@@ -23,7 +23,7 @@ use tokio::sync::{mpsc, oneshot, RwLock};
 pub const MARKETPLACE_DISCOVERY_EVENT: &str = "marketplace_discovery";
 pub const DEFAULT_MARKETPLACE_DISCOVERY_TOPIC: &str = "clawdstrike/marketplace/v1/discovery";
 
-const DISCOVERY_PROTOCOL_VERSION: u8 = 1;
+const DISCOVERY_PROTOCOL_VERSION: u8 = 2;
 const MAX_ANNOUNCEMENT_BYTES: usize = 8 * 1024;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -38,6 +38,24 @@ pub struct MarketplaceDiscoveryAnnouncement {
     pub seq: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub signer_public_key: Option<String>,
+    // --- Spine-aware fields (v2) ---
+    /// Spine head hash for anti-entropy (peers compare to local state).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub head_hash: Option<String>,
+    /// Spine issuer ID of the curator.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub spine_issuer: Option<String>,
+    /// Checkpoint reference for verifiable freshness bound.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub checkpoint_ref: Option<CheckpointRefDto>,
+}
+
+/// Lightweight checkpoint reference for discovery announcements.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct CheckpointRefDto {
+    pub log_id: String,
+    pub checkpoint_seq: u64,
+    pub envelope_hash: String,
 }
 
 fn default_discovery_version() -> u8 {
@@ -380,12 +398,22 @@ async fn run_discovery<R: Runtime>(
 
     loop {
         tokio::select! {
-            swarm_event = swarm.select_next_some() => match swarm_event {
-                SwarmEvent::NewListenAddr { address, .. } => {
-                    let addr_str = address.to_string();
-                    let mut s = status.write().await;
-                    if !s.listen_addrs.iter().any(|a| a == &addr_str) {
-                        s.listen_addrs.push(addr_str);
+                swarm_event = swarm.select_next_some() => match swarm_event {
+                    SwarmEvent::ListenerError { error, .. } => {
+                        set_fatal_error(&status, format!("Listener error: {error}")).await;
+                        break;
+                    }
+                    SwarmEvent::ListenerClosed { reason, .. } => {
+                        if let Err(e) = reason {
+                            set_fatal_error(&status, format!("Listener closed: {e}")).await;
+                        }
+                        break;
+                    }
+                    SwarmEvent::NewListenAddr { address, .. } => {
+                        let addr_str = address.to_string();
+                        let mut s = status.write().await;
+                        if !s.listen_addrs.iter().any(|a| a == &addr_str) {
+                            s.listen_addrs.push(addr_str);
                     }
                 }
                 SwarmEvent::ConnectionEstablished { peer_id, .. } => {
@@ -451,7 +479,7 @@ async fn publish_announcement(
     topic: &IdentTopic,
     announcement: MarketplaceDiscoveryAnnouncement,
 ) -> Result<(), String> {
-    if announcement.v != DISCOVERY_PROTOCOL_VERSION {
+    if announcement.v != 1 && announcement.v != 2 {
         return Err("Unsupported announcement version".to_string());
     }
 
@@ -487,7 +515,7 @@ async fn handle_gossipsub_message<R: Runtime>(
         Err(_) => return,
     };
 
-    if announcement.v != DISCOVERY_PROTOCOL_VERSION {
+    if announcement.v != 1 && announcement.v != 2 {
         return;
     }
 
@@ -549,9 +577,16 @@ mod discovery_manager_tests {
 
         let manager = MarketplaceDiscoveryManager::new();
 
-        // Reserve a port so discovery fails to listen.
-        let listener = TcpListener::bind("0.0.0.0:0").expect("bind");
-        let port = listener.local_addr().expect("local_addr").port();
+        // Prefer reserving a wildcard port to force an "address in use" listen failure.
+        // (libp2p enables `SO_REUSEADDR`, so a loopback-only bind may not always collide.)
+        // If the environment disallows binding sockets (some sandboxes), fall back to
+        // a privileged port to still trigger an immediate listen failure.
+        let listener = TcpListener::bind("0.0.0.0:0").ok();
+        let port = listener
+            .as_ref()
+            .and_then(|l| l.local_addr().ok())
+            .map(|addr| addr.port())
+            .unwrap_or(1);
 
         manager
             .start(

@@ -4,9 +4,9 @@
 
 <p align="center">
   <a href="https://github.com/backbay-labs/clawdstrike/actions"><img src="https://img.shields.io/github/actions/workflow/status/backbay-labs/clawdstrike/ci.yml?branch=main&style=flat-square&logo=github&label=CI" alt="CI Status"></a>
-  <a href="https://crates.io/crates/clawdstrike"><img src="https://img.shields.io/crates/v/clawdstrike?style=flat-square&logo=rust" alt="crates.io"></a>
+  <a href="https://crates.io/crates/libs/clawdstrike"><img src="https://img.shields.io/crates/v/clawdstrike?style=flat-square&logo=rust" alt="crates.io"></a>
   <a href="https://docs.rs/clawdstrike"><img src="https://img.shields.io/docsrs/clawdstrike?style=flat-square&logo=docs.rs" alt="docs.rs"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue?style=flat-square" alt="License: MIT"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue?style=flat-square" alt="License: Apache-2.0"></a>
   <img src="https://img.shields.io/badge/MSRV-1.93-orange?style=flat-square&logo=rust" alt="MSRV: 1.93">
 </p>
 
@@ -50,7 +50,7 @@
   <span style="opacity:0.55;">&nbsp;&nbsp;&middot;&nbsp;&nbsp;</span>
   <a href="docs/src/getting-started/quick-start-python.md">Python</a>
   <span style="opacity:0.55;">&nbsp;&nbsp;&middot;&nbsp;&nbsp;</span>
-  <a href="packages/clawdstrike-openclaw/docs/getting-started.md">OpenClaw</a>
+  <a href="packages/adapters/clawdstrike-openclaw/docs/getting-started.md">OpenClaw</a>
   <span style="opacity:0.55;">&nbsp;&nbsp;&middot;&nbsp;&nbsp;</span>
   <a href="examples">Examples</a>
 </p>
@@ -76,7 +76,7 @@ Clawdstrike provides runtime security enforcement for agents, designed for devel
 ### CLI (Rust)
 
 ```bash
-cargo install --path crates/hush-cli
+cargo install --path crates/services/hush-cli
 
 clawdstrike policy list
 clawdstrike check --action-type file --ruleset strict ~/.ssh/id_rsa
@@ -119,7 +119,7 @@ if (!preflight.proceed) throw new Error("Blocked by policy");
 
 ### OpenClaw plugin
 
-See `packages/clawdstrike-openclaw/docs/getting-started.md`.
+See `packages/adapters/clawdstrike-openclaw/docs/getting-started.md`.
 
 ## Highlights
 
@@ -150,6 +150,8 @@ No external API calls required for core detection. [Full benchmarks →](docs/sr
 - [Guards Reference](docs/src/reference/guards/README.md) — All 7 guards documented
 - [Policy Schema](docs/src/reference/policy-schema.md) — YAML configuration
 - [Framework Integrations](docs/src/concepts/multi-language.md) — OpenClaw, Vercel AI, LangChain
+- [Repository Map](docs/REPO_MAP.md) — Newcomer guide to project layout and component maturity
+- [Documentation Map](docs/DOCS_MAP.md) — Canonical source-of-truth guide for docs
 
 ## Security
 
@@ -168,4 +170,4 @@ cargo build && cargo test && cargo clippy
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) for details.
+Apache License 2.0 - see [LICENSE](LICENSE) for details.

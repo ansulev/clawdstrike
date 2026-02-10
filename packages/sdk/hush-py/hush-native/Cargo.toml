@@ -1,0 +1,25 @@
+[package]
+name = "hush-native"
+version = "0.1.0"
+edition = "2021"
+description = "Native Rust bindings for hush Python SDK"
+license = "Apache-2.0"
+
+[lib]
+name = "hush_native"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { version = "0.28", features = ["extension-module"] }
+hush-core = { workspace = true }
+clawdstrike = { workspace = true }
+futures = { workspace = true }
+base64 = { workspace = true }
+hex = "0.4"
+serde_json = "1.0"
+
+[build-dependencies]
+pyo3-build-config = "0.28"
+
+[lints]
+workspace = true

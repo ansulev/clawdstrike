@@ -1,15 +1,22 @@
 [workspace]
 resolver = "2"
 members = [
-    "crates/hush-core",
-    "crates/hush-proxy",
-    "crates/clawdstrike",
-    "crates/hush-certification",
-    "crates/hush-cli",
-    "crates/hushd",
-    "crates/hush-wasm",
-    "crates/hush-multi-agent",
-    "packages/hush-py/hush-native",
+    "crates/libs/hush-core",
+    "crates/libs/hush-proxy",
+    "crates/libs/clawdstrike",
+    "crates/libs/hush-certification",
+    "crates/services/hush-cli",
+    "crates/services/hushd",
+    "crates/libs/hush-wasm",
+    "crates/libs/hush-multi-agent",
+    "crates/libs/spine",
+    "crates/services/spine-cli",
+    "crates/bridges/tetragon-bridge",
+    "crates/bridges/hubble-bridge",
+    "crates/services/eas-anchor",
+    "crates/tests/sdr-integration-tests",
+    "crates/services/cloud-api",
+    "packages/sdk/hush-py/hush-native",
 ]
 exclude = [
     "fuzz",
@@ -23,7 +30,7 @@ exclude = [
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
-license = "MIT"
+license = "Apache-2.0"
 repository = "https://github.com/backbay-labs/clawdstrike"
 rust-version = "1.93"
 
@@ -72,7 +79,7 @@ chrono-tz = { version = "0.10", features = ["serde"] }
 uuid = { version = "1.20", features = ["v4", "v7", "serde", "js"] }
 
 # CLI
-clap = { version = "4.5", features = ["derive"] }
+clap = { version = "4.5", features = ["derive", "env"] }
 
 # HTTP server
 axum = { version = "0.8", features = ["macros"] }
@@ -88,6 +95,8 @@ dashmap = "6.1"
 
 # Database
 rusqlite = { version = "0.38", features = ["bundled"] }
+sqlx-core = { version = "0.8", default-features = false, features = ["json", "chrono", "uuid", "migrate", "_rt-tokio"] }
+sqlx-postgres = { version = "0.8", default-features = false, features = ["chrono", "uuid", "json"] }
 
 # Async utilities
 tokio-stream = { version = "0.1", features = ["sync"] }
@@ -98,7 +107,7 @@ toml = "0.9"
 dirs = "6.0"
 
 # HTTP client
-reqwest = { version = "0.13", default-features = false, features = ["json", "rustls"] }
+reqwest = { version = "0.13", default-features = false, features = ["json", "rustls", "multipart"] }
 
 # Compression
 flate2 = "1.1"
@@ -110,10 +119,11 @@ url = "2.5"
 jsonwebtoken = { version = "10", default-features = false, features = ["aws_lc_rs", "use_pem"] }
 
 # Internal crates
-hush-core = { path = "crates/hush-core", version = "0.1.0" }
-hush-proxy = { path = "crates/hush-proxy", version = "0.1.0" }
-clawdstrike = { path = "crates/clawdstrike", version = "0.1.0" }
-hush-certification = { path = "crates/hush-certification", version = "0.1.0" }
+hush-core = { path = "crates/libs/hush-core", version = "0.1.0" }
+hush-proxy = { path = "crates/libs/hush-proxy", version = "0.1.0" }
+clawdstrike = { path = "crates/libs/clawdstrike", version = "0.1.0" }
+hush-certification = { path = "crates/libs/hush-certification", version = "0.1.0" }
+spine = { path = "crates/libs/spine", version = "0.1.0" }
 
 [profile.release]
 lto = true

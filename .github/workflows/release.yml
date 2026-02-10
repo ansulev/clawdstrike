@@ -189,8 +189,6 @@ jobs:
     name: Publish to PyPI
     runs-on: ubuntu-latest
     needs: preflight
-    # Only run if hush-py package exists
-    if: ${{ hashFiles('packages/sdk/hush-py/pyproject.toml') != '' }}
     steps:
       - uses: actions/checkout@v6
 

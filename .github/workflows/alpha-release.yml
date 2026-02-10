@@ -169,7 +169,7 @@ jobs:
 
       - name: Install workspace dependencies
         if: steps.detect.outputs.none_missing == 'false'
-        run: npm ci
+        run: npm ci --ignore-scripts
 
       - name: Publish missing npm packages in dependency order
         if: steps.detect.outputs.none_missing == 'false'
@@ -217,6 +217,7 @@ jobs:
   publish-wasm-npm:
     name: Publish @clawdstrike/wasm (alpha)
     runs-on: ubuntu-latest
+    needs: publish-npm
     steps:
       - uses: actions/checkout@v6
 

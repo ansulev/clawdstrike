@@ -91,7 +91,8 @@ jobs:
             while (( attempt <= max_attempts )); do
               echo "Publishing ${crate}@${VERSION} (attempt ${attempt}/${max_attempts})"
               if cargo publish -p "$crate" --token "$CARGO_REGISTRY_TOKEN"; then
-                break
+                echo "Published ${crate}@${VERSION}"
+                return 0
               fi
               echo "Publish attempt failed for ${crate}; waiting for index propagation"
               sleep 30
@@ -102,10 +103,8 @@ jobs:
               attempt=$((attempt + 1))
             done
 
-            if ! crate_exists "$crate" "$VERSION"; then
-              echo "Failed to publish ${crate}@${VERSION}"
-              exit 1
-            fi
+            echo "Failed to publish ${crate}@${VERSION}"
+            exit 1
           }
 
           publish_with_retry hush-core

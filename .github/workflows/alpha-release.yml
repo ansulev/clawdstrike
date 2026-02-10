@@ -42,7 +42,7 @@ jobs:
           echo "workspace_version=$VERSION"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
-          crates=(hush-core hush-proxy clawdstrike hush-cli)
+          crates=(hush-core hush-proxy hush-spine clawdstrike hush-cli)
           missing=()
           for crate in "${crates[@]}"; do
             code="$(curl -s -o /dev/null -w '%{http_code}' "https://crates.io/api/v1/crates/${crate}/${VERSION}")"
@@ -106,6 +106,7 @@ jobs:
 
           publish_with_retry hush-core
           publish_with_retry hush-proxy
+          publish_with_retry hush-spine
           publish_with_retry clawdstrike
           publish_with_retry hush-cli
 

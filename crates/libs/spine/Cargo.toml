@@ -1,5 +1,5 @@
 [package]
-name = "spine"
+name = "hush-spine"
 description = "Aegis Spine protocol for ClawdStrike — envelope signing, checkpoints, trust bundles, and NATS transport"
 version.workspace = true
 edition.workspace = true

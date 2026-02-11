@@ -83,6 +83,7 @@ export function PolicyWorkbenchPanel({
   const [history, setHistory] = React.useState<PolicyTestHistoryItem[]>([]);
   const [copyStatus, setCopyStatus] = React.useState<string>();
   const validationSeq = React.useRef(0);
+  const loadSeq = React.useRef(0);
   const draftYamlRef = React.useRef(state.draftYaml);
   const hasAutoLoadedRef = React.useRef(false);
   const wasConnectedRef = React.useRef(connected);
@@ -143,6 +144,16 @@ export function PolicyWorkbenchPanel({
       return;
     }
     void readPolicy({ forceApply: true });
+  }, [dirty, readPolicy]);
+
+  const handleReload = React.useCallback(() => {
+    if (
+      dirty &&
+      !window.confirm("Discard unsaved policy edits and reload from daemon?")
+    ) {
+      return;
+    }
+    void readPolicy();
   }, [dirty, readPolicy]);
 
   const validateYaml = React.useCallback(
@@ -506,7 +517,7 @@ export function PolicyWorkbenchPanel({
                 <GlowButton
                   data-testid="policy-editor-reload"
                   variant="secondary"
-                  onClick={() => void readPolicy()}
+                  onClick={handleReload}
                 >
                   Reload
                 </GlowButton>

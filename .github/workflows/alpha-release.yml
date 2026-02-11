@@ -196,7 +196,25 @@ jobs:
             fi
 
             echo "Publishing ${name}@${version}"
-            npm publish -w "$pkg" --provenance
+            local output status
+            set +e
+            output="$(npm publish -w "$pkg" --provenance 2>&1)"
+            status=$?
+            set -e
+            printf '%s\n' "$output"
+
+            if [[ $status -eq 0 ]]; then
+              return 0
+            fi
+
+            if grep -q "cannot be republished until 24 hours have passed" <<<"$output" \
+              || grep -q "Cannot publish over previously published version" <<<"$output" \
+              || grep -q "You cannot publish over the previously published versions" <<<"$output"; then
+              echo "${name}@${version} appears already published; continuing"
+              return 0
+            fi
+
+            return $status
           }
 
           publish_workspace packages/adapters/clawdstrike-adapter-core

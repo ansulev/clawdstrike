@@ -264,8 +264,7 @@ jobs:
               return 0
             fi
 
-            if grep -q "cannot be republished until 24 hours have passed" <<<"$output" \
-              || grep -q "Cannot publish over previously published version" <<<"$output" \
+            if grep -q "Cannot publish over previously published version" <<<"$output" \
               || grep -q "You cannot publish over the previously published versions" <<<"$output"; then
               echo "${name}@${version} appears already published; continuing"
               return 0

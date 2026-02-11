@@ -487,11 +487,26 @@ export function PolicyWorkbenchPanel({
 
               <div className="flex items-center gap-2">
                 <GlowButton
-                  data-testid="policy-test-run"
-                  disabled={isRunningTest || !testForm.target.trim()}
-                  onClick={() => void runPolicyTest()}
+                  data-testid="policy-editor-reload"
+                  variant="secondary"
+                  onClick={() => void readPolicy()}
                 >
-                  {isRunningTest ? "Running..." : "Run Test"}
+                  Reload
+                </GlowButton>
+                <GlowButton
+                  data-testid="policy-editor-revert"
+                  variant="secondary"
+                  disabled={!dirty}
+                  onClick={() => dispatch({ type: "revert" })}
+                >
+                  Revert
+                </GlowButton>
+                <GlowButton
+                  data-testid="policy-editor-save"
+                  disabled={!dirty || state.isSaving}
+                  onClick={() => void handleSave()}
+                >
+                  {state.isSaving ? "Saving..." : "Save"}
                 </GlowButton>
                 {copyStatus && <span className="text-xs text-white/60">{copyStatus}</span>}
               </div>
@@ -797,8 +812,8 @@ export function PolicyWorkbenchPanel({
                 </div>
               </GlassPanel>
             </div>
-          </section>
-        )}
+          </TabsContent>
+        </Tabs>
       </div>
     </aside>
   );
@@ -842,6 +857,7 @@ function ResultCard({ result, onCopy }: { result: Record<string, unknown>; onCop
       : decision.allowed
         ? "ALLOW"
         : "UNKNOWN";
+  const rawResultJson = JSON.stringify(result, null, 2);
 
   return (
     <div className="rounded border border-white/12 bg-black/20 p-3 text-xs">
@@ -874,10 +890,14 @@ function ResultCard({ result, onCopy }: { result: Record<string, unknown>; onCop
         <dt className="text-white/55">Severity</dt>
         <dd>{String(decision.severity ?? "-")}</dd>
       </dl>
-
-      <pre className="mt-3 max-h-56 overflow-auto rounded border border-white/10 bg-black/30 p-2 text-[11px] text-white/75">
-        {JSON.stringify(result, null, 2)}
-      </pre>
+      <CodeBlock
+        code={rawResultJson}
+        language="json"
+        title="policy_eval.response"
+        showLineNumbers
+        maxHeight={224}
+        className="mt-3"
+      />
     </div>
   );
 }
@@ -931,39 +951,4 @@ function YamlEditor({
       </GlassPanel>
     </div>
   );
-}
-
-function highlightYaml(input: string): string {
-  const escaped = escapeHtml(input);
-  return escaped
-    .split("\n")
-    .map((line) => {
-      const commentIndex = line.indexOf("#");
-      const head = commentIndex >= 0 ? line.slice(0, commentIndex) : line;
-      const comment = commentIndex >= 0 ? line.slice(commentIndex) : "";
-
-      const keyColored = head.replace(
-        /^(\s*-\s*)?([A-Za-z0-9_."-]+)(\s*:)/,
-        (_m, prefix, key, suffix) =>
-          `${prefix ?? ""}<span style="color:#7dd3fc">${key}</span><span style="color:#d1d5db">${suffix}</span>`
-      );
-
-      const valueColored = keyColored
-        .replace(/\b(true|false|null)\b/g, '<span style="color:#fcd34d">$1</span>')
-        .replace(/(".*?")/g, '<span style="color:#86efac">$1</span>')
-        .replace(/\b([0-9]+)\b/g, '<span style="color:#f9a8d4">$1</span>');
-
-      const commentColored =
-        comment.length > 0 ? `<span style="color:#94a3b8">${comment}</span>` : "";
-
-      return valueColored + commentColored;
-    })
-    .join("\n");
-}
-
-function escapeHtml(input: string): string {
-  return input
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
 }

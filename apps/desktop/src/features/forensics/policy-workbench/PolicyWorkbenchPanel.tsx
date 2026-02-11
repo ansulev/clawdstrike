@@ -83,8 +83,15 @@ export function PolicyWorkbenchPanel({
   const [history, setHistory] = React.useState<PolicyTestHistoryItem[]>([]);
   const [copyStatus, setCopyStatus] = React.useState<string>();
   const validationSeq = React.useRef(0);
+  const draftYamlRef = React.useRef(state.draftYaml);
+  const hasAutoLoadedRef = React.useRef(false);
+  const wasConnectedRef = React.useRef(connected);
 
   const dirty = isPolicyDraftDirty(state);
+
+  React.useEffect(() => {
+    draftYamlRef.current = state.draftYaml;
+  }, [state.draftYaml]);
 
   const copyJson = React.useCallback(async (value: unknown, label: string) => {
     const text = JSON.stringify(value, null, 2);
@@ -162,9 +169,10 @@ export function PolicyWorkbenchPanel({
   );
 
   const handleSave = React.useCallback(async () => {
+    const saveYaml = state.draftYaml;
     dispatch({ type: "save_start" });
     try {
-      const validation = await client.validatePolicy(state.draftYaml);
+      const validation = await client.validatePolicy(saveYaml);
       dispatch({
         type: "validate_success",
         valid: validation.valid,
@@ -180,15 +188,24 @@ export function PolicyWorkbenchPanel({
       return;
     }
 
-      const saved = await client.savePolicy(state.draftYaml);
+      const saved = await client.savePolicy(saveYaml);
       if (!saved.success) {
         dispatch({ type: "save_error", message: saved.message || "Policy save failed" });
         return;
       }
 
+      if (draftYamlRef.current !== saveYaml) {
+        dispatch({
+          type: "save_success_preserve_draft",
+          loadedYaml: saveYaml,
+          hash: saved.policy_hash,
+        });
+        return;
+      }
+
       dispatch({
         type: "save_success",
-        yaml: state.draftYaml,
+        yaml: saveYaml,
         hash: saved.policy_hash,
       });
     } catch (err) {
@@ -289,7 +306,7 @@ export function PolicyWorkbenchPanel({
 
     hasAutoLoadedRef.current = true;
     void readPolicy();
-  }, [readPolicy]);
+  }, [connected, dirty, readPolicy]);
 
   React.useEffect(() => {
     if (!connected || !state.draftYaml) return;
@@ -905,9 +922,11 @@ function ResultCard({ result, onCopy }: { result: Record<string, unknown>; onCop
 function YamlEditor({
   value,
   onChange,
+  disabled,
 }: {
   value: string;
   onChange: (value: string) => void;
+  disabled?: boolean;
 }) {
   return (
     <div className="flex min-h-[420px] flex-col gap-2">

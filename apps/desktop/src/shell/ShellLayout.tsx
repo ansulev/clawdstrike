@@ -63,7 +63,7 @@ export function ShellLayout() {
       setHasPolicyWorkbenchDirtyDraft(Boolean(custom.detail?.dirty));
     };
 
-    window.addEventListener(POLICY_WORKBENCH_DIRTY_EVENT, onDirtyEvent as (event: Event) => void);
+    window.addEventListener(POLICY_WORKBENCH_DIRTY_EVENT, onDirtyEvent as EventListener);
     return () =>
       window.removeEventListener(
         POLICY_WORKBENCH_DIRTY_EVENT,
@@ -255,12 +255,19 @@ export function ShellLayout() {
     ];
   }, [activeAppId]);
 
-  useEffect(() => {
-    setActiveApp(activeAppId);
-  }, [activeAppId, setActiveApp]);
-
   const handleSelectApp = useCallback(
     (appId: AppId) => {
+      if (
+        activeAppId === "forensics-river" &&
+        appId !== "forensics-river" &&
+        hasPolicyWorkbenchDirtyDraft
+      ) {
+        const proceed = globalThis.confirm?.(
+          "You have unsaved policy changes. Leave Forensics River anyway?"
+        );
+        if (!proceed) return;
+      }
+      setActiveApp(appId);
       navigate(`/${appId}`);
     },
     [navigate],

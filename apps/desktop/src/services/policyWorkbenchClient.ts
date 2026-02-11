@@ -9,6 +9,11 @@ import {
   policyValidate,
 } from "./tauri";
 
+export interface PolicyWorkbenchError {
+  code: string;
+  message: string;
+}
+
 export type PolicyLoadModel = PolicyLoadResult | DaemonPolicyResponse;
 export interface PolicyValidationModel {
   valid: boolean;
@@ -44,10 +49,7 @@ function toWorkbenchError(err: unknown): PolicyWorkbenchClientError {
   if (message.includes("Invalid policy YAML") || message.includes("policy_yaml_invalid")) {
     return new PolicyWorkbenchClientError("policy_yaml_invalid", message);
   }
-  if (
-    /policy_eval_invalid_event/i.test(message) ||
-    /unsupported\s+event[_\s]?type/i.test(message)
-  ) {
+  if (message.includes("unsupported eventType") || message.includes("eventType")) {
     return new PolicyWorkbenchClientError("policy_eval_invalid_event", message);
   }
   return new PolicyWorkbenchClientError("policy_request_failed", message);
@@ -78,10 +80,9 @@ export class PolicyWorkbenchClient {
         })),
         warnings: result.warnings.map((warning) => ({
           path: warning.path,
-          code: warning.code ?? "policy_warning",
+          code: "policy_warning",
           message: warning.message,
         })),
-        normalized_version: result.normalized_version,
       };
     } catch (err) {
       throw toWorkbenchError(err);

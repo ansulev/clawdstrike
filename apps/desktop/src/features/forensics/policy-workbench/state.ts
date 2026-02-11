@@ -49,8 +49,7 @@ export type PolicyWorkbenchAction =
     }
   | { type: "validate_error"; message: string }
   | { type: "save_start" }
-  | { type: "save_success"; yaml: string; hash?: string; version?: string }
-  | { type: "save_success_preserve_draft"; loadedYaml: string; hash?: string; version?: string }
+  | { type: "save_success"; yaml: string; hash?: string }
   | { type: "save_error"; message: string };
 
 export function policyWorkbenchReducer(
@@ -59,7 +58,7 @@ export function policyWorkbenchReducer(
 ): PolicyWorkbenchState {
   switch (action.type) {
     case "load_start":
-      return state;
+      return { ...state, loadError: undefined };
     case "load_success":
       return {
         ...state,
@@ -110,9 +109,8 @@ export function policyWorkbenchReducer(
       return {
         ...state,
         validation: {
+          ...state.validation,
           status: "error",
-          errors: [],
-          warnings: [],
           message: action.message,
           lastCheckedAt: Date.now(),
         },
@@ -126,19 +124,6 @@ export function policyWorkbenchReducer(
         loadedYaml: action.yaml,
         draftYaml: action.yaml,
         loadedHash: action.hash ?? state.loadedHash,
-        loadedVersion: action.version ?? state.loadedVersion,
-        loadError: undefined,
-        saveError: undefined,
-      };
-    case "save_success_preserve_draft":
-      return {
-        ...state,
-        isSaving: false,
-        loadedYaml: action.loadedYaml,
-        loadedHash: action.hash ?? state.loadedHash,
-        loadedVersion: action.version ?? state.loadedVersion,
-        loadError: undefined,
-        saveError: undefined,
       };
     case "save_error":
       return {

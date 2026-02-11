@@ -9,7 +9,6 @@ import { useState } from "react";
 import { useConnection } from "@/context/ConnectionContext";
 import {
   buildPolicyTestEvent,
-  getPolicyTestTargetPlaceholder,
   POLICY_TEST_EVENT_TYPES,
   type PolicyTestEventType,
 } from "@/features/forensics/policy-workbench/mapping";
@@ -108,7 +107,7 @@ export function PolicyTesterView() {
               type="text"
               value={form.target}
               onChange={(event) => setForm({ ...form, target: event.target.value })}
-              placeholder={getPolicyTestTargetPlaceholder(form.eventType)}
+              placeholder={getTargetPlaceholder(form.eventType)}
               className="w-full font-mono text-sm"
             />
           </div>
@@ -198,6 +197,26 @@ export function PolicyTesterView() {
   );
 }
 
+function getTargetPlaceholder(eventType: PolicyTestEventType): string {
+  switch (eventType) {
+    case "file_read":
+    case "file_write":
+      return "/path/to/file";
+    case "command_exec":
+      return "git status --short";
+    case "network_egress":
+      return "https://api.example.com/v1";
+    case "tool_call":
+      return "mcp__tool__name";
+    case "patch_apply":
+      return "/path/to/file.patch";
+    case "secret_access":
+      return "OPENAI_API_KEY";
+    default:
+      return "target";
+  }
+}
+
 function ActionTypeButton({
   value,
   selected,
@@ -225,13 +244,7 @@ function ActionTypeButton({
 
 function ResultDisplay({ result }: { result: PolicyEvalResponse }) {
   const decision = result.decision;
-  const verdict = decision.denied
-    ? "DENY"
-    : decision.warn
-      ? "WARN"
-      : decision.allowed
-        ? "ALLOW"
-        : "UNKNOWN";
+  const verdict = decision.denied ? "DENY" : decision.warn ? "WARN" : "ALLOW";
 
   return (
     <div className="space-y-4">

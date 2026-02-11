@@ -21,7 +21,6 @@ import {
 import { POLICY_WORKBENCH_DIRTY_EVENT, type PolicyWorkbenchDirtyEventDetail } from "./events";
 import {
   buildPolicyTestEvent,
-  getPolicyTestTargetPlaceholder,
   POLICY_TEST_EVENT_TYPES,
   type PolicyTestEventType,
   type PolicyTestForm,
@@ -84,17 +83,8 @@ export function PolicyWorkbenchPanel({
   const [history, setHistory] = React.useState<PolicyTestHistoryItem[]>([]);
   const [copyStatus, setCopyStatus] = React.useState<string>();
   const validationSeq = React.useRef(0);
-  const loadSeq = React.useRef(0);
-  const draftYamlRef = React.useRef(state.draftYaml);
-  const hasAutoLoadedRef = React.useRef(false);
-  const wasConnectedRef = React.useRef(connected);
-  const previousDaemonUrlRef = React.useRef(daemonUrl);
 
   const dirty = isPolicyDraftDirty(state);
-
-  React.useEffect(() => {
-    draftYamlRef.current = state.draftYaml;
-  }, [state.draftYaml]);
 
   const copyJson = React.useCallback(async (value: unknown, label: string) => {
     const text = JSON.stringify(value, null, 2);
@@ -172,40 +162,15 @@ export function PolicyWorkbenchPanel({
   );
 
   const handleSave = React.useCallback(async () => {
-    if (!connected) {
-      dispatch({
-        type: "save_error",
-        message: "Daemon disconnected. Reconnect before saving.",
-      });
-      return;
-    }
-
-    const saveYaml = state.draftYaml;
     dispatch({ type: "save_start" });
-    const saveValidationSeq = ++validationSeq.current;
-    dispatch({ type: "validate_start" });
-
-    let validation;
     try {
-      validation = await client.validatePolicy(saveYaml);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Validation failed";
-      if (saveValidationSeq === validationSeq.current) {
-        dispatch({ type: "validate_error", message });
-      }
-      dispatch({ type: "save_error", message });
-      return;
-    }
-
-    if (saveValidationSeq === validationSeq.current) {
+      const validation = await client.validatePolicy(state.draftYaml);
       dispatch({
         type: "validate_success",
         valid: validation.valid,
         errors: validation.errors as ValidationIssue[],
         warnings: validation.warnings as ValidationIssue[],
       });
-    }
-    const normalizedVersion = validation.normalized_version ?? state.loadedVersion;
 
     if (!validation.valid) {
       dispatch({
@@ -215,34 +180,22 @@ export function PolicyWorkbenchPanel({
       return;
     }
 
-    try {
-      const saved = await client.savePolicy(saveYaml);
+      const saved = await client.savePolicy(state.draftYaml);
       if (!saved.success) {
         dispatch({ type: "save_error", message: saved.message || "Policy save failed" });
         return;
       }
 
-      if (draftYamlRef.current !== saveYaml) {
-        dispatch({
-          type: "save_success_preserve_draft",
-          loadedYaml: saveYaml,
-          hash: saved.policy_hash,
-          version: normalizedVersion,
-        });
-        return;
-      }
-
       dispatch({
         type: "save_success",
-        yaml: saveYaml,
+        yaml: state.draftYaml,
         hash: saved.policy_hash,
-        version: normalizedVersion,
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : "Policy save failed";
       dispatch({ type: "save_error", message });
     }
-  }, [client, connected, state.draftYaml, state.loadedVersion]);
+  }, [client, state.draftYaml]);
 
   const runPolicyTest = React.useCallback(async () => {
     setIsRunningTest(true);
@@ -336,15 +289,15 @@ export function PolicyWorkbenchPanel({
 
     hasAutoLoadedRef.current = true;
     void readPolicy();
-  }, [connected, daemonUrl, dirty, readPolicy]);
+  }, [readPolicy]);
 
   React.useEffect(() => {
-    if (!connected || !state.draftYaml || state.isSaving) return;
+    if (!connected || !state.draftYaml) return;
     const handle = window.setTimeout(() => {
       void validateYaml(state.draftYaml);
     }, 500);
     return () => window.clearTimeout(handle);
-  }, [connected, state.draftYaml, state.isSaving, validateYaml]);
+  }, [connected, state.draftYaml, validateYaml]);
 
   React.useEffect(() => {
     if (!dirty) return;
@@ -472,22 +425,73 @@ export function PolicyWorkbenchPanel({
                   variant="secondary"
                   onClick={handleReload}
                 >
-                  Reload
-                </GlowButton>
+                  {POLICY_TEST_EVENT_TYPES.map((eventType) => (
+                    <option key={eventType} value={eventType}>
+                      {eventType}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="mb-1 block text-[11px] uppercase tracking-wide text-white/55">Target / Resource</label>
+                <GlowInput
+                  data-testid="policy-test-target"
+                  value={testForm.target}
+                  onChange={(event) => setTestForm((prev) => ({ ...prev, target: event.target.value }))}
+                  placeholder={targetPlaceholder(testForm.eventType)}
+                  className="w-full font-mono text-xs"
+                />
+              </div>
+
+              {(testForm.eventType === "file_write" || testForm.eventType === "patch_apply") && (
+                <div>
+                  <label className="mb-1 block text-[11px] uppercase tracking-wide text-white/55">Content</label>
+                  <textarea
+                    value={testForm.content}
+                    onChange={(event) => setTestForm((prev) => ({ ...prev, content: event.target.value }))}
+                    className="h-20 w-full resize-none rounded border border-white/20 bg-black/35 px-2 py-1 font-mono text-xs"
+                    placeholder={testForm.eventType === "patch_apply" ? "--- patch diff ---" : "file content"}
+                  />
+                </div>
+              )}
+
+              {(testForm.eventType === "tool_call" || testForm.eventType === "secret_access") && (
+                <div>
+                  <label className="mb-1 block text-[11px] uppercase tracking-wide text-white/55">
+                    {testForm.eventType === "tool_call" ? "Tool Parameters JSON" : "Secret Scope"}
+                  </label>
+                  <textarea
+                    value={testForm.extra}
+                    onChange={(event) => setTestForm((prev) => ({ ...prev, extra: event.target.value }))}
+                    className="h-16 w-full resize-none rounded border border-white/20 bg-black/35 px-2 py-1 font-mono text-xs"
+                    placeholder={testForm.eventType === "tool_call" ? "{\"path\":\"/tmp\"}" : "runtime"}
+                  />
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-2">
+                <GlowInput
+                  value={testForm.sessionId}
+                  onChange={(event) => setTestForm((prev) => ({ ...prev, sessionId: event.target.value }))}
+                  placeholder="sessionId (optional)"
+                  className="font-mono text-xs"
+                />
+                <GlowInput
+                  value={testForm.agentId}
+                  onChange={(event) => setTestForm((prev) => ({ ...prev, agentId: event.target.value }))}
+                  placeholder="agentId (optional)"
+                  className="font-mono text-xs"
+                />
+              </div>
+
+              <div className="flex items-center gap-2">
                 <GlowButton
-                  data-testid="policy-editor-revert"
-                  variant="secondary"
-                  disabled={!dirty}
-                  onClick={() => dispatch({ type: "revert" })}
+                  data-testid="policy-test-run"
+                  disabled={isRunningTest || !testForm.target.trim()}
+                  onClick={() => void runPolicyTest()}
                 >
-                  Revert
-                </GlowButton>
-                <GlowButton
-                  data-testid="policy-editor-save"
-                  disabled={!connected || !dirty || state.isSaving}
-                  onClick={() => void handleSave()}
-                >
-                  {state.isSaving ? "Saving..." : "Save"}
+                  {isRunningTest ? "Running..." : "Run Test"}
                 </GlowButton>
                 {copyStatus && <span className="text-xs text-white/60">{copyStatus}</span>}
               </div>
@@ -793,8 +797,8 @@ export function PolicyWorkbenchPanel({
                 </div>
               </GlassPanel>
             </div>
-          </TabsContent>
-        </Tabs>
+          </section>
+        )}
       </div>
     </aside>
   );
@@ -838,7 +842,6 @@ function ResultCard({ result, onCopy }: { result: Record<string, unknown>; onCop
       : decision.allowed
         ? "ALLOW"
         : "UNKNOWN";
-  const rawResultJson = JSON.stringify(result, null, 2);
 
   return (
     <div className="rounded border border-white/12 bg-black/20 p-3 text-xs">
@@ -871,14 +874,10 @@ function ResultCard({ result, onCopy }: { result: Record<string, unknown>; onCop
         <dt className="text-white/55">Severity</dt>
         <dd>{String(decision.severity ?? "-")}</dd>
       </dl>
-      <CodeBlock
-        code={rawResultJson}
-        language="json"
-        title="policy_eval.response"
-        showLineNumbers
-        maxHeight={224}
-        className="mt-3"
-      />
+
+      <pre className="mt-3 max-h-56 overflow-auto rounded border border-white/10 bg-black/30 p-2 text-[11px] text-white/75">
+        {JSON.stringify(result, null, 2)}
+      </pre>
     </div>
   );
 }
@@ -886,11 +885,9 @@ function ResultCard({ result, onCopy }: { result: Record<string, unknown>; onCop
 function YamlEditor({
   value,
   onChange,
-  disabled,
 }: {
   value: string;
   onChange: (value: string) => void;
-  disabled?: boolean;
 }) {
   return (
     <div className="flex min-h-[420px] flex-col gap-2">
@@ -934,4 +931,39 @@ function YamlEditor({
       </GlassPanel>
     </div>
   );
+}
+
+function highlightYaml(input: string): string {
+  const escaped = escapeHtml(input);
+  return escaped
+    .split("\n")
+    .map((line) => {
+      const commentIndex = line.indexOf("#");
+      const head = commentIndex >= 0 ? line.slice(0, commentIndex) : line;
+      const comment = commentIndex >= 0 ? line.slice(commentIndex) : "";
+
+      const keyColored = head.replace(
+        /^(\s*-\s*)?([A-Za-z0-9_."-]+)(\s*:)/,
+        (_m, prefix, key, suffix) =>
+          `${prefix ?? ""}<span style="color:#7dd3fc">${key}</span><span style="color:#d1d5db">${suffix}</span>`
+      );
+
+      const valueColored = keyColored
+        .replace(/\b(true|false|null)\b/g, '<span style="color:#fcd34d">$1</span>')
+        .replace(/(".*?")/g, '<span style="color:#86efac">$1</span>')
+        .replace(/\b([0-9]+)\b/g, '<span style="color:#f9a8d4">$1</span>');
+
+      const commentColored =
+        comment.length > 0 ? `<span style="color:#94a3b8">${comment}</span>` : "";
+
+      return valueColored + commentColored;
+    })
+    .join("\n");
+}
+
+function escapeHtml(input: string): string {
+  return input
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
 }

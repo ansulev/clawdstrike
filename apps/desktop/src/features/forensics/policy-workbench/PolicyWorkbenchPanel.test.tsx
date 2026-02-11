@@ -227,7 +227,7 @@ describe("PolicyWorkbenchPanel", () => {
       const custom = event as CustomEvent<PolicyWorkbenchDirtyEventDetail>;
       dirtyEvents.push(Boolean(custom.detail?.dirty));
     };
-    window.addEventListener(POLICY_WORKBENCH_DIRTY_EVENT, onDirty);
+    window.addEventListener(POLICY_WORKBENCH_DIRTY_EVENT, onDirty as EventListener);
 
     container = document.createElement("div");
     document.body.appendChild(container);

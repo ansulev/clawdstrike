@@ -292,12 +292,10 @@ pub async fn update_policy_bundle(
         .map(|h| h.to_hex())
         .map_err(|e| V1Error::internal("INTERNAL_ERROR", e.to_string()))?;
     *engine = new_engine;
-    state.policy_engine_cache.clear();
-    drop(engine);
 
     tracing::info!(
         bundle_id = %signed.bundle.bundle_id,
-        policy_hash = %active_policy_hash,
+        policy_hash = %signed.bundle.policy_hash.to_hex_prefixed(),
         "Policy updated via signed bundle"
     );
 
@@ -315,8 +313,7 @@ pub async fn update_policy_bundle(
         agent_id: None,
         metadata: Some(serde_json::json!({
             "bundle_id": signed.bundle.bundle_id,
-            "policy_hash": active_policy_hash.clone(),
-            "bundle_policy_hash": signed.bundle.policy_hash.to_hex(),
+            "policy_hash": signed.bundle.policy_hash.to_hex_prefixed(),
             "sources": signed.bundle.sources,
         })),
     });
@@ -324,7 +321,7 @@ pub async fn update_policy_bundle(
     Ok(Json(UpdatePolicyResponse {
         success: true,
         message: "Policy updated successfully".to_string(),
-        policy_hash: Some(active_policy_hash),
+        policy_hash: Some(signed.bundle.policy_hash.to_hex()),
     }))
 }
 
@@ -392,28 +389,12 @@ pub async fn validate_policy(
     let base_path = state.config.policy_path.as_deref();
 
     match Policy::from_yaml_with_extends_resolver(&request.yaml, base_path, &resolver) {
-        Ok(policy) => {
-            let normalized_version = policy.version.clone();
-            if let Err(err) = HushEngine::builder(policy).build() {
-                return Ok(Json(ValidatePolicyResponse {
-                    valid: false,
-                    errors: vec![ValidationIssue {
-                        path: "policy".to_string(),
-                        code: "policy_engine_invalid".to_string(),
-                        message: err.to_string(),
-                    }],
-                    warnings: Vec::new(),
-                    normalized_version: Some(normalized_version),
-                }));
-            }
-
-            Ok(Json(ValidatePolicyResponse {
-                valid: true,
-                errors: Vec::new(),
-                warnings: Vec::new(),
-                normalized_version: Some(normalized_version),
-            }))
-        }
+        Ok(policy) => Ok(Json(ValidatePolicyResponse {
+            valid: true,
+            errors: Vec::new(),
+            warnings: Vec::new(),
+            normalized_version: Some(policy.version),
+        })),
         Err(err) => Ok(Json(ValidatePolicyResponse {
             valid: false,
             errors: validation_issues_from_policy_error(&err),
@@ -492,6 +473,8 @@ pub async fn update_policy(
     state.policy_engine_cache.clear();
 
     tracing::info!("Policy updated via API");
+
+    let after_hash = hush_core::sha256(request.yaml.as_bytes()).to_hex();
     let mut audit = AuditEvent::session_start(&state.session_id, None);
     audit.event_type = "policy_updated".to_string();
     audit.action_type = "policy".to_string();

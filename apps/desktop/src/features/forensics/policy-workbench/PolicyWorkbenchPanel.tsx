@@ -21,6 +21,7 @@ import {
 import { POLICY_WORKBENCH_DIRTY_EVENT, type PolicyWorkbenchDirtyEventDetail } from "./events";
 import {
   buildPolicyTestEvent,
+  getPolicyTestTargetPlaceholder,
   POLICY_TEST_EVENT_TYPES,
   type PolicyTestEventType,
   type PolicyTestForm,
@@ -183,13 +184,18 @@ export function PolicyWorkbenchPanel({
     const saveYaml = state.draftYaml;
     dispatch({ type: "save_start" });
     try {
+      const saveValidationSeq = ++validationSeq.current;
+      dispatch({ type: "validate_start" });
       const validation = await client.validatePolicy(saveYaml);
-      dispatch({
-        type: "validate_success",
-        valid: validation.valid,
-        errors: validation.errors as ValidationIssue[],
-        warnings: validation.warnings as ValidationIssue[],
-      });
+      if (saveValidationSeq === validationSeq.current) {
+        dispatch({
+          type: "validate_success",
+          valid: validation.valid,
+          errors: validation.errors as ValidationIssue[],
+          warnings: validation.warnings as ValidationIssue[],
+        });
+      }
+      const normalizedVersion = validation.normalized_version ?? state.loadedVersion;
 
     if (!validation.valid) {
       dispatch({
@@ -210,6 +216,7 @@ export function PolicyWorkbenchPanel({
           type: "save_success_preserve_draft",
           loadedYaml: saveYaml,
           hash: saved.policy_hash,
+          version: normalizedVersion,
         });
         return;
       }
@@ -218,12 +225,13 @@ export function PolicyWorkbenchPanel({
         type: "save_success",
         yaml: saveYaml,
         hash: saved.policy_hash,
+        version: normalizedVersion,
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : "Policy save failed";
       dispatch({ type: "save_error", message });
     }
-  }, [client, state.draftYaml]);
+  }, [client, state.draftYaml, state.loadedVersion]);
 
   const runPolicyTest = React.useCallback(async () => {
     setIsRunningTest(true);
@@ -320,12 +328,12 @@ export function PolicyWorkbenchPanel({
   }, [connected, dirty, readPolicy]);
 
   React.useEffect(() => {
-    if (!connected || !state.draftYaml) return;
+    if (!connected || !state.draftYaml || state.isSaving) return;
     const handle = window.setTimeout(() => {
       void validateYaml(state.draftYaml);
     }, 500);
     return () => window.clearTimeout(handle);
-  }, [connected, state.draftYaml, validateYaml]);
+  }, [connected, state.draftYaml, state.isSaving, validateYaml]);
 
   React.useEffect(() => {
     if (!dirty) return;

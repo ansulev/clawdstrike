@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { buildPolicyTestEvent } from "./mapping";
+import { buildPolicyTestEvent, getPolicyTestTargetPlaceholder } from "./mapping";
 
 describe("buildPolicyTestEvent", () => {
   it("maps file_read requests", () => {

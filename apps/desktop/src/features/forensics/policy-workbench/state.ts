@@ -127,6 +127,7 @@ export function policyWorkbenchReducer(
         loadedHash: action.hash ?? state.loadedHash,
         loadedVersion: action.version ?? state.loadedVersion,
         loadError: undefined,
+        saveError: undefined,
       };
     case "save_success_preserve_draft":
       return {
@@ -136,6 +137,7 @@ export function policyWorkbenchReducer(
         loadedHash: action.hash ?? state.loadedHash,
         loadedVersion: action.version ?? state.loadedVersion,
         loadError: undefined,
+        saveError: undefined,
       };
     case "save_error":
       return {

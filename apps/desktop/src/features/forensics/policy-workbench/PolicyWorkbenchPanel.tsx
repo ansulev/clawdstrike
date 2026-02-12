@@ -88,6 +88,7 @@ export function PolicyWorkbenchPanel({
   const draftYamlRef = React.useRef(state.draftYaml);
   const hasAutoLoadedRef = React.useRef(false);
   const wasConnectedRef = React.useRef(connected);
+  const previousDaemonUrlRef = React.useRef(daemonUrl);
 
   const dirty = isPolicyDraftDirty(state);
 
@@ -340,7 +341,7 @@ export function PolicyWorkbenchPanel({
 
     hasAutoLoadedRef.current = true;
     void readPolicy();
-  }, [connected, dirty, readPolicy]);
+  }, [connected, daemonUrl, dirty, readPolicy]);
 
   React.useEffect(() => {
     if (!connected || !state.draftYaml || state.isSaving) return;

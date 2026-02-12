@@ -181,6 +181,14 @@ export function PolicyWorkbenchPanel({
   );
 
   const handleSave = React.useCallback(async () => {
+    if (!connected) {
+      dispatch({
+        type: "save_error",
+        message: "Daemon disconnected. Reconnect before saving.",
+      });
+      return;
+    }
+
     const saveYaml = state.draftYaml;
     dispatch({ type: "save_start" });
     const saveValidationSeq = ++validationSeq.current;
@@ -238,7 +246,7 @@ export function PolicyWorkbenchPanel({
       const message = err instanceof Error ? err.message : "Policy save failed";
       dispatch({ type: "save_error", message });
     }
-  }, [client, state.draftYaml, state.loadedVersion]);
+  }, [client, connected, state.draftYaml, state.loadedVersion]);
 
   const runPolicyTest = React.useCallback(async () => {
     setIsRunningTest(true);
@@ -546,7 +554,7 @@ export function PolicyWorkbenchPanel({
                 </GlowButton>
                 <GlowButton
                   data-testid="policy-editor-save"
-                  disabled={!dirty || state.isSaving}
+                  disabled={!connected || !dirty || state.isSaving}
                   onClick={() => void handleSave()}
                 >
                   {state.isSaving ? "Saving..." : "Save"}

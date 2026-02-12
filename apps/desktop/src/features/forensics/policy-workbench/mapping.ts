@@ -144,11 +144,7 @@ function parseNetworkTarget(target: string): { host: string; port: number; url?:
   if (trimmed.includes("://")) {
     const parsed = new URL(trimmed);
     const port =
-      parsed.port.length > 0
-        ? Number(parsed.port)
-        : parsed.protocol === "http:"
-          ? 80
-          : 443;
+      parsed.port.length > 0 ? Number(parsed.port) : defaultPortForUrlProtocol(parsed.protocol);
     if (!Number.isFinite(port) || port < 1 || port > 65535) {
       throw new Error("network_egress target has invalid port");
     }

@@ -110,8 +110,9 @@ export function policyWorkbenchReducer(
       return {
         ...state,
         validation: {
-          ...state.validation,
           status: "error",
+          errors: [],
+          warnings: [],
           message: action.message,
           lastCheckedAt: Date.now(),
         },

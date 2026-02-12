@@ -154,7 +154,7 @@ export function PolicyWorkbenchPanel({
     ) {
       return;
     }
-    void readPolicy();
+    void readPolicy({ forceApply: true });
   }, [dirty, readPolicy]);
 
   const validateYaml = React.useCallback(

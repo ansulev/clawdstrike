@@ -17,6 +17,7 @@ permissions:
 
 env:
   HELM_OCI_REPO: oci://ghcr.io/backbay-labs/clawdstrike/helm
+  CHART_NAME: clawdstrike
 
 jobs:
   publish-oci:
@@ -101,6 +102,9 @@ jobs:
           cat > artifacthub-repo.yml <<EOF
           repositoryID: ${ARTIFACTHUB_REPOSITORY_ID}
           EOF
-          oras push ghcr.io/backbay-labs/clawdstrike/helm:artifacthub.io \
+          # Helm pushes charts to <repo>/<chartName>:<version>. Publish Artifact Hub metadata to the
+          # same OCI repository where the chart lives.
+          OCI_REPO_PATH="${HELM_OCI_REPO#oci://}"
+          oras push "${OCI_REPO_PATH}/${CHART_NAME}:artifacthub.io" \
             --config /dev/null:application/vnd.cncf.artifact.config.v1+json \
             artifacthub-repo.yml:application/vnd.cncf.artifacthub.repository-metadata.layer.v1.yaml

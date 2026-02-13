@@ -3,8 +3,8 @@
  * @packageDocumentation
  */
 
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-export const VERSION: string = require("../package.json").version;
+declare const __SDK_VERSION__: string;
+export const VERSION: string = __SDK_VERSION__;
 
 // Main entry point
 export {
@@ -72,6 +72,7 @@ export {
   GuardContext,
   GuardAction,
   type Guard,
+  type GuardActionOptions,
   type CanonicalSeverity,
   toCanonicalSeverity,
   fromCanonicalSeverity,

@@ -1,15 +1,14 @@
+export { ClawdstrikeBlockedError } from '@clawdstrike/adapter-core';
+
+import { ClawdstrikeBlockedError } from '@clawdstrike/adapter-core';
 import type { Decision } from '@clawdstrike/adapter-core';
 
-export class ClawdstrikeViolationError extends Error {
-  readonly toolName: string;
-  readonly decision: Decision;
-
+/**
+ * @deprecated Use ClawdstrikeBlockedError instead.
+ */
+export class ClawdstrikeViolationError extends ClawdstrikeBlockedError {
   constructor(toolName: string, decision: Decision, message?: string) {
-    const detail = decision.message ?? decision.reason ?? 'denied';
-    super(message ?? `Tool '${toolName}' blocked: ${detail}`);
+    super(toolName, decision, message);
     this.name = 'ClawdstrikeViolationError';
-    this.toolName = toolName;
-    this.decision = decision;
   }
 }
-

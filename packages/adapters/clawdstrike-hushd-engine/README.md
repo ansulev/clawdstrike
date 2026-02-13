@@ -10,9 +10,9 @@ See [Enforcement Tiers & Integration Contract](https://github.com/backbay-labs/c
 ## Usage
 
 ```ts
-import { createHushdEngine } from "@clawdstrike/engine-remote";
+import { createStrikeCell } from "@clawdstrike/engine-remote";
 
-const engine = createHushdEngine({
+const engine = createStrikeCell({
   baseUrl: "http://127.0.0.1:9876",
   // token: process.env.HUSHD_CHECK_KEY,
   timeoutMs: 10_000,
@@ -21,12 +21,3 @@ const engine = createHushdEngine({
 const decision = await engine.evaluate(event);
 if (decision.status === "deny") throw new Error(decision.message ?? "Blocked by policy");
 ```
-
-## Fail-Closed POC
-
-```bash
-npm --prefix packages/adapters/clawdstrike-hushd-engine run build
-npm --prefix packages/adapters/clawdstrike-hushd-engine run poc:fail-closed
-```
-
-This deterministic POC proves daemon transport failures return fail-closed decisions (`deny` + `engine_error`).

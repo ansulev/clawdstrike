@@ -13,10 +13,10 @@ See [Enforcement Tiers & Integration Contract](https://github.com/backbay-labs/c
 ## Usage
 
 ```ts
-import { createHushCliEngine } from "@clawdstrike/engine-local";
+import { createStrikeCell } from "@clawdstrike/engine-local";
 import type { PolicyEvent } from "@clawdstrike/adapter-core";
 
-const engine = createHushCliEngine({
+const engine = createStrikeCell({
   policyRef: "default",
   // hushPath: "/path/to/hush",
 });
@@ -31,12 +31,3 @@ const event: PolicyEvent = {
 const decision = await engine.evaluate(event);
 if (decision.status === "deny") throw new Error(decision.message ?? "Blocked by policy");
 ```
-
-## Fail-Closed POC
-
-```bash
-npm --prefix packages/adapters/clawdstrike-hush-cli-engine run build
-npm --prefix packages/adapters/clawdstrike-hush-cli-engine run poc:fail-closed
-```
-
-This deterministic POC proves local transport/spawn errors return fail-closed decisions (`deny` + `engine_error`).

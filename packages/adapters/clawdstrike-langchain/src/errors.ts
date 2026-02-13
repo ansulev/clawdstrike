@@ -3,6 +3,9 @@ export { ClawdstrikeBlockedError } from "@clawdstrike/adapter-core";
 import type { Decision } from "@clawdstrike/adapter-core";
 import { ClawdstrikeBlockedError } from "@clawdstrike/adapter-core";
 
+import { ClawdstrikeBlockedError } from '@clawdstrike/adapter-core';
+import type { Decision } from '@clawdstrike/adapter-core';
+
 /**
  * @deprecated Use ClawdstrikeBlockedError instead.
  */

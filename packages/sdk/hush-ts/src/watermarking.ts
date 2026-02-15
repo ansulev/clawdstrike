@@ -1,7 +1,7 @@
 import { canonicalize } from "./canonical";
+import { getBackend } from "./crypto/backend";
 import { sha256, toHex, fromHex } from "./crypto/hash";
 import { generateKeypair, signMessage, verifySignature } from "./crypto/sign";
-import * as ed25519 from "@noble/ed25519";
 
 export type WatermarkEncoding = "metadata";
 
@@ -50,7 +50,7 @@ export interface WatermarkExtractionResult {
   errors: string[];
 }
 
-const META_PREFIX = "<!--clawdstrike.watermark:v1:";
+const META_PREFIX = "<!--hushclaw.watermark:v1:";
 const META_SUFFIX = "-->";
 
 function nowMs(): number {
@@ -159,7 +159,7 @@ export class PromptWatermarker {
     if (config.privateKeyHex) {
       const pkHex = normalizeHex32(config.privateKeyHex, "privateKeyHex");
       const privateKey = fromHex(pkHex);
-      const publicKey = await ed25519.getPublicKeyAsync(privateKey);
+      const publicKey = await getBackend().publicKeyFromPrivate(privateKey);
       return new PromptWatermarker(config, privateKey, publicKey);
     }
 

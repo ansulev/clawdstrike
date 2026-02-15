@@ -49,3 +49,8 @@ _diag/
 .DS_Store
 
 .env
+
+# .NET build artifacts
+packages/sdk/hush-csharp/**/bin/
+packages/sdk/hush-csharp/**/obj/
+packages/sdk/hush-csharp/.vs/

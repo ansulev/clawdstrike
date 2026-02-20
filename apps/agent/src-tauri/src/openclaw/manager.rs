@@ -2,16 +2,22 @@
 
 use super::protocol::{
     create_request_id, parse_gateway_frame, GatewayAuth, GatewayClientIdentity,
-    GatewayConnectParams, GatewayEventFrame, GatewayFrame, GatewayRequestFrame,
+    GatewayConnectParams, GatewayDeviceProof, GatewayEventFrame, GatewayFrame, GatewayRequestFrame,
     GatewayResponseError, GatewayResponseFrame,
 };
 use super::secret_store::{GatewaySecrets, OpenClawSecretStore, SecretStoreMode};
 use crate::settings::{OpenClawGatewayMetadata, Settings};
 use anyhow::{Context, Result};
+use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
+use ed25519_dalek::{
+    pkcs8::{DecodePrivateKey, DecodePublicKey},
+    Signature, Signer, SigningKey, VerifyingKey,
+};
 use futures::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -23,6 +29,16 @@ use tokio_tungstenite::tungstenite::Message;
 const CONNECT_HANDSHAKE_TIMEOUT: Duration = Duration::from_millis(400);
 #[cfg(not(test))]
 const CONNECT_HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(5);
+const DEVICE_AUTH_MAX_CLOCK_SKEW_MS: u64 = 5 * 60 * 1000;
+const OPENCLAW_STATE_DIR: &str = ".openclaw";
+const OPENCLAW_IDENTITY_PATH: &str = "identity/device.json";
+const OPENCLAW_LEGACY_STATE_DIRS: [&str; 3] = [".clawdbot", ".moldbot", ".moltbot"];
+const REQUIRED_GATEWAY_SCOPES: [&str; 4] = [
+    "operator.read",
+    "operator.write",
+    "operator.approvals",
+    "operator.pairing",
+];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -514,32 +530,46 @@ impl OpenClawManager {
         let (mut sink, mut stream) = ws_stream.split();
 
         let connect_id = create_request_id("connect");
+        let role = "operator".to_string();
+        let scopes = default_gateway_scopes();
+        let auth_token = secrets
+            .token
+            .clone()
+            .or_else(|| secrets.device_token.clone());
+        let client = GatewayClientIdentity {
+            id: "cli".to_string(),
+            display_name: Some("Clawdstrike Agent".to_string()),
+            version: Some(env!("CARGO_PKG_VERSION").to_string()),
+            platform: Some("tauri".to_string()),
+            mode: Some("cli".to_string()),
+            instance_id: Some(format!("agent:{}", gateway_id)),
+        };
+        let device =
+            match build_gateway_device_proof(&client, &role, &scopes, auth_token.as_deref()) {
+                Ok(value) => value,
+                Err(err) => {
+                    tracing::warn!(
+                        gateway_id = %gateway_id,
+                        "OpenClaw device proof unavailable: {err}"
+                    );
+                    None
+                }
+            };
         let params = GatewayConnectParams {
             min_protocol: 3,
             max_protocol: 3,
-            client: GatewayClientIdentity {
-                id: "cli".to_string(),
-                display_name: Some("Clawdstrike Agent".to_string()),
-                version: Some(env!("CARGO_PKG_VERSION").to_string()),
-                platform: Some("tauri".to_string()),
-                mode: Some("cli".to_string()),
-                instance_id: Some(format!("agent:{}", gateway_id)),
-            },
-            role: Some("operator".to_string()),
-            scopes: Some(vec![
-                "operator.read".to_string(),
-                "operator.write".to_string(),
-                "operator.approvals".to_string(),
-                "operator.pairing".to_string(),
-            ]),
-            auth: if secrets.token.is_some() || secrets.device_token.is_some() {
+            client,
+            role: Some(role),
+            scopes: Some(scopes),
+            auth: if let Some(token) = auth_token {
                 Some(GatewayAuth {
-                    token: secrets.token.clone(),
-                    device_token: secrets.device_token.clone(),
+                    token: Some(token),
+                    password: None,
                 })
             } else {
                 None
             },
+            device,
             locale: Some("en-US".to_string()),
             user_agent: Some("clawdstrike-agent".to_string()),
         };
@@ -810,10 +840,341 @@ impl OpenClawManager {
     }
 }
 
+fn default_gateway_scopes() -> Vec<String> {
+    REQUIRED_GATEWAY_SCOPES
+        .iter()
+        .map(|scope| (*scope).to_string())
+        .collect()
+}
+
 #[derive(Debug)]
 enum ConnectionExit {
     ManualDisconnect,
     RemoteClosed(String),
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct OpenClawDeviceIdentityFile {
+    #[serde(default)]
+    version: Option<u32>,
+    #[serde(alias = "device_id")]
+    device_id: String,
+    #[serde(alias = "public_key_pem")]
+    public_key_pem: String,
+    #[serde(alias = "private_key_pem")]
+    private_key_pem: String,
+}
+
+#[derive(Debug)]
+struct OpenClawDeviceIdentity {
+    device_id: String,
+    public_key_raw_base64url: String,
+    private_key_pem: String,
+}
+
+fn build_gateway_device_proof(
+    client: &GatewayClientIdentity,
+    role: &str,
+    scopes: &[String],
+    auth_token: Option<&str>,
+) -> Result<Option<GatewayDeviceProof>> {
+    let identity = match load_openclaw_device_identity()? {
+        Some(value) => value,
+        None => return Ok(None),
+    };
+
+    let client_mode = client.mode.as_deref().unwrap_or("cli");
+    let proof = build_gateway_device_proof_from_identity(
+        &identity,
+        &client.id,
+        client_mode,
+        role,
+        scopes,
+        now_ms(),
+        auth_token,
+        None,
+    )?;
+    Ok(Some(proof))
+}
+
+fn load_openclaw_device_identity() -> Result<Option<OpenClawDeviceIdentity>> {
+    load_openclaw_device_identity_from_candidates(&openclaw_identity_candidate_paths())
+}
+
+fn load_openclaw_device_identity_from_path(path: &Path) -> Result<OpenClawDeviceIdentity> {
+    let raw = std::fs::read_to_string(path)
+        .with_context(|| format!("failed to read OpenClaw identity file: {:?}", path))?;
+    let parsed: OpenClawDeviceIdentityFile = serde_json::from_str(&raw)
+        .with_context(|| format!("invalid OpenClaw identity JSON: {:?}", path))?;
+
+    if parsed.version != Some(1) {
+        return Err(anyhow::anyhow!(
+            "unsupported OpenClaw identity version {:?} in {:?}",
+            parsed.version,
+            path
+        ));
+    }
+
+    if parsed.private_key_pem.trim().is_empty() {
+        return Err(anyhow::anyhow!(
+            "OpenClaw identity private key is empty in {:?}",
+            path
+        ));
+    }
+
+    let verifying_key = VerifyingKey::from_public_key_pem(parsed.public_key_pem.trim())
+        .map_err(|err| anyhow::anyhow!("invalid OpenClaw identity public key PEM: {err}"))?;
+    let derived_device_id = hush_core::sha256(verifying_key.as_bytes()).to_hex();
+    if !parsed.device_id.trim().is_empty() && parsed.device_id != derived_device_id {
+        tracing::warn!(
+            configured_device_id = %parsed.device_id,
+            derived_device_id = %derived_device_id,
+            "OpenClaw identity device id mismatch; using derived fingerprint"
+        );
+    }
+
+    Ok(OpenClawDeviceIdentity {
+        device_id: derived_device_id,
+        public_key_raw_base64url: URL_SAFE_NO_PAD.encode(verifying_key.as_bytes()),
+        private_key_pem: parsed.private_key_pem,
+    })
+}
+
+fn build_gateway_device_proof_from_identity(
+    identity: &OpenClawDeviceIdentity,
+    client_id: &str,
+    client_mode: &str,
+    role: &str,
+    scopes: &[String],
+    signed_at_ms: u64,
+    token: Option<&str>,
+    nonce: Option<&str>,
+) -> Result<GatewayDeviceProof> {
+    validate_gateway_scopes(scopes)?;
+    validate_signed_at_window(signed_at_ms, now_ms())?;
+
+    let signing_key = load_identity_signing_key(identity)?;
+    validate_identity_key_consistency(identity, &signing_key)?;
+
+    let payload = build_device_auth_payload(
+        &identity.device_id,
+        client_id,
+        client_mode,
+        role,
+        scopes,
+        signed_at_ms,
+        token,
+        nonce,
+    );
+    let signature: Signature = signing_key.sign(payload.as_bytes());
+
+    Ok(GatewayDeviceProof {
+        id: identity.device_id.clone(),
+        public_key: identity.public_key_raw_base64url.clone(),
+        signature: URL_SAFE_NO_PAD.encode(signature.to_bytes()),
+        signed_at: signed_at_ms,
+        nonce: nonce.map(|value| value.to_string()),
+    })
+}
+
+fn validate_gateway_scopes(scopes: &[String]) -> Result<()> {
+    if scopes.is_empty() {
+        return Err(anyhow::anyhow!(
+            "OpenClaw connect scopes cannot be empty"
+        ));
+    }
+
+    let scope_set: HashSet<String> = scopes
+        .iter()
+        .map(|scope| scope.trim().to_string())
+        .filter(|scope| !scope.is_empty())
+        .collect();
+
+    if scope_set.is_empty() {
+        return Err(anyhow::anyhow!(
+            "OpenClaw connect scopes cannot be blank"
+        ));
+    }
+
+    for required in REQUIRED_GATEWAY_SCOPES {
+        if !scope_set.contains(required) {
+            return Err(anyhow::anyhow!(
+                "OpenClaw connect scopes missing required scope '{}'",
+                required
+            ));
+        }
+    }
+
+    Ok(())
+}
+
+fn validate_signed_at_window(signed_at_ms: u64, now_ms_value: u64) -> Result<()> {
+    let lower_bound = now_ms_value.saturating_sub(DEVICE_AUTH_MAX_CLOCK_SKEW_MS);
+    let upper_bound = now_ms_value.saturating_add(DEVICE_AUTH_MAX_CLOCK_SKEW_MS);
+    if signed_at_ms < lower_bound || signed_at_ms > upper_bound {
+        return Err(anyhow::anyhow!(
+            "OpenClaw device proof signed_at is outside allowable replay window"
+        ));
+    }
+    Ok(())
+}
+
+fn load_identity_signing_key(identity: &OpenClawDeviceIdentity) -> Result<SigningKey> {
+    SigningKey::from_pkcs8_pem(identity.private_key_pem.trim())
+        .map_err(|err| anyhow::anyhow!("invalid OpenClaw identity private key PEM: {err}"))
+}
+
+fn validate_identity_key_consistency(
+    identity: &OpenClawDeviceIdentity,
+    signing_key: &SigningKey,
+) -> Result<()> {
+    let declared_public_raw = URL_SAFE_NO_PAD
+        .decode(identity.public_key_raw_base64url.as_bytes())
+        .map_err(|err| anyhow::anyhow!("invalid OpenClaw identity public key encoding: {err}"))?;
+
+    let declared_public_bytes: [u8; 32] = declared_public_raw
+        .as_slice()
+        .try_into()
+        .map_err(|_| anyhow::anyhow!("invalid OpenClaw identity public key length"))?;
+    let declared_public = VerifyingKey::from_bytes(&declared_public_bytes)
+        .map_err(|err| anyhow::anyhow!("invalid OpenClaw identity public key bytes: {err}"))?;
+    let derived_public = signing_key.verifying_key();
+
+    if declared_public.as_bytes() != derived_public.as_bytes() {
+        return Err(anyhow::anyhow!(
+            "OpenClaw identity public/private key mismatch"
+        ));
+    }
+
+    let expected_device_id = hush_core::sha256(derived_public.as_bytes()).to_hex();
+    if identity.device_id != expected_device_id {
+        return Err(anyhow::anyhow!(
+            "OpenClaw identity device id mismatch for configured keypair"
+        ));
+    }
+
+    Ok(())
+}
+
+fn build_device_auth_payload(
+    device_id: &str,
+    client_id: &str,
+    client_mode: &str,
+    role: &str,
+    scopes: &[String],
+    signed_at_ms: u64,
+    token: Option<&str>,
+    nonce: Option<&str>,
+) -> String {
+    let version = if nonce.is_some() { "v2" } else { "v1" };
+    let scopes_csv = scopes.join(",");
+    let token_value = token.unwrap_or_default();
+    let mut pieces = vec![
+        version.to_string(),
+        device_id.to_string(),
+        client_id.to_string(),
+        client_mode.to_string(),
+        role.to_string(),
+        scopes_csv,
+        signed_at_ms.to_string(),
+        token_value.to_string(),
+    ];
+    if version == "v2" {
+        pieces.push(nonce.unwrap_or_default().to_string());
+    }
+    pieces.join("|")
+}
+
+fn configured_openclaw_state_dir_override() -> Option<PathBuf> {
+    normalized_env_var("OPENCLAW_STATE_DIR")
+        .or_else(|| normalized_env_var("CLAWDBOT_STATE_DIR"))
+        .map(|override_path| resolve_user_path(&override_path, &resolve_openclaw_home_dir()))
+}
+
+fn openclaw_identity_candidate_paths() -> Vec<PathBuf> {
+    openclaw_identity_candidate_paths_for(
+        &resolve_openclaw_home_dir(),
+        configured_openclaw_state_dir_override().as_deref(),
+    )
+}
+
+fn openclaw_identity_candidate_paths_for(
+    home_dir: &Path,
+    override_state_dir: Option<&Path>,
+) -> Vec<PathBuf> {
+    let mut candidates = Vec::new();
+    if let Some(override_dir) = override_state_dir {
+        candidates.push(override_dir.join(OPENCLAW_IDENTITY_PATH));
+    } else {
+        candidates.push(home_dir.join(OPENCLAW_STATE_DIR).join(OPENCLAW_IDENTITY_PATH));
+        for legacy in OPENCLAW_LEGACY_STATE_DIRS {
+            candidates.push(home_dir.join(legacy).join(OPENCLAW_IDENTITY_PATH));
+        }
+    }
+
+    let mut seen = HashSet::new();
+    candidates.retain(|path| seen.insert(path.clone()));
+    candidates
+}
+
+fn load_openclaw_device_identity_from_candidates(
+    candidates: &[PathBuf],
+) -> Result<Option<OpenClawDeviceIdentity>> {
+    for identity_path in candidates {
+        if !identity_path.exists() {
+            continue;
+        }
+
+        return load_openclaw_device_identity_from_path(identity_path)
+            .with_context(|| format!("failed to load OpenClaw identity from {:?}", identity_path))
+            .map(Some);
+    }
+
+    Ok(None)
+}
+
+fn resolve_openclaw_home_dir() -> PathBuf {
+    let fallback = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
+    if let Some(value) = normalized_env_var("OPENCLAW_HOME") {
+        return resolve_user_path(&value, &fallback);
+    }
+    if let Some(value) = normalized_env_var("HOME") {
+        return resolve_user_path(&value, &fallback);
+    }
+    if let Some(value) = normalized_env_var("USERPROFILE") {
+        return resolve_user_path(&value, &fallback);
+    }
+    fallback
+}
+
+fn normalized_env_var(key: &str) -> Option<String> {
+    std::env::var(key)
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+}
+
+fn resolve_user_path(input: &str, home_dir: &Path) -> PathBuf {
+    let trimmed = input.trim();
+    let resolved = if trimmed == "~" {
+        home_dir.to_path_buf()
+    } else if let Some(remainder) = trimmed
+        .strip_prefix("~/")
+        .or_else(|| trimmed.strip_prefix("~\\"))
+    {
+        home_dir.join(remainder)
+    } else {
+        PathBuf::from(trimmed)
+    };
+
+    if resolved.is_absolute() {
+        resolved
+    } else if let Ok(current_dir) = std::env::current_dir() {
+        current_dir.join(resolved)
+    } else {
+        resolved
+    }
 }
 
 fn reject_all_pending(pending: &mut HashMap<String, PendingResponse>, reason: &str) {
@@ -949,10 +1310,16 @@ async fn run_openclaw_json(args: Vec<String>) -> Result<Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ed25519_dalek::{
+        pkcs8::{EncodePrivateKey, EncodePublicKey},
+        Verifier,
+    };
     use futures::{SinkExt, StreamExt};
+    use std::fs;
     use tokio::net::TcpListener;
     use tokio::time::{sleep, Duration};
     use tokio_tungstenite::{accept_async, tungstenite::Message};
+    use uuid::Uuid;
 
     #[test]
     fn extract_json_payload_prefers_clean_payload() {
@@ -1003,6 +1370,327 @@ mod tests {
             normalize_secret_field("token-value".to_string()),
             Some("token-value".to_string())
         );
+    }
+
+    #[test]
+    fn device_auth_payload_matches_openclaw_v1_format() {
+        let scopes = vec!["operator.read".to_string(), "operator.write".to_string()];
+        let payload = build_device_auth_payload(
+            "device-id",
+            "cli",
+            "cli",
+            "operator",
+            &scopes,
+            1_700_000_000_123,
+            Some("gateway-token"),
+            None,
+        );
+        assert_eq!(
+            payload,
+            "v1|device-id|cli|cli|operator|operator.read,operator.write|1700000000123|gateway-token"
+        );
+    }
+
+    #[test]
+    fn gateway_device_proof_signs_openclaw_payload() {
+        let signing_key = SigningKey::from_bytes(&[7u8; 32]);
+        let verifying_key = signing_key.verifying_key();
+        let private_key_pem = match signing_key.to_pkcs8_pem(Default::default()) {
+            Ok(value) => value.to_string(),
+            Err(err) => panic!("failed to encode private key pem: {err}"),
+        };
+        let public_key_raw_base64url = URL_SAFE_NO_PAD.encode(verifying_key.as_bytes());
+        let device_id = hush_core::sha256(verifying_key.as_bytes()).to_hex();
+        let identity = OpenClawDeviceIdentity {
+            device_id: device_id.clone(),
+            public_key_raw_base64url: public_key_raw_base64url.clone(),
+            private_key_pem,
+        };
+        let scopes = vec![
+            "operator.read".to_string(),
+            "operator.write".to_string(),
+            "operator.approvals".to_string(),
+            "operator.pairing".to_string(),
+        ];
+        let signed_at = now_ms();
+        let proof = match build_gateway_device_proof_from_identity(
+            &identity,
+            "cli",
+            "cli",
+            "operator",
+            &scopes,
+            signed_at,
+            Some("gateway-token"),
+            None,
+        ) {
+            Ok(value) => value,
+            Err(err) => panic!("failed to build device proof: {err}"),
+        };
+        assert_eq!(proof.id, device_id);
+        assert_eq!(proof.public_key, public_key_raw_base64url);
+        assert_eq!(proof.signed_at, signed_at);
+
+        let payload = build_device_auth_payload(
+            &proof.id,
+            "cli",
+            "cli",
+            "operator",
+            &scopes,
+            proof.signed_at,
+            Some("gateway-token"),
+            None,
+        );
+        let sig_bytes = match URL_SAFE_NO_PAD.decode(&proof.signature) {
+            Ok(value) => value,
+            Err(err) => panic!("failed to decode signature: {err}"),
+        };
+        let signature = match Signature::from_slice(&sig_bytes) {
+            Ok(value) => value,
+            Err(err) => panic!("failed to parse signature bytes: {err}"),
+        };
+        assert!(
+            verifying_key.verify(payload.as_bytes(), &signature).is_ok(),
+            "device signature failed verification"
+        );
+    }
+
+    #[test]
+    fn gateway_device_proof_rejects_stale_signed_at() {
+        let signing_key = SigningKey::from_bytes(&[11u8; 32]);
+        let verifying_key = signing_key.verifying_key();
+        let private_key_pem = signing_key
+            .to_pkcs8_pem(Default::default())
+            .unwrap_or_else(|err| panic!("failed to encode private key pem: {err}"))
+            .to_string();
+        let identity = OpenClawDeviceIdentity {
+            device_id: hush_core::sha256(verifying_key.as_bytes()).to_hex(),
+            public_key_raw_base64url: URL_SAFE_NO_PAD.encode(verifying_key.as_bytes()),
+            private_key_pem,
+        };
+        let scopes = default_gateway_scopes();
+        let stale_signed_at = now_ms().saturating_sub(DEVICE_AUTH_MAX_CLOCK_SKEW_MS + 5_000);
+
+        let result = build_gateway_device_proof_from_identity(
+            &identity,
+            "cli",
+            "cli",
+            "operator",
+            &scopes,
+            stale_signed_at,
+            Some("gateway-token"),
+            None,
+        );
+
+        let err = result
+            .err()
+            .unwrap_or_else(|| anyhow::anyhow!("expected stale signed_at error"));
+        assert!(
+            err.to_string().contains("signed_at"),
+            "unexpected error text: {err}"
+        );
+    }
+
+    #[test]
+    fn gateway_device_proof_rejects_missing_required_scopes() {
+        let signing_key = SigningKey::from_bytes(&[13u8; 32]);
+        let verifying_key = signing_key.verifying_key();
+        let private_key_pem = signing_key
+            .to_pkcs8_pem(Default::default())
+            .unwrap_or_else(|err| panic!("failed to encode private key pem: {err}"))
+            .to_string();
+        let identity = OpenClawDeviceIdentity {
+            device_id: hush_core::sha256(verifying_key.as_bytes()).to_hex(),
+            public_key_raw_base64url: URL_SAFE_NO_PAD.encode(verifying_key.as_bytes()),
+            private_key_pem,
+        };
+        let scopes = vec!["operator.read".to_string(), "operator.write".to_string()];
+
+        let result = build_gateway_device_proof_from_identity(
+            &identity,
+            "cli",
+            "cli",
+            "operator",
+            &scopes,
+            now_ms(),
+            Some("gateway-token"),
+            None,
+        );
+
+        let err = result
+            .err()
+            .unwrap_or_else(|| anyhow::anyhow!("expected missing scope error"));
+        assert!(
+            err.to_string().contains("missing required scope"),
+            "unexpected error text: {err}"
+        );
+    }
+
+    #[test]
+    fn gateway_device_proof_rejects_public_private_key_mismatch_even_with_token() {
+        let signing_key_a = SigningKey::from_bytes(&[17u8; 32]);
+        let signing_key_b = SigningKey::from_bytes(&[19u8; 32]);
+        let verifying_key_a = signing_key_a.verifying_key();
+        let private_key_pem_b = signing_key_b
+            .to_pkcs8_pem(Default::default())
+            .unwrap_or_else(|err| panic!("failed to encode private key pem: {err}"))
+            .to_string();
+
+        let identity = OpenClawDeviceIdentity {
+            device_id: hush_core::sha256(verifying_key_a.as_bytes()).to_hex(),
+            public_key_raw_base64url: URL_SAFE_NO_PAD.encode(verifying_key_a.as_bytes()),
+            private_key_pem: private_key_pem_b,
+        };
+
+        let result = build_gateway_device_proof_from_identity(
+            &identity,
+            "cli",
+            "cli",
+            "operator",
+            &default_gateway_scopes(),
+            now_ms(),
+            Some("valid-token"),
+            None,
+        );
+
+        let err = result
+            .err()
+            .unwrap_or_else(|| anyhow::anyhow!("expected key mismatch error"));
+        assert!(
+            err.to_string().contains("public/private key mismatch"),
+            "unexpected error text: {err}"
+        );
+    }
+
+    #[test]
+    fn device_auth_payload_changes_when_token_rotates() {
+        let scopes = default_gateway_scopes();
+        let signed_at = now_ms();
+        let payload_before = build_device_auth_payload(
+            "device-id",
+            "cli",
+            "cli",
+            "operator",
+            &scopes,
+            signed_at,
+            Some("token-v1"),
+            None,
+        );
+        let payload_after = build_device_auth_payload(
+            "device-id",
+            "cli",
+            "cli",
+            "operator",
+            &scopes,
+            signed_at,
+            Some("token-v2"),
+            None,
+        );
+
+        assert_ne!(
+            payload_before, payload_after,
+            "rotating gateway token should change signed auth payload"
+        );
+        assert!(
+            payload_after.ends_with("|token-v2"),
+            "rotated payload missing updated token"
+        );
+    }
+
+    #[test]
+    fn load_openclaw_identity_derives_device_id_from_public_key() {
+        let signing_key = SigningKey::from_bytes(&[9u8; 32]);
+        let verifying_key = signing_key.verifying_key();
+        let private_key_pem = match signing_key.to_pkcs8_pem(Default::default()) {
+            Ok(value) => value.to_string(),
+            Err(err) => panic!("failed to encode private key pem: {err}"),
+        };
+        let public_key_pem = match verifying_key.to_public_key_pem(Default::default()) {
+            Ok(value) => value,
+            Err(err) => panic!("failed to encode public key pem: {err}"),
+        };
+        let temp_dir =
+            std::env::temp_dir().join(format!("openclaw-identity-test-{}", Uuid::new_v4()));
+        if let Err(err) = fs::create_dir_all(&temp_dir) {
+            panic!("failed to create temp identity dir: {err}");
+        }
+        let identity_path = temp_dir.join("device.json");
+        let raw = serde_json::json!({
+            "version": 1,
+            "deviceId": "mismatch-id",
+            "publicKeyPem": public_key_pem,
+            "privateKeyPem": private_key_pem,
+        });
+        if let Err(err) = fs::write(&identity_path, raw.to_string()) {
+            let _ = fs::remove_dir_all(&temp_dir);
+            panic!("failed to write temp identity file: {err}");
+        }
+
+        let loaded = match load_openclaw_device_identity_from_path(&identity_path) {
+            Ok(value) => value,
+            Err(err) => {
+                let _ = fs::remove_dir_all(&temp_dir);
+                panic!("failed to load temp identity: {err}");
+            }
+        };
+        let expected_device_id = hush_core::sha256(verifying_key.as_bytes()).to_hex();
+        assert_eq!(loaded.device_id, expected_device_id);
+        assert_eq!(
+            loaded.public_key_raw_base64url,
+            URL_SAFE_NO_PAD.encode(verifying_key.as_bytes())
+        );
+
+        if let Err(err) = fs::remove_dir_all(&temp_dir) {
+            panic!("failed to remove temp identity dir: {err}");
+        }
+    }
+
+    #[test]
+    fn load_openclaw_identity_falls_back_to_legacy_when_primary_missing() {
+        let signing_key = SigningKey::from_bytes(&[29u8; 32]);
+        let verifying_key = signing_key.verifying_key();
+        let private_key_pem = signing_key
+            .to_pkcs8_pem(Default::default())
+            .unwrap_or_else(|err| panic!("failed to encode private key pem: {err}"))
+            .to_string();
+        let public_key_pem = verifying_key
+            .to_public_key_pem(Default::default())
+            .unwrap_or_else(|err| panic!("failed to encode public key pem: {err}"));
+
+        let temp_home = std::env::temp_dir().join(format!("openclaw-fallback-test-{}", Uuid::new_v4()));
+        let primary_identity = temp_home.join(OPENCLAW_STATE_DIR).join(OPENCLAW_IDENTITY_PATH);
+        let legacy_identity = temp_home
+            .join(OPENCLAW_LEGACY_STATE_DIRS[0])
+            .join(OPENCLAW_IDENTITY_PATH);
+
+        if let Some(parent) = primary_identity.parent() {
+            fs::create_dir_all(parent)
+                .unwrap_or_else(|err| panic!("failed to create primary dir: {err}"));
+        }
+        if let Some(parent) = legacy_identity.parent() {
+            fs::create_dir_all(parent)
+                .unwrap_or_else(|err| panic!("failed to create legacy dir: {err}"));
+        }
+
+        let raw = serde_json::json!({
+            "version": 1,
+            "deviceId": "legacy-device-id",
+            "publicKeyPem": public_key_pem,
+            "privateKeyPem": private_key_pem,
+        });
+        fs::write(&legacy_identity, raw.to_string())
+            .unwrap_or_else(|err| panic!("failed to write legacy identity: {err}"));
+
+        let loaded = load_openclaw_device_identity_from_candidates(&[
+            primary_identity.clone(),
+            legacy_identity.clone(),
+        ])
+        .unwrap_or_else(|err| panic!("failed to load fallback identity: {err}"))
+        .unwrap_or_else(|| panic!("expected fallback identity to load"));
+
+        let expected_device_id = hush_core::sha256(verifying_key.as_bytes()).to_hex();
+        assert_eq!(loaded.device_id, expected_device_id);
+
+        let _ = fs::remove_dir_all(&temp_home);
     }
 
     #[tokio::test]
@@ -1066,11 +1754,30 @@ mod tests {
                 None => return Err("stream closed before connect frame".to_string()),
             };
 
-            let connect_id = match parse_gateway_frame(&connect_text) {
-                Some(GatewayFrame::Req(req)) if req.method == "connect" => req.id,
+            let (connect_id, connect_params) = match parse_gateway_frame(&connect_text) {
+                Some(GatewayFrame::Req(req)) if req.method == "connect" => (req.id, req.params),
                 Some(_) => return Err("unexpected first frame shape".to_string()),
                 None => return Err("failed to parse connect frame".to_string()),
             };
+            if let Some(params) = connect_params {
+                if params
+                    .get("auth")
+                    .and_then(|value| value.as_object())
+                    .is_some_and(|auth| auth.contains_key("deviceToken"))
+                {
+                    return Err("connect auth should not include deviceToken".to_string());
+                }
+                if params
+                    .get("auth")
+                    .and_then(|value| value.get("token"))
+                    .and_then(|value| value.as_str())
+                    != Some("gateway-token")
+                {
+                    return Err("connect auth token mismatch".to_string());
+                }
+            } else {
+                return Err("connect params missing".to_string());
+            }
 
             let connect_response = GatewayFrame::Res(GatewayResponseFrame {
                 id: connect_id,
@@ -1144,6 +1851,19 @@ mod tests {
         settings.openclaw.active_gateway_id = Some("gw-test".to_string());
 
         let manager = OpenClawManager::new(Arc::new(RwLock::new(settings)));
+        if let Err(err) = manager
+            .secrets
+            .set(
+                "gw-test",
+                GatewaySecrets {
+                    token: Some("gateway-token".to_string()),
+                    device_token: Some("legacy-device-token".to_string()),
+                },
+            )
+            .await
+        {
+            panic!("failed to set test gateway secrets: {err}");
+        }
         let mut events_rx = manager.subscribe();
 
         if let Err(err) = manager.connect_gateway("gw-test").await {
@@ -1201,6 +1921,162 @@ mod tests {
         };
         if let Err(err) = server_result {
             panic!("mock gateway task failed: {}", err);
+        }
+    }
+
+    #[tokio::test]
+    async fn reconnect_uses_rotated_gateway_token() {
+        let listener = TcpListener::bind("127.0.0.1:0")
+            .await
+            .unwrap_or_else(|err| panic!("failed to bind token-rotation listener: {err}"));
+        let addr = listener
+            .local_addr()
+            .unwrap_or_else(|err| panic!("failed to read token-rotation listener address: {err}"));
+
+        let server = tokio::spawn(async move {
+            let expected_tokens = ["token-v1", "token-v2"];
+            for expected in expected_tokens {
+                let (stream, _) = listener
+                    .accept()
+                    .await
+                    .map_err(|err| format!("accept failed: {err}"))?;
+                let mut ws = accept_async(stream)
+                    .await
+                    .map_err(|err| format!("ws accept failed: {err}"))?;
+
+                let connect_text = match ws.next().await {
+                    Some(Ok(Message::Text(text))) => text,
+                    Some(Ok(_)) => return Err("expected text connect frame".to_string()),
+                    Some(Err(err)) => return Err(format!("read connect frame failed: {err}")),
+                    None => return Err("stream closed before connect frame".to_string()),
+                };
+                let (connect_id, params) = match parse_gateway_frame(&connect_text) {
+                    Some(GatewayFrame::Req(req)) if req.method == "connect" => (req.id, req.params),
+                    Some(_) => return Err("unexpected first frame shape".to_string()),
+                    None => return Err("failed to parse connect frame".to_string()),
+                };
+
+                let token = params
+                    .as_ref()
+                    .and_then(|value| value.get("auth"))
+                    .and_then(|value| value.get("token"))
+                    .and_then(|value| value.as_str())
+                    .ok_or_else(|| "connect auth token missing".to_string())?;
+                if token != expected {
+                    return Err(format!(
+                        "connect auth token mismatch: expected {expected}, got {token}"
+                    ));
+                }
+
+                let connect_response = GatewayFrame::Res(GatewayResponseFrame {
+                    id: connect_id,
+                    ok: true,
+                    payload: Some(serde_json::json!({"session":"mock"})),
+                    error: None,
+                });
+                let response_text = serde_json::to_string(&connect_response)
+                    .map_err(|err| format!("serialize connect response failed: {err}"))?;
+                ws.send(Message::Text(response_text))
+                    .await
+                    .map_err(|err| format!("send connect response failed: {err}"))?;
+
+                let _ = tokio::time::timeout(Duration::from_secs(3), ws.next()).await;
+            }
+
+            Ok::<(), String>(())
+        });
+
+        let mut settings = Settings::default();
+        settings.openclaw.gateways.push(OpenClawGatewayMetadata {
+            id: "gw-rotate".to_string(),
+            label: "Rotate Gateway".to_string(),
+            gateway_url: format!("ws://{}", addr),
+        });
+        settings.openclaw.active_gateway_id = Some("gw-rotate".to_string());
+
+        let manager = OpenClawManager::new(Arc::new(RwLock::new(settings)));
+        manager
+            .secrets
+            .set(
+                "gw-rotate",
+                GatewaySecrets {
+                    token: Some("token-v1".to_string()),
+                    device_token: None,
+                },
+            )
+            .await
+            .unwrap_or_else(|err| panic!("failed to set initial gateway token: {err}"));
+
+        manager
+            .connect_gateway("gw-rotate")
+            .await
+            .unwrap_or_else(|err| panic!("first connect_gateway failed: {err}"));
+
+        let mut connected = false;
+        for _ in 0..40 {
+            let status = manager
+                .list_gateways()
+                .await
+                .gateways
+                .into_iter()
+                .find(|gateway| gateway.id == "gw-rotate")
+                .map(|gateway| gateway.runtime.status);
+            if status == Some(GatewayConnectionStatus::Connected) {
+                connected = true;
+                break;
+            }
+            sleep(Duration::from_millis(50)).await;
+        }
+        assert!(connected, "gateway did not reach connected state on first token");
+
+        manager
+            .disconnect_gateway("gw-rotate")
+            .await
+            .unwrap_or_else(|err| panic!("first disconnect_gateway failed: {err}"));
+
+        manager
+            .upsert_gateway(GatewayUpsertRequest {
+                id: Some("gw-rotate".to_string()),
+                label: "Rotate Gateway".to_string(),
+                gateway_url: format!("ws://{}", addr),
+                token: Some("token-v2".to_string()),
+                device_token: None,
+            })
+            .await
+            .unwrap_or_else(|err| panic!("failed to rotate gateway token: {err}"));
+
+        manager
+            .connect_gateway("gw-rotate")
+            .await
+            .unwrap_or_else(|err| panic!("second connect_gateway failed: {err}"));
+
+        connected = false;
+        for _ in 0..40 {
+            let status = manager
+                .list_gateways()
+                .await
+                .gateways
+                .into_iter()
+                .find(|gateway| gateway.id == "gw-rotate")
+                .map(|gateway| gateway.runtime.status);
+            if status == Some(GatewayConnectionStatus::Connected) {
+                connected = true;
+                break;
+            }
+            sleep(Duration::from_millis(50)).await;
+        }
+        assert!(connected, "gateway did not reach connected state after token rotation");
+
+        manager
+            .disconnect_gateway("gw-rotate")
+            .await
+            .unwrap_or_else(|err| panic!("second disconnect_gateway failed: {err}"));
+
+        let server_result = server
+            .await
+            .unwrap_or_else(|err| panic!("token-rotation server join failed: {err}"));
+        if let Err(err) = server_result {
+            panic!("token-rotation server failed: {err}");
         }
     }
 

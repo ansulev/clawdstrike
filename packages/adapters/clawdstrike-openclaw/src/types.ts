@@ -39,7 +39,18 @@ export type EventType =
   | 'network_egress'
   | 'tool_call'
   | 'patch_apply'
-  | 'secret_access';
+  | 'secret_access'
+  | 'custom'
+  | 'remote.session.connect'
+  | 'remote.session.disconnect'
+  | 'remote.session.reconnect'
+  | 'input.inject'
+  | 'remote.clipboard'
+  | 'remote.file_transfer'
+  | 'remote.audio'
+  | 'remote.drive_mapping'
+  | 'remote.printing'
+  | 'remote.session_share';
 
 /**
  * Plugin configuration schema
@@ -93,7 +104,8 @@ export type EventData =
   | NetworkEventData
   | ToolEventData
   | PatchEventData
-  | SecretEventData;
+  | SecretEventData
+  | CuaEventData;
 
 /**
  * File read/write event data
@@ -178,6 +190,50 @@ export interface SecretEventData {
 }
 
 /**
+ * CUA (Computer Use Agent) event data
+ */
+export interface CuaEventData {
+  type: 'cua';
+  cuaAction: string;
+  direction?: 'read' | 'write' | 'upload' | 'download' | 'inbound' | 'outbound';
+  continuityPrevSessionHash?: string;
+  postconditionProbeHash?: string;
+  [key: string]: unknown;
+}
+
+export type ComputerUseMode = 'observe' | 'guardrail' | 'fail_closed';
+
+export interface ComputerUseGuardConfig {
+  enabled?: boolean;
+  mode?: ComputerUseMode;
+  allowed_actions?: string[];
+}
+
+export interface RemoteDesktopSideChannelGuardConfig {
+  enabled?: boolean;
+  clipboard_enabled?: boolean;
+  file_transfer_enabled?: boolean;
+  audio_enabled?: boolean;
+  drive_mapping_enabled?: boolean;
+  printing_enabled?: boolean;
+  session_share_enabled?: boolean;
+  max_transfer_size_bytes?: number;
+}
+
+export interface InputInjectionCapabilityGuardConfig {
+  enabled?: boolean;
+  allowed_input_types?: string[];
+  require_postcondition_probe?: boolean;
+}
+
+export interface PolicyGuards extends GuardToggles {
+  custom?: unknown;
+  computer_use?: ComputerUseGuardConfig;
+  remote_desktop_side_channel?: RemoteDesktopSideChannelGuardConfig;
+  input_injection_capability?: InputInjectionCapabilityGuardConfig;
+}
+
+/**
  * Decision status for security checks.
  * - 'allow': Operation is permitted
  * - 'warn': Operation is permitted but flagged for review
@@ -185,21 +241,40 @@ export interface SecretEventData {
  */
 export type DecisionStatus = 'allow' | 'warn' | 'deny';
 
+export type DecisionReasonCode = string;
+
 /**
  * Result of policy evaluation
  */
-export interface Decision {
-  /** The decision status: 'allow', 'warn', or 'deny' */
-  status: DecisionStatus;
-  /** Reason for denial (if denied) */
-  reason?: string;
-  /** Guard that made the decision */
-  guard?: string;
-  /** Severity of the violation */
-  severity?: Severity;
-  /** Additional message */
-  message?: string;
-}
+export type Decision =
+  | {
+      /** The decision status: 'allow' */
+      status: 'allow';
+      /** Optional machine-readable reason code */
+      reason_code?: DecisionReasonCode;
+      /** Reason for allow/observe outcome */
+      reason?: string;
+      /** Guard that made the decision */
+      guard?: string;
+      /** Severity of the violation */
+      severity?: Severity;
+      /** Additional message */
+      message?: string;
+    }
+  | {
+      /** The decision status: 'warn' or 'deny' */
+      status: 'warn' | 'deny';
+      /** Required machine-readable reason code for non-allow outcomes */
+      reason_code: DecisionReasonCode;
+      /** Human-readable reason */
+      reason?: string;
+      /** Guard that made the decision */
+      guard?: string;
+      /** Severity of the violation */
+      severity?: Severity;
+      /** Additional message */
+      message?: string;
+    };
 
 /**
  * Result from a single guard check
@@ -234,7 +309,7 @@ export interface Policy {
   /** Resource limits */
   limits?: ResourceLimits;
   /** Guard-level toggles */
-  guards?: GuardToggles & { custom?: unknown };
+  guards?: PolicyGuards;
   /** Action to take on violation */
   on_violation?: ViolationAction;
 }

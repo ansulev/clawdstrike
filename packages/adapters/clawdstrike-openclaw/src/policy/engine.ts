@@ -2,11 +2,12 @@ import { homedir } from 'node:os';
 import path from 'node:path';
 
 import type { PolicyEngineLike as CanonicalPolicyEngineLike, PolicyEvent as CanonicalPolicyEvent } from '@clawdstrike/adapter-core';
+import { parseNetworkTarget } from '@clawdstrike/adapter-core';
 import { createPolicyEngineFromPolicy, type Policy as CanonicalPolicy } from '@clawdstrike/policy';
 
 import { mergeConfig } from '../config.js';
 import { EgressGuard, ForbiddenPathGuard, PatchIntegrityGuard, SecretLeakGuard } from '../guards/index.js';
-import type { Decision, EvaluationMode, ClawdstrikeConfig, Policy, PolicyEvent, Severity } from '../types.js';
+import type { CuaEventData, Decision, EvaluationMode, ClawdstrikeConfig, Policy, PolicyEvent, Severity } from '../types.js';
 import { sanitizeOutputText } from '../sanitizer/output-sanitizer.js';
 
 import { loadPolicy } from './loader.js';
@@ -135,6 +136,63 @@ function extractCommandPathCandidates(command: string, args: string[]): { reads:
   return { reads: uniq(reads), writes: uniq(writes) };
 }
 
+const POLICY_REASON_CODES = {
+  POLICY_DENY: 'ADC_POLICY_DENY',
+  POLICY_WARN: 'ADC_POLICY_WARN',
+  GUARD_ERROR: 'ADC_GUARD_ERROR',
+  CUA_MALFORMED_EVENT: 'OCLAW_CUA_MALFORMED_EVENT',
+  CUA_COMPUTER_USE_CONFIG_MISSING: 'OCLAW_CUA_COMPUTER_USE_CONFIG_MISSING',
+  CUA_COMPUTER_USE_DISABLED: 'OCLAW_CUA_COMPUTER_USE_DISABLED',
+  CUA_ACTION_NOT_ALLOWED: 'OCLAW_CUA_ACTION_NOT_ALLOWED',
+  CUA_MODE_UNSUPPORTED: 'OCLAW_CUA_MODE_UNSUPPORTED',
+  CUA_CONNECT_METADATA_MISSING: 'OCLAW_CUA_CONNECT_METADATA_MISSING',
+  CUA_SIDE_CHANNEL_CONFIG_MISSING: 'OCLAW_CUA_SIDE_CHANNEL_CONFIG_MISSING',
+  CUA_SIDE_CHANNEL_DISABLED: 'OCLAW_CUA_SIDE_CHANNEL_DISABLED',
+  CUA_SIDE_CHANNEL_POLICY_DENY: 'OCLAW_CUA_SIDE_CHANNEL_POLICY_DENY',
+  CUA_TRANSFER_SIZE_CONFIG_INVALID: 'OCLAW_CUA_TRANSFER_SIZE_CONFIG_INVALID',
+  CUA_TRANSFER_SIZE_MISSING: 'OCLAW_CUA_TRANSFER_SIZE_MISSING',
+  CUA_TRANSFER_SIZE_EXCEEDED: 'OCLAW_CUA_TRANSFER_SIZE_EXCEEDED',
+  CUA_INPUT_CONFIG_MISSING: 'OCLAW_CUA_INPUT_CONFIG_MISSING',
+  CUA_INPUT_DISABLED: 'OCLAW_CUA_INPUT_DISABLED',
+  CUA_INPUT_TYPE_MISSING: 'OCLAW_CUA_INPUT_TYPE_MISSING',
+  CUA_INPUT_TYPE_NOT_ALLOWED: 'OCLAW_CUA_INPUT_TYPE_NOT_ALLOWED',
+  CUA_POSTCONDITION_PROBE_REQUIRED: 'OCLAW_CUA_POSTCONDITION_PROBE_REQUIRED',
+  FILESYSTEM_WRITE_ROOT_DENY: 'OCLAW_FILESYSTEM_WRITE_ROOT_DENY',
+  TOOL_DENIED: 'OCLAW_TOOL_DENIED',
+  TOOL_NOT_ALLOWLISTED: 'OCLAW_TOOL_NOT_ALLOWLISTED',
+} as const;
+
+function denyDecision(reason_code: string, reason: string, guard?: string, severity: Severity = 'high'): Decision {
+  return {
+    status: 'deny',
+    reason_code,
+    reason,
+    message: reason,
+    ...(guard !== undefined && { guard }),
+    ...(severity !== undefined && { severity }),
+  };
+}
+
+function warnDecision(reason_code: string, reason: string, guard?: string, severity: Severity = 'medium'): Decision {
+  return {
+    status: 'warn',
+    reason_code,
+    reason,
+    message: reason,
+    ...(guard !== undefined && { guard }),
+    ...(severity !== undefined && { severity }),
+  };
+}
+
+function ensureReasonCode(decision: Decision): Decision {
+  if (decision.status === 'allow') return decision;
+  if (typeof decision.reason_code === 'string' && decision.reason_code.trim().length > 0) return decision;
+  return {
+    ...decision,
+    reason_code: decision.status === 'warn' ? POLICY_REASON_CODES.POLICY_WARN : POLICY_REASON_CODES.GUARD_ERROR,
+  };
+}
+
 export class PolicyEngine {
   private readonly config: Required<ClawdstrikeConfig>;
   private readonly policy: Policy;
@@ -213,16 +271,17 @@ export class PolicyEngine {
     }
 
     if (mode === 'advisory' && result.status === 'deny') {
-      return {
-        status: 'warn',
-        reason: result.reason,
-        guard: result.guard,
-        severity: result.severity,
-        message: result.reason,
-      };
+      return ensureReasonCode(
+        warnDecision(
+          result.reason_code,
+          result.reason ?? result.message ?? 'policy deny converted to advisory warning',
+          result.guard,
+          result.severity ?? 'medium',
+        ),
+      );
     }
 
-    return result;
+    return ensureReasonCode(result);
   }
 
   private evaluateDeterministic(event: PolicyEvent): Decision {
@@ -240,9 +299,304 @@ export class PolicyEngine {
         return this.checkToolCall(event);
       case 'patch_apply':
         return this.checkPatch(event);
+      case 'remote.session.connect':
+      case 'remote.session.disconnect':
+      case 'remote.session.reconnect':
+      case 'input.inject':
+      case 'remote.clipboard':
+      case 'remote.file_transfer':
+      case 'remote.audio':
+      case 'remote.drive_mapping':
+      case 'remote.printing':
+      case 'remote.session_share':
+        return this.checkCua(event);
       default:
         return allowed;
     }
+  }
+
+  private checkCua(event: PolicyEvent): Decision {
+    if (event.data.type !== 'cua') {
+      return this.applyOnViolation(
+        denyDecision(
+          POLICY_REASON_CODES.CUA_MALFORMED_EVENT,
+          `Malformed CUA event payload for ${event.eventType}: data.type must be 'cua'`,
+          'computer_use',
+          'high',
+        ),
+      );
+    }
+    const cuaData = event.data;
+
+    const connectEgressDecision = this.checkCuaConnectEgress(event, cuaData);
+    if (connectEgressDecision.status === 'deny' || connectEgressDecision.status === 'warn') {
+      return connectEgressDecision;
+    }
+
+    const computerUse = this.policy.guards?.computer_use;
+    if (!computerUse) {
+      return this.applyOnViolation(
+        denyDecision(
+          POLICY_REASON_CODES.CUA_COMPUTER_USE_CONFIG_MISSING,
+          `CUA action '${event.eventType}' denied: missing guards.computer_use policy config`,
+          'computer_use',
+          'high',
+        ),
+      );
+    }
+
+    if (computerUse.enabled === false) {
+      return this.applyOnViolation(
+        denyDecision(
+          POLICY_REASON_CODES.CUA_COMPUTER_USE_DISABLED,
+          `CUA action '${event.eventType}' denied: computer_use guard is disabled`,
+          'computer_use',
+          'high',
+        ),
+      );
+    }
+
+    const mode = computerUse.mode ?? 'guardrail';
+    const allowedActions = normalizeStringList(computerUse.allowed_actions);
+    const actionAllowed = allowedActions.length === 0 || allowedActions.includes(event.eventType);
+
+    if (!actionAllowed) {
+      const reason = `CUA action '${event.eventType}' is not listed in guards.computer_use.allowed_actions`;
+      if (mode === 'observe' || mode === 'guardrail') {
+        return warnDecision(
+          POLICY_REASON_CODES.CUA_ACTION_NOT_ALLOWED,
+          reason,
+          'computer_use',
+          'medium',
+        );
+      }
+      if (mode !== 'fail_closed') {
+        return this.applyOnViolation(
+          denyDecision(
+            POLICY_REASON_CODES.CUA_MODE_UNSUPPORTED,
+            `CUA action '${event.eventType}' denied: unsupported computer_use mode '${mode}'`,
+            'computer_use',
+            'high',
+          ),
+        );
+      }
+
+      return this.applyOnViolation(
+        denyDecision(
+          POLICY_REASON_CODES.CUA_ACTION_NOT_ALLOWED,
+          reason,
+          'computer_use',
+          'high',
+        ),
+      );
+    }
+
+    const sideChannelDecision = this.checkRemoteDesktopSideChannel(event, cuaData);
+    if (sideChannelDecision.status === 'deny' || sideChannelDecision.status === 'warn') {
+      return sideChannelDecision;
+    }
+
+    const inputDecision = this.checkInputInjectionCapability(event, cuaData);
+    if (inputDecision.status === 'deny' || inputDecision.status === 'warn') {
+      return inputDecision;
+    }
+
+    return { status: 'allow' };
+  }
+
+  private checkCuaConnectEgress(event: PolicyEvent, data: CuaEventData): Decision {
+    if (event.eventType !== 'remote.session.connect') {
+      return { status: 'allow' };
+    }
+
+    if (!this.config.guards.egress) {
+      return { status: 'allow' };
+    }
+
+    const target = extractCuaNetworkTarget(data);
+    if (!target) {
+      return this.applyOnViolation(
+        denyDecision(
+          POLICY_REASON_CODES.CUA_CONNECT_METADATA_MISSING,
+          "CUA connect action denied: missing destination host/url metadata required for egress evaluation",
+          'egress',
+          'high',
+        ),
+      );
+    }
+
+    const egressEvent: PolicyEvent = {
+      eventId: `${event.eventId}:cua-connect-egress`,
+      eventType: 'network_egress',
+      timestamp: event.timestamp,
+      sessionId: event.sessionId,
+      data: {
+        type: 'network',
+        host: target.host,
+        port: target.port,
+        ...(target.protocol ? { protocol: target.protocol } : {}),
+        ...(target.url ? { url: target.url } : {}),
+      },
+      metadata: {
+        ...(event.metadata ?? {}),
+        derivedFrom: event.eventType,
+      },
+    };
+
+    return this.checkEgress(egressEvent);
+  }
+
+  private checkRemoteDesktopSideChannel(event: PolicyEvent, data: CuaEventData): Decision {
+    const sideChannelFlag = eventTypeToSideChannelFlag(event.eventType);
+    if (!sideChannelFlag) {
+      return { status: 'allow' };
+    }
+
+    const cfg = this.policy.guards?.remote_desktop_side_channel;
+    if (!cfg) {
+      return this.applyOnViolation(
+        denyDecision(
+          POLICY_REASON_CODES.CUA_SIDE_CHANNEL_CONFIG_MISSING,
+          `CUA side-channel action '${event.eventType}' denied: missing guards.remote_desktop_side_channel policy config`,
+          'remote_desktop_side_channel',
+          'high',
+        ),
+      );
+    }
+
+    if (cfg.enabled === false) {
+      return this.applyOnViolation(
+        denyDecision(
+          POLICY_REASON_CODES.CUA_SIDE_CHANNEL_DISABLED,
+          `CUA side-channel action '${event.eventType}' denied: remote_desktop_side_channel guard is disabled`,
+          'remote_desktop_side_channel',
+          'high',
+        ),
+      );
+    }
+
+    if (cfg[sideChannelFlag] === false) {
+      return this.applyOnViolation(
+        denyDecision(
+          POLICY_REASON_CODES.CUA_SIDE_CHANNEL_POLICY_DENY,
+          `CUA side-channel action '${event.eventType}' denied by policy`,
+          'remote_desktop_side_channel',
+          'high',
+        ),
+      );
+    }
+
+    if (event.eventType === 'remote.file_transfer') {
+      const maxBytes = cfg.max_transfer_size_bytes;
+      if (maxBytes !== undefined) {
+        if (typeof maxBytes !== 'number' || !Number.isFinite(maxBytes) || maxBytes < 0) {
+          return this.applyOnViolation(
+            denyDecision(
+              POLICY_REASON_CODES.CUA_TRANSFER_SIZE_CONFIG_INVALID,
+              `CUA file transfer denied: invalid max_transfer_size_bytes '${String(maxBytes)}'`,
+              'remote_desktop_side_channel',
+              'high',
+            ),
+          );
+        }
+
+        const transferSize = extractTransferSize(data);
+        if (transferSize === null) {
+          return this.applyOnViolation(
+            denyDecision(
+              POLICY_REASON_CODES.CUA_TRANSFER_SIZE_MISSING,
+              'CUA file transfer denied: missing required transfer_size metadata',
+              'remote_desktop_side_channel',
+              'high',
+            ),
+          );
+        }
+
+        if (transferSize > maxBytes) {
+          return this.applyOnViolation(
+            denyDecision(
+              POLICY_REASON_CODES.CUA_TRANSFER_SIZE_EXCEEDED,
+              `CUA file transfer size ${transferSize} exceeds max_transfer_size_bytes ${maxBytes}`,
+              'remote_desktop_side_channel',
+              'high',
+            ),
+          );
+        }
+      }
+    }
+
+    return { status: 'allow' };
+  }
+
+  private checkInputInjectionCapability(event: PolicyEvent, data: CuaEventData): Decision {
+    if (event.eventType !== 'input.inject') {
+      return { status: 'allow' };
+    }
+
+    const cfg = this.policy.guards?.input_injection_capability;
+    if (!cfg) {
+      return this.applyOnViolation(
+        denyDecision(
+          POLICY_REASON_CODES.CUA_INPUT_CONFIG_MISSING,
+          `CUA input action '${event.eventType}' denied: missing guards.input_injection_capability policy config`,
+          'input_injection_capability',
+          'high',
+        ),
+      );
+    }
+
+    if (cfg.enabled === false) {
+      return this.applyOnViolation(
+        denyDecision(
+          POLICY_REASON_CODES.CUA_INPUT_DISABLED,
+          `CUA input action '${event.eventType}' denied: input_injection_capability guard is disabled`,
+          'input_injection_capability',
+          'high',
+        ),
+      );
+    }
+
+    const allowedInputTypes = normalizeStringList(cfg.allowed_input_types);
+    const inputType = extractInputType(data);
+    if (allowedInputTypes.length > 0) {
+      if (!inputType) {
+        return this.applyOnViolation(
+          denyDecision(
+            POLICY_REASON_CODES.CUA_INPUT_TYPE_MISSING,
+            "CUA input action denied: missing required 'input_type'",
+            'input_injection_capability',
+            'high',
+          ),
+        );
+      }
+
+      if (!allowedInputTypes.includes(inputType)) {
+        return this.applyOnViolation(
+          denyDecision(
+            POLICY_REASON_CODES.CUA_INPUT_TYPE_NOT_ALLOWED,
+            `CUA input action denied: input_type '${inputType}' is not allowed`,
+            'input_injection_capability',
+            'high',
+          ),
+        );
+      }
+    }
+
+    if (cfg.require_postcondition_probe === true) {
+      const probeHash = data.postconditionProbeHash;
+      if (typeof probeHash !== 'string' || probeHash.trim().length === 0) {
+        return this.applyOnViolation(
+          denyDecision(
+            POLICY_REASON_CODES.CUA_POSTCONDITION_PROBE_REQUIRED,
+            'CUA input action denied: postcondition probe hash is required',
+            'input_injection_capability',
+            'high',
+          ),
+        );
+      }
+    }
+
+    return { status: 'allow' };
   }
 
   private checkFilesystem(event: PolicyEvent): Decision {
@@ -267,12 +621,14 @@ export class PolicyEngine {
           return filePath === rootPath || filePath.startsWith(rootPath + path.sep);
         });
         if (!ok) {
-          return this.applyOnViolation({
-            status: 'deny',
-            reason: 'Write path not in allowed roots',
-            guard: 'forbidden_path',
-            severity: 'high',
-          });
+          return this.applyOnViolation(
+            denyDecision(
+              POLICY_REASON_CODES.FILESYSTEM_WRITE_ROOT_DENY,
+              'Write path not in allowed roots',
+              'forbidden_path',
+              'high',
+            ),
+          );
         }
       }
     }
@@ -347,22 +703,26 @@ export class PolicyEngine {
 
       const deniedTools = tools?.denied?.map((x) => x.toLowerCase()) ?? [];
       if (deniedTools.includes(toolName)) {
-        return this.applyOnViolation({
-          status: 'deny',
-          reason: `Tool '${event.data.toolName}' is denied by policy`,
-          guard: 'mcp_tool',
-          severity: 'high',
-        });
+        return this.applyOnViolation(
+          denyDecision(
+            POLICY_REASON_CODES.TOOL_DENIED,
+            `Tool '${event.data.toolName}' is denied by policy`,
+            'mcp_tool',
+            'high',
+          ),
+        );
       }
 
       const allowedTools = tools?.allowed?.map((x) => x.toLowerCase()) ?? [];
       if (allowedTools.length > 0 && !allowedTools.includes(toolName)) {
-        return this.applyOnViolation({
-          status: 'deny',
-          reason: `Tool '${event.data.toolName}' is not in allowed tool list`,
-          guard: 'mcp_tool',
-          severity: 'high',
-        });
+        return this.applyOnViolation(
+          denyDecision(
+            POLICY_REASON_CODES.TOOL_NOT_ALLOWLISTED,
+            `Tool '${event.data.toolName}' is not in allowed tool list`,
+            'mcp_tool',
+            'high',
+          ),
+        );
       }
     }
 
@@ -419,13 +779,12 @@ export class PolicyEngine {
     if (decision.status !== 'deny') return decision;
 
     if (action === 'warn') {
-      return {
-        status: 'warn',
-        reason: decision.reason,
-        guard: decision.guard,
-        severity: decision.severity,
-        message: decision.reason,
-      };
+      return warnDecision(
+        decision.reason_code,
+        decision.reason ?? decision.message ?? 'Policy violation downgraded to warning',
+        decision.guard,
+        decision.severity ?? 'medium',
+      );
     }
 
     return decision;
@@ -434,9 +793,19 @@ export class PolicyEngine {
   private guardResultToDecision(result: { status: 'allow' | 'deny' | 'warn'; reason?: string; severity?: Severity; guard: string }): Decision {
     if (result.status === 'allow') return { status: 'allow' };
     if (result.status === 'warn') {
-      return { status: 'warn', reason: result.reason, guard: result.guard, message: result.reason };
+      return warnDecision(
+        POLICY_REASON_CODES.POLICY_WARN,
+        result.reason ?? `${result.guard} returned warning`,
+        result.guard,
+        'medium',
+      );
     }
-    return { status: 'deny', reason: result.reason, guard: result.guard, severity: result.severity };
+    return denyDecision(
+      POLICY_REASON_CODES.GUARD_ERROR,
+      result.reason ?? `${result.guard} denied request`,
+      result.guard,
+      result.severity ?? 'high',
+    );
   }
 }
 
@@ -466,4 +835,148 @@ function toCanonicalEvent(event: PolicyEvent): CanonicalPolicyEvent {
 function combineDecisions(base: Decision, next: Decision): Decision {
   if (next.status === 'deny' || next.status === 'warn') return next;
   return base;
+}
+
+function normalizeStringList(values: unknown): string[] {
+  if (!Array.isArray(values)) return [];
+  const out: string[] = [];
+  for (const value of values) {
+    if (typeof value !== 'string') continue;
+    const normalized = value.trim();
+    if (normalized.length > 0) out.push(normalized);
+  }
+  return out;
+}
+
+function extractInputType(data: CuaEventData): string | null {
+  const candidates = [data.input_type, data.inputType];
+  for (const candidate of candidates) {
+    if (typeof candidate === 'string') {
+      const normalized = candidate.trim().toLowerCase();
+      if (normalized.length > 0) return normalized;
+    }
+  }
+  return null;
+}
+
+function extractTransferSize(data: CuaEventData): number | null {
+  const candidates = [
+    data.transfer_size,
+    data.transferSize,
+    data.size_bytes,
+    data.sizeBytes,
+  ];
+
+  for (const candidate of candidates) {
+    if (typeof candidate === 'number' && Number.isFinite(candidate) && candidate >= 0) {
+      return candidate;
+    }
+    if (typeof candidate === 'string') {
+      const parsed = Number.parseInt(candidate, 10);
+      if (Number.isFinite(parsed) && parsed >= 0) {
+        return parsed;
+      }
+    }
+  }
+
+  return null;
+}
+
+function parsePort(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    const port = Math.trunc(value);
+    if (port > 0 && port <= 65535) return port;
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (/^[0-9]+$/.test(trimmed)) {
+      const parsed = Number.parseInt(trimmed, 10);
+      if (Number.isFinite(parsed) && parsed > 0 && parsed <= 65535) return parsed;
+    }
+  }
+  return null;
+}
+
+function firstNonEmptyString(values: unknown[]): string | null {
+  for (const value of values) {
+    if (typeof value !== 'string') continue;
+    const trimmed = value.trim();
+    if (trimmed.length > 0) return trimmed;
+  }
+  return null;
+}
+
+type CuaNetworkTarget = {
+  host: string;
+  port: number;
+  protocol?: string;
+  url?: string;
+};
+
+function extractCuaNetworkTarget(data: CuaEventData): CuaNetworkTarget | null {
+  const url = firstNonEmptyString([
+    data.url,
+    data.endpoint,
+    data.href,
+    data.target_url,
+    data.targetUrl,
+  ]);
+  const parsed = parseNetworkTarget(url ?? '', { emptyPort: 'default' });
+
+  const host = firstNonEmptyString([
+    data.host,
+    data.hostname,
+    data.remote_host,
+    data.remoteHost,
+    data.destination_host,
+    data.destinationHost,
+    parsed.host,
+  ])?.toLowerCase();
+  if (!host) {
+    return null;
+  }
+
+  const protocol = firstNonEmptyString([data.protocol, data.scheme])?.toLowerCase();
+  const explicitPort = parsePort(
+    data.port
+      ?? data.remote_port
+      ?? data.remotePort
+      ?? data.destination_port
+      ?? data.destinationPort,
+  );
+  const port = explicitPort ?? (parsed.host ? parsed.port : protocol === 'http' ? 80 : 443);
+
+  return {
+    host,
+    port,
+    ...(protocol ? { protocol } : {}),
+    ...(url ? { url } : {}),
+  };
+}
+
+type SideChannelFlag =
+  | 'clipboard_enabled'
+  | 'file_transfer_enabled'
+  | 'audio_enabled'
+  | 'drive_mapping_enabled'
+  | 'printing_enabled'
+  | 'session_share_enabled';
+
+function eventTypeToSideChannelFlag(eventType: PolicyEvent['eventType']): SideChannelFlag | null {
+  switch (eventType) {
+    case 'remote.clipboard':
+      return 'clipboard_enabled';
+    case 'remote.file_transfer':
+      return 'file_transfer_enabled';
+    case 'remote.audio':
+      return 'audio_enabled';
+    case 'remote.drive_mapping':
+      return 'drive_mapping_enabled';
+    case 'remote.printing':
+      return 'printing_enabled';
+    case 'remote.session_share':
+      return 'session_share_enabled';
+    default:
+      return null;
+  }
 }

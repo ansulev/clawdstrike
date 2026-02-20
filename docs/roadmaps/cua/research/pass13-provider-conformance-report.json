@@ -1,0 +1,526 @@
+{
+  "results": [
+    {
+      "actual": {
+        "canonical": {
+          "data": {
+            "cuaAction": "navigate",
+            "direction": "outbound"
+          },
+          "eventType": "remote.session.connect"
+        },
+        "result": "pass"
+      },
+      "expected": {
+        "canonical": {
+          "data": {
+            "cuaAction": "navigate",
+            "direction": "outbound"
+          },
+          "eventType": "remote.session.connect"
+        },
+        "result": "pass"
+      },
+      "id": "openai_connect_translates_to_remote_session_connect",
+      "ok": true
+    },
+    {
+      "actual": {
+        "canonical": {
+          "data": {
+            "cuaAction": "navigate",
+            "direction": "outbound"
+          },
+          "eventType": "remote.session.connect"
+        },
+        "result": "pass"
+      },
+      "expected": {
+        "canonical": {
+          "data": {
+            "cuaAction": "navigate",
+            "direction": "outbound"
+          },
+          "eventType": "remote.session.connect"
+        },
+        "result": "pass"
+      },
+      "id": "claude_connect_translates_to_remote_session_connect",
+      "ok": true
+    },
+    {
+      "actual": {
+        "canonical": {
+          "data": {
+            "cuaAction": "click",
+            "direction": null
+          },
+          "eventType": "input.inject"
+        },
+        "result": "pass"
+      },
+      "expected": {
+        "canonical": {
+          "data": {
+            "cuaAction": "click",
+            "direction": null
+          },
+          "eventType": "input.inject"
+        },
+        "result": "pass"
+      },
+      "id": "openai_input_translates_to_input_inject",
+      "ok": true
+    },
+    {
+      "actual": {
+        "canonical": {
+          "data": {
+            "cuaAction": "click",
+            "direction": null
+          },
+          "eventType": "input.inject"
+        },
+        "result": "pass"
+      },
+      "expected": {
+        "canonical": {
+          "data": {
+            "cuaAction": "click",
+            "direction": null
+          },
+          "eventType": "input.inject"
+        },
+        "result": "pass"
+      },
+      "id": "claude_input_translates_to_input_inject",
+      "ok": true
+    },
+    {
+      "actual": {
+        "canonical": {
+          "data": {
+            "cuaAction": "clipboard_read",
+            "direction": "read"
+          },
+          "eventType": "remote.clipboard"
+        },
+        "result": "pass"
+      },
+      "expected": {
+        "canonical": {
+          "data": {
+            "cuaAction": "clipboard_read",
+            "direction": "read"
+          },
+          "eventType": "remote.clipboard"
+        },
+        "result": "pass"
+      },
+      "id": "openai_clipboard_read_translates",
+      "ok": true
+    },
+    {
+      "actual": {
+        "canonical": {
+          "data": {
+            "cuaAction": "clipboard_read",
+            "direction": "read"
+          },
+          "eventType": "remote.clipboard"
+        },
+        "result": "pass"
+      },
+      "expected": {
+        "canonical": {
+          "data": {
+            "cuaAction": "clipboard_read",
+            "direction": "read"
+          },
+          "eventType": "remote.clipboard"
+        },
+        "result": "pass"
+      },
+      "id": "claude_clipboard_read_translates",
+      "ok": true
+    },
+    {
+      "actual": {
+        "canonical": {
+          "data": {
+            "cuaAction": "clipboard_write",
+            "direction": "write"
+          },
+          "eventType": "remote.clipboard"
+        },
+        "result": "pass"
+      },
+      "expected": {
+        "canonical": {
+          "data": {
+            "cuaAction": "clipboard_write",
+            "direction": "write"
+          },
+          "eventType": "remote.clipboard"
+        },
+        "result": "pass"
+      },
+      "id": "openai_clipboard_write_translates",
+      "ok": true
+    },
+    {
+      "actual": {
+        "canonical": {
+          "data": {
+            "cuaAction": "clipboard_write",
+            "direction": "write"
+          },
+          "eventType": "remote.clipboard"
+        },
+        "result": "pass"
+      },
+      "expected": {
+        "canonical": {
+          "data": {
+            "cuaAction": "clipboard_write",
+            "direction": "write"
+          },
+          "eventType": "remote.clipboard"
+        },
+        "result": "pass"
+      },
+      "id": "claude_clipboard_write_translates",
+      "ok": true
+    },
+    {
+      "actual": {
+        "canonical": {
+          "data": {
+            "cuaAction": "file_transfer",
+            "direction": "upload"
+          },
+          "eventType": "remote.file_transfer"
+        },
+        "result": "pass"
+      },
+      "expected": {
+        "canonical": {
+          "data": {
+            "cuaAction": "file_transfer",
+            "direction": "upload"
+          },
+          "eventType": "remote.file_transfer"
+        },
+        "result": "pass"
+      },
+      "id": "openai_file_transfer_upload_translates",
+      "ok": true
+    },
+    {
+      "actual": {
+        "canonical": {
+          "data": {
+            "cuaAction": "file_transfer",
+            "direction": "upload"
+          },
+          "eventType": "remote.file_transfer"
+        },
+        "result": "pass"
+      },
+      "expected": {
+        "canonical": {
+          "data": {
+            "cuaAction": "file_transfer",
+            "direction": "upload"
+          },
+          "eventType": "remote.file_transfer"
+        },
+        "result": "pass"
+      },
+      "id": "claude_file_transfer_upload_translates",
+      "ok": true
+    },
+    {
+      "actual": {
+        "canonical": {
+          "data": {
+            "cuaAction": "file_transfer",
+            "direction": "download"
+          },
+          "eventType": "remote.file_transfer"
+        },
+        "result": "pass"
+      },
+      "expected": {
+        "canonical": {
+          "data": {
+            "cuaAction": "file_transfer",
+            "direction": "download"
+          },
+          "eventType": "remote.file_transfer"
+        },
+        "result": "pass"
+      },
+      "id": "openai_file_transfer_download_translates",
+      "ok": true
+    },
+    {
+      "actual": {
+        "canonical": {
+          "data": {
+            "cuaAction": "file_transfer",
+            "direction": "download"
+          },
+          "eventType": "remote.file_transfer"
+        },
+        "result": "pass"
+      },
+      "expected": {
+        "canonical": {
+          "data": {
+            "cuaAction": "file_transfer",
+            "direction": "download"
+          },
+          "eventType": "remote.file_transfer"
+        },
+        "result": "pass"
+      },
+      "id": "claude_file_transfer_download_translates",
+      "ok": true
+    },
+    {
+      "actual": {
+        "canonical": {
+          "data": {
+            "cuaAction": "session_share",
+            "direction": null
+          },
+          "eventType": "remote.session_share"
+        },
+        "result": "pass"
+      },
+      "expected": {
+        "canonical": {
+          "data": {
+            "cuaAction": "session_share",
+            "direction": null
+          },
+          "eventType": "remote.session_share"
+        },
+        "result": "pass"
+      },
+      "id": "openai_session_share_translates",
+      "ok": true
+    },
+    {
+      "actual": {
+        "canonical": {
+          "data": {
+            "cuaAction": "session_share",
+            "direction": null
+          },
+          "eventType": "remote.session_share"
+        },
+        "result": "pass"
+      },
+      "expected": {
+        "canonical": {
+          "data": {
+            "cuaAction": "session_share",
+            "direction": null
+          },
+          "eventType": "remote.session_share"
+        },
+        "result": "pass"
+      },
+      "id": "claude_session_share_translates",
+      "ok": true
+    },
+    {
+      "actual": {
+        "canonical": {
+          "data": {
+            "cuaAction": "reconnect",
+            "direction": null
+          },
+          "eventType": "remote.session.reconnect"
+        },
+        "result": "pass"
+      },
+      "expected": {
+        "canonical": {
+          "data": {
+            "cuaAction": "reconnect",
+            "direction": null
+          },
+          "eventType": "remote.session.reconnect"
+        },
+        "result": "pass"
+      },
+      "id": "openai_reconnect_translates",
+      "ok": true
+    },
+    {
+      "actual": {
+        "canonical": {
+          "data": {
+            "cuaAction": "reconnect",
+            "direction": null
+          },
+          "eventType": "remote.session.reconnect"
+        },
+        "result": "pass"
+      },
+      "expected": {
+        "canonical": {
+          "data": {
+            "cuaAction": "reconnect",
+            "direction": null
+          },
+          "eventType": "remote.session.reconnect"
+        },
+        "result": "pass"
+      },
+      "id": "claude_reconnect_translates",
+      "ok": true
+    },
+    {
+      "actual": {
+        "canonical": {
+          "data": {
+            "cuaAction": "disconnect",
+            "direction": null
+          },
+          "eventType": "remote.session.disconnect"
+        },
+        "result": "pass"
+      },
+      "expected": {
+        "canonical": {
+          "data": {
+            "cuaAction": "disconnect",
+            "direction": null
+          },
+          "eventType": "remote.session.disconnect"
+        },
+        "result": "pass"
+      },
+      "id": "openai_disconnect_translates",
+      "ok": true
+    },
+    {
+      "actual": {
+        "canonical": {
+          "data": {
+            "cuaAction": "disconnect",
+            "direction": null
+          },
+          "eventType": "remote.session.disconnect"
+        },
+        "result": "pass"
+      },
+      "expected": {
+        "canonical": {
+          "data": {
+            "cuaAction": "disconnect",
+            "direction": null
+          },
+          "eventType": "remote.session.disconnect"
+        },
+        "result": "pass"
+      },
+      "id": "claude_disconnect_translates",
+      "ok": true
+    },
+    {
+      "actual": {
+        "parity": true,
+        "result": "pass"
+      },
+      "expected": {
+        "parity": true,
+        "result": "pass"
+      },
+      "id": "cross_provider_connect_parity_holds",
+      "ok": true
+    },
+    {
+      "actual": {
+        "parity": true,
+        "result": "pass"
+      },
+      "expected": {
+        "parity": true,
+        "result": "pass"
+      },
+      "id": "cross_provider_file_transfer_download_parity_holds",
+      "ok": true
+    },
+    {
+      "actual": {
+        "parity": true,
+        "result": "pass"
+      },
+      "expected": {
+        "parity": true,
+        "result": "pass"
+      },
+      "id": "cross_provider_disconnect_parity_holds",
+      "ok": true
+    },
+    {
+      "actual": {
+        "error_code": "PRV_PROVIDER_UNKNOWN",
+        "result": "fail"
+      },
+      "expected": {
+        "error_code": "PRV_PROVIDER_UNKNOWN",
+        "result": "fail"
+      },
+      "id": "unknown_provider_fails_closed",
+      "ok": true
+    },
+    {
+      "actual": {
+        "error_code": "PRV_INTENT_UNKNOWN",
+        "result": "fail"
+      },
+      "expected": {
+        "error_code": "PRV_INTENT_UNKNOWN",
+        "result": "fail"
+      },
+      "id": "unknown_intent_fails_closed",
+      "ok": true
+    },
+    {
+      "actual": {
+        "error_code": "PRV_PARITY_VIOLATION",
+        "result": "fail"
+      },
+      "expected": {
+        "error_code": "PRV_PARITY_VIOLATION",
+        "result": "fail"
+      },
+      "id": "parity_violation_detected",
+      "ok": true
+    },
+    {
+      "actual": {
+        "error_code": "PRV_MISSING_REQUIRED_FIELD",
+        "result": "fail"
+      },
+      "expected": {
+        "error_code": "PRV_MISSING_REQUIRED_FIELD",
+        "result": "fail"
+      },
+      "id": "missing_required_field_fails_closed",
+      "ok": true
+    }
+  ],
+  "suite": "docs/roadmaps/cua/research/provider_conformance_suite.yaml",
+  "summary": {
+    "failed": 0,
+    "passed": 25,
+    "total": 25
+  }
+}

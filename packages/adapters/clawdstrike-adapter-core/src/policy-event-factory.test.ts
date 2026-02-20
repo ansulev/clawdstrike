@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { PolicyEventFactory } from './policy-event-factory.js';
+import type { CuaEventData } from './types.js';
 
 describe('PolicyEventFactory', () => {
   it('infers event type from tool name', () => {
@@ -86,5 +87,120 @@ describe('PolicyEventFactory', () => {
     if (urnEvent.data.type === 'network') {
       expect(urnEvent.data.host).toBe('');
     }
+  });
+
+  it('CUA connect event creates correct structure', () => {
+    const factory = new PolicyEventFactory();
+    const event = factory.createCuaConnectEvent('sess-001');
+
+    expect(event.eventType).toBe('remote.session.connect');
+    expect(event.sessionId).toBe('sess-001');
+    expect(event.data.type).toBe('cua');
+
+    const data = event.data as CuaEventData;
+    expect(data.cuaAction).toBe('session.connect');
+  });
+
+  it('CUA reconnect event preserves continuity hash', () => {
+    const factory = new PolicyEventFactory();
+    const event = factory.createCuaReconnectEvent('sess-002', {
+      continuityPrevSessionHash: 'abc123deadbeef',
+    });
+
+    expect(event.eventType).toBe('remote.session.reconnect');
+    expect(event.sessionId).toBe('sess-002');
+    expect(event.data.type).toBe('cua');
+
+    const data = event.data as CuaEventData;
+    expect(data.cuaAction).toBe('session.reconnect');
+    expect(data.continuityPrevSessionHash).toBe('abc123deadbeef');
+  });
+
+  it('CUA input inject event preserves probe hash', () => {
+    const factory = new PolicyEventFactory();
+    const event = factory.createCuaInputInjectEvent('sess-003', {
+      postconditionProbeHash: 'probe-hash-456',
+    });
+
+    expect(event.eventType).toBe('input.inject');
+    expect(event.sessionId).toBe('sess-003');
+    expect(event.data.type).toBe('cua');
+
+    const data = event.data as CuaEventData;
+    expect(data.cuaAction).toBe('input.inject');
+    expect(data.postconditionProbeHash).toBe('probe-hash-456');
+  });
+
+  it('CUA clipboard event preserves direction', () => {
+    const factory = new PolicyEventFactory();
+    const event = factory.createCuaClipboardEvent('sess-004', 'read');
+
+    expect(event.eventType).toBe('remote.clipboard');
+    expect(event.sessionId).toBe('sess-004');
+    expect(event.data.type).toBe('cua');
+
+    const data = event.data as CuaEventData;
+    expect(data.cuaAction).toBe('clipboard');
+    expect(data.direction).toBe('read');
+  });
+
+  it('CUA file transfer event preserves direction', () => {
+    const factory = new PolicyEventFactory();
+    const event = factory.createCuaFileTransferEvent('sess-005', 'upload');
+
+    expect(event.eventType).toBe('remote.file_transfer');
+    expect(event.sessionId).toBe('sess-005');
+    expect(event.data.type).toBe('cua');
+
+    const data = event.data as CuaEventData;
+    expect(data.cuaAction).toBe('file_transfer');
+    expect(data.direction).toBe('upload');
+  });
+
+  it('CUA audio event emits remote.audio eventType', () => {
+    const factory = new PolicyEventFactory();
+    const event = factory.createCuaAudioEvent('sess-006');
+
+    expect(event.eventType).toBe('remote.audio');
+    expect(event.sessionId).toBe('sess-006');
+    expect(event.data.type).toBe('cua');
+
+    const data = event.data as CuaEventData;
+    expect(data.cuaAction).toBe('audio');
+  });
+
+  it('CUA drive mapping event emits remote.drive_mapping eventType', () => {
+    const factory = new PolicyEventFactory();
+    const event = factory.createCuaDriveMappingEvent('sess-007');
+
+    expect(event.eventType).toBe('remote.drive_mapping');
+    expect(event.sessionId).toBe('sess-007');
+    expect(event.data.type).toBe('cua');
+
+    const data = event.data as CuaEventData;
+    expect(data.cuaAction).toBe('drive_mapping');
+  });
+
+  it('CUA printing event emits remote.printing eventType', () => {
+    const factory = new PolicyEventFactory();
+    const event = factory.createCuaPrintingEvent('sess-008');
+
+    expect(event.eventType).toBe('remote.printing');
+    expect(event.sessionId).toBe('sess-008');
+    expect(event.data.type).toBe('cua');
+
+    const data = event.data as CuaEventData;
+    expect(data.cuaAction).toBe('printing');
+  });
+
+  it('CUA session connect event supports outbound direction metadata', () => {
+    const factory = new PolicyEventFactory();
+    const event = factory.createCuaConnectEvent('sess-009', { direction: 'outbound' });
+
+    expect(event.eventType).toBe('remote.session.connect');
+    expect(event.data.type).toBe('cua');
+
+    const data = event.data as CuaEventData;
+    expect(data.direction).toBe('outbound');
   });
 });

@@ -3,7 +3,9 @@ use std::io::{BufRead, IsTerminal as _, Read as _, Write};
 use std::time::Instant;
 
 use anyhow::Context as _;
-use clawdstrike::{GuardReport, GuardResult, HushEngine, PostureRuntimeState, Severity};
+use clawdstrike::{
+    decision_taxonomy::summarize_decision, GuardReport, HushEngine, PostureRuntimeState, Severity,
+};
 
 use crate::guard_report_json::GuardReportJson;
 use crate::policy_event::{map_policy_event, PolicyEvent};
@@ -27,6 +29,7 @@ pub struct DecisionJson {
     pub allowed: bool,
     pub denied: bool,
     pub warn: bool,
+    pub reason_code: String,
     pub guard: Option<String>,
     pub severity: Option<String>,
     pub message: Option<String>,
@@ -128,38 +131,21 @@ fn policy_source_guess(policy_ref: &str) -> PolicySource {
     }
 }
 
-fn canonical_severity_for_decision(result: &GuardResult) -> Option<String> {
-    if result.allowed && result.severity == Severity::Info {
-        return None;
-    }
-
-    Some(
-        match result.severity {
-            Severity::Info => "low",
-            Severity::Warning => "medium",
-            Severity::Error => "high",
-            Severity::Critical => "critical",
-        }
-        .to_string(),
-    )
-}
-
 fn decision_from_report(report: &GuardReport, reason_override: Option<String>) -> DecisionJson {
     let overall = &report.overall;
-
-    let warn = overall.allowed && overall.severity == Severity::Warning;
-    let denied = !overall.allowed;
+    let summary = summarize_decision(overall, reason_override.as_deref());
 
     DecisionJson {
         allowed: overall.allowed,
-        denied,
-        warn,
+        denied: summary.denied,
+        warn: summary.warn,
+        reason_code: summary.reason_code,
         guard: if overall.allowed && overall.severity == Severity::Info {
             None
         } else {
             Some(overall.guard.clone())
         },
-        severity: canonical_severity_for_decision(overall),
+        severity: summary.severity,
         message: Some(overall.message.clone()),
         reason: reason_override,
     }
@@ -996,6 +982,7 @@ fn emit_policy_eval_error(
             allowed: false,
             denied: false,
             warn: false,
+            reason_code: "ADC_GUARD_ERROR".to_string(),
             guard: None,
             severity: None,
             message: None,

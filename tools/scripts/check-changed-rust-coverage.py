@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from dataclasses import dataclass
 
@@ -129,11 +130,26 @@ def main() -> int:
     for line in per_file_lines:
         print(f"  - {line}")
 
+    # Test files are compiled with --test but not instrumented for coverage,
+    # so missing LCOV records are expected.  Only fail on non-test sources.
+    real_missing = [
+        p for p in missing
+        if not (os.path.basename(p).endswith("_tests.rs")
+                or "/tests/" in p
+                or "/tests.rs" in p)
+    ]
+
     if missing:
-        print("Missing LCOV records for changed files:")
-        for relpath in missing:
-            print(f"  - {relpath}")
-        return 1
+        skipped = [p for p in missing if p not in real_missing]
+        if skipped:
+            print("Skipped test files with no LCOV records (expected):")
+            for relpath in skipped:
+                print(f"  - {relpath}")
+        if real_missing:
+            print("Missing LCOV records for changed files:")
+            for relpath in real_missing:
+                print(f"  - {relpath}")
+            return 1
 
     coverage_pct = aggregate.ratio() * 100.0
     print(

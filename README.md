@@ -201,7 +201,8 @@ flowchart LR
   <a href="#jailbreak-detection"><kbd>Jailbreak Detection</kbd></a>&nbsp;&nbsp;
   <a href="#cryptographic-receipts"><kbd>Receipts</kbd></a>&nbsp;&nbsp;
   <a href="#multi-agent-security-primitives"><kbd>Multi-Agent</kbd></a>&nbsp;&nbsp;
-  <a href="#irm--output-sanitization--watermarking--threat-intel"><kbd>IRM · Sanitization · Watermarking · Threat Intel</kbd></a>
+  <a href="#irm--output-sanitization--watermarking--threat-intel"><kbd>IRM · Sanitization · Watermarking · Threat Intel</kbd></a>&nbsp;&nbsp;
+  <a href="#spider-sense"><kbd>Spider-Sense</kbd></a>
 </p>
 
 ### Guard Stack
@@ -219,6 +220,7 @@ Composable, policy-driven security checks at the tool boundary. Each guard handl
 | **JailbreakGuard**       | 4-layer detection engine with session aggregation (see below)                    |
 | **ComputerUseGuard**     | Controls CUA actions: remote sessions, clipboard, input injection, file transfer |
 | **ShellCommandGuard**    | Blocks dangerous shell commands before execution                                 |
+| **SpiderSenseGuard**&nbsp;<sup>β</sup> | Hierarchical threat screening adapted from [Yu et al. 2026](https://arxiv.org/abs/2602.05386): fast vector similarity resolves known patterns, optional LLM escalation for ambiguous cases |
 
 ---
 
@@ -297,6 +299,8 @@ IRM Router ─┬─ Filesystem Monitor
 
 Catches secrets that make it into model output on the way out. Scans for API keys, tokens, PII, internal URLs, and custom patterns. Redaction strategies: full replacement, partial masking, type labels, stable SHA-256 hashing. Batch and streaming modes.
 
+The `Sanitize` decision verdict allows operations to proceed with modified content — guards can redact or rewrite dangerous payloads instead of outright blocking.
+
 </td>
 </tr>
 <tr>
@@ -307,9 +311,12 @@ Ed25519-signed provenance markers embedded in prompts for attribution and forens
 
 </td>
 <td width="50%" valign="top">
-<h4 align="center">Threat Intel & WASM Plugins</h4>
+<a id="spider-sense"></a>
+<h4 align="center">Threat Intel · Spider-Sense · WASM</h4>
 
 **Threat feeds:** VirusTotal, Snyk, Google Safe Browsing — with circuit breakers, rate limiting, and caching. External failures never block the pipeline.
+
+**Spider-Sense** <sup>β</sup> adapts the hierarchical screening pattern from [Yu et al. (2026)](https://arxiv.org/abs/2602.05386) as a tool-boundary guard. Fast-path cosine similarity against an attack pattern database resolves known threats; ambiguous inputs optionally escalate to an external LLM for deeper analysis. Test coverage uses the paper's S2Bench taxonomy (4 lifecycle stages × 9 attack types). Note: the original paper proposes agent-intrinsic risk sensing — our adaptation applies the screening hierarchy as middleware, not as an intrinsic agent capability. Feature-gated: `--features clawdstrike-spider-sense`.
 
 **WASM runtime:** Custom guards in sandboxed WebAssembly with declared capability sets and resource limits.
 

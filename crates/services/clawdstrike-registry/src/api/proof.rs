@@ -23,6 +23,14 @@ pub struct InclusionProofResponse {
     pub tree_size: u64,
     /// Sibling hashes for the Merkle path (hex-encoded).
     pub hashes: Vec<String>,
+    /// Hex-encoded Merkle root for `tree_size`.
+    pub root: String,
+    /// RFC-3339 checkpoint timestamp for `root` and `tree_size`.
+    pub checkpoint_timestamp: String,
+    /// Registry signature over `root || tree_size || checkpoint_timestamp`.
+    pub checkpoint_sig: String,
+    /// Registry public key used for `checkpoint_sig`.
+    pub checkpoint_key: String,
 }
 
 /// GET /api/v1/packages/{name}/{version}/proof
@@ -60,6 +68,18 @@ pub async fn get_proof(
     let proof = tree
         .generate_inclusion_proof(leaf_index)
         .map_err(|e| RegistryError::Internal(format!("failed to generate inclusion proof: {e}")))?;
+    let root = tree
+        .root()
+        .map_err(|e| RegistryError::Internal(format!("failed to compute merkle root: {e}")))?;
+    drop(tree);
+
+    let checkpoint_timestamp = chrono::Utc::now().to_rfc3339();
+    let checkpoint_message = format!("{root}{}{checkpoint_timestamp}", proof.tree_size);
+    let checkpoint_sig = state
+        .registry_keypair
+        .sign(checkpoint_message.as_bytes())
+        .to_hex();
+    let checkpoint_key = state.registry_keypair.public_key().to_hex();
 
     Ok(Json(InclusionProofResponse {
         name,
@@ -67,6 +87,10 @@ pub async fn get_proof(
         leaf_index: proof.leaf_index,
         tree_size: proof.tree_size,
         hashes: proof.proof_path,
+        root,
+        checkpoint_timestamp,
+        checkpoint_sig,
+        checkpoint_key,
     }))
 }
 
@@ -82,9 +106,14 @@ mod tests {
             leaf_index: 42,
             tree_size: 100,
             hashes: vec!["aabb".into(), "ccdd".into()],
+            root: "a".repeat(64),
+            checkpoint_timestamp: "2026-02-28T00:00:00Z".into(),
+            checkpoint_sig: "sig".into(),
+            checkpoint_key: "key".into(),
         };
         let json = serde_json::to_value(&proof).unwrap();
         assert_eq!(json["leaf_index"], 42);
         assert_eq!(json["hashes"].as_array().unwrap().len(), 2);
+        assert_eq!(json["root"].as_str().unwrap().len(), 64);
     }
 }

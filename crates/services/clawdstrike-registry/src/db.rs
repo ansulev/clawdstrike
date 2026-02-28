@@ -478,7 +478,14 @@ impl RegistryDb {
     /// Used to rebuild the Merkle tree on startup.
     pub fn list_all_versions_ordered(&self) -> Result<Vec<VersionRow>, RegistryError> {
         let mut stmt = self.conn.prepare(
-            "SELECT name, version, pkg_type, checksum, manifest_toml, publisher_key, publisher_sig, registry_sig, dependencies_json, yanked, published_at, attestation_hash, key_id, leaf_index, download_count FROM versions ORDER BY published_at ASC",
+            "SELECT name, version, pkg_type, checksum, manifest_toml, publisher_key, publisher_sig, registry_sig, dependencies_json, yanked, published_at, attestation_hash, key_id, leaf_index, download_count
+             FROM versions
+             ORDER BY
+               CASE WHEN leaf_index IS NULL THEN 1 ELSE 0 END ASC,
+               leaf_index ASC,
+               published_at ASC,
+               name ASC,
+               version ASC",
         )?;
         let rows = stmt
             .query_map([], |row| {
@@ -502,6 +509,21 @@ impl RegistryDb {
             })?
             .collect::<Result<Vec<_>, _>>()?;
         Ok(rows)
+    }
+
+    /// Return whether `publisher_key` has published at least one version of
+    /// the given package.
+    pub fn is_package_publisher(
+        &self,
+        package_name: &str,
+        publisher_key: &str,
+    ) -> Result<bool, RegistryError> {
+        let count: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM versions WHERE name = ?1 AND publisher_key = ?2",
+            params![package_name, publisher_key],
+            |row| row.get(0),
+        )?;
+        Ok(count > 0)
     }
 
     // -----------------------------------------------------------------------
@@ -1375,7 +1397,8 @@ mod tests {
             registry_sig: None,
             dependencies_json: "{}".into(),
             yanked: false,
-            published_at: "2025-01-02T00:00:00Z".into(),
+            // Intentionally older timestamp to assert ordering uses leaf_index.
+            published_at: "2025-01-01T00:00:00Z".into(),
             attestation_hash: None,
             key_id: None,
             leaf_index: Some(1),
@@ -1392,7 +1415,8 @@ mod tests {
             registry_sig: None,
             dependencies_json: "{}".into(),
             yanked: false,
-            published_at: "2025-01-01T00:00:00Z".into(),
+            // Intentionally newer timestamp to assert ordering uses leaf_index.
+            published_at: "2025-01-02T00:00:00Z".into(),
             attestation_hash: None,
             key_id: None,
             leaf_index: Some(0),
@@ -1405,11 +1429,39 @@ mod tests {
 
         let all = db.list_all_versions_ordered().unwrap();
         assert_eq!(all.len(), 2);
-        // Should be sorted by published_at ASC.
+        // Should be sorted by leaf_index ASC first.
         assert_eq!(all[0].name, "pkg-a");
-        assert_eq!(all[0].published_at, "2025-01-01T00:00:00Z");
+        assert_eq!(all[0].leaf_index, Some(0));
         assert_eq!(all[1].name, "pkg-b");
-        assert_eq!(all[1].published_at, "2025-01-02T00:00:00Z");
+        assert_eq!(all[1].leaf_index, Some(1));
+    }
+
+    #[test]
+    fn is_package_publisher_checks_existing_versions() {
+        let db = test_db();
+        db.upsert_package("pkg", None, "2025-01-01T00:00:00Z")
+            .unwrap();
+        db.insert_version(&VersionRow {
+            name: "pkg".into(),
+            version: "1.0.0".into(),
+            pkg_type: "guard".into(),
+            checksum: "abc".into(),
+            manifest_toml: "".into(),
+            publisher_key: "owner".into(),
+            publisher_sig: "sig".into(),
+            registry_sig: None,
+            dependencies_json: "{}".into(),
+            yanked: false,
+            published_at: "2025-01-01T00:00:00Z".into(),
+            attestation_hash: None,
+            key_id: None,
+            leaf_index: Some(0),
+            download_count: 0,
+        })
+        .unwrap();
+
+        assert!(db.is_package_publisher("pkg", "owner").unwrap());
+        assert!(!db.is_package_publisher("pkg", "stranger").unwrap());
     }
 
     #[test]

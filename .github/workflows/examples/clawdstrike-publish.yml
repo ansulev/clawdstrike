@@ -30,7 +30,7 @@ jobs:
           targets: wasm32-wasip2
 
       - name: Install Clawdstrike CLI
-        run: cargo install clawdstrike-cli
+        run: cargo install hush-cli --locked
 
       - name: Build (WASM)
         run: cargo build --target wasm32-wasip2 --release
@@ -43,7 +43,7 @@ jobs:
         run: |
           for f in *.cpkg; do
             echo "Verifying $f ..."
-            clawdstrike guard validate "$f"
+            clawdstrike pkg install "$f" --allow-unverified
           done
 
       - name: Publish

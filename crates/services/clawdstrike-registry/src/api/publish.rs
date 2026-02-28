@@ -33,7 +33,7 @@ pub struct PublishRequest {
     pub manifest_toml: String,
 }
 
-#[derive(Serialize)]
+#[derive(Debug, Serialize)]
 pub struct PublishResponse {
     pub name: String,
     pub version: String,
@@ -44,15 +44,80 @@ pub struct PublishResponse {
     pub key_id: Option<String>,
 }
 
+fn extract_embedded_manifest_toml(archive_bytes: &[u8]) -> Result<String, RegistryError> {
+    let scratch = std::env::temp_dir().join(format!(
+        "clawdstrike_registry_publish_{}",
+        uuid::Uuid::new_v4()
+    ));
+    let result = (|| {
+        std::fs::create_dir_all(&scratch).map_err(|e| {
+            RegistryError::Internal(format!(
+                "failed to create publish scratch dir {}: {e}",
+                scratch.display()
+            ))
+        })?;
+
+        let archive_path = scratch.join("upload.cpkg");
+        std::fs::write(&archive_path, archive_bytes).map_err(|e| {
+            RegistryError::BadRequest(format!("failed to stage uploaded archive bytes: {e}"))
+        })?;
+
+        let unpack_dir = scratch.join("unpacked");
+        clawdstrike::pkg::archive::unpack(&archive_path, &unpack_dir).map_err(|e| {
+            RegistryError::BadRequest(format!("invalid .cpkg archive payload: {e}"))
+        })?;
+
+        let manifest_path = unpack_dir.join("clawdstrike-pkg.toml");
+        std::fs::read_to_string(&manifest_path).map_err(|e| {
+            RegistryError::BadRequest(format!(
+                "uploaded archive missing clawdstrike-pkg.toml ({}): {e}",
+                manifest_path.display()
+            ))
+        })
+    })();
+    let _ = std::fs::remove_dir_all(&scratch);
+    result
+}
+
+fn manifests_match(
+    request_manifest: &clawdstrike::pkg::manifest::PkgManifest,
+    embedded_manifest: &clawdstrike::pkg::manifest::PkgManifest,
+) -> Result<bool, RegistryError> {
+    let req = serde_json::to_value(request_manifest).map_err(|e| {
+        RegistryError::Internal(format!("failed to serialize request manifest: {e}"))
+    })?;
+    let emb = serde_json::to_value(embedded_manifest).map_err(|e| {
+        RegistryError::Internal(format!("failed to serialize embedded manifest: {e}"))
+    })?;
+    Ok(req == emb)
+}
+
 /// POST /api/v1/packages
 pub async fn publish(
     State(state): State<AppState>,
     headers: axum::http::HeaderMap,
     Json(req): Json<PublishRequest>,
 ) -> Result<Json<PublishResponse>, RegistryError> {
-    // 1. Parse and validate manifest.
-    let manifest = clawdstrike::pkg::manifest::parse_pkg_manifest_toml(&req.manifest_toml)
-        .map_err(|e| RegistryError::BadRequest(format!("invalid manifest: {e}")))?;
+    // 1. Decode archive bytes.
+    use base64::Engine as _;
+    let archive_bytes = base64::engine::general_purpose::STANDARD
+        .decode(&req.archive_base64)
+        .map_err(|e| RegistryError::BadRequest(format!("invalid base64 archive: {e}")))?;
+
+    // 2. Parse and validate both the request-body manifest and the embedded
+    // archive manifest, then enforce semantic equality.
+    let request_manifest = clawdstrike::pkg::manifest::parse_pkg_manifest_toml(&req.manifest_toml)
+        .map_err(|e| RegistryError::BadRequest(format!("invalid request manifest: {e}")))?;
+    let embedded_manifest_toml = extract_embedded_manifest_toml(&archive_bytes)?;
+    let embedded_manifest =
+        clawdstrike::pkg::manifest::parse_pkg_manifest_toml(&embedded_manifest_toml)
+            .map_err(|e| RegistryError::BadRequest(format!("invalid archive manifest: {e}")))?;
+    if !manifests_match(&request_manifest, &embedded_manifest)? {
+        return Err(RegistryError::BadRequest(
+            "request manifest does not match embedded archive manifest".into(),
+        ));
+    }
+    let manifest = embedded_manifest;
 
     let name = manifest.package.name.clone();
     let version = manifest.package.version.clone();
@@ -112,12 +177,6 @@ pub async fn publish(
             drop(db);
         }
     }
-
-    // 2. Decode archive bytes.
-    use base64::Engine as _;
-    let archive_bytes = base64::engine::general_purpose::STANDARD
-        .decode(&req.archive_base64)
-        .map_err(|e| RegistryError::BadRequest(format!("invalid base64 archive: {e}")))?;
 
     // 3. Compute SHA-256 of the archive.
     let checksum = hush_core::sha256_hex(&archive_bytes);
@@ -210,7 +269,7 @@ pub async fn publish(
             version: version.clone(),
             pkg_type: manifest.package.pkg_type.to_string(),
             checksum: checksum.clone(),
-            manifest_toml: req.manifest_toml.clone(),
+            manifest_toml: embedded_manifest_toml,
             publisher_key: req.publisher_key.clone(),
             publisher_sig: req.publisher_sig.clone(),
             registry_sig: Some(registry_sig_hex.clone()),

@@ -157,18 +157,33 @@ mod tests {
         version: &str,
         kp: &Keypair,
     ) -> (publish::PublishRequest, Vec<u8>) {
-        let archive_bytes = b"fake-cpkg-bytes".to_vec();
+        let archive_bytes = build_cpkg_bytes(name, version);
         let hash = hush_core::sha256(&archive_bytes);
         let sig = kp.sign(hash.as_bytes()).to_hex();
+        let manifest_toml = format!(
+            "[package]\nname = \"{name}\"\nversion = \"{version}\"\npkg_type = \"guard\"\n\n[trust]\nlevel = \"trusted\"\nsandbox = \"native\"\n"
+        );
         let req = publish::PublishRequest {
             archive_base64: base64::engine::general_purpose::STANDARD.encode(&archive_bytes),
             publisher_key: kp.public_key().to_hex(),
             publisher_sig: sig,
-            manifest_toml: format!(
-                "[package]\nname = \"{name}\"\nversion = \"{version}\"\npkg_type = \"guard\"\n"
-            ),
+            manifest_toml,
         };
         (req, archive_bytes)
+    }
+
+    fn build_cpkg_bytes(name: &str, version: &str) -> Vec<u8> {
+        let tmp = tempfile::tempdir().unwrap();
+        let src = tmp.path().join("src");
+        std::fs::create_dir_all(&src).unwrap();
+        let manifest_toml = format!(
+            "[package]\nname = \"{name}\"\nversion = \"{version}\"\npkg_type = \"guard\"\n\n[trust]\nlevel = \"trusted\"\nsandbox = \"native\"\n"
+        );
+        std::fs::write(src.join("clawdstrike-pkg.toml"), manifest_toml).unwrap();
+        std::fs::write(src.join("README.md"), "test package").unwrap();
+        let archive = tmp.path().join("pkg.cpkg");
+        clawdstrike::pkg::archive::pack(&src, &archive).unwrap();
+        std::fs::read(&archive).unwrap()
     }
 
     #[tokio::test]
@@ -183,9 +198,11 @@ mod tests {
         let owner_key = owner.public_key().to_hex();
         let scoped_pkg = "@acme/demo-guard";
         let version = "1.2.3";
+        let create_payload = format!("org:create:acme:{}:ACME", owner_key);
 
         let _ = org::create_org(
             State(state.clone()),
+            signed_headers(&owner, &create_payload),
             Json(org::CreateOrgRequest {
                 name: "acme".to_string(),
                 display_name: Some("ACME".to_string()),
@@ -268,6 +285,8 @@ mod tests {
         .await
         .unwrap();
         assert_eq!(proof.0.tree_size, 1);
+        assert!(!proof.0.root.is_empty());
+        assert!(!proof.0.checkpoint_sig.is_empty());
 
         let download_resp = download::download(
             State(state.clone()),
@@ -362,5 +381,81 @@ mod tests {
         .await
         .unwrap();
         assert!(yanked.0.yanked);
+    }
+
+    #[tokio::test]
+    async fn publish_rejects_manifest_mismatch_between_body_and_archive() {
+        let (state, _tmp) = test_state();
+        let publisher = Keypair::from_seed(&[31u8; 32]);
+        let archive_bytes = build_cpkg_bytes("demo", "1.0.0");
+        let hash = hush_core::sha256(&archive_bytes);
+        let req = publish::PublishRequest {
+            archive_base64: base64::engine::general_purpose::STANDARD.encode(&archive_bytes),
+            publisher_key: publisher.public_key().to_hex(),
+            publisher_sig: publisher.sign(hash.as_bytes()).to_hex(),
+            manifest_toml:
+                "[package]\nname = \"demo\"\nversion = \"9.9.9\"\npkg_type = \"guard\"\n"
+                    .to_string(),
+        };
+
+        let err = publish::publish(State(state), HeaderMap::new(), Json(req))
+            .await
+            .unwrap_err();
+        assert!(err
+            .to_string()
+            .contains("request manifest does not match embedded archive manifest"));
+    }
+
+    #[tokio::test]
+    async fn create_org_requires_signed_caller_key_match() {
+        let (state, _tmp) = test_state();
+        let caller = Keypair::from_seed(&[32u8; 32]);
+        let other = Keypair::from_seed(&[33u8; 32]);
+        let payload = format!("org:create:acme:{}:{}", other.public_key().to_hex(), "ACME");
+
+        let err = org::create_org(
+            State(state),
+            signed_headers(&caller, &payload),
+            Json(org::CreateOrgRequest {
+                name: "acme".to_string(),
+                display_name: Some("ACME".to_string()),
+                publisher_key: other.public_key().to_hex(),
+            }),
+        )
+        .await
+        .unwrap_err();
+        assert!(err
+            .to_string()
+            .contains("must match create_org.publisher_key"));
+    }
+
+    #[tokio::test]
+    async fn unscoped_trusted_publisher_requires_package_publisher() {
+        let (state, _tmp) = test_state();
+        let owner = Keypair::from_seed(&[34u8; 32]);
+        let stranger = Keypair::from_seed(&[35u8; 32]);
+        let package = "unscoped-guard";
+        let version = "1.0.0";
+
+        let (req, _bytes) = publish_request(package, version, &owner);
+        let _published = publish::publish(State(state.clone()), HeaderMap::new(), Json(req))
+            .await
+            .unwrap();
+
+        let add_payload = format!("trusted-publisher:add:{package}:github:acme/repo::");
+        let err = trusted_publishers::add_trusted_publisher(
+            State(state.clone()),
+            Path(package.to_string()),
+            signed_headers(&stranger, &add_payload),
+            Json(trusted_publishers::AddTrustedPublisherRequest {
+                provider: "github".to_string(),
+                repository: "acme/repo".to_string(),
+                workflow: None,
+                environment: None,
+            }),
+        )
+        .await
+        .unwrap_err();
+        assert!(err.to_string().contains("not authorized"));
     }
 }

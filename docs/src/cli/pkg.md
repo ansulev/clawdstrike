@@ -25,7 +25,7 @@ Package manager commands for initializing, installing, verifying, publishing, se
 - `unverified`: no registry signature requirements.
 - `signed`: publisher signature is required and verified.
 - `verified`: publisher + registry counter-signatures are required and verified.
-- `certified`: verified + transparency inclusion proof availability.
+- `certified`: verified + cryptographically verified transparency proof.
 
 ## Notes
 

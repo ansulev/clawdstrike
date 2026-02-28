@@ -14,7 +14,7 @@ clawdstrike pkg verify <NAME> --version <VERSION> [--trust-level <LEVEL>] [--reg
 - Registry attestation checksum match
 - Publisher signature verification
 - Registry counter-signature verification (for `verified`/`certified`)
-- Transparency proof endpoint availability (for `certified`)
+- Transparency checkpoint signature + inclusion proof verification (for `certified`)
 
 ## Exit Codes
 

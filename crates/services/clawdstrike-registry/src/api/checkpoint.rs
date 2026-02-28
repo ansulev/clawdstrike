@@ -68,6 +68,8 @@ pub async fn get_checkpoint(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use axum::extract::State;
+    use hush_core::{PublicKey, Signature};
 
     #[test]
     fn checkpoint_response_serializes() {
@@ -81,5 +83,47 @@ mod tests {
         let json = serde_json::to_value(&resp).unwrap();
         assert_eq!(json["tree_size"], 100);
         assert!(json["root"].as_str().unwrap().len() == 64);
+    }
+
+    fn test_state() -> crate::state::AppState {
+        let tmp = tempfile::tempdir().unwrap();
+        let cfg = crate::config::Config {
+            host: "127.0.0.1".to_string(),
+            port: 0,
+            data_dir: tmp.path().to_path_buf(),
+            api_key: String::new(),
+            max_upload_bytes: 1024 * 1024,
+        };
+        crate::state::AppState::new(cfg).unwrap()
+    }
+
+    #[tokio::test]
+    async fn checkpoint_empty_tree_is_signed() {
+        let state = test_state();
+        let resp = get_checkpoint(State(state)).await.unwrap();
+        assert_eq!(resp.0.tree_size, 0);
+        assert_eq!(resp.0.root, "0".repeat(64));
+
+        let key = PublicKey::from_hex(&resp.0.registry_key).unwrap();
+        let sig = Signature::from_hex(&resp.0.registry_sig).unwrap();
+        let msg = format!("{}{}{}", resp.0.root, resp.0.tree_size, resp.0.timestamp);
+        assert!(key.verify(msg.as_bytes(), &sig));
+    }
+
+    #[tokio::test]
+    async fn checkpoint_non_empty_tree_is_signed() {
+        let state = test_state();
+        {
+            let mut tree = state.merkle_tree.lock().unwrap();
+            tree.append_hash(hush_core::sha256(b"leaf"));
+        }
+        let resp = get_checkpoint(State(state)).await.unwrap();
+        assert_eq!(resp.0.tree_size, 1);
+        assert_ne!(resp.0.root, "0".repeat(64));
+
+        let key = PublicKey::from_hex(&resp.0.registry_key).unwrap();
+        let sig = Signature::from_hex(&resp.0.registry_sig).unwrap();
+        let msg = format!("{}{}{}", resp.0.root, resp.0.tree_size, resp.0.timestamp);
+        assert!(key.verify(msg.as_bytes(), &sig));
     }
 }

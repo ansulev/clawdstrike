@@ -351,7 +351,11 @@ OCI distribution provides content-addressable storage, deduplication, and compat
 
 ### REST API (Write Path)
 
-The REST API handles mutations and rich queries that the sparse index cannot serve:
+The REST API handles mutations and rich queries that the sparse index cannot serve.
+
+**Implementation status (2026-02-28):** this branch implements direct publish via
+`POST /api/v1/packages` and does OIDC validation inline in publish requests.
+`/api/v1/auth/oidc` below is retained as a future hosted-token-exchange design target.
 
 ```
 POST   /api/v1/packages                 # Publish
@@ -364,7 +368,10 @@ GET    /api/v1/advisories                # Security advisories
 
 ### Metadata Storage (PostgreSQL)
 
-PostgreSQL stores package metadata, publisher identities, download counts, advisory data, and organization ownership. Schema highlights:
+PostgreSQL stores package metadata, publisher identities, download counts, advisory data, and organization ownership in the **target hosted architecture**.  
+**Implementation status (2026-02-28):** current branch uses SQLite + filesystem blob storage.
+
+Target schema highlights:
 
 ```sql
 CREATE TABLE packages (
@@ -438,7 +445,8 @@ LeafHash(receipt_bytes) = SHA256(0x00 || receipt_bytes)
 NodeHash(left, right)   = SHA256(0x01 || left || right)
 ```
 
-Clients can request inclusion proofs and verify them locally. Optional integration with Sigstore Rekor provides a publicly auditable third-party witness.
+Clients request inclusion proofs and verify them locally.  
+**Implementation status (2026-02-28):** `certified` verification checks checkpoint signature and Merkle inclusion proof cryptographically.
 
 ### Trust Levels
 
@@ -462,10 +470,13 @@ CI workflow
 OIDC Identity Provider (GitHub)
     |  id_token (short-lived JWT)
     v
-Registry Token Exchange (/api/v1/auth/oidc)
+Registry Token Exchange (/api/v1/auth/oidc) [target hosted model]
     |  registry_token (scoped, short-lived)
     v
 Publish with registry_token + Ed25519 signature
+
+Current implementation (2026-02-28): publish uses bearer identity token directly
+with `X-Clawdstrike-Auth-Type: oidc` and provider hint headers.
 ```
 
 The OIDC subject claim binds the publication to a specific repository and workflow, creating an auditable link from package to source.

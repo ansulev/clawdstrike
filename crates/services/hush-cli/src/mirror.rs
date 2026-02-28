@@ -4,7 +4,12 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use clap::Subcommand;
-use clawdstrike::pkg::{archive, integrity::sign_package, manifest::parse_pkg_manifest_toml};
+use clawdstrike::pkg::{
+    archive,
+    integrity::sign_package,
+    manifest::parse_pkg_manifest_toml,
+    merkle::{verify_inclusion_proof, InclusionProof, LeafData},
+};
 use hush_core::{PublicKey, Signature};
 
 use crate::registry_config::RegistryConfig;
@@ -104,6 +109,23 @@ struct MirrorAttestation {
     publisher_sig: String,
     registry_sig: Option<String>,
     registry_key: Option<String>,
+    #[serde(default)]
+    published_at: Option<String>,
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct MirrorProof {
+    leaf_index: u64,
+    tree_size: u64,
+    hashes: Vec<String>,
+    #[serde(default)]
+    root: Option<String>,
+    #[serde(default)]
+    checkpoint_timestamp: Option<String>,
+    #[serde(default)]
+    checkpoint_sig: Option<String>,
+    #[serde(default)]
+    checkpoint_key: Option<String>,
 }
 
 #[derive(Debug, serde::Deserialize)]
@@ -174,6 +196,81 @@ fn verify_attestation(
     };
 
     Ok((true, registry_verified))
+}
+
+fn verify_checkpoint_signature(
+    root: &str,
+    tree_size: u64,
+    timestamp: &str,
+    sig_hex: &str,
+    key_hex: &str,
+) -> Result<(), String> {
+    let key = PublicKey::from_hex(key_hex).map_err(|e| format!("invalid checkpoint key: {e}"))?;
+    let sig =
+        Signature::from_hex(sig_hex).map_err(|e| format!("invalid checkpoint signature: {e}"))?;
+    let message = format!("{root}{tree_size}{timestamp}");
+    if key.verify(message.as_bytes(), &sig) {
+        Ok(())
+    } else {
+        Err("checkpoint signature verification failed".to_string())
+    }
+}
+
+fn verify_transparency_proof(
+    name: &str,
+    version: &str,
+    attestation: &MirrorAttestation,
+    proof: &MirrorProof,
+) -> Result<(), String> {
+    let root = proof
+        .root
+        .as_deref()
+        .ok_or_else(|| "proof response missing root".to_string())?;
+    let checkpoint_timestamp = proof
+        .checkpoint_timestamp
+        .as_deref()
+        .ok_or_else(|| "proof response missing checkpoint timestamp".to_string())?;
+    let checkpoint_sig = proof
+        .checkpoint_sig
+        .as_deref()
+        .ok_or_else(|| "proof response missing checkpoint signature".to_string())?;
+    let checkpoint_key = proof
+        .checkpoint_key
+        .as_deref()
+        .ok_or_else(|| "proof response missing checkpoint key".to_string())?;
+    verify_checkpoint_signature(
+        root,
+        proof.tree_size,
+        checkpoint_timestamp,
+        checkpoint_sig,
+        checkpoint_key,
+    )?;
+
+    let timestamp = attestation
+        .published_at
+        .as_deref()
+        .ok_or_else(|| "attestation missing published_at timestamp".to_string())?;
+    let leaf_data = LeafData {
+        package_name: name.to_string(),
+        version: version.to_string(),
+        content_hash: attestation.checksum.clone(),
+        publisher_key: attestation.publisher_key.clone(),
+        timestamp: timestamp.to_string(),
+    };
+    let leaf_hash = leaf_data
+        .leaf_hash()
+        .map_err(|e| format!("failed to build transparency leaf hash: {e}"))?
+        .to_hex();
+    let inclusion = InclusionProof {
+        leaf_index: proof.leaf_index,
+        tree_size: proof.tree_size,
+        proof_path: proof.hashes.clone(),
+    };
+    if verify_inclusion_proof(&inclusion, &leaf_hash, root) {
+        Ok(())
+    } else {
+        Err("merkle inclusion proof verification failed".to_string())
+    }
 }
 
 fn fetch_attestation(
@@ -341,11 +438,40 @@ fn cmd_mirror_sync(
         urlencoding_simple(name),
         urlencoding_simple(version_segment)
     );
-    let certified = client
-        .get(&proof_url)
-        .send()
-        .ok()
-        .is_some_and(|r| r.status().is_success() && registry_verified);
+    let certified = if registry_verified {
+        match client.get(&proof_url).send() {
+            Ok(resp) if resp.status().is_success() => match resp.json::<MirrorProof>() {
+                Ok(proof) => {
+                    match verify_transparency_proof(name, version_segment, &attestation, &proof) {
+                        Ok(()) => true,
+                        Err(e) => {
+                            let _ =
+                                writeln!(stderr, "Error: transparency verification failed: {e}");
+                            return ExitCode::Fail;
+                        }
+                    }
+                }
+                Err(e) => {
+                    let _ = writeln!(stderr, "Error: invalid proof response: {e}");
+                    return ExitCode::Fail;
+                }
+            },
+            Ok(resp) => {
+                let _ = writeln!(
+                    stderr,
+                    "Error: transparency proof not available (HTTP {})",
+                    resp.status()
+                );
+                return ExitCode::Fail;
+            }
+            Err(e) => {
+                let _ = writeln!(stderr, "Error: cannot fetch transparency proof: {e}");
+                return ExitCode::Fail;
+            }
+        }
+    } else {
+        false
+    };
     let trust = if certified {
         "certified"
     } else if registry_verified {
@@ -625,11 +751,25 @@ fn cmd_mirror_bulk_sync(
                     urlencoding_simple(&pkg.name),
                     urlencoding_simple(version)
                 );
-                let certified = client
-                    .get(&proof_url)
-                    .send()
-                    .ok()
-                    .is_some_and(|r| r.status().is_success() && registry_ok);
+                let certified = if registry_ok {
+                    match client.get(&proof_url).send() {
+                        Ok(resp) if resp.status().is_success() => {
+                            match resp.json::<MirrorProof>() {
+                                Ok(proof) => verify_transparency_proof(
+                                    &pkg.name,
+                                    version,
+                                    &attestation,
+                                    &proof,
+                                )
+                                .is_ok(),
+                                Err(_) => false,
+                            }
+                        }
+                        _ => false,
+                    }
+                } else {
+                    false
+                };
                 if certified {
                     "certified"
                 } else if registry_ok {
@@ -907,5 +1047,86 @@ mod tests {
         assert!(hash_file.exists());
         let hash_content = std::fs::read_to_string(&hash_file).unwrap();
         assert!(hash_content.contains(&hash.to_hex()));
+    }
+
+    #[test]
+    fn certified_transparency_verification_rejects_tampered_path() {
+        let registry = hush_core::Keypair::from_seed(&[55u8; 32]);
+        let attestation = MirrorAttestation {
+            checksum: "abcd".to_string(),
+            publisher_key: "publisher".to_string(),
+            publisher_sig: "sig".to_string(),
+            registry_sig: Some("sig".to_string()),
+            registry_key: Some("key".to_string()),
+            published_at: Some("2026-02-28T00:00:00Z".to_string()),
+        };
+        let leaf = LeafData {
+            package_name: "demo".to_string(),
+            version: "1.0.0".to_string(),
+            content_hash: "abcd".to_string(),
+            publisher_key: "publisher".to_string(),
+            timestamp: "2026-02-28T00:00:00Z".to_string(),
+        };
+        let mut tree = clawdstrike::pkg::merkle::MerkleTree::new();
+        let idx = tree.append_hash(leaf.leaf_hash().unwrap());
+        let inclusion = tree.generate_inclusion_proof(idx).unwrap();
+        let root = tree.root().unwrap();
+        let ts = "2026-02-28T00:00:00Z".to_string();
+        let checkpoint_sig = registry
+            .sign(format!("{root}{}{ts}", inclusion.tree_size).as_bytes())
+            .to_hex();
+
+        let proof = MirrorProof {
+            leaf_index: inclusion.leaf_index,
+            tree_size: inclusion.tree_size,
+            hashes: vec!["00".repeat(32)],
+            root: Some(root),
+            checkpoint_timestamp: Some(ts),
+            checkpoint_sig: Some(checkpoint_sig),
+            checkpoint_key: Some(registry.public_key().to_hex()),
+        };
+
+        let err = verify_transparency_proof("demo", "1.0.0", &attestation, &proof).unwrap_err();
+        assert!(err.contains("merkle inclusion proof verification failed"));
+    }
+
+    #[test]
+    fn certified_transparency_verification_accepts_valid_path() {
+        let registry = hush_core::Keypair::from_seed(&[56u8; 32]);
+        let attestation = MirrorAttestation {
+            checksum: "abcd".to_string(),
+            publisher_key: "publisher".to_string(),
+            publisher_sig: "sig".to_string(),
+            registry_sig: Some("sig".to_string()),
+            registry_key: Some("key".to_string()),
+            published_at: Some("2026-02-28T00:00:00Z".to_string()),
+        };
+        let leaf = LeafData {
+            package_name: "demo".to_string(),
+            version: "1.0.0".to_string(),
+            content_hash: "abcd".to_string(),
+            publisher_key: "publisher".to_string(),
+            timestamp: "2026-02-28T00:00:00Z".to_string(),
+        };
+        let mut tree = clawdstrike::pkg::merkle::MerkleTree::new();
+        let idx = tree.append_hash(leaf.leaf_hash().unwrap());
+        let inclusion = tree.generate_inclusion_proof(idx).unwrap();
+        let root = tree.root().unwrap();
+        let ts = "2026-02-28T00:00:00Z".to_string();
+        let checkpoint_sig = registry
+            .sign(format!("{root}{}{ts}", inclusion.tree_size).as_bytes())
+            .to_hex();
+
+        let proof = MirrorProof {
+            leaf_index: inclusion.leaf_index,
+            tree_size: inclusion.tree_size,
+            hashes: inclusion.proof_path,
+            root: Some(root),
+            checkpoint_timestamp: Some(ts),
+            checkpoint_sig: Some(checkpoint_sig),
+            checkpoint_key: Some(registry.public_key().to_hex()),
+        };
+
+        verify_transparency_proof("demo", "1.0.0", &attestation, &proof).unwrap();
     }
 }

@@ -24,4 +24,4 @@ clawdstrike pkg install <SOURCE> [--version <VERSION>] [--registry <URL>] [--tru
 - Default trust level: `signed`.
 - At `signed` and above, publisher signature and checksum binding are verified.
 - At `verified` and above, registry counter-signature is also verified.
-- At `certified`, inclusion proof endpoint must be available.
+- At `certified`, the CLI verifies the transparency checkpoint signature and Merkle inclusion proof.

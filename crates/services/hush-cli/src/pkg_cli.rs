@@ -10,6 +10,7 @@ use hush_core::{PublicKey, Signature};
 use clawdstrike::pkg::archive;
 use clawdstrike::pkg::integrity::sign_package;
 use clawdstrike::pkg::manifest::{parse_pkg_manifest_toml, PkgManifest, PkgType};
+use clawdstrike::pkg::merkle::{verify_inclusion_proof, InclusionProof, LeafData};
 use clawdstrike::pkg::store::PackageStore;
 
 use crate::registry_config::{is_file_source, load_or_generate_publisher_keypair, RegistryConfig};
@@ -1013,6 +1014,14 @@ fn cmd_pkg_install_local(
     ExitCode::Ok
 }
 
+fn requested_identity_matches_install(
+    requested_name: &str,
+    requested_version: &str,
+    installed: &clawdstrike::pkg::store::InstalledPackage,
+) -> bool {
+    installed.name == requested_name && installed.version == requested_version
+}
+
 fn cmd_pkg_install_registry(
     name: &str,
     version: Option<&str>,
@@ -1162,15 +1171,27 @@ fn cmd_pkg_install_registry(
         }
     };
 
+    if !requested_identity_matches_install(name, version_segment, &installed) {
+        let _ = store.remove(&installed.name, &installed.version);
+        let _ = writeln!(
+            stderr,
+            "Error: downloaded package identity mismatch (requested {}@{}, installed {}@{})",
+            name, version_segment, installed.name, installed.version
+        );
+        return ExitCode::Fail;
+    }
+
     // Cleanup temp
     let _ = std::fs::remove_dir_all(&tmp_dir);
 
     // Trust verification for registry installs.
     if !allow_unverified && trust_level != "unverified" {
         let trust_ok = verify_install_trust(
-            &installed.name,
-            version_segment,
-            &installed.content_hash,
+            InstalledIdentity {
+                name: &installed.name,
+                version: &installed.version,
+                content_hash: &installed.content_hash,
+            },
             &cfg,
             &client,
             trust_level,
@@ -1208,6 +1229,23 @@ struct RegistryAttestation {
     publisher_sig: String,
     registry_sig: Option<String>,
     registry_key: Option<String>,
+    #[serde(default)]
+    published_at: Option<String>,
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct RegistryProof {
+    leaf_index: u64,
+    tree_size: u64,
+    hashes: Vec<String>,
+    #[serde(default)]
+    root: Option<String>,
+    #[serde(default)]
+    checkpoint_timestamp: Option<String>,
+    #[serde(default)]
+    checkpoint_sig: Option<String>,
+    #[serde(default)]
+    checkpoint_key: Option<String>,
 }
 
 #[derive(Debug)]
@@ -1255,10 +1293,89 @@ fn verify_attestation_against_hash(
     })
 }
 
-fn verify_install_trust(
+fn verify_checkpoint_signature(
+    root: &str,
+    tree_size: u64,
+    timestamp: &str,
+    sig_hex: &str,
+    key_hex: &str,
+) -> Result<(), String> {
+    let key = PublicKey::from_hex(key_hex).map_err(|e| format!("invalid checkpoint key: {e}"))?;
+    let sig =
+        Signature::from_hex(sig_hex).map_err(|e| format!("invalid checkpoint signature: {e}"))?;
+    let message = format!("{root}{tree_size}{timestamp}");
+    if key.verify(message.as_bytes(), &sig) {
+        Ok(())
+    } else {
+        Err("checkpoint signature verification failed".to_string())
+    }
+}
+
+fn verify_transparency_proof(
     name: &str,
     version: &str,
-    content_hash: &hush_core::Hash,
+    attestation: &RegistryAttestation,
+    proof: &RegistryProof,
+) -> Result<(), String> {
+    let root = proof
+        .root
+        .as_deref()
+        .ok_or_else(|| "proof response missing root".to_string())?;
+    let checkpoint_timestamp = proof
+        .checkpoint_timestamp
+        .as_deref()
+        .ok_or_else(|| "proof response missing checkpoint timestamp".to_string())?;
+    let checkpoint_sig = proof
+        .checkpoint_sig
+        .as_deref()
+        .ok_or_else(|| "proof response missing checkpoint signature".to_string())?;
+    let checkpoint_key = proof
+        .checkpoint_key
+        .as_deref()
+        .ok_or_else(|| "proof response missing checkpoint key".to_string())?;
+    verify_checkpoint_signature(
+        root,
+        proof.tree_size,
+        checkpoint_timestamp,
+        checkpoint_sig,
+        checkpoint_key,
+    )?;
+
+    let timestamp = attestation
+        .published_at
+        .as_deref()
+        .ok_or_else(|| "attestation missing published_at timestamp".to_string())?;
+    let leaf_data = LeafData {
+        package_name: name.to_string(),
+        version: version.to_string(),
+        content_hash: attestation.checksum.clone(),
+        publisher_key: attestation.publisher_key.clone(),
+        timestamp: timestamp.to_string(),
+    };
+    let leaf_hash = leaf_data
+        .leaf_hash()
+        .map_err(|e| format!("failed to build transparency leaf hash: {e}"))?
+        .to_hex();
+    let inclusion = InclusionProof {
+        leaf_index: proof.leaf_index,
+        tree_size: proof.tree_size,
+        proof_path: proof.hashes.clone(),
+    };
+    if verify_inclusion_proof(&inclusion, &leaf_hash, root) {
+        Ok(())
+    } else {
+        Err("merkle inclusion proof verification failed".to_string())
+    }
+}
+
+struct InstalledIdentity<'a> {
+    name: &'a str,
+    version: &'a str,
+    content_hash: &'a hush_core::Hash,
+}
+
+fn verify_install_trust(
+    installed: InstalledIdentity<'_>,
     cfg: &RegistryConfig,
     client: &reqwest::blocking::Client,
     trust_level: &str,
@@ -1271,8 +1388,8 @@ fn verify_install_trust(
     let attestation_url = format!(
         "{}/api/v1/packages/{}/{}/attestation",
         cfg.registry_url.trim_end_matches('/'),
-        urlencoding_simple(name),
-        urlencoding_simple(version)
+        urlencoding_simple(installed.name),
+        urlencoding_simple(installed.version)
     );
 
     let resp = match client.get(&attestation_url).send() {
@@ -1300,7 +1417,7 @@ fn verify_install_trust(
         }
     };
 
-    let verified = match verify_attestation_against_hash(&attestation, content_hash) {
+    let verified = match verify_attestation_against_hash(&attestation, installed.content_hash) {
         Ok(v) => v,
         Err(e) => {
             let _ = writeln!(stderr, "Error: {e}");
@@ -1328,8 +1445,8 @@ fn verify_install_trust(
     let proof_url = format!(
         "{}/api/v1/packages/{}/{}/proof",
         cfg.registry_url.trim_end_matches('/'),
-        urlencoding_simple(name),
-        urlencoding_simple(version)
+        urlencoding_simple(installed.name),
+        urlencoding_simple(installed.version)
     );
 
     let proof_resp = match client.get(&proof_url).send() {
@@ -1349,8 +1466,21 @@ fn verify_install_trust(
         return false;
     }
 
-    // trust_level == "certified"
-    true
+    let proof: RegistryProof = match proof_resp.json() {
+        Ok(p) => p,
+        Err(e) => {
+            let _ = writeln!(stderr, "Error: invalid proof response: {e}");
+            return false;
+        }
+    };
+
+    match verify_transparency_proof(installed.name, installed.version, &attestation, &proof) {
+        Ok(()) => true,
+        Err(e) => {
+            let _ = writeln!(stderr, "Error: {e}");
+            false
+        }
+    }
 }
 
 fn tempdir_for_download() -> std::io::Result<PathBuf> {
@@ -1590,19 +1720,36 @@ fn cmd_pkg_verify(
         attestation_error = Some("attestation not available from registry".to_string());
     }
 
-    // Fetch Merkle proof (for certified level).
+    // Fetch and verify Merkle proof (for certified level).
     let proof_url = format!(
         "{}/api/v1/packages/{}/{}/proof",
         cfg.registry_url.trim_end_matches('/'),
         urlencoding_simple(name),
         urlencoding_simple(version)
     );
-
-    let transparency_ok = client
-        .get(&proof_url)
-        .send()
-        .ok()
-        .is_some_and(|r| r.status().is_success());
+    let mut transparency_ok = false;
+    let mut transparency_error: Option<String> = None;
+    if let Some(ref att) = attestation {
+        match client.get(&proof_url).send() {
+            Ok(resp) if resp.status().is_success() => match resp.json::<RegistryProof>() {
+                Ok(proof) => match verify_transparency_proof(name, version, att, &proof) {
+                    Ok(()) => transparency_ok = true,
+                    Err(e) => transparency_error = Some(e),
+                },
+                Err(e) => transparency_error = Some(format!("invalid proof response: {e}")),
+            },
+            Ok(resp) => {
+                transparency_error = Some(format!(
+                    "transparency proof unavailable (HTTP {})",
+                    resp.status()
+                ))
+            }
+            Err(e) => transparency_error = Some(format!("cannot fetch transparency proof: {e}")),
+        }
+    } else {
+        transparency_error =
+            Some("attestation unavailable; cannot verify transparency proof".to_string());
+    }
 
     // Determine achieved trust level.
     let achieved = if transparency_ok && registry_ok && publisher_ok {
@@ -1704,11 +1851,8 @@ fn cmd_pkg_verify(
             mark(transparency_ok)
         );
     } else {
-        let _ = writeln!(
-            stdout,
-            "  {} Transparency log     Not yet available",
-            mark(transparency_ok)
-        );
+        let detail = transparency_error.as_deref().unwrap_or("Not yet available");
+        let _ = writeln!(stdout, "  {} Transparency log     {}", mark(false), detail);
     }
 
     let _ = writeln!(stdout, "\nInstalled: {}", installed_at);
@@ -3110,10 +3254,23 @@ fn cmd_org_create(
     if let Some(dn) = display_name {
         body["display_name"] = serde_json::Value::String(dn.to_string());
     }
+    let payload = format!(
+        "org:create:{}:{}:{}",
+        name,
+        keypair.public_key().to_hex(),
+        display_name.unwrap_or("")
+    );
+    let caller = match build_caller_auth_headers(&cfg, &payload, stderr) {
+        Ok(c) => c,
+        Err(code) => return code,
+    };
 
     let resp = match client
         .post(&url)
         .bearer_auth(&auth_token)
+        .header("X-Clawdstrike-Caller-Key", &caller.key_hex)
+        .header("X-Clawdstrike-Caller-Sig", &caller.sig_hex)
+        .header("X-Clawdstrike-Caller-Ts", &caller.ts)
         .json(&body)
         .send()
     {
@@ -3959,5 +4116,112 @@ sandbox = "native"
         });
         assert_eq!(code, ExitCode::ConfigError);
         assert!(stderr.contains("src/lib.rs"));
+    }
+
+    #[test]
+    fn install_requested_identity_mismatch_is_detected() {
+        let installed = clawdstrike::pkg::store::InstalledPackage {
+            name: "actual".to_string(),
+            version: "1.2.3".to_string(),
+            path: std::path::PathBuf::from("/tmp/actual"),
+            content_hash: hush_core::sha256(b"abc"),
+        };
+        assert!(!requested_identity_matches_install(
+            "expected", "1.2.3", &installed
+        ));
+        assert!(!requested_identity_matches_install(
+            "actual", "9.9.9", &installed
+        ));
+        assert!(requested_identity_matches_install(
+            "actual", "1.2.3", &installed
+        ));
+    }
+
+    #[test]
+    fn certified_transparency_verification_rejects_tampered_proof() {
+        let registry = hush_core::Keypair::from_seed(&[77u8; 32]);
+        let leaf = LeafData {
+            package_name: "demo".to_string(),
+            version: "1.0.0".to_string(),
+            content_hash: "abcd".to_string(),
+            publisher_key: "publisher".to_string(),
+            timestamp: "2026-02-28T00:00:00Z".to_string(),
+        };
+        let mut tree = clawdstrike::pkg::merkle::MerkleTree::new();
+        let idx = tree.append_hash(leaf.leaf_hash().unwrap());
+        let proof = tree.generate_inclusion_proof(idx).unwrap();
+        let root = tree.root().unwrap();
+        let checkpoint_timestamp = "2026-02-28T00:00:00Z";
+        let checkpoint_sig = registry
+            .sign(format!("{root}{}{checkpoint_timestamp}", proof.tree_size).as_bytes())
+            .to_hex();
+        let mut tampered_hashes = proof.proof_path.clone();
+        if tampered_hashes.is_empty() {
+            tampered_hashes.push("00".repeat(32));
+        } else {
+            tampered_hashes[0] = "00".repeat(32);
+        }
+
+        let attestation = RegistryAttestation {
+            checksum: "abcd".to_string(),
+            publisher_key: "publisher".to_string(),
+            publisher_sig: "sig".to_string(),
+            registry_sig: None,
+            registry_key: None,
+            published_at: Some("2026-02-28T00:00:00Z".to_string()),
+        };
+        let proof_resp = RegistryProof {
+            leaf_index: proof.leaf_index,
+            tree_size: proof.tree_size,
+            hashes: tampered_hashes,
+            root: Some(root),
+            checkpoint_timestamp: Some(checkpoint_timestamp.to_string()),
+            checkpoint_sig: Some(checkpoint_sig),
+            checkpoint_key: Some(registry.public_key().to_hex()),
+        };
+
+        let err =
+            verify_transparency_proof("demo", "1.0.0", &attestation, &proof_resp).unwrap_err();
+        assert!(err.contains("merkle inclusion proof verification failed"));
+    }
+
+    #[test]
+    fn certified_transparency_verification_accepts_valid_proof() {
+        let registry = hush_core::Keypair::from_seed(&[78u8; 32]);
+        let leaf = LeafData {
+            package_name: "demo".to_string(),
+            version: "1.0.0".to_string(),
+            content_hash: "abcd".to_string(),
+            publisher_key: "publisher".to_string(),
+            timestamp: "2026-02-28T00:00:00Z".to_string(),
+        };
+        let mut tree = clawdstrike::pkg::merkle::MerkleTree::new();
+        let idx = tree.append_hash(leaf.leaf_hash().unwrap());
+        let inclusion = tree.generate_inclusion_proof(idx).unwrap();
+        let root = tree.root().unwrap();
+        let checkpoint_timestamp = "2026-02-28T00:00:00Z";
+        let checkpoint_sig = registry
+            .sign(format!("{root}{}{checkpoint_timestamp}", inclusion.tree_size).as_bytes())
+            .to_hex();
+
+        let attestation = RegistryAttestation {
+            checksum: "abcd".to_string(),
+            publisher_key: "publisher".to_string(),
+            publisher_sig: "sig".to_string(),
+            registry_sig: None,
+            registry_key: None,
+            published_at: Some("2026-02-28T00:00:00Z".to_string()),
+        };
+        let proof_resp = RegistryProof {
+            leaf_index: inclusion.leaf_index,
+            tree_size: inclusion.tree_size,
+            hashes: inclusion.proof_path,
+            root: Some(root),
+            checkpoint_timestamp: Some(checkpoint_timestamp.to_string()),
+            checkpoint_sig: Some(checkpoint_sig),
+            checkpoint_key: Some(registry.public_key().to_hex()),
+        };
+
+        verify_transparency_proof("demo", "1.0.0", &attestation, &proof_resp).unwrap();
     }
 }

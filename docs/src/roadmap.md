@@ -268,9 +268,9 @@ Author                          Registry                        User
 
 | Deliverable | Description |
 |-------------|-------------|
-| Sparse index | Git-based package index (like crates.io) for efficient metadata lookups |
-| OCI storage backend | Package artifacts stored as OCI images in any OCI-compliant registry |
-| Axum API service | `POST /publish`, `GET /packages/{name}`, `GET /packages/{name}/{version}`, `GET /search` |
+| Sparse index | HTTP sparse index endpoint (`GET /api/v1/index/{name}`) with ETag revalidation |
+| Storage backend | **Current (2026-02-28):** filesystem blob store + SQLite metadata. **Planned:** OCI-backed artifact storage for hosted deployments |
+| Axum API service | `POST /api/v1/packages`, `GET /api/v1/packages/{name}`, `GET /api/v1/packages/{name}/{version}`, `GET /api/v1/search` |
 | `clawdstrike pkg publish` | Upload `.cpkg` with Ed25519 signature to the registry |
 | `clawdstrike pkg install <name>` | Resolve dependencies, download, verify, install |
 | `clawdstrike pkg search <query>` | Full-text search across package names, descriptions, tags |
@@ -306,7 +306,7 @@ Author signs package
 | Ed25519 author signing | Authors sign packages with their Ed25519 keypair. Key management via `clawdstrike pkg keygen` |
 | Spine counter-signatures | Registry wraps each publish event in a Spine envelope, adding its own signature |
 | Merkle transparency log | RFC 6962-style append-only log. Every publish is a leaf. Clients verify inclusion proofs |
-| Trust levels | `unverified` (no signature) -> `signed` (publisher Ed25519) -> `verified` (publisher + registry counter-sig) -> `certified` (all above + transparency proof) |
+| Trust levels | `unverified` (no signature) -> `signed` (publisher Ed25519) -> `verified` (publisher + registry counter-sig) -> `certified` (all above + cryptographically verified transparency proof) |
 | OIDC trusted publishing | GitHub Actions, GitLab CI, and other OIDC providers can publish without long-lived keys |
 | Key rotation ceremony | Documented procedure for rotating registry signing keys with overlapping validity windows |
 | Audit monitor | Independent service that watches the transparency log and alerts on anomalies |
@@ -320,7 +320,7 @@ Author signs package
 | unverified | No valid signature. Install requires --allow-unverified flag |
 | signed     | Valid publisher Ed25519 signature            |
 | verified   | Publisher sig + registry counter-signature   |
-| certified  | All above + transparency log inclusion proof |
+| certified  | All above + checkpoint-signature verification + inclusion-proof verification |
 +------------+---------------------------------------------+
 ```
 

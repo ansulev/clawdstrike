@@ -170,6 +170,33 @@ pub fn authorize_scoped_publish(
     }
 }
 
+/// Authorize administrative mutations on an unscoped package.
+///
+/// The caller must have published at least one version of the package.
+pub fn authorize_unscoped_package_admin(
+    db: &RegistryDb,
+    package_name: &str,
+    caller_key: &str,
+) -> Result<(), RegistryError> {
+    if parse_package_scope(package_name).is_some() {
+        return Err(RegistryError::BadRequest(
+            "authorize_unscoped_package_admin called with scoped package".into(),
+        ));
+    }
+
+    db.get_package(package_name)?
+        .ok_or_else(|| RegistryError::NotFound(format!("package '{}' not found", package_name)))?;
+
+    if db.is_package_publisher(package_name, caller_key)? {
+        Ok(())
+    } else {
+        Err(RegistryError::Unauthorized(format!(
+            "caller is not authorized to administer unscoped package '{}'",
+            package_name
+        )))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -312,6 +339,36 @@ mod tests {
 
         let err = authorize_scoped_publish(&db, "nonexistent", "some_key").unwrap_err();
         assert!(err.to_string().contains("not found"));
+    }
+
+    #[test]
+    fn authorize_unscoped_admin_requires_package_publisher() {
+        let db = crate::db::RegistryDb::open_in_memory().unwrap();
+        db.upsert_package("demo", None, "2026-02-28T00:00:00Z")
+            .unwrap();
+        db.insert_version(&crate::db::VersionRow {
+            name: "demo".into(),
+            version: "1.0.0".into(),
+            pkg_type: "guard".into(),
+            checksum: "abc".into(),
+            manifest_toml: "[package]\nname=\"demo\"\nversion=\"1.0.0\"\npkg_type=\"guard\"\n"
+                .into(),
+            publisher_key: "owner_key".into(),
+            publisher_sig: "sig".into(),
+            registry_sig: None,
+            dependencies_json: "{}".into(),
+            yanked: false,
+            published_at: "2026-02-28T00:00:00Z".into(),
+            attestation_hash: None,
+            key_id: None,
+            leaf_index: Some(0),
+            download_count: 0,
+        })
+        .unwrap();
+
+        authorize_unscoped_package_admin(&db, "demo", "owner_key").unwrap();
+        let err = authorize_unscoped_package_admin(&db, "demo", "stranger").unwrap_err();
+        assert!(err.to_string().contains("not authorized"));
     }
 
     // OIDC auth detection tests.

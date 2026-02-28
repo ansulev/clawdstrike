@@ -20,7 +20,7 @@ pub struct CreateOrgRequest {
     pub publisher_key: String,
 }
 
-#[derive(Serialize)]
+#[derive(Debug, Serialize)]
 pub struct CreateOrgResponse {
     pub name: String,
     pub created_at: String,
@@ -77,6 +77,7 @@ pub struct OrgPackageEntry {
 /// POST /api/v1/orgs — create a new organization (auth required).
 pub async fn create_org(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Json(req): Json<CreateOrgRequest>,
 ) -> Result<(StatusCode, Json<CreateOrgResponse>), RegistryError> {
     if req.name.is_empty() || req.name.len() > 64 {
@@ -92,6 +93,19 @@ pub async fn create_org(
         return Err(RegistryError::BadRequest(
             "organization name must contain only alphanumeric characters, hyphens, or underscores"
                 .into(),
+        ));
+    }
+
+    let create_payload = format!(
+        "org:create:{}:{}:{}",
+        req.name,
+        req.publisher_key,
+        req.display_name.as_deref().unwrap_or("")
+    );
+    let caller_key = crate::auth::verify_signed_caller(&headers, &create_payload)?;
+    if caller_key != req.publisher_key {
+        return Err(RegistryError::Unauthorized(
+            "caller key must match create_org.publisher_key".into(),
         ));
     }
 

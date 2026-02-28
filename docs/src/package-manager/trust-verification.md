@@ -7,14 +7,14 @@ Clawdstrike trust levels are derived from cryptographic evidence tied to package
 1. Archive SHA-256 (`checksum`)
 2. Publisher signature over checksum hash bytes
 3. Registry counter-signature over checksum hash bytes
-4. Transparency inclusion proof availability
+4. Transparency checkpoint signature + inclusion proof verification
 
 ## Trust Levels
 
 - `unverified`: local integrity only
 - `signed`: publisher signature verified
 - `verified`: publisher + registry signatures verified
-- `certified`: verified + inclusion proof endpoint available
+- `certified`: verified + cryptographically verified inclusion proof
 
 ## Caller Authentication for Org/Trusted-Publisher Mutations
 

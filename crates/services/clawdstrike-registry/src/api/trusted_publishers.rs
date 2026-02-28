@@ -24,7 +24,7 @@ pub struct AddTrustedPublisherRequest {
     pub environment: Option<String>,
 }
 
-#[derive(Serialize)]
+#[derive(Debug, Serialize)]
 pub struct TrustedPublisherResponse {
     pub id: i64,
     pub package_name: String,
@@ -82,9 +82,12 @@ pub async fn add_trusted_publisher(
     );
     let caller_key = crate::auth::verify_signed_caller(&headers, &payload)?;
 
-    // For scoped packages, verify the caller has owner/maintainer role.
+    // For scoped packages, verify org role. For unscoped packages, require
+    // package-level admin rights (publisher of at least one version).
     if let Some((scope, _basename)) = crate::auth::parse_package_scope(&name) {
         crate::auth::authorize_scoped_publish(&db, &scope, &caller_key)?;
+    } else {
+        crate::auth::authorize_unscoped_package_admin(&db, &name, &caller_key)?;
     }
 
     let id = db.add_trusted_publisher(
@@ -161,6 +164,8 @@ pub async fn remove_trusted_publisher(
 
     if let Some((scope, _basename)) = crate::auth::parse_package_scope(&name) {
         crate::auth::authorize_scoped_publish(&db, &scope, &caller_key)?;
+    } else {
+        crate::auth::authorize_unscoped_package_admin(&db, &name, &caller_key)?;
     }
 
     let deleted = db.remove_trusted_publisher_for_package(&name, id)?;

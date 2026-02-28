@@ -60,6 +60,18 @@ impl AppState {
         let mut tree = MerkleTree::new();
         let versions = db.list_all_versions_ordered()?;
         for v in &versions {
+            let expected_index = tree.tree_size();
+            if let Some(idx) = v.leaf_index {
+                if idx != expected_index {
+                    return Err(anyhow::anyhow!(
+                        "transparency log leaf_index sequence mismatch while rebuilding tree: expected {}, found {} for {}@{}",
+                        expected_index,
+                        idx,
+                        v.name,
+                        v.version
+                    ));
+                }
+            }
             let leaf_data = LeafData {
                 package_name: v.name.clone(),
                 version: v.version.clone(),
@@ -143,5 +155,45 @@ mod tests {
         let first = load_or_generate_keypair(&cfg).unwrap();
         let second = load_or_generate_keypair(&cfg).unwrap();
         assert_eq!(first.public_key().to_hex(), second.public_key().to_hex());
+    }
+
+    #[test]
+    fn app_state_new_rejects_non_sequential_leaf_indices() {
+        let tmp = tempfile::tempdir().unwrap();
+        let cfg = test_config(tmp.path());
+        std::fs::create_dir_all(cfg.data_dir.clone()).unwrap();
+        std::fs::create_dir_all(cfg.index_dir()).unwrap();
+        std::fs::create_dir_all(cfg.keys_dir()).unwrap();
+
+        let db = RegistryDb::open(&cfg.db_path()).unwrap();
+        db.upsert_package("pkg", None, "2026-02-28T00:00:00Z")
+            .unwrap();
+        db.insert_version(&crate::db::VersionRow {
+            name: "pkg".into(),
+            version: "1.0.0".into(),
+            pkg_type: "guard".into(),
+            checksum: "abc".into(),
+            manifest_toml: "".into(),
+            publisher_key: "pk".into(),
+            publisher_sig: "sig".into(),
+            registry_sig: None,
+            dependencies_json: "{}".into(),
+            yanked: false,
+            published_at: "2026-02-28T00:00:00Z".into(),
+            attestation_hash: None,
+            key_id: None,
+            leaf_index: Some(7),
+            download_count: 0,
+        })
+        .unwrap();
+        drop(db);
+
+        let err = AppState::new(cfg)
+            .err()
+            .expect("non-sequential leaf indices should fail");
+        assert!(
+            err.to_string().contains("leaf_index sequence mismatch"),
+            "unexpected error: {err}"
+        );
     }
 }

@@ -30,7 +30,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Install Clawdstrike CLI
-        run: cargo install clawdstrike-cli
+        run: cargo install hush-cli --locked
 
       - name: Lint policies
         run: |
@@ -67,7 +67,7 @@ jobs:
         run: |
           clawdstrike pkg pack
           for f in *.cpkg; do
-            clawdstrike guard validate "$f"
+            clawdstrike pkg install "$f" --allow-unverified
           done
 
   test:
@@ -81,7 +81,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Install Clawdstrike CLI
-        run: cargo install clawdstrike-cli
+        run: cargo install hush-cli --locked
 
       - name: Find and run policy tests
         run: |

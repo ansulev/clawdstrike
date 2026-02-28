@@ -10,7 +10,9 @@ use hunt_scan::analysis::{self, AnalysisClient};
 use hunt_scan::models::{
     ScanError, ScanPathResult, ScanUserInfo, ServerConfig, ServerScanResult, Tool,
 };
-use hunt_scan::{discovery, mcp_client, redact, skills};
+use hunt_scan::packages;
+use hunt_scan::storage;
+use hunt_scan::{discovery, mcp_client, policy_eval, query_filter, redact, skills};
 
 use crate::remote_extends;
 use crate::{ExitCode, HuntCommands, CLI_JSON_VERSION};
@@ -24,11 +26,11 @@ pub async fn cmd_hunt(
     match command {
         HuntCommands::Scan {
             target,
-            package: _,
+            package,
             skills,
-            query: _,
-            policy: _,
-            ruleset: _,
+            query,
+            policy,
+            ruleset,
             timeout,
             include_builtin,
             signing_key: _,
@@ -38,7 +40,11 @@ pub async fn cmd_hunt(
         } => cmd_hunt_scan(
             HuntScanArgs {
                 target,
+                package,
                 skills,
+                query,
+                policy,
+                ruleset,
                 timeout,
                 include_builtin,
                 json,
@@ -253,7 +259,11 @@ pub async fn cmd_hunt(
 
 struct HuntScanArgs {
     target: Option<Vec<String>>,
+    package: Option<Vec<String>>,
     skills: Option<Vec<String>>,
+    query: Option<String>,
+    policy: Option<String>,
+    ruleset: Option<String>,
     timeout: u64,
     include_builtin: bool,
     json: bool,
@@ -287,6 +297,8 @@ struct HuntJsonOutput<T: serde::Serialize> {
 struct HuntScanData {
     scan_results: Vec<ScanPathResult>,
     summary: HuntScanSummary,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    changes: Option<storage::ScanDiff>,
 }
 
 #[derive(serde::Serialize)]
@@ -295,6 +307,7 @@ struct HuntScanSummary {
     servers_found: usize,
     tools_found: usize,
     issues_found: usize,
+    policy_violations_found: usize,
 }
 
 // ---------------------------------------------------------------------------
@@ -335,7 +348,7 @@ async fn cmd_hunt_scan(
             .collect()
     };
 
-    if config_paths.is_empty() && args.skills.is_none() {
+    if config_paths.is_empty() && args.skills.is_none() && args.package.is_none() {
         return emit_hunt_error(
             args.json,
             "hunt scan",
@@ -385,6 +398,7 @@ async fn cmd_hunt_scan(
                     servers: None,
                     issues: vec![],
                     labels: vec![],
+                    policy_violations: vec![],
                     error: Some(error),
                 });
                 continue;
@@ -398,6 +412,7 @@ async fn cmd_hunt_scan(
                 servers: Some(vec![]),
                 issues: vec![],
                 labels: vec![],
+                policy_violations: vec![],
                 error: None,
             });
             continue;
@@ -486,6 +501,7 @@ async fn cmd_hunt_scan(
             servers: Some(server_results),
             issues: vec![],
             labels: vec![],
+            policy_violations: vec![],
             error: None,
         });
     }
@@ -517,6 +533,7 @@ async fn cmd_hunt_scan(
                         servers: Some(vec![result]),
                         issues: vec![],
                         labels: vec![],
+                        policy_violations: vec![],
                         error: None,
                     });
                 }
@@ -528,10 +545,79 @@ async fn cmd_hunt_scan(
                         servers: None,
                         issues: vec![],
                         labels: vec![],
+                        policy_violations: vec![],
                         error: Some(ScanError::skill_scan_error(e.to_string())),
                     });
                 }
             }
+        }
+    }
+
+    // 4b. Package scanning (if --package)
+    if let Some(ref pkg_specs) = args.package {
+        for spec_str in pkg_specs {
+            match packages::parse_package_spec(spec_str) {
+                Ok(spec) => {
+                    if !args.json {
+                        let _ = writeln!(stdout, "  Scanning package {}...", spec_str);
+                    }
+                    let result = packages::scan_package(&spec, args.timeout).await;
+                    let display_name = result.name.clone().unwrap_or_else(|| spec_str.clone());
+
+                    if !args.json {
+                        if let Some(ref sig) = result.signature {
+                            let _ = writeln!(
+                                stdout,
+                                "  \u{2713} {} (package) -- {} tools",
+                                display_name,
+                                sig.tools.len()
+                            );
+                        } else if let Some(ref err) = result.error {
+                            let msg = err.message.as_deref().unwrap_or("unknown error");
+                            let _ = writeln!(
+                                stdout,
+                                "  \u{2717} {} (package) -- {}",
+                                display_name, msg
+                            );
+                        }
+                    }
+
+                    scan_results.push(ScanPathResult {
+                        client: Some("package".to_string()),
+                        path: spec_str.clone(),
+                        servers: Some(vec![result]),
+                        issues: vec![],
+                        labels: vec![],
+                        policy_violations: vec![],
+                        error: None,
+                    });
+                }
+                Err(e) => {
+                    let _ = writeln!(
+                        stderr,
+                        "Warning: invalid package spec '{}': {}",
+                        spec_str, e
+                    );
+                    scan_results.push(ScanPathResult {
+                        client: Some("package".to_string()),
+                        path: spec_str.clone(),
+                        servers: None,
+                        issues: vec![],
+                        labels: vec![],
+                        policy_violations: vec![],
+                        error: Some(ScanError::parse_error(e)),
+                    });
+                }
+            }
+        }
+    }
+
+    // 4c. Apply --query filter BEFORE analysis so heuristic checks run only
+    //     on the filtered set.
+    if let Some(ref query) = args.query {
+        query_filter::filter_scan_results(&mut scan_results, query);
+        if !args.json && scan_results.is_empty() {
+            let _ = writeln!(stdout, "No results match query: {}", query);
         }
     }
 
@@ -602,8 +688,93 @@ async fn cmd_hunt_scan(
         }
     }
 
+    // 6b. Policy evaluation (if --policy or --ruleset)
+    let policy_violation_count = if args.policy.is_some() || args.ruleset.is_some() {
+        let engine_result = if let Some(ref policy_path) = args.policy {
+            clawdstrike::Policy::from_yaml_file(policy_path)
+                .map(clawdstrike::HushEngine::with_policy)
+                .map_err(|e| format!("Failed to load policy: {e}"))
+        } else if let Some(ref ruleset_name) = args.ruleset {
+            clawdstrike::HushEngine::from_ruleset(ruleset_name)
+                .map_err(|e| format!("Failed to load ruleset: {e}"))
+        } else {
+            unreachable!()
+        };
+
+        match engine_result {
+            Ok(engine) => {
+                let count = policy_eval::evaluate_scan_results(&engine, &mut scan_results).await;
+                if !args.json && count > 0 {
+                    let _ = writeln!(stdout);
+                    let _ = writeln!(stdout, "Policy violations: {count}");
+                    for result in &scan_results {
+                        for v in &result.policy_violations {
+                            let _ = writeln!(
+                                stdout,
+                                "  [{}] {} -- {} ({})",
+                                v.guard, v.tool_name, v.message, v.severity
+                            );
+                        }
+                    }
+                }
+                count
+            }
+            Err(e) => {
+                let _ = writeln!(stderr, "Warning: {e}");
+                0
+            }
+        }
+    } else {
+        0
+    };
+
     // 7. Compute summary
-    let summary = compute_summary(&scan_results);
+    let summary = compute_summary(&scan_results, policy_violation_count);
+
+    // 7b. Change detection — load/compare/save history
+    let scan_diff = match storage::default_history_path() {
+        Some(history_path) => {
+            let old_history = storage::load_history(&history_path);
+            let (diff, new_history) = storage::diff_history(&scan_results, &old_history);
+
+            if let Err(e) = storage::save_history(&history_path, &new_history) {
+                let _ = writeln!(stderr, "Warning: could not save scan history: {e}");
+            }
+
+            if !args.json && !diff.is_empty() {
+                let _ = writeln!(stdout);
+                if !diff.new_servers.is_empty() {
+                    let _ = writeln!(stdout, "New servers detected:");
+                    for s in &diff.new_servers {
+                        let _ = writeln!(stdout, "  + {s}");
+                    }
+                }
+                if !diff.removed_servers.is_empty() {
+                    let _ = writeln!(stdout, "Removed servers:");
+                    for s in &diff.removed_servers {
+                        let _ = writeln!(stdout, "  - {s}");
+                    }
+                }
+                if !diff.changed_servers.is_empty() {
+                    let _ = writeln!(stdout, "Changed servers:");
+                    for c in &diff.changed_servers {
+                        let _ = writeln!(stdout, "  ~ {}", c.server_key);
+                        for t in &c.added_tools {
+                            let _ = writeln!(stdout, "    + {t}");
+                        }
+                        for t in &c.removed_tools {
+                            let _ = writeln!(stdout, "    - {t}");
+                        }
+                    }
+                }
+            } else if !args.json && old_history.last_scan.is_some() {
+                let _ = writeln!(stdout, "No changes since last scan.");
+            }
+
+            Some(diff)
+        }
+        None => None,
+    };
 
     // 8. Determine exit code based on issues found
     let exit_code = determine_exit_code(&scan_results, &summary);
@@ -618,6 +789,7 @@ async fn cmd_hunt_scan(
             data: Some(HuntScanData {
                 scan_results,
                 summary,
+                changes: scan_diff,
             }),
         };
         if let Ok(json_str) = serde_json::to_string_pretty(&output) {
@@ -627,11 +799,12 @@ async fn cmd_hunt_scan(
         let _ = writeln!(stdout);
         let _ = writeln!(
             stdout,
-            "Summary: {} clients, {} servers, {} tools, {} issues found",
+            "Summary: {} clients, {} servers, {} tools, {} issues, {} policy violations",
             summary.clients_scanned,
             summary.servers_found,
             summary.tools_found,
             summary.issues_found,
+            summary.policy_violations_found,
         );
 
         // Print issues
@@ -672,7 +845,7 @@ fn mcp_error_to_scan_error(e: &mcp_client::McpError) -> ScanError {
     }
 }
 
-fn compute_summary(results: &[ScanPathResult]) -> HuntScanSummary {
+fn compute_summary(results: &[ScanPathResult], policy_violations: usize) -> HuntScanSummary {
     let clients_scanned = {
         let mut seen = std::collections::HashSet::new();
         for r in results {
@@ -706,6 +879,7 @@ fn compute_summary(results: &[ScanPathResult]) -> HuntScanSummary {
         servers_found,
         tools_found,
         issues_found,
+        policy_violations_found: policy_violations,
     }
 }
 

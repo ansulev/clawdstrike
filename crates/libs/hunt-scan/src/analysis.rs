@@ -38,11 +38,12 @@ pub enum AnalysisError {
 
 /// A policy violation detected when evaluating a discovered tool against a
 /// clawdstrike guard.
-#[derive(Debug, Clone, serde::Serialize)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct PolicyViolation {
     pub guard: String,
     pub tool_name: String,
     pub allowed: bool,
+    pub severity: String,
     pub message: String,
 }
 

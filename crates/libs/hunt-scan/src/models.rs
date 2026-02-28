@@ -531,6 +531,8 @@ pub struct ScanPathResult {
     pub issues: Vec<Issue>,
     #[serde(default)]
     pub labels: Vec<Vec<ScalarToolLabels>>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub policy_violations: Vec<crate::analysis::PolicyViolation>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<ScanError>,
 }
@@ -868,6 +870,7 @@ mod tests {
                 extra_data: None,
             }],
             labels: vec![],
+            policy_violations: vec![],
             error: None,
         };
 

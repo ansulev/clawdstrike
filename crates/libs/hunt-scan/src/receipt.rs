@@ -123,6 +123,7 @@ mod tests {
             servers: None,
             issues,
             labels: vec![],
+            policy_violations: vec![],
             error: None,
         }
     }

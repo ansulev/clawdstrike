@@ -381,6 +381,7 @@ mod tests {
             }]),
             issues: vec![],
             labels: vec![],
+            policy_violations: vec![],
             error: None,
         }];
 
@@ -417,6 +418,7 @@ mod tests {
             }]),
             issues: vec![],
             labels: vec![],
+            policy_violations: vec![],
             error: None,
         }];
 
@@ -442,6 +444,7 @@ mod tests {
             servers: None,
             issues: vec![],
             labels: vec![],
+            policy_violations: vec![],
             error: Some(ScanError {
                 message: Some("failed".into()),
                 exception: None,

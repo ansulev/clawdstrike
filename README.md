@@ -70,44 +70,6 @@
 
 ## Quick Start
 
-### Desktop Agent (Recommended)
-
-Use the desktop agent for local runtime management:
-- tray controls
-- managed daemon
-- built-in MCP server
-
-```bash
-# Build and run the desktop agent
-cd apps/agent
-cargo tauri dev
-```
-
-Prefer a packaged build? Download the latest release:
-[github.com/backbay-labs/clawdstrike/releases/latest](https://github.com/backbay-labs/clawdstrike/releases/latest)
-(current: `v0.1.3`).
-
-When running, the agent manages these local services:
-
-| Service | Default |
-|---|---|
-| `hushd` policy daemon | `127.0.0.1:9876` |
-| MCP `policy_check` server | `127.0.0.1:9877` |
-| Authenticated agent API | `127.0.0.1:9878` |
-| Local management dashboard (Web UI) | `http://127.0.0.1:9878/ui` |
-
-Tray menu actions:
-- enable/disable enforcement
-- reload policy
-- install Claude Code hooks
-- open the local Web UI
-
-Integrations menu:
-- `Configure SIEM Export` (providers: Datadog, Splunk, Elastic, Sumo Logic, Custom endpoint)
-- `Configure Webhooks` (generic webhook forwarding for SOAR/automation endpoints)
-
-For full setup and configuration, see [`apps/agent/README.md`](apps/agent/README.md).
-
 ### CLI
 
 #### Install
@@ -161,6 +123,44 @@ clawdstrike hunt timeline --source tetragon,hubble --start 1h
 # Correlate events against detection rules
 clawdstrike hunt correlate --rules ./rules/exfil.yaml --start 1h
 ```
+
+### Desktop Agent (Recommended)
+
+Use the desktop agent for local runtime management:
+- tray controls
+- managed daemon
+- built-in MCP server
+
+```bash
+# Build and run the desktop agent
+cd apps/agent
+cargo tauri dev
+```
+
+Prefer a packaged build? Download the latest release:
+[github.com/backbay-labs/clawdstrike/releases/latest](https://github.com/backbay-labs/clawdstrike/releases/latest)
+(current: `v0.1.3`).
+
+When running, the agent manages these local services:
+
+| Service | Default |
+|---|---|
+| `hushd` policy daemon | `127.0.0.1:9876` |
+| MCP `policy_check` server | `127.0.0.1:9877` |
+| Authenticated agent API | `127.0.0.1:9878` |
+| Local management dashboard (Web UI) | `http://127.0.0.1:9878/ui` |
+
+Tray menu actions:
+- enable/disable enforcement
+- reload policy
+- install Claude Code hooks
+- open the local Web UI
+
+Integrations menu:
+- `Configure SIEM Export` (providers: Datadog, Splunk, Elastic, Sumo Logic, Custom endpoint)
+- `Configure Webhooks` (generic webhook forwarding for SOAR/automation endpoints)
+
+For full setup and configuration, see [`apps/agent/README.md`](apps/agent/README.md).
 
 ### TypeScript
 

@@ -174,6 +174,9 @@ impl CorrelationEngine {
         // existed before this event was processed, preventing a single event from
         // binding to both a newly-created root window and its dependent condition.
         let pre_existing_count = self.windows.get(&ri).map_or(0, |w| w.len());
+        // Track whether this event already advanced each pre-existing window
+        // through a dependent condition in this pass.
+        let mut dependent_advanced = vec![false; pre_existing_count];
 
         // Check each condition to see if this event matches it.
         for (ci, cond) in rule.conditions.iter().enumerate() {
@@ -209,7 +212,12 @@ impl CorrelationEngine {
                     None => continue,
                 };
 
-                for ws in windows.iter_mut().take(pre_existing_count) {
+                for (wi, ws) in windows.iter_mut().take(pre_existing_count).enumerate() {
+                    // A single event may advance at most one dependent bind per window.
+                    if dependent_advanced.get(wi).copied().unwrap_or(false) {
+                        continue;
+                    }
+
                     // Skip windows that already have this bind matched.
                     if ws.bound_events.contains_key(&cond.bind) {
                         continue;
@@ -243,6 +251,9 @@ impl CorrelationEngine {
                         .entry(cond.bind.clone())
                         .or_default()
                         .push(event.clone());
+                    if let Some(slot) = dependent_advanced.get_mut(wi) {
+                        *slot = true;
+                    }
                 }
             }
         }
@@ -781,6 +792,77 @@ output:
     }
 
     #[test]
+    fn single_event_cannot_satisfy_chained_dependent_conditions() {
+        let rule = parse_rule(
+            r#"
+schema: clawdstrike.hunt.correlation.v1
+name: "Dependent chain"
+severity: high
+description: "Should require three distinct events"
+window: 30s
+conditions:
+  - source: receipt
+    action_type: file
+    bind: first
+  - source: receipt
+    action_type: egress
+    after: first
+    within: 30s
+    bind: second
+  - source: receipt
+    action_type: egress
+    after: second
+    within: 30s
+    bind: third
+output:
+  title: "Three-step sequence"
+  evidence:
+    - first
+    - second
+    - third
+"#,
+        )
+        .unwrap();
+
+        let mut engine = CorrelationEngine::new(vec![rule]).unwrap();
+        let ts1 = Utc.with_ymd_and_hms(2025, 6, 15, 12, 0, 0).unwrap();
+        let ts2 = Utc.with_ymd_and_hms(2025, 6, 15, 12, 0, 5).unwrap();
+        let ts3 = Utc.with_ymd_and_hms(2025, 6, 15, 12, 0, 10).unwrap();
+
+        let first = make_event(
+            EventSource::Receipt,
+            "file",
+            NormalizedVerdict::Allow,
+            "read /tmp/data",
+            ts1,
+        );
+        assert!(engine.process_event(&first).is_empty());
+
+        // This event matches both dependent conditions by predicate; it must
+        // only satisfy the first dependent bind in this pass.
+        let second = make_event(
+            EventSource::Receipt,
+            "egress",
+            NormalizedVerdict::Allow,
+            "evil.com:443",
+            ts2,
+        );
+        assert!(
+            engine.process_event(&second).is_empty(),
+            "a single dependent event must not satisfy an entire chain"
+        );
+
+        let third = make_event(
+            EventSource::Receipt,
+            "egress",
+            NormalizedVerdict::Allow,
+            "other.com:443",
+            ts3,
+        );
+        assert_eq!(engine.process_event(&third).len(), 1);
+    }
+
+    #[test]
     fn condition_matches_source_check() {
         let cond = RuleCondition {
             source: vec!["receipt".to_string()],
@@ -1165,29 +1247,33 @@ output:
     fn evict_expired_capped_preserves_when_cap_larger_than_rule_window() {
         // With a cap larger than the rule window, eviction should
         // behave identically to the uncapped variant.
-        let rule = single_condition_rule(); // 5m window
+        let rule = exfil_rule(); // 30s window
         let mut engine = CorrelationEngine::new(vec![rule]).unwrap();
 
         let ts = Utc::now();
-        // Feed an event that does NOT fully match the single-condition rule
-        // (Forbidden Path Access requires deny verdict, so an allow event
-        // opens a window but it won't complete).
-        let non_matching = make_event(
+        // Feed a root-matching event that opens a window but does not complete
+        // the rule sequence (no matching egress event yet).
+        let root_only = make_event(
             EventSource::Receipt,
             "file",
             NormalizedVerdict::Allow,
-            "some other file",
+            "read /etc/passwd",
             ts,
         );
-        // Use process_event to only open a window (Forbidden Path Access
-        // requires deny verdict, so an allow event opens a window but it
-        // won't complete).
-        let _ = engine.process_event(&non_matching);
+        let alerts = engine.process_event(&root_only);
+        assert!(
+            alerts.is_empty(),
+            "root-only event should not complete rule"
+        );
+        let before = engine.windows.get(&0).map_or(0, Vec::len);
+        assert_eq!(before, 1, "expected one active correlation window");
 
         // A huge cap should not evict a just-created window.
         engine.evict_expired_capped(chrono::Duration::hours(24));
-        // We can't assert much about windows directly since the single
-        // condition rule fires immediately, but we can at least verify
-        // no panic.
+        let after = engine.windows.get(&0).map_or(0, Vec::len);
+        assert_eq!(
+            after, 1,
+            "cap larger than rule window should preserve a fresh window"
+        );
     }
 }

@@ -542,22 +542,7 @@ impl PostureBudgetCounter {
 }
 
 pub fn parse_duration(value: &str) -> Option<Duration> {
-    if value.len() < 2 {
-        return None;
-    }
-
-    let (num, suffix) = value.split_at(value.len() - 1);
-    if num.is_empty() || !num.bytes().all(|b| b.is_ascii_digit()) {
-        return None;
-    }
-
-    let magnitude = num.parse::<u64>().ok()?;
-    match suffix {
-        "s" => Some(Duration::from_secs(magnitude)),
-        "m" => Some(Duration::from_secs(magnitude.saturating_mul(60))),
-        "h" => Some(Duration::from_secs(magnitude.saturating_mul(60 * 60))),
-        _ => None,
-    }
+    hush_core::parse_human_duration(value)?.to_std().ok()
 }
 
 pub fn elapsed_since_timestamp(timestamp: &str, now: DateTime<Utc>) -> Option<Duration> {

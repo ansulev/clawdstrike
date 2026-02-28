@@ -161,6 +161,14 @@ impl IocDatabase {
 
     /// Add a single entry and update indices.
     pub fn add_entry(&mut self, entry: IocEntry) {
+        let indicator = entry.indicator.trim().to_string();
+        if indicator.is_empty() {
+            return;
+        }
+
+        let mut entry = entry;
+        entry.indicator = indicator;
+
         let idx = self.entries.len();
         let key = entry.indicator.to_lowercase();
         match entry.ioc_type {
@@ -466,6 +474,10 @@ fn is_ioc_word_char(ch: u8) -> bool {
 /// A match is word-bounded when the characters immediately before and after
 /// the match are NOT IOC word characters (alphanumeric or dot).
 fn contains_word_bounded(haystack: &str, needle: &str) -> bool {
+    if needle.is_empty() {
+        return false;
+    }
+
     let bytes = haystack.as_bytes();
     let mut start = 0;
     while let Some(pos) = haystack[start..].find(needle) {
@@ -1127,6 +1139,12 @@ mod tests {
         assert!(!contains_word_bounded("ip 10.0.0.100:80", "10.0.0.1"));
     }
 
+    #[test]
+    fn contains_word_bounded_empty_needle_is_false() {
+        assert!(!contains_word_bounded("abc", ""));
+        assert!(!contains_word_bounded("", ""));
+    }
+
     // -- CSV edge cases ----------------------------------------------------
 
     #[test]
@@ -1152,6 +1170,19 @@ mod tests {
         assert_eq!(db.hash_index.len(), 0);
         assert_eq!(db.domain_index.len(), 0);
         assert_eq!(db.ip_index.len(), 0);
+    }
+
+    #[test]
+    fn add_entry_ignores_empty_indicator() {
+        let mut db = IocDatabase::new();
+        db.add_entry(IocEntry {
+            indicator: "   ".into(),
+            ioc_type: IocType::Domain,
+            description: None,
+            source: None,
+        });
+        assert!(db.entries.is_empty());
+        assert!(db.domain_index.is_empty());
     }
 
     #[test]

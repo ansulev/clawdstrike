@@ -24,33 +24,7 @@ const SUPPORTED_SCHEMA: &str = "clawdstrike.hunt.correlation.v1";
 /// Supports multi-character suffixes like `"sec"`, `"min"`, `"hrs"`, `"days"`.
 /// Returns `None` if the string cannot be parsed.
 pub fn parse_duration_str(s: &str) -> Option<Duration> {
-    let s = s.trim();
-    if s.is_empty() {
-        return None;
-    }
-
-    // Split at the boundary between digits and the alphabetic suffix.
-    let digit_end = s.find(|c: char| !c.is_ascii_digit()).unwrap_or(s.len());
-    if digit_end == 0 || digit_end == s.len() {
-        return None;
-    }
-
-    // Guard against splitting inside a multi-byte UTF-8 sequence (e.g. "30秒").
-    if !s.is_char_boundary(digit_end) {
-        return None;
-    }
-
-    let digits = &s[..digit_end];
-    let suffix = s[digit_end..].trim();
-    let value: i64 = digits.parse().ok()?;
-
-    match suffix.to_lowercase().as_str() {
-        "s" | "sec" | "secs" | "second" | "seconds" => Some(Duration::seconds(value)),
-        "m" | "min" | "mins" | "minute" | "minutes" => Some(Duration::minutes(value)),
-        "h" | "hr" | "hrs" | "hour" | "hours" => Some(Duration::hours(value)),
-        "d" | "day" | "days" => Some(Duration::days(value)),
-        _ => None,
-    }
+    hush_core::parse_human_duration(s)
 }
 
 /// Format a `Duration` back to a human-readable string.

@@ -3,6 +3,7 @@
 use std::time::Duration;
 
 use async_nats::jetstream::consumer::pull;
+use chrono::{DateTime, Utc};
 use serde_json::Value;
 use tokio_stream::StreamExt;
 
@@ -14,6 +15,48 @@ use crate::timeline::{self, TimelineEvent};
 /// this duration after we have already received at least one message, we
 /// treat the historical backlog as fully drained and stop.
 const DEFAULT_REPLAY_TIMEOUT: Duration = Duration::from_secs(3);
+
+fn next_poll_timeout(idle_timeout: Duration, received_any: bool) -> Duration {
+    if received_any {
+        idle_timeout
+    } else {
+        idle_timeout * 3
+    }
+}
+
+fn is_past_end(end: Option<&DateTime<Utc>>, event_ts: DateTime<Utc>) -> bool {
+    end.is_some_and(|e| event_ts > *e)
+}
+
+fn deliver_policy_for(
+    start: Option<&DateTime<Utc>>,
+) -> async_nats::jetstream::consumer::DeliverPolicy {
+    if let Some(start) = start {
+        let ts = start.timestamp();
+        let offset_dt = time::OffsetDateTime::from_unix_timestamp(ts)
+            .unwrap_or(time::OffsetDateTime::UNIX_EPOCH);
+        async_nats::jetstream::consumer::DeliverPolicy::ByStartTime {
+            start_time: offset_dt,
+        }
+    } else {
+        async_nats::jetstream::consumer::DeliverPolicy::All
+    }
+}
+
+fn parse_envelope_payload(
+    payload: &[u8],
+    verify: bool,
+    stream_name: &str,
+) -> Option<TimelineEvent> {
+    let payload: Value = match serde_json::from_slice(payload) {
+        Ok(v) => v,
+        Err(e) => {
+            tracing::debug!("skipping non-JSON message from {stream_name}: {e}");
+            return None;
+        }
+    };
+    timeline::parse_envelope(&payload, verify)
+}
 
 /// Replay envelopes from a single JetStream stream, filtered by query predicates.
 ///
@@ -48,21 +91,9 @@ pub async fn replay_stream_with_timeout(
         }
     };
 
-    // Build consumer config with time-based delivery if start is specified
-    let deliver_policy = if let Some(ref start) = query.start {
-        let ts = start.timestamp();
-        let offset_dt = time::OffsetDateTime::from_unix_timestamp(ts)
-            .unwrap_or(time::OffsetDateTime::UNIX_EPOCH);
-        async_nats::jetstream::consumer::DeliverPolicy::ByStartTime {
-            start_time: offset_dt,
-        }
-    } else {
-        async_nats::jetstream::consumer::DeliverPolicy::All
-    };
-
     let config = pull::Config {
         filter_subject: source.subject_filter().to_string(),
-        deliver_policy,
+        deliver_policy: deliver_policy_for(query.start.as_ref()),
         ..Default::default()
     };
 
@@ -80,16 +111,17 @@ pub async fn replay_stream_with_timeout(
     let mut received_any = false;
 
     loop {
+        let poll_timeout = next_poll_timeout(idle_timeout, received_any);
         let msg_result = if received_any {
             // After receiving at least one message, apply an idle timeout so
             // we don't block forever waiting for new messages once the
             // historical backlog is drained.
-            match tokio::time::timeout(idle_timeout, messages.next()).await {
+            match tokio::time::timeout(poll_timeout, messages.next()).await {
                 Ok(Some(r)) => r,
                 Ok(None) => break, // stream ended
                 Err(_elapsed) => {
                     tracing::debug!(
-                        "replay idle timeout ({idle_timeout:?}) on {stream_name}, \
+                        "replay idle timeout ({poll_timeout:?}) on {stream_name}, \
                          treating as end-of-stream"
                     );
                     break;
@@ -98,7 +130,7 @@ pub async fn replay_stream_with_timeout(
         } else {
             // First message: use a longer initial timeout so we don't give up
             // too quickly if the consumer is still being created.
-            match tokio::time::timeout(idle_timeout * 3, messages.next()).await {
+            match tokio::time::timeout(poll_timeout, messages.next()).await {
                 Ok(Some(r)) => r,
                 Ok(None) => break,
                 Err(_elapsed) => {
@@ -121,22 +153,11 @@ pub async fn replay_stream_with_timeout(
         // Acknowledge the message so the pull consumer does not redeliver it.
         msg.ack().await.ok();
 
-        // Parse payload as JSON envelope
-        let payload: Value = match serde_json::from_slice(&msg.payload) {
-            Ok(v) => v,
-            Err(e) => {
-                tracing::debug!("skipping non-JSON message from {stream_name}: {e}");
-                continue;
-            }
-        };
-
         // Parse envelope into TimelineEvent
-        if let Some(event) = timeline::parse_envelope(&payload, verify) {
+        if let Some(event) = parse_envelope_payload(&msg.payload, verify, stream_name) {
             // Stop if past end time
-            if let Some(ref end) = query.end {
-                if event.timestamp > *end {
-                    break;
-                }
+            if is_past_end(query.end.as_ref(), event.timestamp) {
+                break;
             }
 
             if query.matches(&event) {
@@ -189,6 +210,9 @@ pub async fn replay_all(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use async_nats::jetstream::consumer::DeliverPolicy;
+    use chrono::{TimeZone, Utc};
+    use serde_json::json;
 
     #[test]
     fn default_replay_timeout_is_reasonable() {
@@ -205,11 +229,63 @@ mod tests {
 
     #[test]
     fn initial_timeout_is_triple_idle() {
-        // The initial timeout (for the first message) is 3x the idle timeout.
-        // Verify the multiplication doesn't overflow for reasonable values.
         let timeout = DEFAULT_REPLAY_TIMEOUT;
-        let initial = timeout * 3;
+        let initial = next_poll_timeout(timeout, false);
         assert_eq!(initial, Duration::from_secs(9));
+    }
+
+    #[test]
+    fn steady_state_timeout_uses_idle_duration() {
+        let timeout = DEFAULT_REPLAY_TIMEOUT;
+        let steady = next_poll_timeout(timeout, true);
+        assert_eq!(steady, timeout);
+    }
+
+    #[test]
+    fn is_past_end_respects_end_boundary() {
+        let end = chrono::Utc::now();
+        assert!(is_past_end(Some(&end), end + chrono::Duration::seconds(1)));
+        assert!(!is_past_end(Some(&end), end));
+        assert!(!is_past_end(None, end + chrono::Duration::seconds(1)));
+    }
+
+    #[test]
+    fn deliver_policy_defaults_to_all_without_start() {
+        assert!(matches!(deliver_policy_for(None), DeliverPolicy::All));
+    }
+
+    #[test]
+    fn deliver_policy_uses_start_time_when_present() {
+        let start = Utc.with_ymd_and_hms(2026, 2, 1, 12, 30, 0).unwrap();
+        match deliver_policy_for(Some(&start)) {
+            DeliverPolicy::ByStartTime { start_time } => {
+                assert_eq!(start_time.unix_timestamp(), start.timestamp());
+            }
+            other => panic!("unexpected deliver policy: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parse_envelope_payload_rejects_invalid_json() {
+        assert!(parse_envelope_payload(b"not json", false, "TEST").is_none());
+    }
+
+    #[test]
+    fn parse_envelope_payload_parses_valid_envelope() {
+        let envelope = json!({
+            "issued_at": "2026-02-01T12:00:00Z",
+            "fact": {
+                "schema": "clawdstrike.sdr.fact.scan.v1",
+                "scan_type": "mcp",
+                "status": "pass",
+            }
+        });
+        let payload = serde_json::to_vec(&envelope).unwrap();
+        let event = parse_envelope_payload(&payload, false, "CLAWDSTRIKE_SCANS");
+        assert!(event.is_some());
+        let event = event.unwrap();
+        assert_eq!(event.source, crate::query::EventSource::Scan);
+        assert_eq!(event.action_type.as_deref(), Some("scan"));
     }
 
     /// Verify that `replay_all` returns an error (not a hang) when NATS is

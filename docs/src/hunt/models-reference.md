@@ -490,6 +490,14 @@ Some server configs have `type = None` in the JSON. The `ServerConfig` enum uses
 
 **Origin:** `Storage.py`
 
-Scan history is persisted to `~/.agent-scan/scanned_entities.json` for change detection between runs. The file is protected by a file lock (10-second timeout). Entity keys follow the format `"{server_name}.{entity_type}.{entity_name}"`.
+Current Rust implementation persists scan history to `~/.clawdstrike/scan_history.json`.
 
-Change detection (`check_and_update`): compute the entity hash, compare against stored hash. If different, flag as changed and include the previous description and timestamp in the change message.
+- `ScanHistory.servers` is keyed by `"{scan_path}::{server_name}"`.
+- Each `ScanRecord` stores:
+  - `signature_hash` (SHA-256 of normalized tool name/description entries)
+  - `tool_names`
+  - prompt/resource counts
+  - timestamp
+- `diff_history` returns `new_servers`, `removed_servers`, and `changed_servers` with added/removed tools.
+
+The current implementation creates parent directories as needed and writes JSON directly; it does not implement a file-lock timeout mechanism.

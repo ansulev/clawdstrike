@@ -3,6 +3,9 @@
 This document describes the phased implementation plan for the `clawdstrike hunt`
 CLI command -- a threat-hunting toolkit for AI agent ecosystems.
 
+> Note: This roadmap includes planned features and historical design options.
+> For current implemented CLI behavior, use the command reference pages under `docs/src/hunt/*.md`.
+
 The command ports and extends the Python `agent-scan` tool into Rust, integrates
 with the Spine/NATS attestation infrastructure, and adds correlation, watch-mode,
 and IOC capabilities that do not exist in the original Python codebase.

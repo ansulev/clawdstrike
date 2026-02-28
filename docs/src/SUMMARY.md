@@ -90,7 +90,7 @@
   - [hunt correlate](hunt/correlate.md)
   - [hunt watch](hunt/watch.md)
   - [hunt ioc](hunt/ioc.md)
-  - [hunt report](hunt/report.md)
+  - [hunt report (planned)](hunt/report.md)
   - [Discovery Reference](hunt/discovery-reference.md)
   - [Models Reference](hunt/models-reference.md)
 

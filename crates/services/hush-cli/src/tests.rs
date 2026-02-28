@@ -2982,12 +2982,39 @@ mod remote_extends_contract {
         stream: &mut TcpStream,
         routes: &HashMap<String, Vec<u8>>,
     ) -> std::io::Result<()> {
-        stream.set_read_timeout(Some(Duration::from_millis(200)))?;
-        stream.set_write_timeout(Some(Duration::from_millis(200)))?;
+        stream.set_read_timeout(Some(Duration::from_secs(2)))?;
+        stream.set_write_timeout(Some(Duration::from_secs(2)))?;
 
-        let mut buf = [0u8; 4096];
-        let n = stream.read(&mut buf)?;
-        let req = std::str::from_utf8(&buf[..n]).unwrap_or("");
+        // Read until the request headers are complete. Under heavy
+        // instrumentation, a single read is not always sufficient.
+        let mut buf = Vec::with_capacity(4096);
+        let mut chunk = [0u8; 1024];
+        loop {
+            match stream.read(&mut chunk) {
+                Ok(0) => break,
+                Ok(n) => {
+                    buf.extend_from_slice(&chunk[..n]);
+                    if buf.windows(4).any(|w| w == b"\r\n\r\n") {
+                        break;
+                    }
+                    if buf.len() >= 64 * 1024 {
+                        break;
+                    }
+                }
+                Err(e)
+                    if e.kind() == std::io::ErrorKind::WouldBlock
+                        || e.kind() == std::io::ErrorKind::TimedOut =>
+                {
+                    if buf.is_empty() {
+                        return Err(e);
+                    }
+                    break;
+                }
+                Err(e) => return Err(e),
+            }
+        }
+
+        let req = std::str::from_utf8(&buf).unwrap_or("");
         let mut lines = req.lines();
         let first = lines.next().unwrap_or("");
         let mut parts = first.split_whitespace();
@@ -3532,7 +3559,6 @@ mod hunt_cli_parsing {
                     rules,
                     nats_url,
                     nats_creds,
-                    signing_key,
                     max_window,
                     json,
                     no_color,
@@ -3540,7 +3566,6 @@ mod hunt_cli_parsing {
                     assert_eq!(rules, vec!["rule.yaml"]);
                     assert_eq!(nats_url, "nats://localhost:4222");
                     assert!(nats_creds.is_none());
-                    assert_eq!(signing_key, "hush.key");
                     assert_eq!(max_window, "5m");
                     assert!(!json);
                     assert!(!no_color);
@@ -3783,7 +3808,6 @@ mod hunt_contract {
                 offline: true,
                 local_dir: None,
                 verify: false,
-                signing_key: "hush.key".to_string(),
                 json: true,
                 jsonl: false,
                 no_color: true,
@@ -3857,7 +3881,6 @@ output:
                 offline: true,
                 local_dir: Some(vec![local_dir.to_string_lossy().to_string()]),
                 verify: false,
-                signing_key: "hush.key".to_string(),
                 json: true,
                 jsonl: false,
                 no_color: true,
@@ -3909,7 +3932,6 @@ output:
                 offline: true,
                 local_dir: None,
                 verify: false,
-                signing_key: "hush.key".to_string(),
                 json: true,
                 jsonl: false,
                 no_color: true,
@@ -4133,7 +4155,6 @@ output:
                 rules: vec![],
                 nats_url: "nats://localhost:4222".to_string(),
                 nats_creds: None,
-                signing_key: "hush.key".to_string(),
                 max_window: "5m".to_string(),
                 json: true,
                 no_color: true,
@@ -4184,7 +4205,6 @@ output:
                 rules: vec![rule_path.to_string_lossy().to_string()],
                 nats_url: "nats://localhost:4222".to_string(),
                 nats_creds: None,
-                signing_key: "hush.key".to_string(),
                 max_window: "invalid".to_string(),
                 json: true,
                 no_color: true,
@@ -4230,7 +4250,6 @@ output:
                 offline: true,
                 local_dir: None,
                 verify: false,
-                signing_key: "hush.key".to_string(),
                 json: false,
                 jsonl: false,
                 no_color: true,

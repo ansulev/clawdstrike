@@ -1,10 +1,6 @@
 # hunt query
 
-Search Spine telemetry across all data layers using structured flags or natural language.
-
-## Purpose
-
-`hunt query` is the primary search interface for Spine telemetry stored in NATS JetStream. It supports both structured flag-based queries for automation and a natural language mode for ad hoc investigations.
+Query historical events from NATS JetStream (or local exported files in offline mode) with structured filters and optional natural-language hints.
 
 ## Usage
 
@@ -16,125 +12,51 @@ clawdstrike hunt query [OPTIONS]
 
 | Flag | Description | Default |
 |------|-------------|---------|
-| `--layer <layer>` | Data layer to query: `kernel`, `network`, `agent`, `decisions`, `all` | `all` |
-| `--filter <expr>` | Structured filter expression (see below) | (none) |
-| `--nl <text>` | Natural language query (translated to structured filters) | (none) |
-| `--since <duration>` | Time window start (e.g. `1h`, `30m`, `7d`, `2024-01-15T00:00:00Z`) | `1h` |
-| `--until <time>` | Time window end | now |
-| `--limit <n>` | Maximum results to return | `100` |
-| `--sort <field>` | Sort field (`time`, `severity`, `entity`) | `time` |
-| `--reverse` | Reverse sort order (newest first by default) | `false` |
-| `--json` | JSON output | `false` |
-| `--jsonl` | Line-delimited JSON output (for piping) | `false` |
-| `--nats-url <url>` | NATS server URL | `nats://localhost:4222` |
-| `--verify` | Verify envelope signatures on results | `false` |
-| `--columns <cols>` | Columns to display (comma-separated) | (layer default) |
+| `--source <value>` | Event source filter (repeatable/comma-separated): `tetragon`, `hubble`, `receipt`, `scan` | all |
+| `--verdict <value>` | Verdict filter: `allow`, `deny`, `warn`, `forwarded`, `dropped` (aliases accepted) | none |
+| `--start <time>` | RFC3339 or relative duration (`30m`, `1h`, `2d`) | none |
+| `--end <time>` | RFC3339 or relative duration | none |
+| `--action-type <type>` | Action-type filter (exact, case-insensitive) | none |
+| `--process <text>` | Process substring filter | none |
+| `--namespace <ns>` | Namespace filter | none |
+| `--pod <text>` | Pod substring filter | none |
+| `--limit <n>` | Maximum events returned | `100` |
+| `--nl <text>` | Apply natural-language parser to augment filters | none |
+| `--nats-url <url>` | NATS URL | `nats://localhost:4222` |
+| `--nats-creds <path>` | NATS credentials file | none |
+| `--offline` | Skip NATS and query local files only | `false` |
+| `--local-dir <path>` | Local directories for offline/fallback query (repeatable) | built-in defaults |
+| `--verify` | Verify envelope signatures while parsing | `false` |
+| `--json` | Emit JSON envelope output | `false` |
+| `--jsonl` | Emit one JSON event per line | `false` |
+| `--no-color` | Disable colored text output | `false` |
 
-## Structured filter expressions
+## Behavior
 
-Filters use a comma-separated `key=value` syntax with operators:
-
-| Operator | Meaning | Example |
-|----------|---------|---------|
-| `=` | Exact match | `binary=python` |
-| `!=` | Not equal | `verdict!=FORWARDED` |
-| `~` | Contains / regex | `args~my_agent` |
-| `>`, `<`, `>=`, `<=` | Numeric/time comparison | `port>1024` |
-
-Multiple filters are AND-joined. Use `--filter` multiple times for complex queries.
-
-### Layer-specific filter keys
-
-**Kernel** (`--layer kernel`):
-
-- `binary` -- process binary name
-- `args` -- process arguments
-- `pid`, `ppid` -- process/parent PID
-- `namespace` -- Kubernetes namespace
-- `pod` -- pod name
-- `event_type` -- `process_exec`, `process_exit`, `kprobe`
-- `uid` -- user ID
-
-**Network** (`--layer network`):
-
-- `src_ip`, `dst_ip` -- source/destination IP
-- `src_port`, `dst_port` -- source/destination port
-- `src_namespace`, `dst_namespace` -- Kubernetes namespaces
-- `verdict` -- `FORWARDED`, `DROPPED`, `ERROR`
-- `protocol` -- `TCP`, `UDP`, `ICMP`
-- `dns_query` -- DNS query name
-- `http_url` -- HTTP URL (L7)
-
-**Decisions** (`--layer decisions`):
-
-- `guard` -- guard name (e.g. `forbidden_path`, `egress_allowlist`)
-- `verdict` -- `allow`, `warn`, `deny`
-- `severity` -- `info`, `warning`, `error`, `critical`
-- `policy` -- policy reference or hash
-- `action_type` -- `file`, `egress`, `mcp`, `shell`, `computer_use`
-- `issuer` -- receipt signer identity
-
-## Natural language queries
-
-The `--nl` flag translates natural language to structured filters:
-
-```bash
-# These are equivalent:
-clawdstrike hunt query --nl "show me all blocked egress in the last hour"
-clawdstrike hunt query --layer decisions --filter "verdict=deny,action_type=egress" --since 1h
-```
-
-Natural language queries are translated locally using pattern matching (no external API calls). Complex queries may produce a `--filter` suggestion for refinement.
+- If NATS query fails and `--offline` is not set, query falls back to local file sources.
+- `--jsonl` suppresses text footer lines to keep stream output machine-safe.
 
 ## Examples
 
-Find all process executions in a namespace:
-
 ```bash
-clawdstrike hunt query --layer kernel --filter "event_type=process_exec,namespace=agent-pool" --since 1h
+# Denied receipt events in the last hour
+clawdstrike hunt query --source receipt --verdict deny --start 1h
+
+# Hubble events for one namespace/pod
+clawdstrike hunt query --source hubble --namespace prod --pod agent-7f4
+
+# Natural language augmentation + JSONL
+clawdstrike hunt query --nl "blocked egress last 30 minutes" --jsonl
+
+# Fully offline query against exported envelopes
+clawdstrike hunt query --offline --local-dir ./exports --source tetragon --limit 200
 ```
 
-Search for denied egress decisions:
+## Exit Codes
 
-```bash
-clawdstrike hunt query --layer decisions --filter "verdict=deny,action_type=egress" --since 24h --json
-```
-
-Find network flows to a specific destination:
-
-```bash
-clawdstrike hunt query --layer network --filter "dst_ip=10.0.0.5" --since 30m
-```
-
-Cross-layer search for everything related to a pod:
-
-```bash
-clawdstrike hunt query --layer all --filter "pod=research-agent-7f4b9" --since 2h
-```
-
-Pipe results to jq for further processing:
-
-```bash
-clawdstrike hunt query --layer decisions --filter "severity>=error" --since 7d --jsonl | jq 'select(.guard == "secret_leak")'
-```
-
-Verify envelope signatures on results:
-
-```bash
-clawdstrike hunt query --layer kernel --filter "binary=curl" --since 1h --verify
-```
-
-## Output
-
-Default table output:
-
-```text
-TIME                 LAYER     TYPE          ENTITY              SUMMARY
-2026-02-27T14:01:03Z kernel    process_exec  pid:48291           python my_agent.py --mode research
-2026-02-27T14:01:05Z network   flow          10.0.1.5:443        TCP FORWARDED -> api.openai.com
-2026-02-27T14:01:05Z decisions egress        api.openai.com:443  allow (egress_allowlist)
-2026-02-27T14:01:12Z decisions mcp           shell_exec          deny (mcp_tool_guard) severity=critical
-2026-02-27T14:01:12Z kernel    process_exec  pid:48305           /bin/sh -c rm -rf /tmp/cache
-```
-
-With `--verify`, an additional column shows envelope signature status (`VALID`, `INVALID`, `NO_KEY`).
+| Code | Meaning |
+|------|---------|
+| 0 | Success |
+| 3 | Configuration error |
+| 4 | Runtime error |
+| 5 | Invalid arguments |

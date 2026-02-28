@@ -939,6 +939,139 @@ pub fn parse_mcp_config(path: &std::path::Path) -> Result<HashMap<String, Server
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    async fn read_http_request(
+        stream: &mut tokio::net::TcpStream,
+    ) -> Option<(String, String, Vec<u8>)> {
+        let mut buf = Vec::new();
+        let mut chunk = [0u8; 1024];
+        let mut header_end = None;
+        while header_end.is_none() {
+            let n = stream.read(&mut chunk).await.ok()?;
+            if n == 0 {
+                return None;
+            }
+            buf.extend_from_slice(&chunk[..n]);
+            header_end = buf.windows(4).position(|w| w == b"\r\n\r\n").map(|p| p + 4);
+            if buf.len() > 64 * 1024 {
+                return None;
+            }
+        }
+
+        let header_end = header_end?;
+        let head = std::str::from_utf8(&buf[..header_end]).ok()?;
+        let mut lines = head.lines();
+        let request_line = lines.next()?;
+        let mut parts = request_line.split_whitespace();
+        let method = parts.next()?.to_string();
+        let path = parts.next()?.to_string();
+
+        let mut content_len = 0usize;
+        for line in lines {
+            let lower = line.to_ascii_lowercase();
+            if let Some(v) = lower.strip_prefix("content-length:") {
+                content_len = v.trim().parse().ok()?;
+            }
+        }
+
+        let mut body = buf[header_end..].to_vec();
+        while body.len() < content_len {
+            let n = stream.read(&mut chunk).await.ok()?;
+            if n == 0 {
+                break;
+            }
+            body.extend_from_slice(&chunk[..n]);
+        }
+        body.truncate(content_len);
+
+        Some((method, path, body))
+    }
+
+    async fn write_http_response(
+        stream: &mut tokio::net::TcpStream,
+        status: &str,
+        content_type: &str,
+        body: &[u8],
+    ) {
+        let header = format!(
+            "HTTP/1.1 {status}\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+            body.len()
+        );
+        let _ = stream.write_all(header.as_bytes()).await;
+        let _ = stream.write_all(body).await;
+        let _ = stream.shutdown().await;
+    }
+
+    async fn spawn_mock_mcp_server(max_requests: usize) -> (String, tokio::task::JoinHandle<()>) {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let handle = tokio::spawn(async move {
+            let mut served = 0usize;
+            while served < max_requests {
+                let accept =
+                    tokio::time::timeout(std::time::Duration::from_secs(5), listener.accept())
+                        .await;
+                let (mut stream, _) = match accept {
+                    Ok(Ok(pair)) => pair,
+                    _ => break,
+                };
+                served += 1;
+
+                let Some((method, path, body)) = read_http_request(&mut stream).await else {
+                    continue;
+                };
+
+                match (method.as_str(), path.as_str()) {
+                    ("GET", "/sse") => {
+                        let sse = b"event: endpoint\ndata: /mcp\n\n";
+                        write_http_response(&mut stream, "200 OK", "text/event-stream", sse).await;
+                    }
+                    ("POST", "/mcp") => {
+                        let req: serde_json::Value =
+                            serde_json::from_slice(&body).unwrap_or_else(|_| serde_json::json!({}));
+                        let method = req.get("method").and_then(|v| v.as_str()).unwrap_or("");
+                        let id = req.get("id").cloned();
+
+                        let resp = match method {
+                            "initialize" => serde_json::json!({
+                                "jsonrpc": "2.0",
+                                "id": id.unwrap_or(serde_json::json!(1)),
+                                "result": {
+                                    "capabilities": { "tools": {} },
+                                    "serverInfo": { "name": "mock-mcp", "version": "1.0.0" }
+                                }
+                            }),
+                            "tools/list" => serde_json::json!({
+                                "jsonrpc": "2.0",
+                                "id": id.unwrap_or(serde_json::json!(1)),
+                                "result": {
+                                    "tools": [
+                                        { "name": "ping", "description": "health check", "inputSchema": { "type": "object" } }
+                                    ]
+                                }
+                            }),
+                            _ => serde_json::json!({ "ok": true }),
+                        };
+                        let bytes = serde_json::to_vec(&resp).unwrap();
+                        write_http_response(&mut stream, "200 OK", "application/json", &bytes)
+                            .await;
+                    }
+                    _ => {
+                        write_http_response(
+                            &mut stream,
+                            "404 Not Found",
+                            "text/plain",
+                            b"not found",
+                        )
+                        .await;
+                    }
+                }
+            }
+        });
+
+        (format!("http://{addr}"), handle)
+    }
 
     #[test]
     fn test_url_variants_plain() {
@@ -990,6 +1123,19 @@ mod tests {
         // First attempt should be Sse + url_with_mcp
         assert!(matches!(strategy[0].0, ProbeProtocol::Sse));
         assert!(strategy[0].1.ends_with("/mcp"));
+    }
+
+    #[test]
+    fn test_build_http_client_invalid_header_name() {
+        let mut headers = HashMap::new();
+        headers.insert("bad header".to_string(), "value".to_string());
+        let server = RemoteServer {
+            url: "https://example.com/mcp".to_string(),
+            server_type: Some("http".to_string()),
+            headers,
+        };
+        let err = build_http_client(&server).unwrap_err();
+        assert!(matches!(err, McpError::Other(_)));
     }
 
     #[test]
@@ -1241,5 +1387,33 @@ mod tests {
 
         let err = introspect_server(&config, 5).await.unwrap_err();
         assert!(matches!(err, McpError::Other(_)));
+    }
+
+    #[tokio::test]
+    async fn test_discover_sse_endpoint_parses_event_data() {
+        let (base, handle) = spawn_mock_mcp_server(1).await;
+        let client = reqwest::Client::new();
+        let endpoint = discover_sse_endpoint(&client, &format!("{base}/sse"), 3)
+            .await
+            .unwrap();
+        assert_eq!(endpoint, "/mcp");
+        let _ = tokio::time::timeout(std::time::Duration::from_secs(2), handle).await;
+    }
+
+    #[tokio::test]
+    async fn test_introspect_server_sse_end_to_end() {
+        let (base, handle) = spawn_mock_mcp_server(6).await;
+        let cfg = ServerConfig::Sse(RemoteServer {
+            url: format!("{base}/sse"),
+            server_type: Some("sse".to_string()),
+            headers: HashMap::new(),
+        });
+
+        let sig = introspect_server(&cfg, 3).await.unwrap();
+        assert_eq!(sig.tools.len(), 1);
+        assert_eq!(sig.tools[0].name, "ping");
+        assert_eq!(sig.metadata["serverInfo"]["name"], "mock-mcp");
+
+        let _ = tokio::time::timeout(std::time::Duration::from_secs(2), handle).await;
     }
 }

@@ -3,6 +3,9 @@
 This document describes the technical architecture of the `clawdstrike hunt` subsystem.
 It is intended for implementers building or extending the hunt query engine.
 
+> Note: This architecture doc includes forward-looking design material.
+> For current implemented CLI flags/subcommands, use the command reference pages in this section.
+
 ## System Architecture
 
 ```

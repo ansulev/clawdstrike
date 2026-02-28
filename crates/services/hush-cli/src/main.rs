@@ -861,10 +861,6 @@ enum HuntCommands {
         #[arg(long)]
         include_builtin: bool,
 
-        /// Signing key path (hex Ed25519 seed)
-        #[arg(long, default_value = "hush.key")]
-        signing_key: String,
-
         /// Emit machine-readable JSON
         #[arg(long)]
         json: bool,
@@ -1046,10 +1042,6 @@ enum HuntCommands {
         #[arg(long)]
         nats_creds: Option<String>,
 
-        /// Signing key path (hex Ed25519 seed)
-        #[arg(long, default_value = "hush.key")]
-        signing_key: String,
-
         /// Maximum sliding window duration (e.g. "5m", "1h")
         #[arg(long, default_value = "5m")]
         max_window: String,
@@ -1128,10 +1120,6 @@ enum HuntCommands {
         /// Verify envelope signatures
         #[arg(long)]
         verify: bool,
-
-        /// Signing key path (hex Ed25519 seed)
-        #[arg(long, default_value = "hush.key")]
-        signing_key: String,
 
         /// Output as JSON
         #[arg(long)]

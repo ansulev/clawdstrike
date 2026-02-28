@@ -363,6 +363,12 @@ pub fn check_tool_name_shadowing(tools: &[Tool], known_tools: &[&str]) -> Vec<Is
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::models::{
+        ScalarToolLabels, ScanPathResult, ScanUserInfo, ServerConfig, ServerScanResult,
+        ServerSignature, StdioServer,
+    };
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use tokio::net::TcpListener;
 
     fn make_tool(name: &str, desc: Option<&str>) -> Tool {
         Tool {
@@ -370,6 +376,66 @@ mod tests {
             description: desc.map(|s| s.to_string()),
             input_schema: None,
         }
+    }
+
+    fn make_user_info() -> ScanUserInfo {
+        ScanUserInfo {
+            hostname: None,
+            username: None,
+            identifier: None,
+            ip_address: None,
+            anonymous_identifier: None,
+        }
+    }
+
+    fn make_scan_result(signature: Option<ServerSignature>) -> ScanPathResult {
+        ScanPathResult {
+            client: Some("test".to_string()),
+            path: "/tmp/test-mcp.json".to_string(),
+            servers: Some(vec![ServerScanResult {
+                name: Some("server-a".to_string()),
+                server: ServerConfig::Stdio(StdioServer {
+                    command: "node".to_string(),
+                    args: None,
+                    server_type: None,
+                    env: None,
+                    binary_identifier: None,
+                }),
+                signature,
+                error: None,
+            }]),
+            issues: vec![],
+            labels: vec![],
+            policy_violations: vec![],
+            error: None,
+        }
+    }
+
+    async fn spawn_mock_analysis_server(status: u16, body: String) -> String {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+
+        tokio::spawn(async move {
+            let (mut socket, _) = listener.accept().await.unwrap();
+            let mut buf = [0_u8; 8192];
+            let _ = socket.read(&mut buf).await;
+
+            let reason = match status {
+                200 => "OK",
+                400 => "Bad Request",
+                413 => "Payload Too Large",
+                500 => "Internal Server Error",
+                _ => "Status",
+            };
+
+            let response = format!(
+                "HTTP/1.1 {status} {reason}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                body.len()
+            );
+            let _ = socket.write_all(response.as_bytes()).await;
+        });
+
+        format!("http://{addr}/analyze")
     }
 
     #[test]
@@ -448,5 +514,70 @@ mod tests {
         let tools = vec![make_tool("tool_no_desc", None)];
         let issues = check_descriptions_for_injection(&tools);
         assert!(issues.is_empty());
+    }
+
+    #[tokio::test]
+    async fn verify_merges_response_and_backfills_signature() {
+        let user = make_user_info();
+
+        let mut sent = vec![make_scan_result(None)];
+
+        let mut received_result = make_scan_result(Some(ServerSignature {
+            metadata: serde_json::json!({}),
+            prompts: vec![],
+            resources: vec![],
+            resource_templates: vec![],
+            tools: vec![make_tool("remote_tool", Some("from analysis server"))],
+        }));
+        received_result.issues.push(Issue {
+            code: "PROMPT_INJECTION".to_string(),
+            message: "injected".to_string(),
+            reference: Some((0, Some(0))),
+            extra_data: None,
+        });
+        received_result.labels.push(vec![ScalarToolLabels {
+            is_public_sink: 0.9,
+            destructive: 0.8,
+            untrusted_content: 0.7,
+            private_data: 0.6,
+        }]);
+
+        let response_payload = ScanPathResultsCreate {
+            scan_path_results: vec![received_result],
+            scan_user_info: user.clone(),
+            scan_metadata: None,
+        };
+        let body = serde_json::to_string(&response_payload).unwrap();
+
+        let url = spawn_mock_analysis_server(200, body).await;
+        let client = AnalysisClient::new(url, false);
+        client.verify(&mut sent, &user).await.unwrap();
+
+        assert_eq!(sent[0].issues.len(), 1);
+        assert_eq!(sent[0].issues[0].code, "PROMPT_INJECTION");
+        assert_eq!(sent[0].labels.len(), 1);
+        assert_eq!(sent[0].labels[0].len(), 1);
+        assert!(sent[0].labels[0][0].is_public_sink > 0.5);
+        assert!(sent[0].servers.as_ref().unwrap()[0].signature.is_some());
+    }
+
+    #[tokio::test]
+    async fn verify_returns_scope_too_large_for_413() {
+        let user = make_user_info();
+        let mut sent = vec![make_scan_result(None)];
+        let url = spawn_mock_analysis_server(413, "\"too large\"".to_string()).await;
+        let client = AnalysisClient::new(url, false);
+        let err = client.verify(&mut sent, &user).await.unwrap_err();
+        assert!(matches!(err, AnalysisError::ScopeTooLarge));
+    }
+
+    #[tokio::test]
+    async fn verify_returns_api_error_for_4xx() {
+        let user = make_user_info();
+        let mut sent = vec![make_scan_result(None)];
+        let url = spawn_mock_analysis_server(400, "\"bad request\"".to_string()).await;
+        let client = AnalysisClient::new(url, false);
+        let err = client.verify(&mut sent, &user).await.unwrap_err();
+        assert!(matches!(err, AnalysisError::ApiError { status: 400, .. }));
     }
 }

@@ -25,6 +25,10 @@ pub struct InstalledPackage {
 pub struct StoreMetadata {
     pub content_hash: Hash,
     pub installed_at: String,
+    /// Original package name (including scope if any). Used to avoid
+    /// ambiguity when denormalizing directory names that contain `--`.
+    #[serde(default)]
+    pub name: Option<String>,
 }
 
 /// Local package store rooted at `~/.clawdstrike/packages/` by default.
@@ -80,36 +84,36 @@ impl PackageStore {
     /// to `<root>/<normalized_name>/<version>/`.
     pub fn install_from_file(&self, archive_path: &Path) -> Result<InstalledPackage> {
         // Unpack to a temp directory first (atomic install).
+        // Use a guard so the temp dir is cleaned up on any error path.
         let tmp_name = format!(".tmp-{}", uuid::Uuid::new_v4());
         let tmp_dir = self.root.join(&tmp_name);
         fs::create_dir_all(&tmp_dir)?;
 
-        let content_hash = match archive::unpack(archive_path, &tmp_dir) {
-            Ok(h) => h,
-            Err(e) => {
-                let _ = fs::remove_dir_all(&tmp_dir);
-                return Err(e);
+        // Guard that removes the temp directory when dropped, unless
+        // explicitly disarmed after a successful rename.
+        struct TmpGuard {
+            path: PathBuf,
+            disarmed: bool,
+        }
+        impl Drop for TmpGuard {
+            fn drop(&mut self) {
+                if !self.disarmed {
+                    let _ = fs::remove_dir_all(&self.path);
+                }
             }
+        }
+        let mut guard = TmpGuard {
+            path: tmp_dir.clone(),
+            disarmed: false,
         };
+
+        let content_hash = archive::unpack(archive_path, &tmp_dir)?;
 
         // Read and validate manifest.
         let manifest_path = tmp_dir.join("clawdstrike-pkg.toml");
-        let manifest_content = match fs::read_to_string(&manifest_path) {
-            Ok(c) => c,
-            Err(e) => {
-                let _ = fs::remove_dir_all(&tmp_dir);
-                return Err(Error::PkgError(format!(
-                    "package missing clawdstrike-pkg.toml: {e}"
-                )));
-            }
-        };
-        let manifest = match parse_pkg_manifest_toml(&manifest_content) {
-            Ok(m) => m,
-            Err(e) => {
-                let _ = fs::remove_dir_all(&tmp_dir);
-                return Err(e);
-            }
-        };
+        let manifest_content = fs::read_to_string(&manifest_path)
+            .map_err(|e| Error::PkgError(format!("package missing clawdstrike-pkg.toml: {e}")))?;
+        let manifest = parse_pkg_manifest_toml(&manifest_content)?;
 
         let name = &manifest.package.name;
         let version = &manifest.package.version;
@@ -126,11 +130,14 @@ impl PackageStore {
 
         // Atomic rename (same filesystem).
         fs::rename(&tmp_dir, &target)?;
+        // Disarm the guard — the temp dir no longer exists (it was renamed).
+        guard.disarmed = true;
 
         // Write metadata file.
         let meta = StoreMetadata {
             content_hash,
             installed_at: chrono::Utc::now().to_rfc3339(),
+            name: Some(name.clone()),
         };
         let meta_path = target.join(".pkg-meta.json");
         let meta_json = serde_json::to_string_pretty(&meta)?;
@@ -181,7 +188,6 @@ impl PackageStore {
             }
 
             let dir_name = entry.file_name().to_string_lossy().to_string();
-            let name = denormalize_name(&dir_name);
 
             // Each package dir contains version subdirs.
             let version_entries = match fs::read_dir(&pkg_dir) {
@@ -210,10 +216,17 @@ impl PackageStore {
                     Err(_) => continue,
                 };
 
+                // Prefer the original name stored in metadata (avoids
+                // double-dash ambiguity); fall back to heuristic
+                // denormalization for older metadata without the field.
+                let name = meta
+                    .name
+                    .clone()
+                    .unwrap_or_else(|| denormalize_name(&dir_name));
                 let version = ver_entry.file_name().to_string_lossy().to_string();
 
                 packages.push(InstalledPackage {
-                    name: name.clone(),
+                    name,
                     version,
                     path: ver_dir,
                     content_hash: meta.content_hash,

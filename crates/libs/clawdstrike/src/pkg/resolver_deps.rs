@@ -227,9 +227,12 @@ impl DependencyResolver {
         for iv in &entry.versions {
             if let Ok(sv) = semver::Version::parse(&iv.version) {
                 if &sv == version {
+                    // URL-encode the package name so scoped names like
+                    // `@acme/firewall` don't produce broken URL segments.
+                    let encoded_name = encode_url_path_segment(name);
                     let url = format!(
                         "{}/api/v1/packages/{}/{}/download",
-                        self.registry_url, name, iv.version
+                        self.registry_url, encoded_name, iv.version
                     );
                     return Some((iv, url));
                 }
@@ -402,10 +405,9 @@ fn comparator_to_range(comp: &semver::Comparator) -> std::result::Result<VS, Res
             Ok(Ranges::strictly_lower_than(v))
         }
         semver::Op::LessEq => {
-            // <=X.Y.Z: includes X.Y.Z but not X.Y.(Z+1)
-            let lo = make_version(major, minor, patch);
+            // <=X.Y.Z: includes all versions from 0.0.0 up to and including X.Y.Z
             let hi = make_version(major, minor, patch.map(|p| p + 1));
-            Ok(Ranges::between(lo, hi))
+            Ok(Ranges::strictly_lower_than(hi))
         }
         semver::Op::Tilde => {
             // ~X.Y.Z: >=X.Y.Z, <X.(Y+1).0
@@ -452,6 +454,15 @@ fn comparator_to_range(comp: &semver::Comparator) -> std::result::Result<VS, Res
 /// Build a `semver::Version` from major/optional-minor/optional-patch.
 fn make_version(major: u64, minor: Option<u64>, patch: Option<u64>) -> semver::Version {
     semver::Version::new(major, minor.unwrap_or(0), patch.unwrap_or(0))
+}
+
+/// Percent-encode characters in a package name that are not safe in URL path
+/// segments (`@` and `/`). This ensures scoped names like `@acme/firewall`
+/// produce a single path segment instead of multiple segments.
+fn encode_url_path_segment(name: &str) -> String {
+    name.replace('%', "%25")
+        .replace('@', "%40")
+        .replace('/', "%2F")
 }
 
 // ---------------------------------------------------------------------------

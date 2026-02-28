@@ -49,6 +49,8 @@ pub struct MemberEntry {
 
 #[derive(Deserialize)]
 pub struct InviteMemberRequest {
+    /// Ed25519 public key hex of the caller (must be owner or maintainer).
+    pub caller_key: String,
     pub publisher_key: String,
     #[serde(default = "default_role")]
     pub role: String,
@@ -191,7 +193,25 @@ pub async fn invite_member(
         .get_organization(&name)?
         .ok_or_else(|| RegistryError::NotFound(format!("organization '{}' not found", name)))?;
 
-    db.add_org_member(org.id, &req.publisher_key, &req.role, None)?;
+    // Verify the caller is an owner or maintainer of the organization.
+    let caller_role = db.get_member_role(org.id, &req.caller_key)?;
+    match caller_role.as_deref() {
+        Some("owner" | "maintainer") => {}
+        Some(_) => {
+            return Err(RegistryError::Unauthorized(format!(
+                "caller does not have permission to invite members to @{}",
+                name
+            )));
+        }
+        None => {
+            return Err(RegistryError::Unauthorized(format!(
+                "caller is not a member of @{}",
+                name
+            )));
+        }
+    }
+
+    db.add_org_member(org.id, &req.publisher_key, &req.role, Some(&req.caller_key))?;
 
     Ok((
         StatusCode::CREATED,

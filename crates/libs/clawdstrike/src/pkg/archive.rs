@@ -61,17 +61,23 @@ pub fn unpack(archive_path: &Path, target_dir: &Path) -> Result<Hash> {
     let compressed = fs::read(archive_path)?;
     let hash = hush_core::sha256(&compressed);
 
-    // Decompress.
+    // Decompress in chunks to prevent decompression bombs from exhausting
+    // memory before the size check runs.
     let mut decoder = zstd::stream::read::Decoder::new(compressed.as_slice())?;
     let mut tar_bytes: Vec<u8> = Vec::new();
-    decoder.read_to_end(&mut tar_bytes)?;
-
-    if tar_bytes.len() as u64 > MAX_UNCOMPRESSED_SIZE {
-        return Err(Error::PkgError(format!(
-            "uncompressed archive size ({} bytes) exceeds limit ({} bytes)",
-            tar_bytes.len(),
-            MAX_UNCOMPRESSED_SIZE
-        )));
+    let mut buf = [0u8; 64 * 1024]; // 64 KiB chunks
+    loop {
+        let n = decoder.read(&mut buf)?;
+        if n == 0 {
+            break;
+        }
+        tar_bytes.extend_from_slice(&buf[..n]);
+        if tar_bytes.len() as u64 > MAX_UNCOMPRESSED_SIZE {
+            return Err(Error::PkgError(format!(
+                "uncompressed archive size exceeds limit ({} bytes)",
+                MAX_UNCOMPRESSED_SIZE
+            )));
+        }
     }
 
     // Extract, validating paths against traversal.

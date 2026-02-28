@@ -43,7 +43,7 @@ jobs:
         run: |
           for f in *.cpkg; do
             echo "Verifying $f ..."
-            clawdstrike guard validate .
+            clawdstrike guard validate "$f"
           done
 
       - name: Publish

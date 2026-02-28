@@ -98,7 +98,7 @@ impl RegistryIndex {
     /// Fetch (or return cached) version information for a package.
     ///
     /// The index follows a sparse layout where package metadata lives at:
-    /// `{base_url}/api/v1/index/{normalized_name}.json`
+    /// `{base_url}/api/v1/index/{normalized_name}`
     ///
     /// HTTP ETag headers are used for cache revalidation.
     pub fn fetch_package_versions(&self, name: &str) -> Result<PackageIndexEntry> {
@@ -112,7 +112,7 @@ impl RegistryIndex {
             .and_then(|s| serde_json::from_str::<CacheMetadata>(&s).ok())
             .and_then(|m| m.etag);
 
-        let url = format!("{}/api/v1/index/{}.json", self.base_url, normalized);
+        let url = format!("{}/api/v1/index/{}", self.base_url, normalized);
 
         // Build the request.
         let client = build_blocking_client()?;

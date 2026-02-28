@@ -152,6 +152,10 @@ pub fn clawdstrike_home() -> Option<PathBuf> {
 }
 
 /// Write an auth token to `~/.clawdstrike/credentials.toml`.
+///
+/// Currently unused — will be called when the `/api/v1/auth/register` endpoint
+/// is added in a future phase.
+#[allow(dead_code)]
 pub fn save_credentials(token: &str) -> std::io::Result<()> {
     let dir = clawdstrike_home().ok_or_else(|| {
         std::io::Error::new(

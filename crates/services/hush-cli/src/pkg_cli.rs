@@ -11,9 +11,7 @@ use clawdstrike::pkg::integrity::sign_package;
 use clawdstrike::pkg::manifest::{parse_pkg_manifest_toml, PkgManifest, PkgType};
 use clawdstrike::pkg::store::PackageStore;
 
-use crate::registry_config::{
-    is_file_source, load_or_generate_publisher_keypair, save_credentials, RegistryConfig,
-};
+use crate::registry_config::{is_file_source, load_or_generate_publisher_keypair, RegistryConfig};
 use crate::ExitCode;
 
 // ---------------------------------------------------------------------------
@@ -1604,7 +1602,7 @@ fn cmd_pkg_login(
 ) -> ExitCode {
     let cfg = RegistryConfig::load(registry);
 
-    // Load or generate publisher keypair
+    // Load or generate publisher keypair locally.
     let keypair = match load_or_generate_publisher_keypair(&cfg, stderr) {
         Ok(kp) => kp,
         Err(e) => {
@@ -1614,64 +1612,33 @@ fn cmd_pkg_login(
     };
 
     let public_key_hex = keypair.public_key().to_hex();
-    let url = format!(
-        "{}/api/v1/auth/register",
-        cfg.registry_url.trim_end_matches('/')
+
+    // If an auth token is already configured (via env var or credentials file),
+    // report success immediately.
+    if cfg.auth_token.is_some() {
+        let _ = writeln!(stdout, "Already authenticated.");
+        let _ = writeln!(stdout, "Publisher key: {public_key_hex}");
+        let _ = writeln!(stdout, "Registry: {}", cfg.registry_url);
+        return ExitCode::Ok;
+    }
+
+    // Store the keypair locally. The auth token can be set via
+    // CLAWDSTRIKE_AUTH_TOKEN env var or written to
+    // ~/.clawdstrike/credentials.toml manually.
+    //
+    // TODO: A `/api/v1/auth/register` endpoint will be added in a future phase
+    // to enable automated token exchange. For now, register your public key with
+    // the registry administrator and set the token manually.
+    let _ = writeln!(stdout, "Publisher keypair ready.");
+    let _ = writeln!(stdout, "Publisher key: {public_key_hex}");
+    let _ = writeln!(stdout, "Registry: {}", cfg.registry_url);
+    let _ = writeln!(stdout);
+    let _ = writeln!(stdout, "To complete login, set your auth token via one of:");
+    let _ = writeln!(stdout, "  export CLAWDSTRIKE_AUTH_TOKEN=<your-token>");
+    let _ = writeln!(
+        stdout,
+        "  echo '[registry]\\nauth_token = \"<your-token>\"' > ~/.clawdstrike/credentials.toml"
     );
-
-    let client = match reqwest::blocking::Client::builder()
-        .timeout(std::time::Duration::from_secs(30))
-        .build()
-    {
-        Ok(c) => c,
-        Err(e) => {
-            let _ = writeln!(stderr, "Error: cannot create HTTP client: {e}");
-            return ExitCode::RuntimeError;
-        }
-    };
-
-    let body = serde_json::json!({
-        "public_key": public_key_hex,
-    });
-
-    let resp = match client.post(&url).json(&body).send() {
-        Ok(r) => r,
-        Err(e) => {
-            let _ = writeln!(stderr, "Error: login request failed: {e}");
-            return ExitCode::RuntimeError;
-        }
-    };
-
-    if !resp.status().is_success() {
-        let status = resp.status();
-        let body = resp.text().unwrap_or_default();
-        let _ = writeln!(stderr, "Error: registry returned HTTP {status}: {body}");
-        return ExitCode::RuntimeError;
-    }
-
-    // Parse the auth token from response
-    let resp_json: serde_json::Value = match resp.json() {
-        Ok(v) => v,
-        Err(e) => {
-            let _ = writeln!(stderr, "Error: invalid response from registry: {e}");
-            return ExitCode::RuntimeError;
-        }
-    };
-
-    let token = match resp_json.get("token").and_then(|t| t.as_str()) {
-        Some(t) => t,
-        None => {
-            let _ = writeln!(stderr, "Error: registry response missing 'token' field");
-            return ExitCode::RuntimeError;
-        }
-    };
-
-    if let Err(e) = save_credentials(token) {
-        let _ = writeln!(stderr, "Error: failed to save credentials: {e}");
-        return ExitCode::RuntimeError;
-    }
-
-    let _ = writeln!(stdout, "Logged in. Publisher key: {public_key_hex}");
     ExitCode::Ok
 }
 

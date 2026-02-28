@@ -155,9 +155,10 @@ pub async fn replay_stream_with_timeout(
 
         // Parse envelope into TimelineEvent
         if let Some(event) = parse_envelope_payload(&msg.payload, verify, stream_name) {
-            // Stop if past end time
+            // Skip events past end time, but keep consuming: envelope timestamps
+            // are producer-provided and may be out-of-order within a stream.
             if is_past_end(query.end.as_ref(), event.timestamp) {
-                break;
+                continue;
             }
 
             if query.matches(&event) {

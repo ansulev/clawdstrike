@@ -624,15 +624,6 @@ async fn cmd_hunt_scan_inner(
     // output-time filtering (`--query`) does not mutate persisted baseline state.
     let history_scan_results = scan_results.clone();
 
-    // 4c. Apply --query filter BEFORE analysis so heuristic checks run only
-    //     on the filtered set.
-    if let Some(ref query) = args.query {
-        query_filter::filter_scan_results(&mut scan_results, query);
-        if !args.json && scan_results.is_empty() {
-            let _ = writeln!(stdout, "No results match query: {}", query);
-        }
-    }
-
     // 5. Run local analysis per scan result so issues are attributed to the
     //    correct config rather than flattened into the first result.
     for result in scan_results.iter_mut() {
@@ -780,6 +771,16 @@ async fn cmd_hunt_scan_inner(
     // 8. Determine exit code based on issues found
     let exit_code = determine_exit_code(&scan_results, &summary);
 
+    // 8b. Apply --query as an output filter only, after all analysis and
+    // policy checks have been performed on the full scan set.
+    let mut display_scan_results = scan_results.clone();
+    if let Some(ref query) = args.query {
+        query_filter::filter_scan_results(&mut display_scan_results, query);
+        if !args.json && display_scan_results.is_empty() {
+            let _ = writeln!(stdout, "No results match query: {}", query);
+        }
+    }
+
     // 9. Output results
     if args.json {
         let output = HuntJsonOutput::<HuntScanData> {
@@ -788,7 +789,7 @@ async fn cmd_hunt_scan_inner(
             exit_code: exit_code.as_i32(),
             error: None,
             data: Some(HuntScanData {
-                scan_results,
+                scan_results: display_scan_results,
                 summary,
                 changes: scan_diff,
             }),
@@ -809,7 +810,7 @@ async fn cmd_hunt_scan_inner(
         );
 
         // Print issues
-        for result in &scan_results {
+        for result in &display_scan_results {
             for issue in &result.issues {
                 let _ = writeln!(stdout, "  [{}] {}", issue.code, issue.message);
             }
@@ -2661,6 +2662,80 @@ output:
         let record = history.servers.values().next().unwrap();
         assert!(record.tool_names.iter().any(|t| t == "alpha_tool"));
         assert!(record.tool_names.iter().any(|t| t == "beta_tool"));
+
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[tokio::test]
+    async fn hunt_scan_query_filter_does_not_change_policy_enforcement() {
+        let nonce = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let tmp = std::env::temp_dir().join(format!("hush-scan-query-policy-test-{nonce}"));
+        std::fs::create_dir_all(&tmp).unwrap();
+
+        let config_path = tmp.join("mcp.json");
+        std::fs::write(
+            &config_path,
+            r#"{
+                "mcpServers": {
+                    "static-tools": {
+                        "type": "tools",
+                        "name": "static-tools",
+                        "signature": [
+                            { "name": "unknown_dangerous_tool", "description": "dangerous op" }
+                        ]
+                    }
+                }
+            }"#,
+        )
+        .unwrap();
+
+        let args = HuntScanArgs {
+            target: Some(vec![config_path.to_string_lossy().to_string()]),
+            package: None,
+            skills: None,
+            query: Some("nonexistent_keyword_xyz".to_string()),
+            policy: None,
+            ruleset: Some("strict".to_string()),
+            timeout: 1,
+            include_builtin: false,
+            json: true,
+            analysis_url: None,
+            skip_ssl_verify: false,
+        };
+
+        let mut stdout = Vec::new();
+        let mut stderr = Vec::new();
+        let exit_code = cmd_hunt_scan(args, &mut stdout, &mut stderr).await;
+        assert_eq!(
+            exit_code,
+            ExitCode::Fail,
+            "query filtering must not suppress policy violations"
+        );
+        assert!(
+            stderr.is_empty(),
+            "JSON mode should not emit text errors to stderr: {}",
+            String::from_utf8_lossy(&stderr)
+        );
+
+        let output: serde_json::Value = serde_json::from_slice(&stdout).unwrap();
+        assert_eq!(
+            output["data"]["summary"]["policy_violations_found"]
+                .as_u64()
+                .unwrap_or(0)
+                > 0,
+            true,
+            "summary must still reflect full-set policy violations"
+        );
+        assert_eq!(
+            output["data"]["scan_results"]
+                .as_array()
+                .map_or(0, |a| a.len()),
+            0,
+            "query filter should still affect displayed scan results"
+        );
 
         let _ = std::fs::remove_dir_all(&tmp);
     }

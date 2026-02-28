@@ -688,6 +688,27 @@ async fn introspect_sse(
 
 /// GET the SSE URL and parse events to find the endpoint URL.
 /// Returns the endpoint path/URL from the first relevant SSE event.
+fn extract_sse_endpoint_from_buffer(buffer: &mut String) -> Option<String> {
+    let last_newline = buffer.rfind('\n')?;
+    let mut endpoint: Option<String> = None;
+
+    for raw_line in buffer[..=last_newline].lines() {
+        let line = raw_line.trim_end_matches('\r').trim();
+        if let Some(data) = line.strip_prefix("data:") {
+            let data = data.trim();
+            if !data.is_empty() && (data.starts_with('/') || data.starts_with("http")) {
+                endpoint = Some(data.to_string());
+                break;
+            }
+        }
+    }
+
+    // Keep only the unterminated tail for the next chunk; this prevents
+    // truncated `data:` lines from being treated as complete SSE events.
+    *buffer = buffer[(last_newline + 1)..].to_string();
+    endpoint
+}
+
 async fn discover_sse_endpoint(
     client: &reqwest::Client,
     url: &str,
@@ -717,15 +738,8 @@ async fn discover_sse_endpoint(
         while let Some(chunk) = resp.chunk().await.map_err(McpError::Http)? {
             buffer.push_str(&String::from_utf8_lossy(&chunk));
 
-            // Scan accumulated buffer for endpoint data
-            for line in buffer.lines() {
-                let line = line.trim();
-                if let Some(data) = line.strip_prefix("data:") {
-                    let data = data.trim();
-                    if !data.is_empty() && (data.starts_with('/') || data.starts_with("http")) {
-                        return Ok::<String, McpError>(data.to_string());
-                    }
-                }
+            if let Some(endpoint) = extract_sse_endpoint_from_buffer(&mut buffer) {
+                return Ok::<String, McpError>(endpoint);
             }
         }
 
@@ -1449,6 +1463,20 @@ mod tests {
             .unwrap();
         assert_eq!(endpoint, "/mcp");
         let _ = tokio::time::timeout(std::time::Duration::from_secs(2), handle).await;
+    }
+
+    #[test]
+    fn test_extract_sse_endpoint_from_buffer_waits_for_complete_line() {
+        let mut buffer = "event: endpoint\ndata: /mc".to_string();
+        assert_eq!(extract_sse_endpoint_from_buffer(&mut buffer), None);
+        assert_eq!(buffer, "data: /mc");
+
+        buffer.push_str("p\n\n");
+        assert_eq!(
+            extract_sse_endpoint_from_buffer(&mut buffer),
+            Some("/mcp".to_string())
+        );
+        assert!(buffer.is_empty());
     }
 
     #[tokio::test]

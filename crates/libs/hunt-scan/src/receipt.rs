@@ -53,6 +53,23 @@ pub struct HuntScanReceiptContent {
 /// 2. Serialises it to JSON and computes a SHA-256 content hash.
 /// 3. Determines the overall verdict (pass = no issues found).
 /// 4. Creates a `hush_core::Receipt` and signs it with the provided keypair.
+fn scan_error_is_failure(error: &crate::models::ScanError) -> bool {
+    error.is_failure
+        || error
+            .category
+            .as_ref()
+            .is_some_and(crate::models::ErrorCategory::is_failure)
+}
+
+fn result_has_failure(result: &ScanPathResult) -> bool {
+    result.error.as_ref().is_some_and(scan_error_is_failure)
+        || result.servers.as_ref().is_some_and(|servers| {
+            servers
+                .iter()
+                .any(|server| server.error.as_ref().is_some_and(scan_error_is_failure))
+        })
+}
+
 pub fn sign_scan_receipt(
     results: &[ScanPathResult],
     keypair: &Keypair,
@@ -71,9 +88,11 @@ pub fn sign_scan_receipt(
     let json_bytes = serde_json::to_vec(&content)?;
     let content_hash: Hash = sha256(&json_bytes);
 
-    // Determine verdict: pass when no issues are found across all results.
+    // Determine verdict: fail on issues, policy violations, or scan failures.
     let has_issues = results.iter().any(|r| !r.issues.is_empty());
-    let verdict = if has_issues {
+    let has_policy_violations = results.iter().any(|r| !r.policy_violations.is_empty());
+    let has_failures = results.iter().any(result_has_failure);
+    let verdict = if has_issues || has_policy_violations || has_failures {
         Verdict::fail_with_gate("hunt-scan")
     } else {
         Verdict::pass_with_gate("hunt-scan")
@@ -157,6 +176,37 @@ mod tests {
         assert!(vr.valid);
 
         // Verdict should be failing.
+        assert!(!signed.receipt.verdict.passed);
+    }
+
+    #[test]
+    fn test_sign_scan_receipt_with_policy_violations_fails() {
+        let keypair = Keypair::generate();
+        let mut result = make_scan_result("/test/config.json", 0);
+        result
+            .policy_violations
+            .push(crate::analysis::PolicyViolation {
+                guard: "mcp_tool".to_string(),
+                tool_name: "shell_exec".to_string(),
+                allowed: false,
+                severity: "error".to_string(),
+                message: "Tool blocked by policy".to_string(),
+            });
+
+        let signed = sign_scan_receipt(&[result], &keypair, Some("strict")).unwrap();
+        assert!(!signed.receipt.verdict.passed);
+    }
+
+    #[test]
+    fn test_sign_scan_receipt_with_failure_error_fails() {
+        let keypair = Keypair::generate();
+        let mut result = make_scan_result("/test/config.json", 0);
+        result.error = Some(crate::models::ScanError::server_startup(
+            "failed to start",
+            None,
+        ));
+
+        let signed = sign_scan_receipt(&[result], &keypair, None).unwrap();
         assert!(!signed.receipt.verdict.passed);
     }
 

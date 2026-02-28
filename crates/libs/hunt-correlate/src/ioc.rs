@@ -460,19 +460,20 @@ fn stix_lhs_to_ioc_type(lhs: &str) -> Option<IocType> {
 // Matching
 // ---------------------------------------------------------------------------
 
-/// Check whether the character is an IOC word character (alphanumeric or dot).
+/// Check whether the character is an IOC word character.
 ///
-/// Dots are word characters for IOC matching because domains and IPs contain
-/// dots. This prevents `evil.com` from matching inside `notevil.com` and
+/// Dots and hyphens are word characters for IOC matching because domains and
+/// hostnames commonly contain both. This prevents `evil.com` from matching
+/// inside `notevil.com` or `cdn-evil.com`, and prevents
 /// `10.0.0.1` from matching inside `210.0.0.10`.
 fn is_ioc_word_char(ch: u8) -> bool {
-    ch.is_ascii_alphanumeric() || ch == b'.'
+    ch.is_ascii_alphanumeric() || ch == b'.' || ch == b'-'
 }
 
 /// Check whether `needle` appears in `haystack` at word boundaries.
 ///
 /// A match is word-bounded when the characters immediately before and after
-/// the match are NOT IOC word characters (alphanumeric or dot).
+/// the match are NOT IOC word characters (alphanumeric, dot, hyphen).
 fn contains_word_bounded(haystack: &str, needle: &str) -> bool {
     if needle.is_empty() {
         return false;
@@ -1131,9 +1132,31 @@ mod tests {
     }
 
     #[test]
+    fn domain_no_false_positive_when_prefixed_by_hyphen() {
+        let mut db = IocDatabase::new();
+        db.add_entry(IocEntry {
+            indicator: "evil.com".into(),
+            ioc_type: IocType::Domain,
+            description: None,
+            source: None,
+        });
+
+        let event = make_event("connection to cdn-evil.com", None, None);
+        let results = match_event(&db, &event);
+        assert!(
+            results.is_empty(),
+            "should not match evil.com inside cdn-evil.com"
+        );
+    }
+
+    #[test]
     fn contains_word_bounded_helpers() {
         assert!(contains_word_bounded("connect to evil.com:443", "evil.com"));
         assert!(!contains_word_bounded("connect to notevil.com", "evil.com"));
+        assert!(!contains_word_bounded(
+            "connect to cdn-evil.com",
+            "evil.com"
+        ));
         assert!(contains_word_bounded("ip 10.0.0.1:80", "10.0.0.1"));
         assert!(!contains_word_bounded("ip 210.0.0.1:80", "10.0.0.1"));
         assert!(!contains_word_bounded("ip 10.0.0.100:80", "10.0.0.1"));

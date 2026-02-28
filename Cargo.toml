@@ -20,6 +20,7 @@ members = [
     "crates/libs/hush-ffi",
     "crates/libs/clawdstrike-guard-sdk",
     "crates/libs/clawdstrike-guard-sdk-macros",
+    "crates/services/clawdstrike-registry",
 ]
 exclude = [
     "fuzz",
@@ -120,6 +121,10 @@ zstd = "0.13"
 
 # URL parsing
 url = "2.5"
+
+# Version solving
+semver = "1"
+pubgrub = "0.3"
 
 # JWT (OIDC)
 jsonwebtoken = { version = "10", default-features = false, features = ["aws_lc_rs", "use_pem"] }

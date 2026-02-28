@@ -1,0 +1,60 @@
+//! HTTP API for the package registry.
+
+pub mod download;
+pub mod health;
+pub mod index;
+pub mod info;
+pub mod publish;
+pub mod search;
+pub mod yank;
+
+use axum::{
+    middleware,
+    routing::{delete, get, post},
+    Router,
+};
+use tower_http::cors::{Any, CorsLayer};
+use tower_http::limit::RequestBodyLimitLayer;
+use tower_http::trace::TraceLayer;
+
+use crate::auth::require_publish_auth;
+use crate::state::AppState;
+
+/// Create the top-level router for the registry.
+pub fn create_router(state: AppState) -> Router {
+    let max_upload = state.config.max_upload_bytes;
+
+    let cors = CorsLayer::new()
+        .allow_origin(Any)
+        .allow_methods(Any)
+        .allow_headers(Any);
+
+    // Public routes (no auth required).
+    let public_routes = Router::new()
+        .route("/health", get(health::health))
+        .route("/api/v1/packages/{name}", get(info::package_info))
+        .route("/api/v1/packages/{name}/{version}", get(info::version_info))
+        .route(
+            "/api/v1/packages/{name}/{version}/download",
+            get(download::download),
+        )
+        .route("/api/v1/search", get(search::search))
+        .route("/api/v1/index/{name}", get(index::sparse_index));
+
+    // Authenticated routes (publish, yank).
+    let auth_routes = Router::new()
+        .route("/api/v1/packages", post(publish::publish))
+        .route("/api/v1/packages/{name}/{version}", delete(yank::yank))
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
+            require_publish_auth,
+        ));
+
+    Router::new()
+        .merge(public_routes)
+        .merge(auth_routes)
+        .layer(TraceLayer::new_for_http())
+        .layer(cors)
+        .layer(RequestBodyLimitLayer::new(max_upload))
+        .with_state(state)
+}

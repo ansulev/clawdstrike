@@ -7,9 +7,13 @@ use std::path::{Path, PathBuf};
 use clap::Subcommand;
 
 use clawdstrike::pkg::archive;
+use clawdstrike::pkg::integrity::sign_package;
 use clawdstrike::pkg::manifest::{parse_pkg_manifest_toml, PkgManifest, PkgType};
 use clawdstrike::pkg::store::PackageStore;
 
+use crate::registry_config::{
+    is_file_source, load_or_generate_publisher_keypair, save_credentials, RegistryConfig,
+};
 use crate::ExitCode;
 
 // ---------------------------------------------------------------------------
@@ -91,10 +95,16 @@ pub enum PkgCommands {
         /// Path to package directory (defaults to current dir)
         path: Option<PathBuf>,
     },
-    /// Install a package from a local .cpkg file
+    /// Install a package from a local .cpkg file or the registry
     Install {
-        /// Path to .cpkg file
-        source: PathBuf,
+        /// Path to .cpkg file, or package name for registry install
+        source: String,
+        /// Version to install (for registry packages)
+        #[arg(long)]
+        version: Option<String>,
+        /// Registry URL override
+        #[arg(long)]
+        registry: Option<String>,
     },
     /// List installed packages
     List,
@@ -122,6 +132,45 @@ pub enum PkgCommands {
         #[arg(long)]
         filter: Option<String>,
     },
+    /// Authenticate with a package registry
+    Login {
+        /// Registry URL override
+        #[arg(long)]
+        registry: Option<String>,
+    },
+    /// Publish a package to the registry
+    Publish {
+        /// Path to package directory (defaults to current dir)
+        path: Option<PathBuf>,
+        /// Registry URL override
+        #[arg(long)]
+        registry: Option<String>,
+    },
+    /// Search for packages in the registry
+    Search {
+        /// Search query
+        query: String,
+        /// Maximum number of results
+        #[arg(long, default_value = "20")]
+        limit: usize,
+        /// Page number (0-indexed)
+        #[arg(long, default_value = "0")]
+        page: usize,
+        /// Registry URL override
+        #[arg(long)]
+        registry: Option<String>,
+    },
+    /// Yank (soft-delete) a package version from the registry
+    Yank {
+        /// Package name (e.g., @scope/name)
+        name: String,
+        /// Version to yank
+        #[arg(long)]
+        version: String,
+        /// Registry URL override
+        #[arg(long)]
+        registry: Option<String>,
+    },
 }
 
 // ---------------------------------------------------------------------------
@@ -132,13 +181,38 @@ pub fn cmd_pkg(command: PkgCommands, stdout: &mut dyn Write, stderr: &mut dyn Wr
     match command {
         PkgCommands::Init { pkg_type, name } => cmd_pkg_init(&pkg_type, &name, stdout, stderr),
         PkgCommands::Pack { path } => cmd_pkg_pack(path.as_deref(), stdout, stderr),
-        PkgCommands::Install { source } => cmd_pkg_install(&source, stdout, stderr),
+        PkgCommands::Install {
+            source,
+            version,
+            registry,
+        } => cmd_pkg_install(
+            &source,
+            version.as_deref(),
+            registry.as_deref(),
+            stdout,
+            stderr,
+        ),
         PkgCommands::List => cmd_pkg_list(stdout, stderr),
         PkgCommands::Verify { name, version } => cmd_pkg_verify(&name, &version, stdout, stderr),
         PkgCommands::Info { name, version } => cmd_pkg_info(&name, &version, stdout, stderr),
         PkgCommands::Test { path, filter } => {
             cmd_pkg_test(path.as_deref(), filter.as_deref(), stdout, stderr)
         }
+        PkgCommands::Login { registry } => cmd_pkg_login(registry.as_deref(), stdout, stderr),
+        PkgCommands::Publish { path, registry } => {
+            cmd_pkg_publish(path.as_deref(), registry.as_deref(), stdout, stderr)
+        }
+        PkgCommands::Search {
+            query,
+            limit,
+            page,
+            registry,
+        } => cmd_pkg_search(&query, limit, page, registry.as_deref(), stdout, stderr),
+        PkgCommands::Yank {
+            name,
+            version,
+            registry,
+        } => cmd_pkg_yank(&name, &version, registry.as_deref(), stdout, stderr),
     }
 }
 
@@ -454,7 +528,25 @@ fn cmd_pkg_pack(path: Option<&Path>, stdout: &mut dyn Write, stderr: &mut dyn Wr
 // pkg install
 // ---------------------------------------------------------------------------
 
-fn cmd_pkg_install(source: &Path, stdout: &mut dyn Write, stderr: &mut dyn Write) -> ExitCode {
+fn cmd_pkg_install(
+    source: &str,
+    version: Option<&str>,
+    registry: Option<&str>,
+    stdout: &mut dyn Write,
+    stderr: &mut dyn Write,
+) -> ExitCode {
+    if is_file_source(source) {
+        return cmd_pkg_install_local(Path::new(source), stdout, stderr);
+    }
+
+    cmd_pkg_install_registry(source, version, registry, stdout, stderr)
+}
+
+fn cmd_pkg_install_local(
+    source: &Path,
+    stdout: &mut dyn Write,
+    stderr: &mut dyn Write,
+) -> ExitCode {
     if !source.exists() {
         let _ = writeln!(stderr, "Error: file not found: {}", source.display());
         return ExitCode::ConfigError;
@@ -484,6 +576,113 @@ fn cmd_pkg_install(source: &Path, stdout: &mut dyn Write, stderr: &mut dyn Write
     let _ = writeln!(stdout, "Path:      {}", installed.path.display());
     let _ = writeln!(stdout, "Hash:      {}", installed.content_hash.to_hex());
     ExitCode::Ok
+}
+
+fn cmd_pkg_install_registry(
+    name: &str,
+    version: Option<&str>,
+    registry: Option<&str>,
+    stdout: &mut dyn Write,
+    stderr: &mut dyn Write,
+) -> ExitCode {
+    let cfg = RegistryConfig::load(registry);
+    let version_segment = version.unwrap_or("latest");
+    let url = format!(
+        "{}/api/v1/packages/{}/{}/download",
+        cfg.registry_url.trim_end_matches('/'),
+        name,
+        version_segment
+    );
+
+    let client = match reqwest::blocking::Client::builder()
+        .timeout(std::time::Duration::from_secs(60))
+        .build()
+    {
+        Ok(c) => c,
+        Err(e) => {
+            let _ = writeln!(stderr, "Error: cannot create HTTP client: {e}");
+            return ExitCode::RuntimeError;
+        }
+    };
+
+    let _ = writeln!(stdout, "Downloading {} v{} ...", name, version_segment);
+
+    let resp = match client.get(&url).send() {
+        Ok(r) => r,
+        Err(e) => {
+            let _ = writeln!(stderr, "Error: download failed: {e}");
+            return ExitCode::RuntimeError;
+        }
+    };
+
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let body = resp.text().unwrap_or_default();
+        let _ = writeln!(stderr, "Error: registry returned HTTP {status}: {body}");
+        return ExitCode::RuntimeError;
+    }
+
+    let bytes = match resp.bytes() {
+        Ok(b) => b,
+        Err(e) => {
+            let _ = writeln!(stderr, "Error: failed to read response: {e}");
+            return ExitCode::RuntimeError;
+        }
+    };
+
+    // Write to a temp file, then install
+    let tmp_dir = match tempdir_for_download() {
+        Ok(d) => d,
+        Err(e) => {
+            let _ = writeln!(stderr, "Error: cannot create temp dir: {e}");
+            return ExitCode::RuntimeError;
+        }
+    };
+
+    let cpkg_path = tmp_dir.join(format!(
+        "{}-{}.cpkg",
+        name.replace('/', "-").replace('@', ""),
+        version_segment
+    ));
+    if let Err(e) = std::fs::write(&cpkg_path, &bytes) {
+        let _ = writeln!(stderr, "Error: cannot write temp file: {e}");
+        return ExitCode::RuntimeError;
+    }
+
+    let store = match PackageStore::new() {
+        Ok(s) => s,
+        Err(e) => {
+            let _ = writeln!(stderr, "Error: cannot open package store: {e}");
+            return ExitCode::RuntimeError;
+        }
+    };
+
+    let installed = match store.install_from_file(&cpkg_path) {
+        Ok(p) => p,
+        Err(e) => {
+            let _ = writeln!(stderr, "Error: install failed: {e}");
+            return ExitCode::RuntimeError;
+        }
+    };
+
+    // Cleanup temp
+    let _ = std::fs::remove_dir_all(&tmp_dir);
+
+    let _ = writeln!(
+        stdout,
+        "Installed: {} v{}",
+        installed.name, installed.version
+    );
+    let _ = writeln!(stdout, "Path:      {}", installed.path.display());
+    let _ = writeln!(stdout, "Hash:      {}", installed.content_hash.to_hex());
+    ExitCode::Ok
+}
+
+fn tempdir_for_download() -> std::io::Result<PathBuf> {
+    let nonce: u64 = rand::Rng::random(&mut rand::rng());
+    let dir = std::env::temp_dir().join(format!("clawdstrike_dl_{nonce:x}"));
+    std::fs::create_dir_all(&dir)?;
+    Ok(dir)
 }
 
 // ---------------------------------------------------------------------------
@@ -665,6 +864,424 @@ fn cmd_pkg_info(
         }
     }
 
+    ExitCode::Ok
+}
+
+// ---------------------------------------------------------------------------
+// pkg login
+// ---------------------------------------------------------------------------
+
+fn cmd_pkg_login(
+    registry: Option<&str>,
+    stdout: &mut dyn Write,
+    stderr: &mut dyn Write,
+) -> ExitCode {
+    let cfg = RegistryConfig::load(registry);
+
+    // Load or generate publisher keypair
+    let keypair = match load_or_generate_publisher_keypair(&cfg, stderr) {
+        Ok(kp) => kp,
+        Err(e) => {
+            let _ = writeln!(stderr, "Error: {e}");
+            return ExitCode::RuntimeError;
+        }
+    };
+
+    let public_key_hex = keypair.public_key().to_hex();
+    let url = format!(
+        "{}/api/v1/auth/register",
+        cfg.registry_url.trim_end_matches('/')
+    );
+
+    let client = match reqwest::blocking::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+    {
+        Ok(c) => c,
+        Err(e) => {
+            let _ = writeln!(stderr, "Error: cannot create HTTP client: {e}");
+            return ExitCode::RuntimeError;
+        }
+    };
+
+    let body = serde_json::json!({
+        "public_key": public_key_hex,
+    });
+
+    let resp = match client.post(&url).json(&body).send() {
+        Ok(r) => r,
+        Err(e) => {
+            let _ = writeln!(stderr, "Error: login request failed: {e}");
+            return ExitCode::RuntimeError;
+        }
+    };
+
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let body = resp.text().unwrap_or_default();
+        let _ = writeln!(stderr, "Error: registry returned HTTP {status}: {body}");
+        return ExitCode::RuntimeError;
+    }
+
+    // Parse the auth token from response
+    let resp_json: serde_json::Value = match resp.json() {
+        Ok(v) => v,
+        Err(e) => {
+            let _ = writeln!(stderr, "Error: invalid response from registry: {e}");
+            return ExitCode::RuntimeError;
+        }
+    };
+
+    let token = match resp_json.get("token").and_then(|t| t.as_str()) {
+        Some(t) => t,
+        None => {
+            let _ = writeln!(stderr, "Error: registry response missing 'token' field");
+            return ExitCode::RuntimeError;
+        }
+    };
+
+    if let Err(e) = save_credentials(token) {
+        let _ = writeln!(stderr, "Error: failed to save credentials: {e}");
+        return ExitCode::RuntimeError;
+    }
+
+    let _ = writeln!(stdout, "Logged in. Publisher key: {public_key_hex}");
+    ExitCode::Ok
+}
+
+// ---------------------------------------------------------------------------
+// pkg publish
+// ---------------------------------------------------------------------------
+
+fn cmd_pkg_publish(
+    path: Option<&Path>,
+    registry: Option<&str>,
+    stdout: &mut dyn Write,
+    stderr: &mut dyn Write,
+) -> ExitCode {
+    let source_dir = match path {
+        Some(p) => p.to_path_buf(),
+        None => match std::env::current_dir() {
+            Ok(d) => d,
+            Err(e) => {
+                let _ = writeln!(stderr, "Error: cannot determine current directory: {e}");
+                return ExitCode::RuntimeError;
+            }
+        },
+    };
+
+    let cfg = RegistryConfig::load(registry);
+
+    let auth_token = match &cfg.auth_token {
+        Some(t) => t.clone(),
+        None => {
+            let _ = writeln!(
+                stderr,
+                "Error: not authenticated. Run `clawdstrike pkg login` first."
+            );
+            return ExitCode::ConfigError;
+        }
+    };
+
+    // Read and validate manifest
+    let manifest_path = source_dir.join("clawdstrike-pkg.toml");
+    let manifest_str = match std::fs::read_to_string(&manifest_path) {
+        Ok(s) => s,
+        Err(e) => {
+            let _ = writeln!(stderr, "Error: cannot read clawdstrike-pkg.toml: {e}");
+            return ExitCode::ConfigError;
+        }
+    };
+
+    let manifest: PkgManifest = match parse_pkg_manifest_toml(&manifest_str) {
+        Ok(m) => m,
+        Err(e) => {
+            let _ = writeln!(stderr, "Error: invalid manifest: {e}");
+            return ExitCode::ConfigError;
+        }
+    };
+
+    let pkg_name = &manifest.package.name;
+    let pkg_version = &manifest.package.version;
+
+    // Pack the archive
+    let archive_name = format!(
+        "{}-{}.cpkg",
+        pkg_name.replace('/', "-").replace('@', ""),
+        pkg_version
+    );
+    let output_path = source_dir.join(&archive_name);
+
+    let _ = writeln!(stdout, "Packing {} v{} ...", pkg_name, pkg_version);
+
+    if let Err(e) = archive::pack(&source_dir, &output_path) {
+        let _ = writeln!(stderr, "Error: pack failed: {e}");
+        return ExitCode::RuntimeError;
+    }
+
+    // Sign the archive
+    let keypair = match load_or_generate_publisher_keypair(&cfg, stderr) {
+        Ok(kp) => kp,
+        Err(e) => {
+            let _ = writeln!(stderr, "Error: {e}");
+            return ExitCode::RuntimeError;
+        }
+    };
+
+    let signature = match sign_package(&output_path, &keypair) {
+        Ok(s) => s,
+        Err(e) => {
+            let _ = writeln!(stderr, "Error: signing failed: {e}");
+            return ExitCode::RuntimeError;
+        }
+    };
+
+    // Upload
+    let url = format!("{}/api/v1/packages", cfg.registry_url.trim_end_matches('/'));
+
+    let cpkg_bytes = match std::fs::read(&output_path) {
+        Ok(b) => b,
+        Err(e) => {
+            let _ = writeln!(stderr, "Error: cannot read archive: {e}");
+            return ExitCode::RuntimeError;
+        }
+    };
+
+    let client = match reqwest::blocking::Client::builder()
+        .timeout(std::time::Duration::from_secs(120))
+        .build()
+    {
+        Ok(c) => c,
+        Err(e) => {
+            let _ = writeln!(stderr, "Error: cannot create HTTP client: {e}");
+            return ExitCode::RuntimeError;
+        }
+    };
+
+    let pkg_part = match reqwest::blocking::multipart::Part::bytes(cpkg_bytes)
+        .file_name(archive_name.clone())
+        .mime_str("application/octet-stream")
+    {
+        Ok(p) => p,
+        Err(e) => {
+            let _ = writeln!(stderr, "Error: failed to build multipart form: {e}");
+            return ExitCode::RuntimeError;
+        }
+    };
+
+    let form = reqwest::blocking::multipart::Form::new()
+        .part("package", pkg_part)
+        .text("signature", signature.signature.to_hex())
+        .text("public_key", keypair.public_key().to_hex());
+
+    let resp = match client
+        .post(&url)
+        .bearer_auth(&auth_token)
+        .multipart(form)
+        .send()
+    {
+        Ok(r) => r,
+        Err(e) => {
+            let _ = writeln!(stderr, "Error: publish request failed: {e}");
+            return ExitCode::RuntimeError;
+        }
+    };
+
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let body = resp.text().unwrap_or_default();
+        let _ = writeln!(stderr, "Error: registry returned HTTP {status}: {body}");
+        return ExitCode::RuntimeError;
+    }
+
+    let _ = writeln!(stdout, "Published {} v{}", pkg_name, pkg_version);
+    ExitCode::Ok
+}
+
+// ---------------------------------------------------------------------------
+// pkg search
+// ---------------------------------------------------------------------------
+
+fn cmd_pkg_search(
+    query: &str,
+    limit: usize,
+    page: usize,
+    registry: Option<&str>,
+    stdout: &mut dyn Write,
+    stderr: &mut dyn Write,
+) -> ExitCode {
+    let cfg = RegistryConfig::load(registry);
+    let offset = page * limit;
+    let url = format!(
+        "{}/api/v1/search?q={}&limit={}&offset={}",
+        cfg.registry_url.trim_end_matches('/'),
+        urlencoding_simple(query),
+        limit,
+        offset
+    );
+
+    let client = match reqwest::blocking::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+    {
+        Ok(c) => c,
+        Err(e) => {
+            let _ = writeln!(stderr, "Error: cannot create HTTP client: {e}");
+            return ExitCode::RuntimeError;
+        }
+    };
+
+    let resp = match client.get(&url).send() {
+        Ok(r) => r,
+        Err(e) => {
+            let _ = writeln!(stderr, "Error: search request failed: {e}");
+            return ExitCode::RuntimeError;
+        }
+    };
+
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let body = resp.text().unwrap_or_default();
+        let _ = writeln!(stderr, "Error: registry returned HTTP {status}: {body}");
+        return ExitCode::RuntimeError;
+    }
+
+    let resp_json: serde_json::Value = match resp.json() {
+        Ok(v) => v,
+        Err(e) => {
+            let _ = writeln!(stderr, "Error: invalid response from registry: {e}");
+            return ExitCode::RuntimeError;
+        }
+    };
+
+    let results = match resp_json.get("results").and_then(|r| r.as_array()) {
+        Some(r) => r,
+        None => {
+            let _ = writeln!(stdout, "No packages found.");
+            return ExitCode::Ok;
+        }
+    };
+
+    if results.is_empty() {
+        let _ = writeln!(stdout, "No packages found.");
+        return ExitCode::Ok;
+    }
+
+    let _ = writeln!(stdout, "{:<40} {:<12} DESCRIPTION", "NAME", "VERSION");
+    let _ = writeln!(stdout, "{}", "-".repeat(80));
+
+    for result in results {
+        let name = result.get("name").and_then(|n| n.as_str()).unwrap_or("?");
+        let version = result
+            .get("version")
+            .and_then(|v| v.as_str())
+            .unwrap_or("?");
+        let description = result
+            .get("description")
+            .and_then(|d| d.as_str())
+            .unwrap_or("");
+        let desc_display = if description.len() > 40 {
+            format!("{}...", &description[..37])
+        } else {
+            description.to_string()
+        };
+        let _ = writeln!(stdout, "{:<40} {:<12} {}", name, version, desc_display);
+    }
+
+    let total = resp_json
+        .get("total")
+        .and_then(|t| t.as_u64())
+        .unwrap_or(results.len() as u64);
+    let showing_end = offset + results.len();
+    let _ = writeln!(
+        stdout,
+        "\nShowing {}-{} of {} results",
+        offset + 1,
+        showing_end,
+        total
+    );
+
+    ExitCode::Ok
+}
+
+/// Minimal percent-encoding for query parameters (avoids pulling in another dep).
+fn urlencoding_simple(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for b in s.bytes() {
+        match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                out.push(b as char);
+            }
+            _ => {
+                out.push('%');
+                out.push(char::from(HEX_UPPER[(b >> 4) as usize]));
+                out.push(char::from(HEX_UPPER[(b & 0x0f) as usize]));
+            }
+        }
+    }
+    out
+}
+
+const HEX_UPPER: [u8; 16] = *b"0123456789ABCDEF";
+
+// ---------------------------------------------------------------------------
+// pkg yank
+// ---------------------------------------------------------------------------
+
+fn cmd_pkg_yank(
+    name: &str,
+    version: &str,
+    registry: Option<&str>,
+    stdout: &mut dyn Write,
+    stderr: &mut dyn Write,
+) -> ExitCode {
+    let cfg = RegistryConfig::load(registry);
+
+    let auth_token = match &cfg.auth_token {
+        Some(t) => t.clone(),
+        None => {
+            let _ = writeln!(
+                stderr,
+                "Error: not authenticated. Run `clawdstrike pkg login` first."
+            );
+            return ExitCode::ConfigError;
+        }
+    };
+
+    let url = format!(
+        "{}/api/v1/packages/{}/{}",
+        cfg.registry_url.trim_end_matches('/'),
+        name,
+        version
+    );
+
+    let client = match reqwest::blocking::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+    {
+        Ok(c) => c,
+        Err(e) => {
+            let _ = writeln!(stderr, "Error: cannot create HTTP client: {e}");
+            return ExitCode::RuntimeError;
+        }
+    };
+
+    let resp = match client.delete(&url).bearer_auth(&auth_token).send() {
+        Ok(r) => r,
+        Err(e) => {
+            let _ = writeln!(stderr, "Error: yank request failed: {e}");
+            return ExitCode::RuntimeError;
+        }
+    };
+
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let body = resp.text().unwrap_or_default();
+        let _ = writeln!(stderr, "Error: registry returned HTTP {status}: {body}");
+        return ExitCode::RuntimeError;
+    }
+
+    let _ = writeln!(stdout, "Yanked {} v{}", name, version);
     ExitCode::Ok
 }
 
@@ -1106,10 +1723,84 @@ sandbox = "native"
     #[test]
     fn test_install_nonexistent() {
         let (_, stderr, code) = run_cmd(PkgCommands::Install {
-            source: PathBuf::from("/tmp/nonexistent-pkg-12345.cpkg"),
+            source: "/tmp/nonexistent-pkg-12345.cpkg".to_string(),
+            version: None,
+            registry: None,
         });
 
         assert_eq!(code, ExitCode::ConfigError);
         assert!(stderr.contains("not found"));
+    }
+
+    #[test]
+    fn test_is_file_source() {
+        // File paths
+        assert!(is_file_source("/tmp/my-pkg.cpkg"));
+        assert!(is_file_source("./local-pkg.cpkg"));
+        assert!(is_file_source("../other.cpkg"));
+        assert!(is_file_source("/absolute/path/to/pkg.cpkg"));
+
+        // Package names (not file paths)
+        assert!(!is_file_source("@acme/my-guard"));
+        assert!(!is_file_source("my-guard"));
+        assert!(!is_file_source("@scope/name"));
+    }
+
+    #[test]
+    fn test_registry_config_defaults() {
+        let cfg = RegistryConfig::from_toml_str("", "");
+        assert_eq!(cfg.registry_url, "http://localhost:3100");
+        assert!(cfg.auth_token.is_none());
+    }
+
+    #[test]
+    fn test_registry_config_from_toml() {
+        let config = r#"
+[registry]
+url = "https://registry.example.com"
+"#;
+        let creds = r#"
+[registry]
+auth_token = "tok_secret"
+"#;
+        let cfg = RegistryConfig::from_toml_str(config, creds);
+        assert_eq!(cfg.registry_url, "https://registry.example.com");
+        assert_eq!(cfg.auth_token.as_deref(), Some("tok_secret"));
+    }
+
+    #[test]
+    fn test_urlencoding_simple() {
+        assert_eq!(urlencoding_simple("hello"), "hello");
+        assert_eq!(urlencoding_simple("@scope/name"), "%40scope%2Fname");
+        assert_eq!(urlencoding_simple("a b"), "a%20b");
+        assert_eq!(urlencoding_simple("foo+bar"), "foo%2Bbar");
+    }
+
+    #[test]
+    fn test_publish_requires_auth() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::write(
+            tmp.path().join("clawdstrike-pkg.toml"),
+            r#"[package]
+name = "test-pkg"
+version = "0.1.0"
+pkg_type = "guard"
+
+[trust]
+level = "trusted"
+sandbox = "native"
+"#,
+        )
+        .unwrap();
+
+        let (_, stderr, code) = run_cmd(PkgCommands::Publish {
+            path: Some(tmp.path().to_path_buf()),
+            // Use a fake registry so we never actually hit a real server
+            registry: Some("http://127.0.0.1:1".to_string()),
+        });
+
+        // Should fail because no auth token is configured
+        assert_eq!(code, ExitCode::ConfigError);
+        assert!(stderr.contains("not authenticated"));
     }
 }

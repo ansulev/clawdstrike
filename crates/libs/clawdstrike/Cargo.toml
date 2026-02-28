@@ -32,8 +32,10 @@ futures.workspace = true
 uuid = { workspace = true, features = ["v4"] }
 unicode-normalization = "0.1"
 base64.workspace = true
-reqwest.workspace = true
+reqwest = { workspace = true, features = ["blocking"] }
 hex.workspace = true
+semver.workspace = true
+pubgrub.workspace = true
 tar = { workspace = true }
 zstd = { workspace = true }
 wasmtime = { version = "41.0.3", optional = true, default-features = false, features = ["runtime", "cranelift", "std"] }

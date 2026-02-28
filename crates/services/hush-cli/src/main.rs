@@ -54,6 +54,7 @@ mod policy_rego;
 mod policy_synth;
 mod policy_test;
 mod policy_version;
+mod registry_config;
 mod remote_extends;
 
 const CLI_JSON_VERSION: u8 = 1;

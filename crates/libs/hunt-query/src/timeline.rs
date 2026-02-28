@@ -220,7 +220,14 @@ fn parse_hubble(
         process: None,
         namespace: ns,
         pod: pod_name,
-        action_type: Some("network".to_string()),
+        action_type: Some(
+            match direction {
+                "EGRESS" => "egress",
+                "INGRESS" => "ingress",
+                _ => "network",
+            }
+            .to_string(),
+        ),
         signature_valid: sig,
         raw: None,
     })
@@ -423,6 +430,66 @@ mod tests {
         assert_eq!(event.namespace.as_deref(), Some("production"));
         assert_eq!(event.pod.as_deref(), Some("web-server-xyz"));
         assert!(event.summary.contains("egress"));
+    }
+
+    #[test]
+    fn parse_hubble_egress_action_type() {
+        let envelope = json!({
+            "issued_at": "2025-06-15T12:05:00Z",
+            "fact": {
+                "schema": "clawdstrike.sdr.fact.hubble_flow.v1",
+                "verdict": "FORWARDED",
+                "traffic_direction": "EGRESS",
+                "summary": "TCP 10.0.0.1:8080 -> 93.184.216.34:443"
+            }
+        });
+
+        let event = parse_envelope(&envelope, false).unwrap();
+        assert_eq!(
+            event.action_type.as_deref(),
+            Some("egress"),
+            "EGRESS traffic_direction should map to action_type 'egress'"
+        );
+    }
+
+    #[test]
+    fn parse_hubble_ingress_action_type() {
+        let envelope = json!({
+            "issued_at": "2025-06-15T12:05:00Z",
+            "fact": {
+                "schema": "clawdstrike.sdr.fact.hubble_flow.v1",
+                "verdict": "FORWARDED",
+                "traffic_direction": "INGRESS",
+                "summary": "TCP 93.184.216.34:443 -> 10.0.0.1:8080"
+            }
+        });
+
+        let event = parse_envelope(&envelope, false).unwrap();
+        assert_eq!(
+            event.action_type.as_deref(),
+            Some("ingress"),
+            "INGRESS traffic_direction should map to action_type 'ingress'"
+        );
+    }
+
+    #[test]
+    fn parse_hubble_unknown_direction_falls_back_to_network() {
+        let envelope = json!({
+            "issued_at": "2025-06-15T12:05:00Z",
+            "fact": {
+                "schema": "clawdstrike.sdr.fact.hubble_flow.v1",
+                "verdict": "FORWARDED",
+                "traffic_direction": "UNKNOWN",
+                "summary": "flow"
+            }
+        });
+
+        let event = parse_envelope(&envelope, false).unwrap();
+        assert_eq!(
+            event.action_type.as_deref(),
+            Some("network"),
+            "unknown traffic_direction should fall back to 'network'"
+        );
     }
 
     #[test]

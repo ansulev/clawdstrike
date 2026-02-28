@@ -169,6 +169,12 @@ impl CorrelationEngine {
         let mut alerts = Vec::new();
         let rule = &self.rules[ri];
 
+        // Snapshot the number of windows that existed before processing this event.
+        // Dependent conditions (`after` is Some) must only iterate windows that
+        // existed before this event was processed, preventing a single event from
+        // binding to both a newly-created root window and its dependent condition.
+        let pre_existing_count = self.windows.get(&ri).map_or(0, |w| w.len());
+
         // Check each condition to see if this event matches it.
         for (ci, cond) in rule.conditions.iter().enumerate() {
             let cp = match self.patterns.get(&(ri, ci)) {
@@ -194,12 +200,16 @@ impl CorrelationEngine {
                 // This condition depends on a prior bind. Try to advance existing windows.
                 let after_bind = cond.after.as_deref();
 
+                if pre_existing_count == 0 {
+                    continue;
+                }
+
                 let windows = match self.windows.get_mut(&ri) {
                     Some(w) => w,
                     None => continue,
                 };
 
-                for ws in windows.iter_mut() {
+                for ws in windows.iter_mut().take(pre_existing_count) {
                     // Skip windows that already have this bind matched.
                     if ws.bound_events.contains_key(&cond.bind) {
                         continue;
@@ -703,6 +713,71 @@ output:
         let names: Vec<&str> = alerts.iter().map(|a| a.rule_name.as_str()).collect();
         assert!(names.contains(&"Forbidden Path Access"));
         assert!(names.contains(&"Any File Deny"));
+    }
+
+    #[test]
+    fn single_event_cannot_satisfy_root_and_dependent_condition() {
+        // Regression: a single event that matches both a root condition and
+        // a dependent condition (with `after` pointing to the root) must NOT
+        // bind to both in the same pass. The dependent condition should only
+        // match against windows that existed *before* this event was processed.
+        let rule = parse_rule(
+            r#"
+schema: clawdstrike.hunt.correlation.v1
+name: "Self-match guard"
+severity: high
+description: "Should require two distinct events"
+window: 30s
+conditions:
+  - source: receipt
+    action_type: egress
+    bind: first
+  - source: receipt
+    action_type: egress
+    after: first
+    within: 30s
+    bind: second
+output:
+  title: "Two egress events"
+  evidence:
+    - first
+    - second
+"#,
+        )
+        .unwrap();
+        let mut engine = CorrelationEngine::new(vec![rule]).unwrap();
+
+        let ts = Utc.with_ymd_and_hms(2025, 6, 15, 12, 0, 0).unwrap();
+        let event = make_event(
+            EventSource::Receipt,
+            "egress",
+            NormalizedVerdict::Allow,
+            "evil.com:443",
+            ts,
+        );
+
+        // A single event should open a window but NOT complete it.
+        let alerts = engine.process_event(&event);
+        assert!(
+            alerts.is_empty(),
+            "a single event must not satisfy both root and dependent conditions"
+        );
+
+        // A second distinct event should now complete the window.
+        let ts2 = Utc.with_ymd_and_hms(2025, 6, 15, 12, 0, 5).unwrap();
+        let event2 = make_event(
+            EventSource::Receipt,
+            "egress",
+            NormalizedVerdict::Allow,
+            "other.com:443",
+            ts2,
+        );
+        let alerts = engine.process_event(&event2);
+        assert_eq!(
+            alerts.len(),
+            1,
+            "two distinct events should complete the sequence"
+        );
     }
 
     #[test]

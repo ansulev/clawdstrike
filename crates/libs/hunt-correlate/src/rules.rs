@@ -265,6 +265,13 @@ pub fn validate_rule(rule: &CorrelationRule) -> Result<()> {
             }
         }
 
+        // `within` requires `after` — it constrains timing relative to the prior bind.
+        if cond.within.is_some() && cond.after.is_none() {
+            return Err(Error::InvalidRule(format!(
+                "condition {i} has 'within' but no 'after'; 'within' only makes sense with 'after'"
+            )));
+        }
+
         // Validate `within` does not exceed global window.
         if let Some(within) = cond.within {
             if within > rule.window {
@@ -520,6 +527,31 @@ output:
         let err = parse_rule(yaml).unwrap_err();
         let msg = err.to_string();
         assert!(msg.contains("exceeds global window"), "got: {msg}");
+    }
+
+    #[test]
+    fn reject_within_without_after() {
+        let yaml = r#"
+schema: clawdstrike.hunt.correlation.v1
+name: "Within without after"
+severity: low
+description: "test"
+window: 30s
+conditions:
+  - source: receipt
+    within: 10s
+    bind: evt
+output:
+  title: "test"
+  evidence:
+    - evt
+"#;
+        let err = parse_rule(yaml).unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("'within' but no 'after'"),
+            "expected within-without-after error, got: {msg}"
+        );
     }
 
     #[test]

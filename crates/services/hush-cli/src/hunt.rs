@@ -33,7 +33,7 @@ pub async fn cmd_hunt(
             ruleset,
             timeout,
             include_builtin,
-            signing_key: _,
+            signing_key,
             json,
             analysis_url,
             skip_ssl_verify,
@@ -47,6 +47,7 @@ pub async fn cmd_hunt(
                 ruleset,
                 timeout,
                 include_builtin,
+                signing_key,
                 json,
                 analysis_url,
                 skip_ssl_verify,
@@ -153,7 +154,7 @@ pub async fn cmd_hunt(
             rules,
             nats_url,
             nats_creds,
-            signing_key: _,
+            signing_key,
             max_window,
             json,
             no_color,
@@ -162,6 +163,7 @@ pub async fn cmd_hunt(
                 rules,
                 nats_url,
                 nats_creds,
+                signing_key,
                 max_window,
                 json,
                 no_color,
@@ -188,7 +190,7 @@ pub async fn cmd_hunt(
             offline,
             local_dir,
             verify,
-            signing_key: _,
+            signing_key,
             json,
             jsonl,
             no_color,
@@ -210,6 +212,7 @@ pub async fn cmd_hunt(
                 offline,
                 local_dir,
                 verify,
+                signing_key,
                 json,
                 jsonl,
                 no_color,
@@ -266,6 +269,9 @@ struct HuntScanArgs {
     ruleset: Option<String>,
     timeout: u64,
     include_builtin: bool,
+    /// Captured for future receipt-signing support; not yet wired into scan.
+    #[allow(dead_code)]
+    signing_key: String,
     json: bool,
     analysis_url: Option<String>,
     skip_ssl_verify: bool,
@@ -720,8 +726,15 @@ async fn cmd_hunt_scan(
                 count
             }
             Err(e) => {
-                let _ = writeln!(stderr, "Warning: {e}");
-                0
+                return emit_hunt_error(
+                    args.json,
+                    "hunt scan",
+                    stdout,
+                    stderr,
+                    "config_error",
+                    &e,
+                    ExitCode::ConfigError,
+                );
             }
         }
     } else {
@@ -895,7 +908,7 @@ fn determine_exit_code(results: &[ScanPathResult], summary: &HuntScanSummary) ->
             })
     });
 
-    if has_failure {
+    if has_failure || summary.policy_violations_found > 0 {
         ExitCode::Fail
     } else if summary.issues_found > 0 {
         ExitCode::Warn
@@ -955,8 +968,26 @@ fn build_hunt_query(args: &HuntQueryArgs) -> Result<HuntQuery, (ExitCode, String
 
     // Sources
     if let Some(ref source_strs) = args.source {
+        let raw_values: Vec<&str> = source_strs
+            .iter()
+            .flat_map(|s| s.split(',').map(str::trim))
+            .filter(|s| !s.is_empty())
+            .collect();
+
         for s in source_strs {
             query.sources.extend(EventSource::parse_list(s));
+        }
+
+        // If the user provided source values but none were recognized, reject
+        if !raw_values.is_empty() && query.sources.is_empty() {
+            let valid = "tetragon, hubble, receipt, scan";
+            return Err((
+                ExitCode::InvalidArgs,
+                format!(
+                    "Unknown --source value(s): '{}'. Valid sources: {valid}",
+                    raw_values.join("', '")
+                ),
+            ));
         }
     }
 
@@ -973,26 +1004,20 @@ fn build_hunt_query(args: &HuntQueryArgs) -> Result<HuntQuery, (ExitCode, String
         }
     }
 
-    // Time range
+    // Time range — accept RFC 3339 or relative durations like "1h", "30m", "2d".
     if let Some(ref s) = args.start {
-        match chrono::DateTime::parse_from_rfc3339(s) {
-            Ok(dt) => query.start = Some(dt.with_timezone(&chrono::Utc)),
-            Err(e) => {
-                return Err((
-                    ExitCode::InvalidArgs,
-                    format!("Invalid --start timestamp '{s}': {e}"),
-                ));
+        match parse_timestamp_or_relative(s) {
+            Ok(dt) => query.start = Some(dt),
+            Err(msg) => {
+                return Err((ExitCode::InvalidArgs, format!("Invalid --start: {msg}")));
             }
         }
     }
     if let Some(ref e) = args.end {
-        match chrono::DateTime::parse_from_rfc3339(e) {
-            Ok(dt) => query.end = Some(dt.with_timezone(&chrono::Utc)),
-            Err(e) => {
-                return Err((
-                    ExitCode::InvalidArgs,
-                    format!("Invalid --end timestamp: {e}"),
-                ));
+        match parse_timestamp_or_relative(e) {
+            Ok(dt) => query.end = Some(dt),
+            Err(msg) => {
+                return Err((ExitCode::InvalidArgs, format!("Invalid --end: {msg}")));
             }
         }
     }
@@ -1128,8 +1153,11 @@ async fn cmd_hunt_query(
             let _ = writeln!(stderr, "Render error: {e}");
             return ExitCode::RuntimeError;
         }
-        let _ = writeln!(stdout);
-        let _ = writeln!(stdout, "{} events returned", events.len());
+        // Skip text footer in JSONL mode to avoid breaking parsers
+        if !args.jsonl {
+            let _ = writeln!(stdout);
+            let _ = writeln!(stdout, "{} events returned", events.len());
+        }
     }
 
     ExitCode::Ok
@@ -1216,6 +1244,9 @@ struct HuntWatchArgs {
     rules: Vec<String>,
     nats_url: String,
     nats_creds: Option<String>,
+    /// Captured for future receipt-signing support; not yet wired into watch.
+    #[allow(dead_code)]
+    signing_key: String,
     max_window: String,
     json: bool,
     no_color: bool,
@@ -1242,6 +1273,9 @@ struct HuntCorrelateArgs {
     offline: bool,
     local_dir: Option<Vec<String>>,
     verify: bool,
+    /// Captured for future receipt-signing support; not yet wired into correlate.
+    #[allow(dead_code)]
+    signing_key: String,
     json: bool,
     jsonl: bool,
     no_color: bool,
@@ -1745,6 +1779,28 @@ async fn cmd_hunt_ioc(
     exit_code
 }
 
+/// Parse a timestamp string as either RFC 3339 or a relative duration.
+///
+/// Relative durations (e.g. `"1h"`, `"30m"`, `"2d"`) are interpreted as
+/// offsets *before* the current time (`Utc::now() - duration`).
+fn parse_timestamp_or_relative(
+    s: &str,
+) -> std::result::Result<chrono::DateTime<chrono::Utc>, String> {
+    // Try RFC 3339 first (e.g. "2025-06-15T12:00:00Z").
+    if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(s) {
+        return Ok(dt.with_timezone(&chrono::Utc));
+    }
+
+    // Fallback: try relative duration via hunt_correlate's parser.
+    if let Some(dur) = hunt_correlate::rules::parse_duration_str(s) {
+        return Ok(chrono::Utc::now() - dur);
+    }
+
+    Err(format!(
+        "'{s}' is not a valid RFC 3339 timestamp or relative duration (e.g. 1h, 30m, 2d)"
+    ))
+}
+
 fn emit_hunt_error(
     json: bool,
     command: &'static str,
@@ -1772,4 +1828,305 @@ fn emit_hunt_error(
         let _ = writeln!(stderr, "Error: {message}");
     }
     code
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use hunt_scan::models::ScanPathResult;
+
+    fn empty_scan_result() -> ScanPathResult {
+        ScanPathResult {
+            client: Some("test".to_string()),
+            path: "/test".to_string(),
+            servers: Some(vec![]),
+            issues: vec![],
+            labels: vec![],
+            policy_violations: vec![],
+            error: None,
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Fix 1: determine_exit_code includes policy violations
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn determine_exit_code_ok_when_no_issues_or_violations() {
+        let results = vec![empty_scan_result()];
+        let summary = HuntScanSummary {
+            clients_scanned: 1,
+            servers_found: 0,
+            tools_found: 0,
+            issues_found: 0,
+            policy_violations_found: 0,
+        };
+        assert_eq!(determine_exit_code(&results, &summary), ExitCode::Ok);
+    }
+
+    #[test]
+    fn determine_exit_code_warn_when_issues_only() {
+        let results = vec![empty_scan_result()];
+        let summary = HuntScanSummary {
+            clients_scanned: 1,
+            servers_found: 0,
+            tools_found: 0,
+            issues_found: 3,
+            policy_violations_found: 0,
+        };
+        assert_eq!(determine_exit_code(&results, &summary), ExitCode::Warn);
+    }
+
+    #[test]
+    fn determine_exit_code_fail_when_policy_violations() {
+        let results = vec![empty_scan_result()];
+        let summary = HuntScanSummary {
+            clients_scanned: 1,
+            servers_found: 0,
+            tools_found: 0,
+            issues_found: 0,
+            policy_violations_found: 2,
+        };
+        assert_eq!(determine_exit_code(&results, &summary), ExitCode::Fail);
+    }
+
+    #[test]
+    fn determine_exit_code_fail_when_both_issues_and_violations() {
+        let results = vec![empty_scan_result()];
+        let summary = HuntScanSummary {
+            clients_scanned: 1,
+            servers_found: 0,
+            tools_found: 0,
+            issues_found: 1,
+            policy_violations_found: 1,
+        };
+        // Policy violations take precedence (Fail > Warn)
+        assert_eq!(determine_exit_code(&results, &summary), ExitCode::Fail);
+    }
+
+    // -----------------------------------------------------------------------
+    // Fix 3: Reject unknown --source values
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn build_hunt_query_rejects_all_unknown_sources() {
+        let args = HuntQueryArgs {
+            source: Some(vec!["bogus,nonsense".to_string()]),
+            verdict: None,
+            start: None,
+            end: None,
+            action_type: None,
+            process: None,
+            namespace: None,
+            pod: None,
+            limit: 100,
+            nl: None,
+            nats_url: "nats://localhost:4222".to_string(),
+            nats_creds: None,
+            offline: true,
+            local_dir: None,
+            verify: false,
+            json: false,
+            jsonl: false,
+            no_color: false,
+            entity: None,
+        };
+        let result = build_hunt_query(&args);
+        assert!(result.is_err());
+        let (code, msg) = result.unwrap_err();
+        assert_eq!(code, ExitCode::InvalidArgs);
+        assert!(msg.contains("Unknown --source"), "msg: {msg}");
+    }
+
+    #[test]
+    fn build_hunt_query_accepts_valid_source() {
+        let args = HuntQueryArgs {
+            source: Some(vec!["tetragon".to_string()]),
+            verdict: None,
+            start: None,
+            end: None,
+            action_type: None,
+            process: None,
+            namespace: None,
+            pod: None,
+            limit: 100,
+            nl: None,
+            nats_url: "nats://localhost:4222".to_string(),
+            nats_creds: None,
+            offline: true,
+            local_dir: None,
+            verify: false,
+            json: false,
+            jsonl: false,
+            no_color: false,
+            entity: None,
+        };
+        let result = build_hunt_query(&args);
+        assert!(result.is_ok());
+        let query = result.unwrap();
+        assert_eq!(query.sources.len(), 1);
+    }
+
+    #[test]
+    fn build_hunt_query_accepts_mixed_valid_and_invalid_sources() {
+        // If at least one source is valid, it should succeed (only fully
+        // unknown lists are rejected).
+        let args = HuntQueryArgs {
+            source: Some(vec!["tetragon,bogus".to_string()]),
+            verdict: None,
+            start: None,
+            end: None,
+            action_type: None,
+            process: None,
+            namespace: None,
+            pod: None,
+            limit: 100,
+            nl: None,
+            nats_url: "nats://localhost:4222".to_string(),
+            nats_creds: None,
+            offline: true,
+            local_dir: None,
+            verify: false,
+            json: false,
+            jsonl: false,
+            no_color: false,
+            entity: None,
+        };
+        let result = build_hunt_query(&args);
+        assert!(result.is_ok());
+        let query = result.unwrap();
+        assert_eq!(query.sources.len(), 1);
+    }
+
+    // -----------------------------------------------------------------------
+    // Fix 4: JSONL output should not include text footer
+    // -----------------------------------------------------------------------
+
+    #[tokio::test]
+    async fn hunt_query_jsonl_no_text_footer() {
+        let args = HuntQueryArgs {
+            source: None,
+            verdict: None,
+            start: None,
+            end: None,
+            action_type: None,
+            process: None,
+            namespace: None,
+            pod: None,
+            limit: 0,
+            nl: None,
+            nats_url: "nats://localhost:4222".to_string(),
+            nats_creds: None,
+            offline: true,
+            local_dir: Some(vec!["/nonexistent".to_string()]),
+            verify: false,
+            json: false,
+            jsonl: true,
+            no_color: true,
+            entity: None,
+        };
+        let mut stdout = Vec::new();
+        let mut stderr = Vec::new();
+        let _ = cmd_hunt_query(args, &mut stdout, &mut stderr).await;
+        let output = String::from_utf8_lossy(&stdout);
+        // In JSONL mode, no "events returned" text footer should appear
+        assert!(
+            !output.contains("events returned"),
+            "JSONL output should not contain text footer, got: {output}"
+        );
+    }
+
+    #[tokio::test]
+    async fn hunt_query_text_mode_has_footer() {
+        let args = HuntQueryArgs {
+            source: None,
+            verdict: None,
+            start: None,
+            end: None,
+            action_type: None,
+            process: None,
+            namespace: None,
+            pod: None,
+            limit: 0,
+            nl: None,
+            nats_url: "nats://localhost:4222".to_string(),
+            nats_creds: None,
+            offline: true,
+            local_dir: Some(vec!["/nonexistent".to_string()]),
+            verify: false,
+            json: false,
+            jsonl: false,
+            no_color: true,
+            entity: None,
+        };
+        let mut stdout = Vec::new();
+        let mut stderr = Vec::new();
+        let _ = cmd_hunt_query(args, &mut stdout, &mut stderr).await;
+        let output = String::from_utf8_lossy(&stdout);
+        // In text mode, the footer should be present
+        assert!(
+            output.contains("events returned"),
+            "Text output should contain footer, got: {output}"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // Fix 2: Policy load failure returns error exit code
+    // -----------------------------------------------------------------------
+
+    #[tokio::test]
+    async fn hunt_scan_fails_on_invalid_policy_path() {
+        let args = HuntScanArgs {
+            target: Some(vec!["/nonexistent-mcp-config.json".to_string()]),
+            package: None,
+            skills: None,
+            query: None,
+            policy: Some("/nonexistent-policy.yaml".to_string()),
+            ruleset: None,
+            timeout: 1,
+            include_builtin: false,
+            signing_key: String::new(),
+            json: false,
+            analysis_url: None,
+            skip_ssl_verify: false,
+        };
+        let mut stdout = Vec::new();
+        let mut stderr = Vec::new();
+        let exit_code = cmd_hunt_scan(args, &mut stdout, &mut stderr).await;
+        assert_eq!(
+            exit_code,
+            ExitCode::ConfigError,
+            "Should fail with ConfigError when policy cannot be loaded, got: {:?}\nstderr: {}",
+            exit_code,
+            String::from_utf8_lossy(&stderr),
+        );
+    }
+
+    #[tokio::test]
+    async fn hunt_scan_fails_on_invalid_ruleset() {
+        let args = HuntScanArgs {
+            target: Some(vec!["/nonexistent-mcp-config.json".to_string()]),
+            package: None,
+            skills: None,
+            query: None,
+            policy: None,
+            ruleset: Some("nonexistent-ruleset-xyz".to_string()),
+            timeout: 1,
+            include_builtin: false,
+            signing_key: String::new(),
+            json: false,
+            analysis_url: None,
+            skip_ssl_verify: false,
+        };
+        let mut stdout = Vec::new();
+        let mut stderr = Vec::new();
+        let exit_code = cmd_hunt_scan(args, &mut stdout, &mut stderr).await;
+        assert_eq!(
+            exit_code,
+            ExitCode::ConfigError,
+            "Should fail with ConfigError when ruleset cannot be loaded, got: {:?}\nstderr: {}",
+            exit_code,
+            String::from_utf8_lossy(&stderr),
+        );
+    }
 }

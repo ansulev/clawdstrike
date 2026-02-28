@@ -93,31 +93,36 @@ static POD_RE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"(?i)\bpod\s+(\S+)").expect("valid regex"));
 
 /// Apply natural language keywords to a `HuntQuery`, setting fields.
+///
+/// NL extraction is *supplemental*: it never overrides fields that are
+/// already set (e.g. from explicit CLI flags like `--start` or `--end`).
 pub fn apply_nl_query(query: &mut HuntQuery, nl: &str) {
-    // Time extraction
-    if let Some(caps) = TIME_RE.captures(nl) {
-        if let Ok(n) = caps[1].parse::<i64>() {
-            let unit = caps[2].to_lowercase();
-            let duration = match unit.as_str() {
-                "hour" | "hr" => Duration::hours(n),
-                "minute" | "min" => Duration::minutes(n),
-                "day" => Duration::days(n),
-                "second" | "sec" => Duration::seconds(n),
-                _ => Duration::hours(n),
-            };
-            query.start = Some(Utc::now() - duration);
-        }
-    } else if TODAY_RE.is_match(nl) {
-        let today = Utc::now().date_naive().and_hms_opt(0, 0, 0);
-        if let Some(t) = today {
-            query.start = Some(t.and_utc());
-        }
-    } else if YESTERDAY_RE.is_match(nl) {
-        let yesterday = (Utc::now() - Duration::days(1))
-            .date_naive()
-            .and_hms_opt(0, 0, 0);
-        if let Some(t) = yesterday {
-            query.start = Some(t.and_utc());
+    // Time extraction — only when start is not already set by an explicit flag.
+    if query.start.is_none() {
+        if let Some(caps) = TIME_RE.captures(nl) {
+            if let Ok(n) = caps[1].parse::<i64>() {
+                let unit = caps[2].to_lowercase();
+                let duration = match unit.as_str() {
+                    "hour" | "hr" => Duration::hours(n),
+                    "minute" | "min" => Duration::minutes(n),
+                    "day" => Duration::days(n),
+                    "second" | "sec" => Duration::seconds(n),
+                    _ => Duration::hours(n),
+                };
+                query.start = Some(Utc::now() - duration);
+            }
+        } else if TODAY_RE.is_match(nl) {
+            let today = Utc::now().date_naive().and_hms_opt(0, 0, 0);
+            if let Some(t) = today {
+                query.start = Some(t.and_utc());
+            }
+        } else if YESTERDAY_RE.is_match(nl) {
+            let yesterday = (Utc::now() - Duration::days(1))
+                .date_naive()
+                .and_hms_opt(0, 0, 0);
+            if let Some(t) = yesterday {
+                query.start = Some(t.and_utc());
+            }
         }
     }
 
@@ -600,5 +605,34 @@ mod tests {
         let mut q2 = empty_query();
         apply_nl_query(&mut q2, "binary python3 allowed");
         assert_eq!(q2.process, Some("python3".to_string()));
+    }
+
+    #[test]
+    fn nl_does_not_override_existing_start() {
+        let mut q = empty_query();
+        let explicit_start = Utc::now() - Duration::hours(10);
+        q.start = Some(explicit_start);
+        apply_nl_query(&mut q, "events from the last 2 hours");
+        // NL mentions "last 2 hours" but explicit --start was already set;
+        // it must not be overwritten.
+        assert_eq!(q.start, Some(explicit_start));
+    }
+
+    #[test]
+    fn nl_does_not_override_existing_start_with_today() {
+        let mut q = empty_query();
+        let explicit_start = Utc::now() - Duration::days(5);
+        q.start = Some(explicit_start);
+        apply_nl_query(&mut q, "events from today");
+        assert_eq!(q.start, Some(explicit_start));
+    }
+
+    #[test]
+    fn nl_does_not_override_existing_start_with_yesterday() {
+        let mut q = empty_query();
+        let explicit_start = Utc::now() - Duration::days(10);
+        q.start = Some(explicit_start);
+        apply_nl_query(&mut q, "events since yesterday");
+        assert_eq!(q.start, Some(explicit_start));
     }
 }

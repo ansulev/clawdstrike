@@ -257,7 +257,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
 
       - name: Run cloud-api adaptive integration tests
-        run: cargo test -p clawdstrike-cloud-api integration_tests:: -- --nocapture
+        run: 'cargo test -p clawdstrike-cloud-api integration_tests:: -- --nocapture'
 
   msrv:
     name: Minimum Supported Rust Version

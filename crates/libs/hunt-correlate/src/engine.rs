@@ -424,7 +424,7 @@ conditions:
     bind: file_access
   - source: [receipt, hubble]
     action_type: egress
-    not_target_pattern: "(^|->\\s*)(localhost|127\\.|10\\.|172\\.(1[6-9]|2[0-9]|3[01])\\.[0-9]{1,3}\\.|192\\.168\\.)"
+    not_target_pattern: "->\\s*(localhost|127\\.|10\\.|172\\.(1[6-9]|2[0-9]|3[01])\\.[0-9]{1,3}\\.|192\\.168\\.)"
     after: file_access
     within: 30s
     bind: egress_event
@@ -630,6 +630,40 @@ output:
             alerts.len(),
             1,
             "172.2.x.x is a public IP and should trigger exfiltration alert"
+        );
+    }
+
+    #[test]
+    fn egress_without_direction_prefix_private_source_public_dest_still_alerts() {
+        // Some summaries may omit the direction prefix and start with source IP.
+        // The not_target_pattern must not exclude based on private source.
+        let rule = exfil_rule();
+        let mut engine = CorrelationEngine::new(vec![rule]).unwrap();
+
+        let ts1 = Utc.with_ymd_and_hms(2025, 6, 15, 12, 0, 0).unwrap();
+        let ts2 = Utc.with_ymd_and_hms(2025, 6, 15, 12, 0, 10).unwrap();
+
+        let e1 = make_event(
+            EventSource::Receipt,
+            "file",
+            NormalizedVerdict::Allow,
+            "read /etc/passwd",
+            ts1,
+        );
+        engine.process_event(&e1);
+
+        let e2 = make_event(
+            EventSource::Receipt,
+            "egress",
+            NormalizedVerdict::Allow,
+            "10.0.0.1 -> 93.184.216.34:443",
+            ts2,
+        );
+        let alerts = engine.process_event(&e2);
+        assert_eq!(
+            alerts.len(),
+            1,
+            "private source at summary start must not suppress external destination alerts"
         );
     }
 

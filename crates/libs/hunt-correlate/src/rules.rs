@@ -326,7 +326,7 @@ conditions:
     bind: file_access
   - source: [receipt, hubble]
     action_type: egress
-    not_target_pattern: "(^|->\\s*)(localhost|127\\.|10\\.|172\\.(1[6-9]|2[0-9]|3[01])\\.[0-9]{1,3}\\.|192\\.168\\.)"
+    not_target_pattern: "->\\s*(localhost|127\\.|10\\.|172\\.(1[6-9]|2[0-9]|3[01])\\.[0-9]{1,3}\\.|192\\.168\\.)"
     after: file_access
     within: 30s
     bind: egress_event
@@ -396,7 +396,7 @@ output:
     }
 
     #[test]
-    fn exfil_not_target_pattern_keeps_public_172_160() {
+    fn exfil_not_target_pattern_matches_private_destination_after_arrow() {
         let rule = parse_rule(EXAMPLE_RULE).unwrap();
         let pattern = rule.conditions[1]
             .not_target_pattern
@@ -404,10 +404,17 @@ output:
             .expect("pattern");
         let re = regex::Regex::new(pattern).expect("valid regex");
 
-        assert!(re.is_match("172.16.0.1"), "RFC1918 172.16/12 must match");
+        assert!(
+            !re.is_match("172.16.0.1"),
+            "bare private IP should not match without destination delimiter"
+        );
         assert!(
             re.is_match("egress TCP 10.0.0.1:8080 -> 172.16.0.1:443"),
             "private destination in real Hubble-style summary must match"
+        );
+        assert!(
+            re.is_match("10.0.0.1 -> 172.16.0.1:443"),
+            "private destination should match even when summary starts with source IP"
         );
         assert!(
             !re.is_match("172.160.0.1"),
@@ -420,6 +427,10 @@ output:
         assert!(
             !re.is_match("egress TCP 10.0.0.1:8080 -> 93.184.216.34:443"),
             "public destination should not be excluded just because source is private"
+        );
+        assert!(
+            !re.is_match("10.0.0.1 -> 93.184.216.34:443"),
+            "private source at start should not be excluded when destination is public"
         );
     }
 

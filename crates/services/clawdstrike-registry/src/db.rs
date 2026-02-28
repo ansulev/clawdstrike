@@ -510,14 +510,16 @@ impl RegistryDb {
 
     /// Atomically increment both the version and package download counters.
     pub fn increment_download(&self, name: &str, version: &str) -> Result<(), RegistryError> {
-        self.conn.execute(
+        let tx = self.conn.unchecked_transaction()?;
+        tx.execute(
             "UPDATE versions SET download_count = download_count + 1 WHERE name = ?1 AND version = ?2",
             params![name, version],
         )?;
-        self.conn.execute(
+        tx.execute(
             "UPDATE packages SET total_downloads = total_downloads + 1 WHERE name = ?1",
             params![name],
         )?;
+        tx.commit()?;
         Ok(())
     }
 

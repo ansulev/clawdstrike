@@ -409,8 +409,20 @@ fn comparator_to_range(comp: &semver::Comparator) -> std::result::Result<VS, Res
             }
         }
         semver::Op::Greater => {
-            let v = make_version(major, minor, patch);
-            Ok(Ranges::strictly_higher_than(v))
+            // >I.J.K → strictly_higher_than(I.J.K)
+            // >I.J   → higher_than(I.(J+1).0)  (greater than all I.J.*)
+            // >I     → higher_than((I+1).0.0)   (greater than all I.*.*)
+            match (minor, patch) {
+                (Some(min_val), Some(pat_val)) => Ok(Ranges::strictly_higher_than(
+                    semver::Version::new(major, min_val, pat_val),
+                )),
+                (Some(min_val), None) => Ok(Ranges::higher_than(semver::Version::new(
+                    major,
+                    min_val + 1,
+                    0,
+                ))),
+                _ => Ok(Ranges::higher_than(semver::Version::new(major + 1, 0, 0))),
+            }
         }
         semver::Op::GreaterEq => {
             let v = make_version(major, minor, patch);

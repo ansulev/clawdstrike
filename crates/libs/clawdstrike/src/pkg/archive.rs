@@ -2,7 +2,7 @@
 
 use std::fs;
 use std::io::{Read as IoRead, Write as IoWrite};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use hush_core::Hash;
 
@@ -61,23 +61,19 @@ pub fn unpack(archive_path: &Path, target_dir: &Path) -> Result<Hash> {
     let compressed = fs::read(archive_path)?;
     let hash = hush_core::sha256(&compressed);
 
-    // Decompress in chunks to prevent decompression bombs from exhausting
-    // memory before the size check runs.
-    let mut decoder = zstd::stream::read::Decoder::new(compressed.as_slice())?;
+    // Decompress with a hard size limit to prevent decompression bombs from
+    // exhausting memory.  `take()` ensures we never read more than
+    // MAX_UNCOMPRESSED_SIZE + 1 bytes, so an oversized payload is caught
+    // cheaply without buffering the entire stream first.
+    let decoder = zstd::stream::read::Decoder::new(compressed.as_slice())?;
     let mut tar_bytes: Vec<u8> = Vec::new();
-    let mut buf = [0u8; 64 * 1024]; // 64 KiB chunks
-    loop {
-        let n = decoder.read(&mut buf)?;
-        if n == 0 {
-            break;
-        }
-        tar_bytes.extend_from_slice(&buf[..n]);
-        if tar_bytes.len() as u64 > MAX_UNCOMPRESSED_SIZE {
-            return Err(Error::PkgError(format!(
-                "uncompressed archive size exceeds limit ({} bytes)",
-                MAX_UNCOMPRESSED_SIZE
-            )));
-        }
+    let mut limited = decoder.take(MAX_UNCOMPRESSED_SIZE + 1);
+    limited.read_to_end(&mut tar_bytes)?;
+    if tar_bytes.len() as u64 > MAX_UNCOMPRESSED_SIZE {
+        return Err(Error::PkgError(format!(
+            "uncompressed archive size exceeds limit ({} bytes)",
+            MAX_UNCOMPRESSED_SIZE
+        )));
     }
 
     // Extract, validating paths against traversal.
@@ -93,33 +89,39 @@ pub fn unpack(archive_path: &Path, target_dir: &Path) -> Result<Hash> {
         let mut entry = entry?;
         let entry_path = entry.path()?;
 
-        // Resolve the destination and ensure it stays inside target_dir.
+        // Resolve the destination and check for path traversal BEFORE
+        // touching the filesystem.  We normalize the path lexically first
+        // (collapsing `.` / `..` components) so the `starts_with` check
+        // catches traversal attempts before any directories are created.
         let dest = canonical_target.join(&entry_path);
-        let dest_canonical = if dest.exists() {
-            dest.canonicalize()?
-        } else {
-            // Parent must exist inside the target.
-            if let Some(parent) = dest.parent() {
-                fs::create_dir_all(parent)?;
-            }
-            // Normalize by resolving parent + filename.
-            match dest.parent() {
-                Some(p) => p.canonicalize()?.join(
-                    dest.file_name()
-                        .ok_or_else(|| Error::PkgError("entry with no filename".to_string()))?,
-                ),
-                None => dest.clone(),
-            }
-        };
 
-        if !dest_canonical.starts_with(&canonical_target) {
+        // Lexically normalize the path to resolve `..` without requiring
+        // the path to exist on disk yet.
+        let mut normalized = PathBuf::new();
+        for component in dest.components() {
+            match component {
+                std::path::Component::ParentDir => {
+                    normalized.pop();
+                }
+                std::path::Component::CurDir => {}
+                other => normalized.push(other),
+            }
+        }
+
+        // Check for traversal BEFORE creating any directories.
+        if !normalized.starts_with(&canonical_target) {
             return Err(Error::PkgError(format!(
                 "path traversal detected: {}",
                 entry_path.display()
             )));
         }
 
-        entry.unpack(&dest_canonical)?;
+        // Now it is safe to create parent directories.
+        if let Some(parent) = normalized.parent() {
+            fs::create_dir_all(parent)?;
+        }
+
+        entry.unpack(&normalized)?;
     }
 
     Ok(hash)

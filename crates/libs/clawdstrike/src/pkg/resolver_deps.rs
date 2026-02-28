@@ -388,9 +388,25 @@ fn comparator_to_range(comp: &semver::Comparator) -> std::result::Result<VS, Res
 
     match comp.op {
         semver::Op::Exact => {
-            // =X.Y.Z
-            let v = make_version(major, minor, patch);
-            Ok(Ranges::singleton(v))
+            // =I.J.K → singleton [I.J.K, I.J.K]
+            // =I.J   → [I.J.0, I.(J+1).0)
+            // =I     → [I.0.0, (I+1).0.0)
+            match (minor, patch) {
+                (Some(min_val), Some(pat_val)) => {
+                    let v = semver::Version::new(major, min_val, pat_val);
+                    Ok(Ranges::singleton(v))
+                }
+                (Some(min_val), None) => {
+                    let lo = semver::Version::new(major, min_val, 0);
+                    let hi = semver::Version::new(major, min_val + 1, 0);
+                    Ok(Ranges::between(lo, hi))
+                }
+                _ => {
+                    let lo = semver::Version::new(major, 0, 0);
+                    let hi = semver::Version::new(major + 1, 0, 0);
+                    Ok(Ranges::between(lo, hi))
+                }
+            }
         }
         semver::Op::Greater => {
             let v = make_version(major, minor, patch);
@@ -405,28 +421,67 @@ fn comparator_to_range(comp: &semver::Comparator) -> std::result::Result<VS, Res
             Ok(Ranges::strictly_lower_than(v))
         }
         semver::Op::LessEq => {
-            // <=X.Y.Z: includes all versions from 0.0.0 up to and including X.Y.Z
-            let hi = make_version(major, minor, patch.map(|p| p + 1));
+            // <=I.J.K → strictly_lower_than(I.J.(K+1))
+            // <=I.J   → strictly_lower_than(I.(J+1).0)
+            // <=I     → strictly_lower_than((I+1).0.0)
+            let hi = match (minor, patch) {
+                (Some(min_val), Some(pat_val)) => {
+                    semver::Version::new(major, min_val, pat_val + 1)
+                }
+                (Some(min_val), None) => semver::Version::new(major, min_val + 1, 0),
+                _ => semver::Version::new(major + 1, 0, 0),
+            };
             Ok(Ranges::strictly_lower_than(hi))
         }
         semver::Op::Tilde => {
-            // ~X.Y.Z: >=X.Y.Z, <X.(Y+1).0
+            // ~I.J.K → [I.J.K, I.(J+1).0)
+            // ~I.J   → [I.J.0, I.(J+1).0)
+            // ~I     → [I.0.0, (I+1).0.0)
             let lo = make_version(major, minor, patch);
-            let min_val = minor.unwrap_or(0);
-            let hi = semver::Version::new(major, min_val + 1, 0);
+            let hi = match minor {
+                Some(min_val) => semver::Version::new(major, min_val + 1, 0),
+                None => semver::Version::new(major + 1, 0, 0),
+            };
             Ok(Ranges::between(lo, hi))
         }
         semver::Op::Caret => {
-            // ^X.Y.Z: >=X.Y.Z, <next breaking
+            // ^I.J.K → [I.J.K, next-breaking)
+            // ^I.J   → [I.J.0, next-breaking)  (None patch ≠ Some(0))
+            // ^I     → [I.0.0, (I+1).0.0)      (None minor ≠ Some(0))
+            //
+            // "next breaking" depends on the leftmost non-zero specified component:
+            //   major > 0              → (major+1).0.0
+            //   major == 0, minor specified:
+            //     minor > 0            → 0.(minor+1).0
+            //     minor == 0, patch specified:
+            //       patch value        → 0.0.(patch+1)
+            //     minor == 0, patch unspecified (^0.0) → 0.1.0
+            //   major == 0, minor unspecified (^0) → 1.0.0
             let lo = make_version(major, minor, patch);
-            let min_val = minor.unwrap_or(0);
-            let pat_val = patch.unwrap_or(0);
             let hi = if major > 0 {
                 semver::Version::new(major + 1, 0, 0)
-            } else if min_val > 0 {
-                semver::Version::new(0, min_val + 1, 0)
             } else {
-                semver::Version::new(0, 0, pat_val + 1)
+                match minor {
+                    None => {
+                        // ^0 → [0.0.0, 1.0.0)
+                        semver::Version::new(1, 0, 0)
+                    }
+                    Some(min_val) if min_val > 0 => {
+                        semver::Version::new(0, min_val + 1, 0)
+                    }
+                    Some(_) => {
+                        // minor == 0
+                        match patch {
+                            Some(pat_val) => {
+                                semver::Version::new(0, 0, pat_val + 1)
+                            }
+                            None => {
+                                // ^0.0 → [0.0.0, 0.1.0)
+                                semver::Version::new(0, 1, 0)
+                            }
+                        }
+                    }
+                }
             };
             Ok(Ranges::between(lo, hi))
         }

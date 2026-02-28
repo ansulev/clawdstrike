@@ -46,16 +46,19 @@ fn normalize_name(name: &str) -> String {
     }
 }
 
-/// Reverse the directory name back to a package name.
+/// Reverse the directory name back to a package name (**legacy fallback**).
+///
+/// New installs always persist the original name in [`StoreMetadata`],
+/// so [`PackageStore::list`] prefers that authoritative value and only
+/// calls this function for old metadata that lacks the `name` field.
+///
+/// Because the `scope--name` encoding is inherently ambiguous (an
+/// unscoped package called `my--pkg` is indistinguishable from a
+/// scoped `@my/pkg` after normalization), this function simply returns
+/// the directory name unchanged.  Callers that need the display name
+/// should use `StoreMetadata::name` instead.
 fn denormalize_name(dir_name: &str) -> String {
-    if dir_name.contains("--") {
-        let mut parts = dir_name.splitn(2, "--");
-        let scope = parts.next().unwrap_or_default();
-        let name = parts.next().unwrap_or_default();
-        format!("@{scope}/{name}")
-    } else {
-        dir_name.to_string()
-    }
+    dir_name.to_string()
 }
 
 impl PackageStore {
@@ -392,5 +395,33 @@ sandbox = "native"
 
         assert_eq!(first.content_hash, second.content_hash);
         assert_eq!(store.list().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn denormalize_returns_dir_name_unchanged() {
+        // `denormalize_name` is a legacy fallback that no longer attempts
+        // to reverse `--` into scoped names because the mapping is
+        // ambiguous.  New installs store the original name in metadata.
+        assert_eq!(denormalize_name("acme--firewall"), "acme--firewall");
+        assert_eq!(denormalize_name("my--pkg"), "my--pkg");
+        assert_eq!(denormalize_name("a--b--c"), "a--b--c");
+        assert_eq!(denormalize_name("simple-guard"), "simple-guard");
+        assert_eq!(denormalize_name("--name"), "--name");
+    }
+
+    #[test]
+    fn list_uses_metadata_name_for_scoped_packages() {
+        let tmp = tempfile::tempdir().unwrap();
+        let store = PackageStore::with_root(tmp.path().join("store")).unwrap();
+
+        let archive =
+            create_test_package(tmp.path(), "@acme/firewall", "0.1.0", "policy-pack", "g");
+        store.install_from_file(&archive).unwrap();
+
+        let list = store.list().unwrap();
+        assert_eq!(list.len(), 1);
+        // The original scoped name is preserved via StoreMetadata.name,
+        // NOT via denormalize_name heuristics.
+        assert_eq!(list[0].name, "@acme/firewall");
     }
 }

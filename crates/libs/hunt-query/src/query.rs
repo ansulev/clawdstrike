@@ -78,6 +78,8 @@ pub enum QueryVerdict {
     Allow,
     Deny,
     Warn,
+    Forwarded,
+    Dropped,
 }
 
 impl QueryVerdict {
@@ -87,6 +89,8 @@ impl QueryVerdict {
             "allow" | "allowed" | "pass" | "passed" => Some(Self::Allow),
             "deny" | "denied" | "block" | "blocked" => Some(Self::Deny),
             "warn" | "warned" | "warning" => Some(Self::Warn),
+            "forwarded" | "forward" => Some(Self::Forwarded),
+            "dropped" | "drop" => Some(Self::Dropped),
             _ => None,
         }
     }
@@ -147,6 +151,8 @@ impl HuntQuery {
                 QueryVerdict::Allow => NormalizedVerdict::Allow,
                 QueryVerdict::Deny => NormalizedVerdict::Deny,
                 QueryVerdict::Warn => NormalizedVerdict::Warn,
+                QueryVerdict::Forwarded => NormalizedVerdict::Forwarded,
+                QueryVerdict::Dropped => NormalizedVerdict::Dropped,
             };
             if event.verdict != expected {
                 return false;
@@ -323,7 +329,53 @@ mod tests {
         assert_eq!(QueryVerdict::parse("warn"), Some(QueryVerdict::Warn));
         assert_eq!(QueryVerdict::parse("warned"), Some(QueryVerdict::Warn));
         assert_eq!(QueryVerdict::parse("warning"), Some(QueryVerdict::Warn));
+        assert_eq!(
+            QueryVerdict::parse("forwarded"),
+            Some(QueryVerdict::Forwarded)
+        );
+        assert_eq!(
+            QueryVerdict::parse("forward"),
+            Some(QueryVerdict::Forwarded)
+        );
+        assert_eq!(QueryVerdict::parse("dropped"), Some(QueryVerdict::Dropped));
+        assert_eq!(QueryVerdict::parse("drop"), Some(QueryVerdict::Dropped));
         assert_eq!(QueryVerdict::parse("unknown"), None);
+    }
+
+    #[test]
+    fn hunt_query_matches_forwarded_verdict() {
+        let mut event = make_event();
+        event.verdict = NormalizedVerdict::Forwarded;
+
+        let q = HuntQuery {
+            verdict: Some(QueryVerdict::Forwarded),
+            ..Default::default()
+        };
+        assert!(q.matches(&event));
+
+        let q2 = HuntQuery {
+            verdict: Some(QueryVerdict::Allow),
+            ..Default::default()
+        };
+        assert!(!q2.matches(&event));
+    }
+
+    #[test]
+    fn hunt_query_matches_dropped_verdict() {
+        let mut event = make_event();
+        event.verdict = NormalizedVerdict::Dropped;
+
+        let q = HuntQuery {
+            verdict: Some(QueryVerdict::Dropped),
+            ..Default::default()
+        };
+        assert!(q.matches(&event));
+
+        let q2 = HuntQuery {
+            verdict: Some(QueryVerdict::Deny),
+            ..Default::default()
+        };
+        assert!(!q2.matches(&event));
     }
 
     #[test]

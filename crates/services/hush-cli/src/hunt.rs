@@ -24,28 +24,23 @@ pub async fn cmd_hunt(
     match command {
         HuntCommands::Scan {
             target,
-            package,
+            package: _,
             skills,
-            query,
-            policy,
-            ruleset,
+            query: _,
+            policy: _,
+            ruleset: _,
             timeout,
             include_builtin,
-            signing_key,
+            signing_key: _,
             json,
             analysis_url,
             skip_ssl_verify,
         } => cmd_hunt_scan(
             HuntScanArgs {
                 target,
-                package,
                 skills,
-                query,
-                policy,
-                ruleset,
                 timeout,
                 include_builtin,
-                signing_key,
                 json,
                 analysis_url,
                 skip_ssl_verify,
@@ -152,7 +147,7 @@ pub async fn cmd_hunt(
             rules,
             nats_url,
             nats_creds,
-            signing_key,
+            signing_key: _,
             max_window,
             json,
             no_color,
@@ -161,7 +156,6 @@ pub async fn cmd_hunt(
                 rules,
                 nats_url,
                 nats_creds,
-                signing_key,
                 max_window,
                 json,
                 no_color,
@@ -259,19 +253,9 @@ pub async fn cmd_hunt(
 
 struct HuntScanArgs {
     target: Option<Vec<String>>,
-    #[allow(dead_code)]
-    package: Option<Vec<String>>,
     skills: Option<Vec<String>>,
-    #[allow(dead_code)]
-    query: Option<String>,
-    #[allow(dead_code)]
-    policy: Option<String>,
-    #[allow(dead_code)]
-    ruleset: Option<String>,
     timeout: u64,
     include_builtin: bool,
-    #[allow(dead_code)]
-    signing_key: String,
     json: bool,
     analysis_url: Option<String>,
     skip_ssl_verify: bool,
@@ -287,15 +271,16 @@ struct HuntJsonError {
     message: String,
 }
 
+/// Generic JSON envelope shared by all hunt subcommands.
 #[derive(serde::Serialize)]
-struct HuntScanJsonOutput {
+struct HuntJsonOutput<T: serde::Serialize> {
     version: u8,
     command: &'static str,
     exit_code: i32,
     #[serde(skip_serializing_if = "Option::is_none")]
     error: Option<HuntJsonError>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    data: Option<HuntScanData>,
+    data: Option<T>,
 }
 
 #[derive(serde::Serialize)]
@@ -333,6 +318,7 @@ async fn cmd_hunt_scan(
             Err(e) => {
                 return emit_hunt_error(
                     args.json,
+                    "hunt scan",
                     stdout,
                     stderr,
                     "config_error",
@@ -352,6 +338,7 @@ async fn cmd_hunt_scan(
     if config_paths.is_empty() && args.skills.is_none() {
         return emit_hunt_error(
             args.json,
+            "hunt scan",
             stdout,
             stderr,
             "config_error",
@@ -623,7 +610,7 @@ async fn cmd_hunt_scan(
 
     // 9. Output results
     if args.json {
-        let output = HuntScanJsonOutput {
+        let output = HuntJsonOutput::<HuntScanData> {
             version: CLI_JSON_VERSION,
             command: "hunt scan",
             exit_code: exit_code.as_i32(),
@@ -772,17 +759,6 @@ struct HuntQueryArgs {
 // ---------------------------------------------------------------------------
 // Hunt Query / Timeline JSON output structs
 // ---------------------------------------------------------------------------
-
-#[derive(serde::Serialize)]
-struct HuntQueryJsonOutput {
-    version: u8,
-    command: &'static str,
-    exit_code: i32,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    error: Option<HuntJsonError>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    data: Option<HuntQueryData>,
-}
 
 #[derive(serde::Serialize)]
 struct HuntQueryData {
@@ -936,7 +912,15 @@ async fn cmd_hunt_query(
     let query = match build_hunt_query(&args) {
         Ok(q) => q,
         Err((code, msg)) => {
-            return emit_hunt_query_error(is_json, "hunt query", stdout, stderr, &msg, code);
+            return emit_hunt_error(
+                is_json,
+                "hunt query",
+                stdout,
+                stderr,
+                "invalid_args",
+                &msg,
+                code,
+            );
         }
     };
 
@@ -949,7 +933,7 @@ async fn cmd_hunt_query(
     let events = fetch_events(&args, &query, stderr).await;
 
     if is_json {
-        let output = HuntQueryJsonOutput {
+        let output = HuntJsonOutput::<HuntQueryData> {
             version: CLI_JSON_VERSION,
             command: "hunt query",
             exit_code: ExitCode::Ok.as_i32(),
@@ -991,7 +975,15 @@ async fn cmd_hunt_timeline(
     let query = match build_hunt_query(&args) {
         Ok(q) => q,
         Err((code, msg)) => {
-            return emit_hunt_query_error(is_json, "hunt timeline", stdout, stderr, &msg, code);
+            return emit_hunt_error(
+                is_json,
+                "hunt timeline",
+                stdout,
+                stderr,
+                "invalid_args",
+                &msg,
+                code,
+            );
         }
     };
 
@@ -1006,7 +998,7 @@ async fn cmd_hunt_timeline(
     let timeline = hunt_query::timeline::merge_timeline(events);
 
     if is_json {
-        let output = HuntQueryJsonOutput {
+        let output = HuntJsonOutput::<HuntQueryData> {
             version: CLI_JSON_VERSION,
             command: "hunt timeline",
             exit_code: ExitCode::Ok.as_i32(),
@@ -1042,34 +1034,6 @@ async fn cmd_hunt_timeline(
     ExitCode::Ok
 }
 
-fn emit_hunt_query_error(
-    json: bool,
-    command: &'static str,
-    stdout: &mut dyn Write,
-    stderr: &mut dyn Write,
-    message: &str,
-    code: ExitCode,
-) -> ExitCode {
-    if json {
-        let output = HuntQueryJsonOutput {
-            version: CLI_JSON_VERSION,
-            command,
-            exit_code: code.as_i32(),
-            error: Some(HuntJsonError {
-                kind: "invalid_args",
-                message: message.to_string(),
-            }),
-            data: None,
-        };
-        if let Ok(json_str) = serde_json::to_string_pretty(&output) {
-            let _ = writeln!(stdout, "{json_str}");
-        }
-    } else {
-        let _ = writeln!(stderr, "Error: {message}");
-    }
-    code
-}
-
 // ---------------------------------------------------------------------------
 // Hunt Watch args
 // ---------------------------------------------------------------------------
@@ -1078,7 +1042,6 @@ struct HuntWatchArgs {
     rules: Vec<String>,
     nats_url: String,
     nats_creds: Option<String>,
-    signing_key: String,
     max_window: String,
     json: bool,
     no_color: bool,
@@ -1135,17 +1098,6 @@ struct HuntIocArgs {
 // ---------------------------------------------------------------------------
 
 #[derive(serde::Serialize)]
-struct HuntCorrelateJsonOutput {
-    version: u8,
-    command: &'static str,
-    exit_code: i32,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    error: Option<HuntJsonError>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    data: Option<HuntCorrelateData>,
-}
-
-#[derive(serde::Serialize)]
 struct HuntCorrelateData {
     alerts: Vec<hunt_correlate::engine::Alert>,
     summary: HuntCorrelateSummary,
@@ -1156,17 +1108,6 @@ struct HuntCorrelateSummary {
     events_processed: usize,
     alerts_generated: usize,
     rules_loaded: usize,
-}
-
-#[derive(serde::Serialize)]
-struct HuntIocJsonOutput {
-    version: u8,
-    command: &'static str,
-    exit_code: i32,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    error: Option<HuntJsonError>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    data: Option<HuntIocData>,
 }
 
 #[derive(serde::Serialize)]
@@ -1194,11 +1135,12 @@ async fn cmd_hunt_watch(
     let is_json = args.json;
 
     if args.rules.is_empty() {
-        return emit_hunt_correlate_error(
+        return emit_hunt_error(
             is_json,
             "hunt watch",
             stdout,
             stderr,
+            "invalid_args",
             "No correlation rule files specified. Use --rules <path>.",
             ExitCode::InvalidArgs,
         );
@@ -1209,11 +1151,12 @@ async fn cmd_hunt_watch(
     let all_rules = match hunt_correlate::rules::load_rules_from_files(&rule_paths) {
         Ok(rules) => rules,
         Err(e) => {
-            return emit_hunt_correlate_error(
+            return emit_hunt_error(
                 is_json,
                 "hunt watch",
                 stdout,
                 stderr,
+                "config_error",
                 &format!("Failed to load rules: {e}"),
                 ExitCode::ConfigError,
             );
@@ -1226,11 +1169,12 @@ async fn cmd_hunt_watch(
     let max_window = match hunt_correlate::rules::parse_duration_str(&args.max_window) {
         Some(dur) => dur,
         None => {
-            return emit_hunt_correlate_error(
+            return emit_hunt_error(
                 is_json,
                 "hunt watch",
                 stdout,
                 stderr,
+                "invalid_args",
                 &format!(
                     "Invalid --max-window value '{}'. Use e.g. '5m', '1h'.",
                     args.max_window
@@ -1251,7 +1195,6 @@ async fn cmd_hunt_watch(
     let config = hunt_correlate::watch::WatchConfig {
         nats_url: args.nats_url,
         nats_creds: args.nats_creds,
-        signing_key: Some(args.signing_key),
         rules: all_rules,
         max_window,
         color: !args.no_color,
@@ -1261,7 +1204,7 @@ async fn cmd_hunt_watch(
     match hunt_correlate::watch::run_watch(config, stdout, stderr).await {
         Ok(stats) => {
             if is_json {
-                let output = HuntCorrelateJsonOutput {
+                let output = HuntJsonOutput::<HuntCorrelateData> {
                     version: CLI_JSON_VERSION,
                     command: "hunt watch",
                     exit_code: ExitCode::Ok.as_i32(),
@@ -1287,11 +1230,12 @@ async fn cmd_hunt_watch(
             }
             ExitCode::Ok
         }
-        Err(e) => emit_hunt_correlate_error(
+        Err(e) => emit_hunt_error(
             is_json,
             "hunt watch",
             stdout,
             stderr,
+            "runtime_error",
             &format!("Watch failed: {e}"),
             ExitCode::RuntimeError,
         ),
@@ -1310,11 +1254,12 @@ async fn cmd_hunt_correlate(
     let is_json = args.json;
 
     if args.rules.is_empty() {
-        return emit_hunt_correlate_error(
+        return emit_hunt_error(
             is_json,
             "hunt correlate",
             stdout,
             stderr,
+            "invalid_args",
             "No correlation rule files specified. Use --rules <path>.",
             ExitCode::InvalidArgs,
         );
@@ -1325,11 +1270,12 @@ async fn cmd_hunt_correlate(
     let all_rules = match hunt_correlate::rules::load_rules_from_files(&rule_paths) {
         Ok(rules) => rules,
         Err(e) => {
-            return emit_hunt_correlate_error(
+            return emit_hunt_error(
                 is_json,
                 "hunt correlate",
                 stdout,
                 stderr,
+                "config_error",
                 &format!("Failed to load rules: {e}"),
                 ExitCode::ConfigError,
             );
@@ -1364,11 +1310,12 @@ async fn cmd_hunt_correlate(
     let query = match build_hunt_query(&query_args) {
         Ok(q) => q,
         Err((code, msg)) => {
-            return emit_hunt_correlate_error(
+            return emit_hunt_error(
                 is_json,
                 "hunt correlate",
                 stdout,
                 stderr,
+                "invalid_args",
                 &msg,
                 code,
             );
@@ -1385,11 +1332,12 @@ async fn cmd_hunt_correlate(
     let mut engine = match hunt_correlate::engine::CorrelationEngine::new(all_rules) {
         Ok(eng) => eng,
         Err(e) => {
-            return emit_hunt_correlate_error(
+            return emit_hunt_error(
                 is_json,
                 "hunt correlate",
                 stdout,
                 stderr,
+                "config_error",
                 &format!("Failed to initialize correlation engine: {e}"),
                 ExitCode::ConfigError,
             );
@@ -1415,7 +1363,7 @@ async fn cmd_hunt_correlate(
     };
 
     if is_json {
-        let output = HuntCorrelateJsonOutput {
+        let output = HuntJsonOutput::<HuntCorrelateData> {
             version: CLI_JSON_VERSION,
             command: "hunt correlate",
             exit_code: exit_code.as_i32(),
@@ -1458,10 +1406,12 @@ async fn cmd_hunt_ioc(
     let is_json = args.json;
 
     if args.feed.is_none() && args.stix.is_none() {
-        return emit_hunt_ioc_error(
+        return emit_hunt_error(
             is_json,
+            "hunt ioc",
             stdout,
             stderr,
+            "invalid_args",
             "No IOC feeds specified. Use --feed or --stix.",
             ExitCode::InvalidArgs,
         );
@@ -1487,10 +1437,12 @@ async fn cmd_hunt_ioc(
                     db.merge(loaded_db);
                 }
                 Err(e) => {
-                    return emit_hunt_ioc_error(
+                    return emit_hunt_error(
                         is_json,
+                        "hunt ioc",
                         stdout,
                         stderr,
+                        "config_error",
                         &format!("Failed to load IOC feed '{path}': {e}"),
                         ExitCode::ConfigError,
                     );
@@ -1510,10 +1462,12 @@ async fn cmd_hunt_ioc(
                     db.merge(loaded_db);
                 }
                 Err(e) => {
-                    return emit_hunt_ioc_error(
+                    return emit_hunt_error(
                         is_json,
+                        "hunt ioc",
                         stdout,
                         stderr,
+                        "config_error",
                         &format!("Failed to load STIX bundle '{path}': {e}"),
                         ExitCode::ConfigError,
                     );
@@ -1550,7 +1504,15 @@ async fn cmd_hunt_ioc(
     let query = match build_hunt_query(&query_args) {
         Ok(q) => q,
         Err((code, msg)) => {
-            return emit_hunt_ioc_error(is_json, stdout, stderr, &msg, code);
+            return emit_hunt_error(
+                is_json,
+                "hunt ioc",
+                stdout,
+                stderr,
+                "invalid_args",
+                &msg,
+                code,
+            );
         }
     };
 
@@ -1567,7 +1529,7 @@ async fn cmd_hunt_ioc(
     };
 
     if is_json {
-        let output = HuntIocJsonOutput {
+        let output = HuntJsonOutput::<HuntIocData> {
             version: CLI_JSON_VERSION,
             command: "hunt ioc",
             exit_code: exit_code.as_i32(),
@@ -1609,63 +1571,9 @@ async fn cmd_hunt_ioc(
     exit_code
 }
 
-fn emit_hunt_correlate_error(
-    json: bool,
-    command: &'static str,
-    stdout: &mut dyn Write,
-    stderr: &mut dyn Write,
-    message: &str,
-    code: ExitCode,
-) -> ExitCode {
-    if json {
-        let output = HuntCorrelateJsonOutput {
-            version: CLI_JSON_VERSION,
-            command,
-            exit_code: code.as_i32(),
-            error: Some(HuntJsonError {
-                kind: "invalid_args",
-                message: message.to_string(),
-            }),
-            data: None,
-        };
-        if let Ok(json_str) = serde_json::to_string_pretty(&output) {
-            let _ = writeln!(stdout, "{json_str}");
-        }
-    } else {
-        let _ = writeln!(stderr, "Error: {message}");
-    }
-    code
-}
-
-fn emit_hunt_ioc_error(
-    json: bool,
-    stdout: &mut dyn Write,
-    stderr: &mut dyn Write,
-    message: &str,
-    code: ExitCode,
-) -> ExitCode {
-    if json {
-        let output = HuntIocJsonOutput {
-            version: CLI_JSON_VERSION,
-            command: "hunt ioc",
-            exit_code: code.as_i32(),
-            error: Some(HuntJsonError {
-                kind: "invalid_args",
-                message: message.to_string(),
-            }),
-            data: None,
-        };
-        if let Ok(json_str) = serde_json::to_string_pretty(&output) {
-            let _ = writeln!(stdout, "{json_str}");
-        }
-    } else {
-        let _ = writeln!(stderr, "Error: {message}");
-    }
-    code
-}
-
 fn emit_hunt_error(
     json: bool,
+    command: &'static str,
     stdout: &mut dyn Write,
     stderr: &mut dyn Write,
     kind: &'static str,
@@ -1673,9 +1581,9 @@ fn emit_hunt_error(
     code: ExitCode,
 ) -> ExitCode {
     if json {
-        let output = HuntScanJsonOutput {
+        let output = HuntJsonOutput::<serde_json::Value> {
             version: CLI_JSON_VERSION,
-            command: "hunt scan",
+            command,
             exit_code: code.as_i32(),
             error: Some(HuntJsonError {
                 kind,

@@ -447,11 +447,45 @@ fn stix_lhs_to_ioc_type(lhs: &str) -> Option<IocType> {
 // Matching
 // ---------------------------------------------------------------------------
 
+/// Check whether the character is an IOC word character (alphanumeric or dot).
+///
+/// Dots are word characters for IOC matching because domains and IPs contain
+/// dots. This prevents `evil.com` from matching inside `notevil.com` and
+/// `10.0.0.1` from matching inside `210.0.0.10`.
+fn is_ioc_word_char(ch: u8) -> bool {
+    ch.is_ascii_alphanumeric() || ch == b'.'
+}
+
+/// Check whether `needle` appears in `haystack` at word boundaries.
+///
+/// A match is word-bounded when the characters immediately before and after
+/// the match are NOT IOC word characters (alphanumeric or dot).
+fn contains_word_bounded(haystack: &str, needle: &str) -> bool {
+    let bytes = haystack.as_bytes();
+    let mut start = 0;
+    while let Some(pos) = haystack[start..].find(needle) {
+        let abs_pos = start + pos;
+        let end_pos = abs_pos + needle.len();
+
+        // Check left boundary: either at start of string, or preceded by non-word char
+        let left_ok = abs_pos == 0 || !is_ioc_word_char(bytes[abs_pos - 1]);
+
+        // Check right boundary: either at end of string, or followed by non-word char
+        let right_ok = end_pos >= bytes.len() || !is_ioc_word_char(bytes[end_pos]);
+
+        if left_ok && right_ok {
+            return true;
+        }
+        start = abs_pos + 1;
+    }
+    false
+}
+
 /// Check a single timeline event against the IOC database.
 ///
 /// Fields checked: `summary`, `process`, and `raw` JSON (serialised to string).
-/// Hash IOCs require exact substring match; domain and IP IOCs check for
-/// substring presence.
+/// Hash IOCs use plain substring match; domain, IP, and URL IOCs use
+/// word-boundary-aware matching to prevent false positives.
 pub fn match_event(db: &IocDatabase, event: &TimelineEvent) -> Vec<IocMatch> {
     let mut matches: Vec<IocMatch> = Vec::new();
 
@@ -463,7 +497,7 @@ pub fn match_event(db: &IocDatabase, event: &TimelineEvent) -> Vec<IocMatch> {
         .map(|v| v.to_string().to_lowercase())
         .unwrap_or_default();
 
-    // Check hashes (exact match in any text field)
+    // Check hashes (exact substring match — hashes are long enough to be unique)
     for (hash, indices) in &db.hash_index {
         let mut field = None;
         if summary_lower.contains(hash.as_str()) {
@@ -484,14 +518,14 @@ pub fn match_event(db: &IocDatabase, event: &TimelineEvent) -> Vec<IocMatch> {
         }
     }
 
-    // Check domains (substring)
+    // Check domains (word-boundary match)
     for (domain, indices) in &db.domain_index {
         let mut field = None;
-        if summary_lower.contains(domain.as_str()) {
+        if contains_word_bounded(&summary_lower, domain) {
             field = Some("summary");
-        } else if process_lower.contains(domain.as_str()) {
+        } else if contains_word_bounded(&process_lower, domain) {
             field = Some("process");
-        } else if raw_str.contains(domain.as_str()) {
+        } else if contains_word_bounded(&raw_str, domain) {
             field = Some("raw");
         }
         if let Some(f) = field {
@@ -505,14 +539,14 @@ pub fn match_event(db: &IocDatabase, event: &TimelineEvent) -> Vec<IocMatch> {
         }
     }
 
-    // Check IPs (substring)
+    // Check IPs (word-boundary match)
     for (ip, indices) in &db.ip_index {
         let mut field = None;
-        if summary_lower.contains(ip.as_str()) {
+        if contains_word_bounded(&summary_lower, ip) {
             field = Some("summary");
-        } else if process_lower.contains(ip.as_str()) {
+        } else if contains_word_bounded(&process_lower, ip) {
             field = Some("process");
-        } else if raw_str.contains(ip.as_str()) {
+        } else if contains_word_bounded(&raw_str, ip) {
             field = Some("raw");
         }
         if let Some(f) = field {
@@ -526,14 +560,14 @@ pub fn match_event(db: &IocDatabase, event: &TimelineEvent) -> Vec<IocMatch> {
         }
     }
 
-    // Check URLs (substring)
+    // Check URLs (word-boundary match)
     for (url, indices) in &db.url_index {
         let mut field = None;
-        if summary_lower.contains(url.as_str()) {
+        if contains_word_bounded(&summary_lower, url) {
             field = Some("summary");
-        } else if process_lower.contains(url.as_str()) {
+        } else if contains_word_bounded(&process_lower, url) {
             field = Some("process");
-        } else if raw_str.contains(url.as_str()) {
+        } else if contains_word_bounded(&raw_str, url) {
             field = Some("raw");
         }
         if let Some(f) = field {
@@ -934,6 +968,105 @@ mod tests {
         assert!(parse_stix_pattern("not a valid pattern").is_none());
         assert!(parse_stix_pattern("[unknown:value = 'foo']").is_none());
         assert!(parse_stix_pattern("[]").is_none());
+    }
+
+    // -- word-boundary matching ---------------------------------------------
+
+    #[test]
+    fn ip_no_false_positive_on_prefix() {
+        // "10.0.0.1" must NOT match inside "210.0.0.1"
+        let mut db = IocDatabase::new();
+        db.add_entry(IocEntry {
+            indicator: "10.0.0.1".into(),
+            ioc_type: IocType::IPv4,
+            description: None,
+            source: None,
+        });
+
+        let event = make_event("egress TCP -> 210.0.0.1:8080", None, None);
+        let results = match_event(&db, &event);
+        assert!(
+            results.is_empty(),
+            "should not match 10.0.0.1 inside 210.0.0.1"
+        );
+    }
+
+    #[test]
+    fn ip_no_false_positive_on_suffix() {
+        // "10.0.0.1" must NOT match inside "10.0.0.100"
+        let mut db = IocDatabase::new();
+        db.add_entry(IocEntry {
+            indicator: "10.0.0.1".into(),
+            ioc_type: IocType::IPv4,
+            description: None,
+            source: None,
+        });
+
+        let event = make_event("egress TCP -> 10.0.0.100:443", None, None);
+        let results = match_event(&db, &event);
+        assert!(
+            results.is_empty(),
+            "should not match 10.0.0.1 inside 10.0.0.100"
+        );
+    }
+
+    #[test]
+    fn ip_matches_with_port_separator() {
+        // "10.0.0.99" should match when followed by ":"
+        let mut db = IocDatabase::new();
+        db.add_entry(IocEntry {
+            indicator: "10.0.0.99".into(),
+            ioc_type: IocType::IPv4,
+            description: None,
+            source: None,
+        });
+
+        let event = make_event("egress TCP -> 10.0.0.99:8080", None, None);
+        let results = match_event(&db, &event);
+        assert_eq!(results.len(), 1);
+    }
+
+    #[test]
+    fn domain_no_false_positive_on_subdomain() {
+        // "evil.com" must NOT match inside "notevil.com"
+        let mut db = IocDatabase::new();
+        db.add_entry(IocEntry {
+            indicator: "evil.com".into(),
+            ioc_type: IocType::Domain,
+            description: None,
+            source: None,
+        });
+
+        let event = make_event("connection to notevil.com", None, None);
+        let results = match_event(&db, &event);
+        assert!(
+            results.is_empty(),
+            "should not match evil.com inside notevil.com"
+        );
+    }
+
+    #[test]
+    fn domain_matches_preceded_by_space() {
+        let mut db = IocDatabase::new();
+        db.add_entry(IocEntry {
+            indicator: "evil.com".into(),
+            ioc_type: IocType::Domain,
+            description: None,
+            source: None,
+        });
+
+        let event = make_event("connection to evil.com:443", None, None);
+        let results = match_event(&db, &event);
+        assert_eq!(results.len(), 1);
+    }
+
+    #[test]
+    fn contains_word_bounded_helpers() {
+        assert!(contains_word_bounded("connect to evil.com:443", "evil.com"));
+        assert!(!contains_word_bounded("connect to notevil.com", "evil.com"));
+        assert!(contains_word_bounded("ip 10.0.0.1:80", "10.0.0.1"));
+        assert!(!contains_word_bounded("ip 210.0.0.1:80", "10.0.0.1"));
+        assert!(!contains_word_bounded("ip 10.0.0.100:80", "10.0.0.1"));
     }
 
     // -- CSV edge cases ----------------------------------------------------

@@ -20,8 +20,6 @@ pub struct WatchConfig {
     pub nats_creds: Option<String>,
     /// Correlation rules to evaluate.
     pub rules: Vec<CorrelationRule>,
-    /// Signing key path (reserved for future receipt signing).
-    pub signing_key: Option<String>,
     /// Maximum sliding window duration for eviction.
     pub max_window: Duration,
     /// Whether to use colored output.

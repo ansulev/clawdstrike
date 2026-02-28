@@ -21,6 +21,7 @@ const SUPPORTED_SCHEMA: &str = "clawdstrike.hunt.correlation.v1";
 
 /// Parse a human-readable duration string such as `"30s"`, `"5m"`, `"1h"`, `"2d"`.
 ///
+/// Supports multi-character suffixes like `"sec"`, `"min"`, `"hrs"`, `"days"`.
 /// Returns `None` if the string cannot be parsed.
 pub fn parse_duration_str(s: &str) -> Option<Duration> {
     let s = s.trim();
@@ -28,14 +29,21 @@ pub fn parse_duration_str(s: &str) -> Option<Duration> {
         return None;
     }
 
-    let (digits, suffix) = s.split_at(s.len() - 1);
+    // Split at the boundary between digits and the alphabetic suffix.
+    let digit_end = s.find(|c: char| !c.is_ascii_digit()).unwrap_or(s.len());
+    if digit_end == 0 || digit_end == s.len() {
+        return None;
+    }
+
+    let digits = &s[..digit_end];
+    let suffix = s[digit_end..].trim();
     let value: i64 = digits.parse().ok()?;
 
-    match suffix {
-        "s" => Some(Duration::seconds(value)),
-        "m" => Some(Duration::minutes(value)),
-        "h" => Some(Duration::hours(value)),
-        "d" => Some(Duration::days(value)),
+    match suffix.to_lowercase().as_str() {
+        "s" | "sec" | "secs" | "second" | "seconds" => Some(Duration::seconds(value)),
+        "m" | "min" | "mins" | "minute" | "minutes" => Some(Duration::minutes(value)),
+        "h" | "hr" | "hrs" | "hour" | "hours" => Some(Duration::hours(value)),
+        "d" | "day" | "days" => Some(Duration::days(value)),
         _ => None,
     }
 }
@@ -509,6 +517,21 @@ output:
         assert_eq!(parse_duration_str(""), None);
         assert_eq!(parse_duration_str("abc"), None);
         assert_eq!(parse_duration_str("10x"), None);
+        assert_eq!(parse_duration_str("s"), None);
+    }
+
+    #[test]
+    fn parse_duration_str_multi_char_suffixes() {
+        assert_eq!(parse_duration_str("30sec"), Some(Duration::seconds(30)));
+        assert_eq!(parse_duration_str("5min"), Some(Duration::minutes(5)));
+        assert_eq!(parse_duration_str("5mins"), Some(Duration::minutes(5)));
+        assert_eq!(parse_duration_str("1hr"), Some(Duration::hours(1)));
+        assert_eq!(parse_duration_str("2hrs"), Some(Duration::hours(2)));
+        assert_eq!(parse_duration_str("1hour"), Some(Duration::hours(1)));
+        assert_eq!(parse_duration_str("3days"), Some(Duration::days(3)));
+        assert_eq!(parse_duration_str("1day"), Some(Duration::days(1)));
+        assert_eq!(parse_duration_str("10seconds"), Some(Duration::seconds(10)));
+        assert_eq!(parse_duration_str("2minutes"), Some(Duration::minutes(2)));
     }
 
     #[test]

@@ -333,8 +333,8 @@ mod tests {
     #[test]
     fn test_scan_skills_dir_no_skill_md() {
         let tmp = tempdir();
-        fs::write(tmp.join("README.md"), "hello").unwrap();
-        let result = scan_skills_dir(&tmp).unwrap();
+        fs::write(tmp.path().join("README.md"), "hello").unwrap();
+        let result = scan_skills_dir(tmp.path()).unwrap();
         assert!(result.error.is_some());
         assert!(result.signature.is_none());
     }
@@ -343,12 +343,12 @@ mod tests {
     fn test_scan_skills_dir_with_skill_md() {
         let tmp = tempdir();
         let skill_content = "---\nname: Test Skill\ndescription: A test\n---\n# Body\nContent here";
-        fs::write(tmp.join("SKILL.md"), skill_content).unwrap();
-        fs::write(tmp.join("helper.py"), "print('hello')").unwrap();
-        fs::write(tmp.join("notes.md"), "# Notes").unwrap();
-        fs::write(tmp.join("data.json"), r#"{"key": "val"}"#).unwrap();
+        fs::write(tmp.path().join("SKILL.md"), skill_content).unwrap();
+        fs::write(tmp.path().join("helper.py"), "print('hello')").unwrap();
+        fs::write(tmp.path().join("notes.md"), "# Notes").unwrap();
+        fs::write(tmp.path().join("data.json"), r#"{"key": "val"}"#).unwrap();
 
-        let result = scan_skills_dir(&tmp).unwrap();
+        let result = scan_skills_dir(tmp.path()).unwrap();
         assert!(result.error.is_none());
         let sig = result.signature.unwrap();
 
@@ -364,10 +364,14 @@ mod tests {
     #[test]
     fn test_scan_skills_dir_js_file_is_tool() {
         let tmp = tempdir();
-        fs::write(tmp.join("SKILL.md"), "---\nname: JS Skill\n---\n# JS Skill").unwrap();
-        fs::write(tmp.join("action.js"), "console.log('hello')").unwrap();
+        fs::write(
+            tmp.path().join("SKILL.md"),
+            "---\nname: JS Skill\n---\n# JS Skill",
+        )
+        .unwrap();
+        fs::write(tmp.path().join("action.js"), "console.log('hello')").unwrap();
 
-        let result = scan_skills_dir(&tmp).unwrap();
+        let result = scan_skills_dir(tmp.path()).unwrap();
         let sig = result.signature.unwrap();
         assert_eq!(sig.tools.len(), 1);
         assert_eq!(sig.tools[0].name, "action.js");
@@ -381,11 +385,15 @@ mod tests {
     #[test]
     fn test_scan_skills_dir_ts_and_sh_are_tools() {
         let tmp = tempdir();
-        fs::write(tmp.join("SKILL.md"), "---\nname: Multi Skill\n---\n# Body").unwrap();
-        fs::write(tmp.join("run.ts"), "import something").unwrap();
-        fs::write(tmp.join("setup.sh"), "#!/bin/bash\necho hi").unwrap();
+        fs::write(
+            tmp.path().join("SKILL.md"),
+            "---\nname: Multi Skill\n---\n# Body",
+        )
+        .unwrap();
+        fs::write(tmp.path().join("run.ts"), "import something").unwrap();
+        fs::write(tmp.path().join("setup.sh"), "#!/bin/bash\necho hi").unwrap();
 
-        let result = scan_skills_dir(&tmp).unwrap();
+        let result = scan_skills_dir(tmp.path()).unwrap();
         let sig = result.signature.unwrap();
         assert_eq!(sig.tools.len(), 2);
         let names: Vec<&str> = sig.tools.iter().map(|t| t.name.as_str()).collect();
@@ -396,14 +404,18 @@ mod tests {
     #[test]
     fn test_scan_skills_dir_subdirectory() {
         let tmp = tempdir();
-        fs::write(tmp.join("SKILL.md"), "---\nname: Nested\n---\n# Body").unwrap();
-        let sub = tmp.join("subdir");
+        fs::write(
+            tmp.path().join("SKILL.md"),
+            "---\nname: Nested\n---\n# Body",
+        )
+        .unwrap();
+        let sub = tmp.path().join("subdir");
         fs::create_dir_all(&sub).unwrap();
         fs::write(sub.join("nested.py"), "pass").unwrap();
         fs::write(sub.join("readme.md"), "# Nested readme").unwrap();
         fs::write(sub.join("config.yaml"), "key: val").unwrap();
 
-        let result = scan_skills_dir(&tmp).unwrap();
+        let result = scan_skills_dir(tmp.path()).unwrap();
         let sig = result.signature.unwrap();
 
         // nested.py -> tool
@@ -422,9 +434,13 @@ mod tests {
     fn test_scan_skills_dir_case_insensitive_skill_md() {
         let tmp = tempdir();
         // lowercase skill.md should also be found
-        fs::write(tmp.join("skill.md"), "---\nname: Lowercase\n---\n# Body").unwrap();
+        fs::write(
+            tmp.path().join("skill.md"),
+            "---\nname: Lowercase\n---\n# Body",
+        )
+        .unwrap();
 
-        let result = scan_skills_dir(&tmp).unwrap();
+        let result = scan_skills_dir(tmp.path()).unwrap();
         assert!(result.error.is_none());
         assert!(result.signature.is_some());
     }
@@ -454,16 +470,8 @@ mod tests {
         assert_eq!(err.to_string(), "custom error");
     }
 
-    /// Create a temporary directory for testing.
-    fn tempdir() -> std::path::PathBuf {
-        let dir = std::env::temp_dir().join(format!(
-            "hunt_skills_test_{}",
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .expect("time")
-                .as_nanos()
-        ));
-        std::fs::create_dir_all(&dir).expect("create temp dir");
-        dir
+    /// Create a temporary directory for testing (auto-cleaned on drop).
+    fn tempdir() -> tempfile::TempDir {
+        tempfile::tempdir().expect("create temp dir")
     }
 }

@@ -212,6 +212,12 @@ async fn introspect_stdio(
     let command = &server.command;
     let args = server.args.as_deref().unwrap_or_default();
 
+    // Security note: the command and args come from user config files (e.g.
+    // ~/.cursor/mcp.json).  Spawning is inherent to MCP introspection — we
+    // must start the server to discover its tool surface.  We log the binary
+    // so the scan output is auditable.
+    tracing::info!(command = %command, "spawning MCP stdio server for introspection");
+
     let mut cmd = tokio::process::Command::new(command);
     cmd.args(args)
         .stdin(std::process::Stdio::piped())
@@ -219,6 +225,22 @@ async fn introspect_stdio(
         .stderr(std::process::Stdio::piped());
 
     if let Some(env) = &server.env {
+        // Warn about security-sensitive env vars that could alter process loading.
+        const SENSITIVE_ENV_KEYS: &[&str] = &[
+            "LD_PRELOAD",
+            "LD_LIBRARY_PATH",
+            "DYLD_INSERT_LIBRARIES",
+            "DYLD_LIBRARY_PATH",
+        ];
+        for k in env.keys() {
+            if SENSITIVE_ENV_KEYS.iter().any(|s| k.eq_ignore_ascii_case(s)) {
+                tracing::warn!(
+                    key = %k,
+                    command = %command,
+                    "MCP server config sets security-sensitive environment variable"
+                );
+            }
+        }
         for (k, v) in env {
             cmd.env(k, v);
         }
@@ -1101,15 +1123,8 @@ mod tests {
 
     #[test]
     fn test_parse_mcp_config_claude_format() {
-        let tmp_dir = std::env::temp_dir().join(format!(
-            "hunt_mcp_test_{}",
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
-        std::fs::create_dir_all(&tmp_dir).unwrap();
-        let path = tmp_dir.join("mcp.json");
+        let tmp_dir = tempfile::tempdir().unwrap();
+        let path = tmp_dir.path().join("mcp.json");
         std::fs::write(
             &path,
             r#"{
@@ -1125,20 +1140,12 @@ mod tests {
 
         let servers = parse_mcp_config(&path).unwrap();
         assert!(servers.contains_key("test-server"));
-        let _ = std::fs::remove_dir_all(&tmp_dir);
     }
 
     #[test]
     fn test_parse_mcp_config_vscode_format() {
-        let tmp_dir = std::env::temp_dir().join(format!(
-            "hunt_mcp_vsc_{}",
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
-        std::fs::create_dir_all(&tmp_dir).unwrap();
-        let path = tmp_dir.join("settings.json");
+        let tmp_dir = tempfile::tempdir().unwrap();
+        let path = tmp_dir.path().join("settings.json");
         std::fs::write(
             &path,
             r#"{
@@ -1158,25 +1165,16 @@ mod tests {
 
         let servers = parse_mcp_config(&path).unwrap();
         assert!(servers.contains_key("vsc-server"));
-        let _ = std::fs::remove_dir_all(&tmp_dir);
     }
 
     #[test]
     fn test_parse_mcp_config_empty_file() {
-        let tmp_dir = std::env::temp_dir().join(format!(
-            "hunt_mcp_empty_{}",
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
-        std::fs::create_dir_all(&tmp_dir).unwrap();
-        let path = tmp_dir.join("empty.json");
+        let tmp_dir = tempfile::tempdir().unwrap();
+        let path = tmp_dir.path().join("empty.json");
         std::fs::write(&path, "").unwrap();
 
         let servers = parse_mcp_config(&path).unwrap();
         assert!(servers.is_empty());
-        let _ = std::fs::remove_dir_all(&tmp_dir);
     }
 
     #[test]
@@ -1205,5 +1203,43 @@ mod tests {
         };
         assert!(err.to_string().contains("-32601"));
         assert!(err.to_string().contains("Method not found"));
+    }
+
+    #[tokio::test]
+    async fn test_introspect_static_tools_server() {
+        use crate::models::{ServerConfig, StaticToolsServer, Tool};
+
+        let config = ServerConfig::Tools(StaticToolsServer {
+            name: "test-builtin".to_string(),
+            signature: vec![Tool {
+                name: "read_file".to_string(),
+                description: Some("Read a file".to_string()),
+                input_schema: Some(serde_json::json!({"type": "object"})),
+            }],
+            server_type: None,
+        });
+
+        let sig = introspect_server(&config, 5).await.unwrap();
+        assert_eq!(sig.tools.len(), 1);
+        assert_eq!(sig.tools[0].name, "read_file");
+        assert!(sig.prompts.is_empty());
+        assert!(sig.resources.is_empty());
+        assert!(sig.resource_templates.is_empty());
+        let info = sig.metadata.get("serverInfo").unwrap();
+        assert_eq!(info["name"], "test-builtin");
+        assert_eq!(info["version"], "built-in");
+    }
+
+    #[tokio::test]
+    async fn test_introspect_skill_server_errors() {
+        use crate::models::{ServerConfig, SkillServer};
+
+        let config = ServerConfig::Skill(SkillServer {
+            path: "/some/path".to_string(),
+            server_type: None,
+        });
+
+        let err = introspect_server(&config, 5).await.unwrap_err();
+        assert!(matches!(err, McpError::Other(_)));
     }
 }

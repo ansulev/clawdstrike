@@ -12,6 +12,7 @@ mod db;
 mod error;
 mod index;
 mod keys;
+mod oidc;
 mod state;
 mod storage;
 

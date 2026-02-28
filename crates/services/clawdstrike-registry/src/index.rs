@@ -140,6 +140,8 @@ mod tests {
             published_at: "2025-01-01T00:00:00Z".into(),
             attestation_hash: None,
             key_id: None,
+            leaf_index: None,
+            download_count: 0,
         })
         .unwrap();
 

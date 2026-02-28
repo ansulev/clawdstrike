@@ -27,6 +27,17 @@ pub async fn download(
 
     let data = state.blobs.load(&checksum)?;
 
+    // Increment download counter (non-blocking: log warning on failure).
+    {
+        let db = state
+            .db
+            .lock()
+            .map_err(|e| RegistryError::Internal(format!("db lock poisoned: {e}")))?;
+        if let Err(e) = db.increment_download(&name, &version) {
+            tracing::warn!(name = %name, version = %version, error = %e, "Failed to increment download counter");
+        }
+    }
+
     let filename = format!("{}-{}.cpkg", name.replace('/', "-"), version);
 
     let mut headers = HeaderMap::new();

@@ -33,22 +33,41 @@ pub async fn get_proof(
     State(state): State<AppState>,
     Path((name, version)): Path<(String, String)>,
 ) -> Result<Json<InclusionProofResponse>, RegistryError> {
-    // First verify the package version exists.
-    let db = state
-        .db
+    // Look up the version and its leaf_index.
+    let leaf_index = {
+        let db = state
+            .db
+            .lock()
+            .map_err(|e| RegistryError::Internal(format!("db lock poisoned: {e}")))?;
+
+        let v = db.get_version(&name, &version)?.ok_or_else(|| {
+            RegistryError::NotFound(format!("version {version} of {name} not found"))
+        })?;
+
+        v.leaf_index.ok_or_else(|| {
+            RegistryError::NotFound(format!(
+                "inclusion proof for {name}@{version} not yet available (legacy version)"
+            ))
+        })?
+    };
+
+    // Generate the inclusion proof from the Merkle tree.
+    let tree = state
+        .merkle_tree
         .lock()
-        .map_err(|e| RegistryError::Internal(format!("db lock poisoned: {e}")))?;
+        .map_err(|e| RegistryError::Internal(format!("merkle_tree lock poisoned: {e}")))?;
 
-    let _v = db
-        .get_version(&name, &version)?
-        .ok_or_else(|| RegistryError::NotFound(format!("version {version} of {name} not found")))?;
+    let proof = tree
+        .generate_inclusion_proof(leaf_index)
+        .map_err(|e| RegistryError::Internal(format!("failed to generate inclusion proof: {e}")))?;
 
-    // The transparency log integration is built by Stream 1 (merkle-agent).
-    // For now, return a placeholder that indicates the proof is not yet available.
-    // During synthesis, this will be wired to the actual Merkle tree.
-    Err(RegistryError::NotFound(format!(
-        "inclusion proof for {name}@{version} not yet available"
-    )))
+    Ok(Json(InclusionProofResponse {
+        name,
+        version,
+        leaf_index: proof.leaf_index,
+        tree_size: proof.tree_size,
+        hashes: proof.proof_path,
+    }))
 }
 
 #[cfg(test)]

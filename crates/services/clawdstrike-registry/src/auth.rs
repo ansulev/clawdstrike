@@ -29,9 +29,21 @@ fn extract_bearer_token(req: &Request<Body>) -> Option<String> {
     None
 }
 
+/// Check whether the request uses OIDC authentication.
+pub fn is_oidc_auth(req: &Request<Body>) -> bool {
+    req.headers()
+        .get("X-Clawdstrike-Auth-Type")
+        .and_then(|v| v.to_str().ok())
+        .map(|v| v.eq_ignore_ascii_case("oidc"))
+        .unwrap_or(false)
+}
+
 /// Middleware that validates a bearer token against the configured API key.
 ///
 /// If no API key is configured (empty string), all requests are allowed through.
+/// OIDC-authenticated requests are passed through without API key validation;
+/// the OIDC token is validated later in the publish handler where the package
+/// name is available for trusted-publisher matching.
 pub async fn require_publish_auth(
     State(state): State<AppState>,
     req: Request<Body>,
@@ -39,6 +51,14 @@ pub async fn require_publish_auth(
 ) -> Result<Response, StatusCode> {
     // Skip auth if no API key is configured.
     if state.config.api_key.is_empty() {
+        return Ok(next.run(req).await);
+    }
+
+    // OIDC requests carry a CI/CD identity token instead of an API key.
+    // The token will be validated in the publish handler itself.
+    if is_oidc_auth(&req) {
+        // Still require a bearer token to be present.
+        let _token = extract_bearer_token(&req).ok_or(StatusCode::UNAUTHORIZED)?;
         return Ok(next.run(req).await);
     }
 
@@ -203,5 +223,40 @@ mod tests {
 
         let err = authorize_scoped_publish(&db, "nonexistent", "some_key").unwrap_err();
         assert!(err.to_string().contains("not found"));
+    }
+
+    // OIDC auth detection tests.
+
+    #[test]
+    fn is_oidc_auth_true() {
+        let req = Request::builder()
+            .header("X-Clawdstrike-Auth-Type", "oidc")
+            .body(Body::empty())
+            .unwrap();
+        assert!(is_oidc_auth(&req));
+    }
+
+    #[test]
+    fn is_oidc_auth_case_insensitive() {
+        let req = Request::builder()
+            .header("X-Clawdstrike-Auth-Type", "OIDC")
+            .body(Body::empty())
+            .unwrap();
+        assert!(is_oidc_auth(&req));
+    }
+
+    #[test]
+    fn is_oidc_auth_false_missing() {
+        let req = Request::builder().body(Body::empty()).unwrap();
+        assert!(!is_oidc_auth(&req));
+    }
+
+    #[test]
+    fn is_oidc_auth_false_other_value() {
+        let req = Request::builder()
+            .header("X-Clawdstrike-Auth-Type", "api-key")
+            .body(Body::empty())
+            .unwrap();
+        assert!(!is_oidc_auth(&req));
     }
 }

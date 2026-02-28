@@ -14,6 +14,7 @@ pub struct PackageRow {
     pub description: Option<String>,
     pub created_at: String,
     pub updated_at: String,
+    pub total_downloads: u64,
 }
 
 /// A row from the `versions` table.
@@ -36,6 +37,12 @@ pub struct VersionRow {
     /// Key ID of the registry key that counter-signed this version.
     #[serde(default)]
     pub key_id: Option<String>,
+    /// Transparency log leaf index.
+    #[serde(default)]
+    pub leaf_index: Option<u64>,
+    /// Download count for this version.
+    #[serde(default)]
+    pub download_count: u64,
 }
 
 /// A row from the `api_keys` table.
@@ -45,6 +52,19 @@ pub struct ApiKeyRow {
     pub key_hash: String,
     pub publisher_key: Option<String>,
     pub created_at: String,
+}
+
+/// A row from the `trusted_publishers` table.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct TrustedPublisher {
+    pub id: i64,
+    pub package_name: String,
+    pub provider: String,
+    pub repository: String,
+    pub workflow: Option<String>,
+    pub environment: Option<String>,
+    pub created_at: String,
+    pub created_by: String,
 }
 
 /// A row from the `organizations` table.
@@ -71,6 +91,33 @@ pub struct OrgMember {
 pub struct SearchResult {
     pub name: String,
     pub description: Option<String>,
+    pub latest_version: Option<String>,
+}
+
+/// Aggregate download statistics for a package.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct PackageStats {
+    pub name: String,
+    pub total_downloads: u64,
+    pub versions: Vec<VersionStats>,
+    pub first_published: Option<String>,
+    pub latest_version: Option<String>,
+}
+
+/// Per-version download statistics.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct VersionStats {
+    pub version: String,
+    pub downloads: u64,
+    pub published_at: String,
+}
+
+/// A popular package entry.
+#[derive(Clone, Debug, Serialize)]
+pub struct PopularPackage {
+    pub name: String,
+    pub description: Option<String>,
+    pub total_downloads: u64,
     pub latest_version: Option<String>,
 }
 
@@ -158,6 +205,17 @@ impl RegistryDb {
                 joined_at TEXT NOT NULL DEFAULT (datetime('now')),
                 UNIQUE(org_id, publisher_key)
             );
+
+            CREATE TABLE IF NOT EXISTS trusted_publishers (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                package_name TEXT NOT NULL,
+                provider TEXT NOT NULL,
+                repository TEXT NOT NULL,
+                workflow TEXT,
+                environment TEXT,
+                created_at TEXT NOT NULL,
+                created_by TEXT NOT NULL
+            );
             ",
         )?;
 
@@ -170,6 +228,17 @@ impl RegistryDb {
         let _ = self
             .conn
             .execute("ALTER TABLE versions ADD COLUMN key_id TEXT", []);
+        let _ = self
+            .conn
+            .execute("ALTER TABLE versions ADD COLUMN leaf_index INTEGER", []);
+        let _ = self.conn.execute(
+            "ALTER TABLE versions ADD COLUMN download_count INTEGER NOT NULL DEFAULT 0",
+            [],
+        );
+        let _ = self.conn.execute(
+            "ALTER TABLE packages ADD COLUMN total_downloads INTEGER NOT NULL DEFAULT 0",
+            [],
+        );
 
         Ok(())
     }
@@ -219,7 +288,7 @@ impl RegistryDb {
         let row = self
             .conn
             .query_row(
-                "SELECT name, description, created_at, updated_at FROM packages WHERE name = ?1",
+                "SELECT name, description, created_at, updated_at, total_downloads FROM packages WHERE name = ?1",
                 params![name],
                 |row| {
                     Ok(PackageRow {
@@ -227,6 +296,7 @@ impl RegistryDb {
                         description: row.get(1)?,
                         created_at: row.get(2)?,
                         updated_at: row.get(3)?,
+                        total_downloads: row.get::<_, i64>(4)? as u64,
                     })
                 },
             )
@@ -257,7 +327,7 @@ impl RegistryDb {
         }
 
         self.conn.execute(
-            "INSERT INTO versions (name, version, pkg_type, checksum, manifest_toml, publisher_key, publisher_sig, registry_sig, dependencies_json, yanked, published_at, attestation_hash, key_id) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
+            "INSERT INTO versions (name, version, pkg_type, checksum, manifest_toml, publisher_key, publisher_sig, registry_sig, dependencies_json, yanked, published_at, attestation_hash, key_id, leaf_index) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
             params![
                 v.name,
                 v.version,
@@ -272,6 +342,7 @@ impl RegistryDb {
                 v.published_at,
                 v.attestation_hash,
                 v.key_id,
+                v.leaf_index.map(|i| i as i64),
             ],
         )?;
         Ok(())
@@ -280,7 +351,7 @@ impl RegistryDb {
     /// List all versions for a package.
     pub fn list_versions(&self, name: &str) -> Result<Vec<VersionRow>, RegistryError> {
         let mut stmt = self.conn.prepare(
-            "SELECT name, version, pkg_type, checksum, manifest_toml, publisher_key, publisher_sig, registry_sig, dependencies_json, yanked, published_at, attestation_hash, key_id FROM versions WHERE name = ?1 ORDER BY published_at ASC",
+            "SELECT name, version, pkg_type, checksum, manifest_toml, publisher_key, publisher_sig, registry_sig, dependencies_json, yanked, published_at, attestation_hash, key_id, leaf_index, download_count FROM versions WHERE name = ?1 ORDER BY published_at ASC",
         )?;
         let rows = stmt
             .query_map(params![name], |row| {
@@ -298,6 +369,8 @@ impl RegistryDb {
                     published_at: row.get(10)?,
                     attestation_hash: row.get(11)?,
                     key_id: row.get(12)?,
+                    leaf_index: row.get::<_, Option<i64>>(13)?.map(|i| i as u64),
+                    download_count: row.get::<_, i64>(14)? as u64,
                 })
             })?
             .collect::<Result<Vec<_>, _>>()?;
@@ -313,7 +386,7 @@ impl RegistryDb {
         let row = self
             .conn
             .query_row(
-                "SELECT name, version, pkg_type, checksum, manifest_toml, publisher_key, publisher_sig, registry_sig, dependencies_json, yanked, published_at, attestation_hash, key_id FROM versions WHERE name = ?1 AND version = ?2",
+                "SELECT name, version, pkg_type, checksum, manifest_toml, publisher_key, publisher_sig, registry_sig, dependencies_json, yanked, published_at, attestation_hash, key_id, leaf_index, download_count FROM versions WHERE name = ?1 AND version = ?2",
                 params![name, version],
                 |row| {
                     Ok(VersionRow {
@@ -330,6 +403,8 @@ impl RegistryDb {
                         published_at: row.get(10)?,
                         attestation_hash: row.get(11)?,
                         key_id: row.get(12)?,
+                        leaf_index: row.get::<_, Option<i64>>(13)?.map(|i| i as u64),
+                        download_count: row.get::<_, i64>(14)? as u64,
                     })
                 },
             )
@@ -382,6 +457,119 @@ impl RegistryDb {
             params![attestation_hash, key_id, name, version],
         )?;
         Ok(())
+    }
+
+    /// Update the leaf_index for a specific version.
+    #[allow(dead_code)]
+    pub fn update_leaf_index(
+        &self,
+        name: &str,
+        version: &str,
+        leaf_index: u64,
+    ) -> Result<(), RegistryError> {
+        self.conn.execute(
+            "UPDATE versions SET leaf_index = ?1 WHERE name = ?2 AND version = ?3",
+            params![leaf_index as i64, name, version],
+        )?;
+        Ok(())
+    }
+
+    /// List all versions across all packages, ordered by `published_at ASC`.
+    /// Used to rebuild the Merkle tree on startup.
+    pub fn list_all_versions_ordered(&self) -> Result<Vec<VersionRow>, RegistryError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT name, version, pkg_type, checksum, manifest_toml, publisher_key, publisher_sig, registry_sig, dependencies_json, yanked, published_at, attestation_hash, key_id, leaf_index, download_count FROM versions ORDER BY published_at ASC",
+        )?;
+        let rows = stmt
+            .query_map([], |row| {
+                Ok(VersionRow {
+                    name: row.get(0)?,
+                    version: row.get(1)?,
+                    pkg_type: row.get(2)?,
+                    checksum: row.get(3)?,
+                    manifest_toml: row.get(4)?,
+                    publisher_key: row.get(5)?,
+                    publisher_sig: row.get(6)?,
+                    registry_sig: row.get(7)?,
+                    dependencies_json: row.get(8)?,
+                    yanked: row.get::<_, i32>(9)? != 0,
+                    published_at: row.get(10)?,
+                    attestation_hash: row.get(11)?,
+                    key_id: row.get(12)?,
+                    leaf_index: row.get::<_, Option<i64>>(13)?.map(|i| i as u64),
+                    download_count: row.get::<_, i64>(14)? as u64,
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(rows)
+    }
+
+    // -----------------------------------------------------------------------
+    // Download Statistics
+    // -----------------------------------------------------------------------
+
+    /// Atomically increment both the version and package download counters.
+    pub fn increment_download(&self, name: &str, version: &str) -> Result<(), RegistryError> {
+        self.conn.execute(
+            "UPDATE versions SET download_count = download_count + 1 WHERE name = ?1 AND version = ?2",
+            params![name, version],
+        )?;
+        self.conn.execute(
+            "UPDATE packages SET total_downloads = total_downloads + 1 WHERE name = ?1",
+            params![name],
+        )?;
+        Ok(())
+    }
+
+    /// Get aggregate download statistics for a package.
+    pub fn get_package_stats(&self, name: &str) -> Result<Option<PackageStats>, RegistryError> {
+        let pkg = self.get_package(name)?;
+        let pkg = match pkg {
+            Some(p) => p,
+            None => return Ok(None),
+        };
+
+        let mut stmt = self.conn.prepare(
+            "SELECT version, download_count, published_at FROM versions WHERE name = ?1 ORDER BY published_at DESC",
+        )?;
+        let version_stats: Vec<VersionStats> = stmt
+            .query_map(params![name], |row| {
+                Ok(VersionStats {
+                    version: row.get(0)?,
+                    downloads: row.get::<_, i64>(1)? as u64,
+                    published_at: row.get(2)?,
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+
+        let first_published = version_stats.last().map(|v| v.published_at.clone());
+        let latest_version = version_stats.first().map(|v| v.version.clone());
+
+        Ok(Some(PackageStats {
+            name: pkg.name,
+            total_downloads: pkg.total_downloads,
+            versions: version_stats,
+            first_published,
+            latest_version,
+        }))
+    }
+
+    /// Get the most popular packages ordered by total downloads.
+    pub fn get_popular_packages(&self, limit: u32) -> Result<Vec<PopularPackage>, RegistryError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT p.name, p.description, p.total_downloads, (SELECT v.version FROM versions v WHERE v.name = p.name ORDER BY v.published_at DESC LIMIT 1) FROM packages p ORDER BY p.total_downloads DESC LIMIT ?1",
+        )?;
+        let rows = stmt
+            .query_map(params![limit], |row| {
+                Ok(PopularPackage {
+                    name: row.get(0)?,
+                    description: row.get(1)?,
+                    total_downloads: row.get::<_, i64>(2)? as u64,
+                    latest_version: row.get(3)?,
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(rows)
     }
 
     // -----------------------------------------------------------------------
@@ -467,6 +655,62 @@ impl RegistryDb {
             )
             .optional()?;
         Ok(row)
+    }
+
+    // -----------------------------------------------------------------------
+    // Trusted Publishers
+    // -----------------------------------------------------------------------
+
+    /// Add a trusted publisher for OIDC-based publishing.
+    /// Returns the new row's ID.
+    pub fn add_trusted_publisher(
+        &self,
+        package_name: &str,
+        provider: &str,
+        repository: &str,
+        workflow: Option<&str>,
+        environment: Option<&str>,
+        created_by: &str,
+    ) -> Result<i64, RegistryError> {
+        let now = chrono::Utc::now().to_rfc3339();
+        self.conn.execute(
+            "INSERT INTO trusted_publishers (package_name, provider, repository, workflow, environment, created_at, created_by) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            params![package_name, provider, repository, workflow, environment, now, created_by],
+        )?;
+        Ok(self.conn.last_insert_rowid())
+    }
+
+    /// List all trusted publishers for a package.
+    pub fn get_trusted_publishers(
+        &self,
+        package_name: &str,
+    ) -> Result<Vec<TrustedPublisher>, RegistryError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, package_name, provider, repository, workflow, environment, created_at, created_by FROM trusted_publishers WHERE package_name = ?1 ORDER BY created_at ASC",
+        )?;
+        let rows = stmt
+            .query_map(params![package_name], |row| {
+                Ok(TrustedPublisher {
+                    id: row.get(0)?,
+                    package_name: row.get(1)?,
+                    provider: row.get(2)?,
+                    repository: row.get(3)?,
+                    workflow: row.get(4)?,
+                    environment: row.get(5)?,
+                    created_at: row.get(6)?,
+                    created_by: row.get(7)?,
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(rows)
+    }
+
+    /// Remove a trusted publisher by ID. Returns `true` if a row was deleted.
+    pub fn remove_trusted_publisher(&self, id: i64) -> Result<bool, RegistryError> {
+        let count = self
+            .conn
+            .execute("DELETE FROM trusted_publishers WHERE id = ?1", params![id])?;
+        Ok(count > 0)
     }
 
     // -----------------------------------------------------------------------
@@ -691,7 +935,7 @@ impl RegistryDb {
     pub fn list_org_packages(&self, org_name: &str) -> Result<Vec<PackageRow>, RegistryError> {
         let prefix = format!("@{}/", org_name);
         let mut stmt = self.conn.prepare(
-            "SELECT name, description, created_at, updated_at FROM packages WHERE name LIKE ?1 ORDER BY name ASC",
+            "SELECT name, description, created_at, updated_at, total_downloads FROM packages WHERE name LIKE ?1 ORDER BY name ASC",
         )?;
         let pattern = format!("{}%", prefix);
         let rows = stmt
@@ -701,6 +945,7 @@ impl RegistryDb {
                     description: row.get(1)?,
                     created_at: row.get(2)?,
                     updated_at: row.get(3)?,
+                    total_downloads: row.get::<_, i64>(4)? as u64,
                 })
             })?
             .collect::<Result<Vec<_>, _>>()?;
@@ -789,6 +1034,8 @@ mod tests {
             published_at: "2025-01-01T00:00:00Z".into(),
             attestation_hash: None,
             key_id: None,
+            leaf_index: None,
+            download_count: 0,
         };
         db.insert_version(&v).unwrap();
 
@@ -817,6 +1064,8 @@ mod tests {
             published_at: "2025-01-01T00:00:00Z".into(),
             attestation_hash: None,
             key_id: None,
+            leaf_index: None,
+            download_count: 0,
         };
         db.insert_version(&v).unwrap();
 
@@ -844,6 +1093,8 @@ mod tests {
             published_at: "2025-01-01T00:00:00Z".into(),
             attestation_hash: None,
             key_id: None,
+            leaf_index: None,
+            download_count: 0,
         };
         db.insert_version(&v).unwrap();
 
@@ -1054,5 +1305,298 @@ mod tests {
 
         let err = db.remove_org_member(org_id, "nonexistent").unwrap_err();
         assert!(err.to_string().contains("not found"));
+    }
+
+    // -------------------------------------------------------------------
+    // Transparency log (leaf_index) tests
+    // -------------------------------------------------------------------
+
+    #[test]
+    fn update_and_read_leaf_index() {
+        let db = test_db();
+        db.upsert_package("pkg", None, "2025-01-01T00:00:00Z")
+            .unwrap();
+
+        let v = VersionRow {
+            name: "pkg".into(),
+            version: "1.0.0".into(),
+            pkg_type: "guard".into(),
+            checksum: "abc".into(),
+            manifest_toml: "".into(),
+            publisher_key: "pk".into(),
+            publisher_sig: "sig".into(),
+            registry_sig: None,
+            dependencies_json: "{}".into(),
+            yanked: false,
+            published_at: "2025-01-01T00:00:00Z".into(),
+            attestation_hash: None,
+            key_id: None,
+            leaf_index: None,
+            download_count: 0,
+        };
+        db.insert_version(&v).unwrap();
+
+        // Initially no leaf_index.
+        let row = db.get_version("pkg", "1.0.0").unwrap().unwrap();
+        assert!(row.leaf_index.is_none());
+
+        // Update leaf_index.
+        db.update_leaf_index("pkg", "1.0.0", 42).unwrap();
+
+        // Read back.
+        let row = db.get_version("pkg", "1.0.0").unwrap().unwrap();
+        assert_eq!(row.leaf_index, Some(42));
+    }
+
+    #[test]
+    fn list_all_versions_ordered_returns_correct_order() {
+        let db = test_db();
+        db.upsert_package("pkg-a", None, "2025-01-01T00:00:00Z")
+            .unwrap();
+        db.upsert_package("pkg-b", None, "2025-01-02T00:00:00Z")
+            .unwrap();
+
+        let v1 = VersionRow {
+            name: "pkg-b".into(),
+            version: "1.0.0".into(),
+            pkg_type: "guard".into(),
+            checksum: "abc".into(),
+            manifest_toml: "".into(),
+            publisher_key: "pk".into(),
+            publisher_sig: "sig".into(),
+            registry_sig: None,
+            dependencies_json: "{}".into(),
+            yanked: false,
+            published_at: "2025-01-02T00:00:00Z".into(),
+            attestation_hash: None,
+            key_id: None,
+            leaf_index: Some(1),
+            download_count: 0,
+        };
+        let v0 = VersionRow {
+            name: "pkg-a".into(),
+            version: "1.0.0".into(),
+            pkg_type: "guard".into(),
+            checksum: "def".into(),
+            manifest_toml: "".into(),
+            publisher_key: "pk".into(),
+            publisher_sig: "sig".into(),
+            registry_sig: None,
+            dependencies_json: "{}".into(),
+            yanked: false,
+            published_at: "2025-01-01T00:00:00Z".into(),
+            attestation_hash: None,
+            key_id: None,
+            leaf_index: Some(0),
+            download_count: 0,
+        };
+
+        // Insert out of order.
+        db.insert_version(&v1).unwrap();
+        db.insert_version(&v0).unwrap();
+
+        let all = db.list_all_versions_ordered().unwrap();
+        assert_eq!(all.len(), 2);
+        // Should be sorted by published_at ASC.
+        assert_eq!(all[0].name, "pkg-a");
+        assert_eq!(all[0].published_at, "2025-01-01T00:00:00Z");
+        assert_eq!(all[1].name, "pkg-b");
+        assert_eq!(all[1].published_at, "2025-01-02T00:00:00Z");
+    }
+
+    #[test]
+    fn insert_version_with_leaf_index() {
+        let db = test_db();
+        db.upsert_package("pkg", None, "2025-01-01T00:00:00Z")
+            .unwrap();
+
+        let v = VersionRow {
+            name: "pkg".into(),
+            version: "1.0.0".into(),
+            pkg_type: "guard".into(),
+            checksum: "abc".into(),
+            manifest_toml: "".into(),
+            publisher_key: "pk".into(),
+            publisher_sig: "sig".into(),
+            registry_sig: None,
+            dependencies_json: "{}".into(),
+            yanked: false,
+            published_at: "2025-01-01T00:00:00Z".into(),
+            attestation_hash: None,
+            key_id: None,
+            leaf_index: Some(7),
+            download_count: 0,
+        };
+        db.insert_version(&v).unwrap();
+
+        let row = db.get_version("pkg", "1.0.0").unwrap().unwrap();
+        assert_eq!(row.leaf_index, Some(7));
+    }
+
+    // -------------------------------------------------------------------
+    // Trusted publisher tests
+    // -------------------------------------------------------------------
+
+    #[test]
+    fn trusted_publisher_crud() {
+        let db = test_db();
+        let id = db
+            .add_trusted_publisher(
+                "my-guard",
+                "github",
+                "acme/my-guard",
+                Some("release.yml"),
+                None,
+                "creator_key",
+            )
+            .unwrap();
+        assert!(id > 0);
+
+        let publishers = db.get_trusted_publishers("my-guard").unwrap();
+        assert_eq!(publishers.len(), 1);
+        assert_eq!(publishers[0].provider, "github");
+        assert_eq!(publishers[0].repository, "acme/my-guard");
+        assert_eq!(publishers[0].workflow.as_deref(), Some("release.yml"));
+        assert!(publishers[0].environment.is_none());
+
+        let deleted = db.remove_trusted_publisher(id).unwrap();
+        assert!(deleted);
+
+        let publishers = db.get_trusted_publishers("my-guard").unwrap();
+        assert!(publishers.is_empty());
+    }
+
+    #[test]
+    fn trusted_publisher_remove_nonexistent() {
+        let db = test_db();
+        let deleted = db.remove_trusted_publisher(9999).unwrap();
+        assert!(!deleted);
+    }
+
+    #[test]
+    fn trusted_publisher_multiple() {
+        let db = test_db();
+        db.add_trusted_publisher("pkg", "github", "acme/pkg", None, None, "key1")
+            .unwrap();
+        db.add_trusted_publisher(
+            "pkg",
+            "gitlab",
+            "acme/pkg",
+            None,
+            Some("production"),
+            "key1",
+        )
+        .unwrap();
+
+        let publishers = db.get_trusted_publishers("pkg").unwrap();
+        assert_eq!(publishers.len(), 2);
+
+        // Different package name returns empty.
+        let other = db.get_trusted_publishers("other-pkg").unwrap();
+        assert!(other.is_empty());
+    }
+
+    // -------------------------------------------------------------------
+    // Download statistics tests
+    // -------------------------------------------------------------------
+
+    #[test]
+    fn increment_download_counts() {
+        let db = test_db();
+        db.upsert_package("my-guard", Some("A guard"), "2025-01-01T00:00:00Z")
+            .unwrap();
+
+        let v = VersionRow {
+            name: "my-guard".into(),
+            version: "1.0.0".into(),
+            pkg_type: "guard".into(),
+            checksum: "abc123".into(),
+            manifest_toml: "[package]\nname = \"my-guard\"".into(),
+            publisher_key: "pubkey_hex".into(),
+            publisher_sig: "sig_hex".into(),
+            registry_sig: None,
+            dependencies_json: "{}".into(),
+            yanked: false,
+            published_at: "2025-01-01T00:00:00Z".into(),
+            attestation_hash: None,
+            key_id: None,
+            leaf_index: None,
+            download_count: 0,
+        };
+        db.insert_version(&v).unwrap();
+
+        db.increment_download("my-guard", "1.0.0").unwrap();
+        db.increment_download("my-guard", "1.0.0").unwrap();
+        db.increment_download("my-guard", "1.0.0").unwrap();
+
+        let stats = db.get_package_stats("my-guard").unwrap().unwrap();
+        assert_eq!(stats.total_downloads, 3);
+        assert_eq!(stats.versions[0].downloads, 3);
+    }
+
+    #[test]
+    fn get_popular_packages() {
+        let db = test_db();
+
+        db.upsert_package("pkg-a", Some("Package A"), "2025-01-01T00:00:00Z")
+            .unwrap();
+        let va = VersionRow {
+            name: "pkg-a".into(),
+            version: "1.0.0".into(),
+            pkg_type: "guard".into(),
+            checksum: "aaa".into(),
+            manifest_toml: "".into(),
+            publisher_key: "pk".into(),
+            publisher_sig: "sig".into(),
+            registry_sig: None,
+            dependencies_json: "{}".into(),
+            yanked: false,
+            published_at: "2025-01-01T00:00:00Z".into(),
+            attestation_hash: None,
+            key_id: None,
+            leaf_index: None,
+            download_count: 0,
+        };
+        db.insert_version(&va).unwrap();
+
+        db.upsert_package("pkg-b", Some("Package B"), "2025-01-02T00:00:00Z")
+            .unwrap();
+        let vb = VersionRow {
+            name: "pkg-b".into(),
+            version: "1.0.0".into(),
+            pkg_type: "guard".into(),
+            checksum: "bbb".into(),
+            manifest_toml: "".into(),
+            publisher_key: "pk".into(),
+            publisher_sig: "sig".into(),
+            registry_sig: None,
+            dependencies_json: "{}".into(),
+            yanked: false,
+            published_at: "2025-01-02T00:00:00Z".into(),
+            attestation_hash: None,
+            key_id: None,
+            leaf_index: None,
+            download_count: 0,
+        };
+        db.insert_version(&vb).unwrap();
+
+        // Download pkg-b more than pkg-a.
+        db.increment_download("pkg-a", "1.0.0").unwrap();
+        db.increment_download("pkg-b", "1.0.0").unwrap();
+        db.increment_download("pkg-b", "1.0.0").unwrap();
+        db.increment_download("pkg-b", "1.0.0").unwrap();
+
+        let popular = db.get_popular_packages(10).unwrap();
+        assert_eq!(popular.len(), 2);
+        assert_eq!(popular[0].name, "pkg-b");
+        assert_eq!(popular[0].total_downloads, 3);
+        assert_eq!(popular[1].name, "pkg-a");
+        assert_eq!(popular[1].total_downloads, 1);
+    }
+
+    #[test]
+    fn package_stats_not_found() {
+        let db = test_db();
+        assert!(db.get_package_stats("nonexistent").unwrap().is_none());
     }
 }

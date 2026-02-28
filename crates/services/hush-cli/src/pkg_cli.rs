@@ -155,6 +155,9 @@ pub enum PkgCommands {
         /// Registry URL override
         #[arg(long)]
         registry: Option<String>,
+        /// Use OIDC token for authentication (for CI/CD environments)
+        #[arg(long)]
+        oidc: bool,
     },
     /// Search for packages in the registry
     Search {
@@ -192,15 +195,71 @@ pub enum PkgCommands {
         #[arg(long)]
         registry: Option<String>,
     },
+    /// Show package download and usage statistics
+    Stats {
+        /// Package name
+        name: String,
+        /// Registry URL
+        #[arg(long)]
+        registry: Option<String>,
+    },
     /// Organization management
     Org {
         #[command(subcommand)]
         command: OrgCommands,
     },
+    /// Manage trusted publishers for OIDC-based CI/CD publishing
+    TrustedPublishers {
+        #[command(subcommand)]
+        command: TrustedPublisherCommands,
+    },
     /// Mirror packages from an upstream registry for air-gapped or local use
     Mirror {
         #[command(subcommand)]
         command: crate::mirror::MirrorCommands,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum TrustedPublisherCommands {
+    /// Add a trusted publisher for a package
+    Add {
+        /// Package name (e.g., @acme/my-guard)
+        package: String,
+        /// OIDC provider: github or gitlab
+        #[arg(long)]
+        provider: String,
+        /// Repository in owner/repo format
+        #[arg(long)]
+        repo: String,
+        /// Optional workflow filter (e.g., release.yml)
+        #[arg(long)]
+        workflow: Option<String>,
+        /// Optional environment filter (e.g., production)
+        #[arg(long)]
+        environment: Option<String>,
+        /// Registry URL override
+        #[arg(long)]
+        registry: Option<String>,
+    },
+    /// List trusted publishers for a package
+    List {
+        /// Package name
+        package: String,
+        /// Registry URL override
+        #[arg(long)]
+        registry: Option<String>,
+    },
+    /// Remove a trusted publisher by ID
+    Remove {
+        /// Package name
+        package: String,
+        /// Trusted publisher ID
+        #[arg(long)]
+        id: i64,
+        /// Registry URL override
+        #[arg(long)]
+        registry: Option<String>,
     },
 }
 
@@ -300,9 +359,11 @@ pub fn cmd_pkg(command: PkgCommands, stdout: &mut dyn Write, stderr: &mut dyn Wr
             cmd_pkg_test(path.as_deref(), filter.as_deref(), stdout, stderr)
         }
         PkgCommands::Login { registry } => cmd_pkg_login(registry.as_deref(), stdout, stderr),
-        PkgCommands::Publish { path, registry } => {
-            cmd_pkg_publish(path.as_deref(), registry.as_deref(), stdout, stderr)
-        }
+        PkgCommands::Publish {
+            path,
+            registry,
+            oidc,
+        } => cmd_pkg_publish(path.as_deref(), registry.as_deref(), oidc, stdout, stderr),
         PkgCommands::Search {
             query,
             limit,
@@ -319,6 +380,12 @@ pub fn cmd_pkg(command: PkgCommands, stdout: &mut dyn Write, stderr: &mut dyn Wr
             version,
             registry,
         } => cmd_pkg_yank(&name, &version, registry.as_deref(), stdout, stderr),
+        PkgCommands::Stats { name, registry } => {
+            cmd_pkg_stats(&name, registry.as_deref(), stdout, stderr)
+        }
+        PkgCommands::TrustedPublishers { command } => {
+            cmd_pkg_trusted_publishers(command, stdout, stderr)
+        }
         PkgCommands::Org { command } => cmd_pkg_org(command, stdout, stderr),
         PkgCommands::Mirror { command } => crate::mirror::cmd_mirror(command, stdout, stderr),
     }
@@ -1649,6 +1716,7 @@ fn cmd_pkg_login(
 fn cmd_pkg_publish(
     path: Option<&Path>,
     registry: Option<&str>,
+    oidc: bool,
     stdout: &mut dyn Write,
     stderr: &mut dyn Write,
 ) -> ExitCode {
@@ -1665,14 +1733,22 @@ fn cmd_pkg_publish(
 
     let cfg = RegistryConfig::load(registry);
 
-    let auth_token = match &cfg.auth_token {
-        Some(t) => t.clone(),
-        None => {
-            let _ = writeln!(
-                stderr,
-                "Error: not authenticated. Run `clawdstrike pkg login` first."
-            );
-            return ExitCode::ConfigError;
+    // For OIDC publishing, obtain the identity token from CI/CD environment.
+    let auth_token = if oidc {
+        match obtain_oidc_token(stderr) {
+            Ok(t) => t,
+            Err(code) => return code,
+        }
+    } else {
+        match &cfg.auth_token {
+            Some(t) => t.clone(),
+            None => {
+                let _ = writeln!(
+                    stderr,
+                    "Error: not authenticated. Run `clawdstrike pkg login` first."
+                );
+                return ExitCode::ConfigError;
+            }
         }
     };
 
@@ -1767,12 +1843,22 @@ fn cmd_pkg_publish(
         .text("signature", signature.signature.to_hex())
         .text("public_key", keypair.public_key().to_hex());
 
-    let resp = match client
-        .post(&url)
-        .bearer_auth(&auth_token)
-        .multipart(form)
-        .send()
-    {
+    let mut request_builder = client.post(&url).bearer_auth(&auth_token);
+
+    if oidc {
+        request_builder = request_builder.header("X-Clawdstrike-Auth-Type", "oidc");
+        // Detect provider from env vars.
+        let provider = if std::env::var("GITHUB_ACTIONS").is_ok() {
+            "github"
+        } else if std::env::var("GITLAB_CI").is_ok() {
+            "gitlab"
+        } else {
+            "github"
+        };
+        request_builder = request_builder.header("X-Clawdstrike-Oidc-Provider", provider);
+    }
+
+    let resp = match request_builder.multipart(form).send() {
         Ok(r) => r,
         Err(e) => {
             let _ = writeln!(stderr, "Error: publish request failed: {e}");
@@ -1788,6 +1874,344 @@ fn cmd_pkg_publish(
     }
 
     let _ = writeln!(stdout, "Published {} v{}", pkg_name, pkg_version);
+    ExitCode::Ok
+}
+
+// ---------------------------------------------------------------------------
+// OIDC token acquisition
+// ---------------------------------------------------------------------------
+
+/// Obtain an OIDC identity token from the CI/CD environment.
+///
+/// GitHub Actions: uses `ACTIONS_ID_TOKEN_REQUEST_TOKEN` + `ACTIONS_ID_TOKEN_REQUEST_URL`.
+/// GitLab CI: uses `CI_JOB_JWT_V2`.
+fn obtain_oidc_token(stderr: &mut dyn Write) -> Result<String, ExitCode> {
+    // GitLab CI: direct JWT env var.
+    if let Ok(jwt) = std::env::var("CI_JOB_JWT_V2") {
+        if !jwt.is_empty() {
+            return Ok(jwt);
+        }
+    }
+
+    // GitHub Actions: request a token from the OIDC provider.
+    let request_token = std::env::var("ACTIONS_ID_TOKEN_REQUEST_TOKEN").ok();
+    let request_url = std::env::var("ACTIONS_ID_TOKEN_REQUEST_URL").ok();
+
+    if let (Some(token), Some(url)) = (request_token, request_url) {
+        if !token.is_empty() && !url.is_empty() {
+            let url_with_audience = format!("{url}&audience=clawdstrike-registry");
+            let client = match reqwest::blocking::Client::builder()
+                .timeout(std::time::Duration::from_secs(30))
+                .build()
+            {
+                Ok(c) => c,
+                Err(e) => {
+                    let _ = writeln!(stderr, "Error: cannot create HTTP client: {e}");
+                    return Err(ExitCode::RuntimeError);
+                }
+            };
+
+            let resp = match client.get(&url_with_audience).bearer_auth(&token).send() {
+                Ok(r) => r,
+                Err(e) => {
+                    let _ = writeln!(stderr, "Error: failed to request OIDC token: {e}");
+                    return Err(ExitCode::RuntimeError);
+                }
+            };
+
+            if !resp.status().is_success() {
+                let status = resp.status();
+                let _ = writeln!(stderr, "Error: OIDC token request returned HTTP {status}");
+                return Err(ExitCode::RuntimeError);
+            }
+
+            let body: serde_json::Value = match resp.json() {
+                Ok(v) => v,
+                Err(e) => {
+                    let _ = writeln!(stderr, "Error: invalid OIDC token response: {e}");
+                    return Err(ExitCode::RuntimeError);
+                }
+            };
+
+            if let Some(value) = body.get("value").and_then(|v| v.as_str()) {
+                return Ok(value.to_string());
+            }
+
+            let _ = writeln!(stderr, "Error: OIDC token response missing 'value' field");
+            return Err(ExitCode::RuntimeError);
+        }
+    }
+
+    let _ = writeln!(
+        stderr,
+        "Error: --oidc requires a CI/CD environment (GitHub Actions or GitLab CI)"
+    );
+    Err(ExitCode::ConfigError)
+}
+
+// ---------------------------------------------------------------------------
+// Trusted publishers
+// ---------------------------------------------------------------------------
+
+fn cmd_pkg_trusted_publishers(
+    command: TrustedPublisherCommands,
+    stdout: &mut dyn Write,
+    stderr: &mut dyn Write,
+) -> ExitCode {
+    match command {
+        TrustedPublisherCommands::Add {
+            package,
+            provider,
+            repo,
+            workflow,
+            environment,
+            registry,
+        } => cmd_trusted_publisher_add(
+            &package,
+            &provider,
+            &repo,
+            workflow.as_deref(),
+            environment.as_deref(),
+            registry.as_deref(),
+            stdout,
+            stderr,
+        ),
+        TrustedPublisherCommands::List { package, registry } => {
+            cmd_trusted_publisher_list(&package, registry.as_deref(), stdout, stderr)
+        }
+        TrustedPublisherCommands::Remove {
+            package,
+            id,
+            registry,
+        } => cmd_trusted_publisher_remove(&package, id, registry.as_deref(), stdout, stderr),
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn cmd_trusted_publisher_add(
+    package: &str,
+    provider: &str,
+    repo: &str,
+    workflow: Option<&str>,
+    environment: Option<&str>,
+    registry: Option<&str>,
+    stdout: &mut dyn Write,
+    stderr: &mut dyn Write,
+) -> ExitCode {
+    let cfg = RegistryConfig::load(registry);
+
+    let auth_token = match &cfg.auth_token {
+        Some(t) => t.clone(),
+        None => {
+            let _ = writeln!(
+                stderr,
+                "Error: not authenticated. Run `clawdstrike pkg login` first."
+            );
+            return ExitCode::ConfigError;
+        }
+    };
+
+    let keypair = match load_or_generate_publisher_keypair(&cfg, stderr) {
+        Ok(kp) => kp,
+        Err(e) => {
+            let _ = writeln!(stderr, "Error: {e}");
+            return ExitCode::RuntimeError;
+        }
+    };
+
+    let client = match reqwest::blocking::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+    {
+        Ok(c) => c,
+        Err(e) => {
+            let _ = writeln!(stderr, "Error: cannot create HTTP client: {e}");
+            return ExitCode::RuntimeError;
+        }
+    };
+
+    let url = format!(
+        "{}/api/v1/packages/{}/trusted-publishers",
+        cfg.registry_url.trim_end_matches('/'),
+        urlencoding_simple(package)
+    );
+
+    let mut body = serde_json::json!({
+        "provider": provider,
+        "repository": repo,
+        "publisher_key": keypair.public_key().to_hex(),
+    });
+    if let Some(wf) = workflow {
+        body["workflow"] = serde_json::Value::String(wf.to_string());
+    }
+    if let Some(env) = environment {
+        body["environment"] = serde_json::Value::String(env.to_string());
+    }
+
+    let resp = match client
+        .post(&url)
+        .bearer_auth(&auth_token)
+        .json(&body)
+        .send()
+    {
+        Ok(r) => r,
+        Err(e) => {
+            let _ = writeln!(stderr, "Error: request failed: {e}");
+            return ExitCode::RuntimeError;
+        }
+    };
+
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let resp_body = resp.text().unwrap_or_default();
+        let _ = writeln!(
+            stderr,
+            "Error: registry returned HTTP {status}: {resp_body}"
+        );
+        return ExitCode::RuntimeError;
+    }
+
+    let _ = writeln!(
+        stdout,
+        "Added trusted publisher for {}: {} ({})",
+        package, repo, provider
+    );
+    ExitCode::Ok
+}
+
+fn cmd_trusted_publisher_list(
+    package: &str,
+    registry: Option<&str>,
+    stdout: &mut dyn Write,
+    stderr: &mut dyn Write,
+) -> ExitCode {
+    let cfg = RegistryConfig::load(registry);
+
+    let client = match reqwest::blocking::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+    {
+        Ok(c) => c,
+        Err(e) => {
+            let _ = writeln!(stderr, "Error: cannot create HTTP client: {e}");
+            return ExitCode::RuntimeError;
+        }
+    };
+
+    let url = format!(
+        "{}/api/v1/packages/{}/trusted-publishers",
+        cfg.registry_url.trim_end_matches('/'),
+        urlencoding_simple(package)
+    );
+
+    let resp = match client.get(&url).send() {
+        Ok(r) => r,
+        Err(e) => {
+            let _ = writeln!(stderr, "Error: request failed: {e}");
+            return ExitCode::RuntimeError;
+        }
+    };
+
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let body = resp.text().unwrap_or_default();
+        let _ = writeln!(stderr, "Error: registry returned HTTP {status}: {body}");
+        return ExitCode::RuntimeError;
+    }
+
+    let resp_json: serde_json::Value = match resp.json() {
+        Ok(v) => v,
+        Err(e) => {
+            let _ = writeln!(stderr, "Error: invalid response: {e}");
+            return ExitCode::RuntimeError;
+        }
+    };
+
+    let publishers = resp_json
+        .get("trusted_publishers")
+        .and_then(|v| v.as_array());
+
+    match publishers {
+        Some(list) if !list.is_empty() => {
+            let _ = writeln!(stdout, "Trusted publishers for {}:", package);
+            for tp in list {
+                let id = tp.get("id").and_then(|v| v.as_i64()).unwrap_or(0);
+                let provider = tp.get("provider").and_then(|v| v.as_str()).unwrap_or("?");
+                let repository = tp.get("repository").and_then(|v| v.as_str()).unwrap_or("?");
+                let workflow = tp.get("workflow").and_then(|v| v.as_str()).unwrap_or("-");
+                let environment = tp
+                    .get("environment")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("-");
+                let _ = writeln!(
+                    stdout,
+                    "  [{}] {} {} (workflow: {}, env: {})",
+                    id, provider, repository, workflow, environment
+                );
+            }
+        }
+        _ => {
+            let _ = writeln!(stdout, "No trusted publishers configured for {}.", package);
+        }
+    }
+
+    ExitCode::Ok
+}
+
+fn cmd_trusted_publisher_remove(
+    package: &str,
+    id: i64,
+    registry: Option<&str>,
+    stdout: &mut dyn Write,
+    stderr: &mut dyn Write,
+) -> ExitCode {
+    let cfg = RegistryConfig::load(registry);
+
+    let auth_token = match &cfg.auth_token {
+        Some(t) => t.clone(),
+        None => {
+            let _ = writeln!(
+                stderr,
+                "Error: not authenticated. Run `clawdstrike pkg login` first."
+            );
+            return ExitCode::ConfigError;
+        }
+    };
+
+    let client = match reqwest::blocking::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+    {
+        Ok(c) => c,
+        Err(e) => {
+            let _ = writeln!(stderr, "Error: cannot create HTTP client: {e}");
+            return ExitCode::RuntimeError;
+        }
+    };
+
+    let url = format!(
+        "{}/api/v1/packages/{}/trusted-publishers/{}",
+        cfg.registry_url.trim_end_matches('/'),
+        urlencoding_simple(package),
+        id
+    );
+
+    let resp = match client.delete(&url).bearer_auth(&auth_token).send() {
+        Ok(r) => r,
+        Err(e) => {
+            let _ = writeln!(stderr, "Error: request failed: {e}");
+            return ExitCode::RuntimeError;
+        }
+    };
+
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let body = resp.text().unwrap_or_default();
+        let _ = writeln!(stderr, "Error: registry returned HTTP {status}: {body}");
+        return ExitCode::RuntimeError;
+    }
+
+    let _ = writeln!(stdout, "Removed trusted publisher {} from {}", id, package);
     ExitCode::Ok
 }
 
@@ -2017,6 +2441,120 @@ fn cmd_pkg_audit(
 
     let _ = writeln!(stdout, "\n{} event(s) shown.", events.len());
     ExitCode::Ok
+}
+
+// ---------------------------------------------------------------------------
+// pkg stats
+// ---------------------------------------------------------------------------
+
+fn cmd_pkg_stats(
+    name: &str,
+    registry: Option<&str>,
+    stdout: &mut dyn Write,
+    stderr: &mut dyn Write,
+) -> ExitCode {
+    let cfg = RegistryConfig::load(registry);
+    let url = format!(
+        "{}/api/v1/packages/{}/stats",
+        cfg.registry_url.trim_end_matches('/'),
+        urlencoding_simple(name),
+    );
+
+    let client = match reqwest::blocking::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+    {
+        Ok(c) => c,
+        Err(e) => {
+            let _ = writeln!(stderr, "Error: cannot create HTTP client: {e}");
+            return ExitCode::RuntimeError;
+        }
+    };
+
+    let resp = match client.get(&url).send() {
+        Ok(r) => r,
+        Err(e) => {
+            let _ = writeln!(stderr, "Error: stats request failed: {e}");
+            return ExitCode::RuntimeError;
+        }
+    };
+
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let body = resp.text().unwrap_or_default();
+        let _ = writeln!(stderr, "Error: registry returned HTTP {status}: {body}");
+        return ExitCode::RuntimeError;
+    }
+
+    let resp_json: serde_json::Value = match resp.json() {
+        Ok(v) => v,
+        Err(e) => {
+            let _ = writeln!(stderr, "Error: invalid response from registry: {e}");
+            return ExitCode::RuntimeError;
+        }
+    };
+
+    let pkg_name = resp_json
+        .get("name")
+        .and_then(|n| n.as_str())
+        .unwrap_or(name);
+    let total_downloads = resp_json
+        .get("total_downloads")
+        .and_then(|t| t.as_u64())
+        .unwrap_or(0);
+    let first_published = resp_json
+        .get("first_published")
+        .and_then(|f| f.as_str())
+        .unwrap_or("unknown");
+
+    let _ = writeln!(stdout, "Package: {}", pkg_name);
+    let _ = writeln!(
+        stdout,
+        "Total downloads: {}",
+        format_number(total_downloads)
+    );
+    let _ = writeln!(stdout, "First published: {}", first_published);
+
+    let versions = resp_json.get("versions").and_then(|v| v.as_array());
+
+    if let Some(versions) = versions {
+        if !versions.is_empty() {
+            let _ = writeln!(stdout);
+            let _ = writeln!(stdout, "  {:<12} {:<12} PUBLISHED", "VERSION", "DOWNLOADS");
+            let _ = writeln!(stdout, "  {}", "-".repeat(50));
+
+            for v in versions {
+                let version = v.get("version").and_then(|v| v.as_str()).unwrap_or("?");
+                let downloads = v.get("downloads").and_then(|d| d.as_u64()).unwrap_or(0);
+                let published_at = v
+                    .get("published_at")
+                    .and_then(|p| p.as_str())
+                    .unwrap_or("?");
+                let _ = writeln!(
+                    stdout,
+                    "  {:<12} {:<12} {}",
+                    version,
+                    format_number(downloads),
+                    published_at
+                );
+            }
+        }
+    }
+
+    ExitCode::Ok
+}
+
+/// Format a number with comma separators (e.g. 1234 -> "1,234").
+fn format_number(n: u64) -> String {
+    let s = n.to_string();
+    let mut result = String::with_capacity(s.len() + s.len() / 3);
+    for (i, c) in s.chars().rev().enumerate() {
+        if i > 0 && i % 3 == 0 {
+            result.push(',');
+        }
+        result.push(c);
+    }
+    result.chars().rev().collect()
 }
 
 // ---------------------------------------------------------------------------
@@ -3027,6 +3565,7 @@ sandbox = "native"
             path: Some(tmp.path().to_path_buf()),
             // Use a fake registry so we never actually hit a real server
             registry: Some("http://127.0.0.1:1".to_string()),
+            oidc: false,
         });
 
         // Should fail because no auth token is configured

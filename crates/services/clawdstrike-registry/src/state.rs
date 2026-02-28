@@ -2,12 +2,14 @@
 
 use std::sync::{Arc, Mutex};
 
+use clawdstrike::pkg::merkle::{LeafData, MerkleTree};
 use hush_core::Keypair;
 
 use crate::config::Config;
 use crate::db::RegistryDb;
 use crate::error::RegistryError;
 use crate::keys::RegistryKeyManager;
+use crate::oidc::JwksCache;
 use crate::storage::BlobStorage;
 
 /// Shared application state, cheaply cloneable via `Arc`.
@@ -18,13 +20,16 @@ pub struct AppState {
     pub blobs: Arc<BlobStorage>,
     pub registry_keypair: Arc<Keypair>,
     pub key_manager: Arc<Mutex<RegistryKeyManager>>,
+    pub merkle_tree: Arc<Mutex<MerkleTree>>,
+    pub jwks_cache: Arc<Mutex<JwksCache>>,
 }
 
 impl AppState {
     /// Initialize application state from config.
     ///
     /// Creates directories, opens the database, and loads or generates the
-    /// registry Ed25519 keypair.
+    /// registry Ed25519 keypair. Rebuilds the Merkle tree from existing
+    /// version rows.
     pub fn new(config: Config) -> anyhow::Result<Self> {
         // Ensure directories exist.
         std::fs::create_dir_all(config.data_dir.clone())?;
@@ -51,12 +56,35 @@ impl AppState {
         let key_info = key_manager.current_key();
         db.upsert_registry_key(key_info)?;
 
+        // Rebuild the Merkle tree from existing version rows.
+        let mut tree = MerkleTree::new();
+        let versions = db.list_all_versions_ordered()?;
+        for v in &versions {
+            let leaf_data = LeafData {
+                package_name: v.name.clone(),
+                version: v.version.clone(),
+                content_hash: v.checksum.clone(),
+                publisher_key: v.publisher_key.clone(),
+                timestamp: v.published_at.clone(),
+            };
+            let leaf_hash = leaf_data.leaf_hash().map_err(|e| {
+                RegistryError::Internal(format!("failed to compute leaf hash on rebuild: {e}"))
+            })?;
+            tree.append_hash(leaf_hash);
+        }
+        tracing::info!(
+            tree_size = tree.tree_size(),
+            "Merkle tree rebuilt from existing versions"
+        );
+
         Ok(Self {
             config: Arc::new(config),
             db: Arc::new(Mutex::new(db)),
             blobs: Arc::new(blobs),
             registry_keypair: Arc::new(keypair),
             key_manager: Arc::new(Mutex::new(key_manager)),
+            merkle_tree: Arc::new(Mutex::new(tree)),
+            jwks_cache: Arc::new(Mutex::new(JwksCache::new())),
         })
     }
 }

@@ -3,6 +3,7 @@
 pub mod attestation;
 pub mod audit;
 pub mod checkpoint;
+pub mod consistency;
 pub mod download;
 pub mod health;
 pub mod index;
@@ -11,6 +12,8 @@ pub mod org;
 pub mod proof;
 pub mod publish;
 pub mod search;
+pub mod stats;
+pub mod trusted_publishers;
 pub mod yank;
 
 use axum::{
@@ -57,7 +60,22 @@ pub fn create_router(state: AppState) -> Router {
             "/api/v1/transparency/checkpoint",
             get(checkpoint::get_checkpoint),
         )
+        .route(
+            "/api/v1/transparency/consistency",
+            get(consistency::get_consistency_proof),
+        )
         .route("/api/v1/audit/{name}", get(audit::get_audit))
+        // Download statistics endpoints.
+        .route(
+            "/api/v1/packages/{name}/stats",
+            get(stats::get_package_stats),
+        )
+        .route("/api/v1/popular", get(stats::get_popular))
+        // Trusted publisher listing (public).
+        .route(
+            "/api/v1/packages/{name}/trusted-publishers",
+            get(trusted_publishers::list_trusted_publishers),
+        )
         // Organization public endpoints.
         .route("/api/v1/orgs/{name}", get(org::get_org))
         .route("/api/v1/orgs/{name}/packages", get(org::list_org_packages));
@@ -74,6 +92,15 @@ pub fn create_router(state: AppState) -> Router {
         .route(
             "/api/v1/orgs/{name}/members/{key}",
             delete(org::remove_member),
+        )
+        // Trusted publisher management (auth required).
+        .route(
+            "/api/v1/packages/{name}/trusted-publishers",
+            post(trusted_publishers::add_trusted_publisher),
+        )
+        .route(
+            "/api/v1/packages/{name}/trusted-publishers/{id}",
+            delete(trusted_publishers::remove_trusted_publisher),
         )
         .layer(middleware::from_fn_with_state(
             state.clone(),

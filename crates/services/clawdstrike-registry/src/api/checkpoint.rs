@@ -27,18 +27,29 @@ pub struct CheckpointResponse {
 
 /// GET /api/v1/transparency/checkpoint
 ///
-/// Returns the latest checkpoint. The Merkle tree integration is built by
-/// Stream 1. For now, this returns a signed checkpoint with an empty tree.
-/// During synthesis, this will be wired to the actual Merkle tree state.
+/// Returns the latest checkpoint signed by the registry key.
 pub async fn get_checkpoint(
     State(state): State<AppState>,
 ) -> Result<Json<CheckpointResponse>, RegistryError> {
     let timestamp = chrono::Utc::now().to_rfc3339();
-    let tree_size: u64 = 0;
+
+    let (root_hex, tree_size) = {
+        let tree = state
+            .merkle_tree
+            .lock()
+            .map_err(|e| RegistryError::Internal(format!("merkle_tree lock poisoned: {e}")))?;
+        let size = tree.tree_size();
+        if size == 0 {
+            ("0".repeat(64), 0u64)
+        } else {
+            let root = tree
+                .root()
+                .map_err(|e| RegistryError::Internal(format!("merkle root error: {e}")))?;
+            (root, size)
+        }
+    };
 
     // Build the checkpoint message: root || tree_size || timestamp
-    // For an empty tree, the root is the zero hash.
-    let root_hex = "0".repeat(64);
     let checkpoint_msg = format!("{root_hex}{tree_size}{timestamp}");
 
     let signature = state.registry_keypair.sign(checkpoint_msg.as_bytes());

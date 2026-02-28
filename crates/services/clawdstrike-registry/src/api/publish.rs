@@ -4,6 +4,7 @@ use axum::extract::State;
 use axum::Json;
 use serde::{Deserialize, Serialize};
 
+use clawdstrike::pkg::merkle::LeafData;
 use hush_core::{PublicKey, Signature};
 
 use crate::attestation;
@@ -11,6 +12,14 @@ use crate::db::VersionRow;
 use crate::error::RegistryError;
 use crate::index;
 use crate::state::AppState;
+
+/// Extract the OIDC provider hint from request headers.
+fn extract_oidc_provider(headers: &axum::http::HeaderMap) -> Option<String> {
+    headers
+        .get("X-Clawdstrike-Oidc-Provider")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string())
+}
 
 #[derive(Deserialize)]
 pub struct PublishRequest {
@@ -38,6 +47,7 @@ pub struct PublishResponse {
 /// POST /api/v1/packages
 pub async fn publish(
     State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
     Json(req): Json<PublishRequest>,
 ) -> Result<Json<PublishResponse>, RegistryError> {
     // 1. Parse and validate manifest.
@@ -47,14 +57,60 @@ pub async fn publish(
     let name = manifest.package.name.clone();
     let version = manifest.package.version.clone();
 
-    // 1b. Scope authorization for @scope/name packages.
-    if let Some((scope, _basename)) = crate::auth::parse_package_scope(&name) {
+    // 1a. OIDC trusted publisher validation (when using CI/CD identity tokens).
+    let is_oidc = headers
+        .get("X-Clawdstrike-Auth-Type")
+        .and_then(|v| v.to_str().ok())
+        .map(|v| v.eq_ignore_ascii_case("oidc"))
+        .unwrap_or(false);
+
+    if is_oidc {
+        let oidc_token = headers
+            .get("Authorization")
+            .and_then(|v| v.to_str().ok())
+            .and_then(|h| {
+                if h.len() > 7 && h[..7].eq_ignore_ascii_case("Bearer ") {
+                    Some(h[7..].to_string())
+                } else {
+                    None
+                }
+            })
+            .ok_or_else(|| {
+                RegistryError::Unauthorized("missing bearer token for OIDC auth".into())
+            })?;
+
+        let provider = extract_oidc_provider(&headers).unwrap_or_else(|| "github".to_string());
+
+        let claims = crate::oidc::validate_oidc_token(&oidc_token, &provider, &state.jwks_cache)?;
+
         let db = state
             .db
             .lock()
             .map_err(|e| RegistryError::Internal(format!("db lock poisoned: {e}")))?;
-        crate::auth::authorize_scoped_publish(&db, &scope, &req.publisher_key)?;
+        let trusted_publishers = db.get_trusted_publishers(&name)?;
         drop(db);
+
+        let matched = crate::oidc::match_trusted_publisher(&claims, &trusted_publishers)?;
+
+        tracing::info!(
+            package = %name,
+            provider = %claims.provider(),
+            repository = %claims.repository(),
+            publisher_id = matched.id,
+            "OIDC trusted publisher matched"
+        );
+    }
+
+    // 1b. Scope authorization for @scope/name packages (for non-OIDC publishes).
+    if !is_oidc {
+        if let Some((scope, _basename)) = crate::auth::parse_package_scope(&name) {
+            let db = state
+                .db
+                .lock()
+                .map_err(|e| RegistryError::Internal(format!("db lock poisoned: {e}")))?;
+            crate::auth::authorize_scoped_publish(&db, &scope, &req.publisher_key)?;
+            drop(db);
+        }
     }
 
     // 2. Decode archive bytes.
@@ -93,7 +149,26 @@ pub async fn publish(
 
     let now = chrono::Utc::now().to_rfc3339();
 
-    // 8. Create publish attestation using the key manager.
+    // 8a. Append to Merkle tree.
+    let leaf_index = {
+        let leaf_data = LeafData {
+            package_name: name.clone(),
+            version: version.clone(),
+            content_hash: checksum.clone(),
+            publisher_key: req.publisher_key.clone(),
+            timestamp: now.clone(),
+        };
+        let leaf_hash = leaf_data
+            .leaf_hash()
+            .map_err(|e| RegistryError::Internal(format!("failed to compute leaf hash: {e}")))?;
+        let mut tree = state
+            .merkle_tree
+            .lock()
+            .map_err(|e| RegistryError::Internal(format!("merkle_tree lock poisoned: {e}")))?;
+        tree.append_hash(leaf_hash)
+    };
+
+    // 8b. Create publish attestation with real leaf_index.
     let (attestation_hash, key_id) = {
         let key_mgr = state
             .key_manager
@@ -111,7 +186,7 @@ pub async fn publish(
             publisher_signature: &req.publisher_sig,
             content_hash: &checksum,
             registry_signature: &registry_sig_hex,
-            leaf_index: None, // populated by transparency log in a later phase
+            leaf_index: Some(leaf_index),
             timestamp: &now,
         });
 
@@ -143,13 +218,15 @@ pub async fn publish(
             published_at: now,
             attestation_hash: Some(attestation_hash.clone()),
             key_id: Some(key_id.clone()),
+            leaf_index: Some(leaf_index),
+            download_count: 0,
         })?;
 
         // 10. Update sparse index.
         index::update_index(&db, &state.config.index_dir(), &name)?;
     }
 
-    tracing::info!(name = %name, version = %version, checksum = %checksum, "Package published");
+    tracing::info!(name = %name, version = %version, checksum = %checksum, leaf_index = leaf_index, "Package published");
 
     Ok(Json(PublishResponse {
         name,

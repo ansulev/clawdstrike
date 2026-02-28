@@ -17,6 +17,7 @@ pub struct PackageInfoResponse {
     pub description: Option<String>,
     pub created_at: String,
     pub updated_at: String,
+    pub total_downloads: u64,
     pub versions: Vec<VersionSummary>,
 }
 
@@ -27,6 +28,7 @@ pub struct VersionSummary {
     pub checksum: String,
     pub yanked: bool,
     pub published_at: String,
+    pub downloads: u64,
 }
 
 /// GET /api/v1/packages/{name}
@@ -52,6 +54,7 @@ pub async fn package_info(
             checksum: v.checksum.clone(),
             yanked: v.yanked,
             published_at: v.published_at.clone(),
+            downloads: v.download_count,
         })
         .collect();
 
@@ -60,6 +63,7 @@ pub async fn package_info(
         description: pkg.description,
         created_at: pkg.created_at,
         updated_at: pkg.updated_at,
+        total_downloads: pkg.total_downloads,
         versions: version_summaries,
     }))
 }
@@ -81,6 +85,7 @@ pub struct VersionInfoResponse {
     pub dependencies: serde_json::Value,
     pub yanked: bool,
     pub published_at: String,
+    pub downloads: u64,
 }
 
 /// GET /api/v1/packages/{name}/{version}
@@ -112,5 +117,6 @@ pub async fn version_info(
         dependencies,
         yanked: v.yanked,
         published_at: v.published_at,
+        downloads: v.download_count,
     }))
 }

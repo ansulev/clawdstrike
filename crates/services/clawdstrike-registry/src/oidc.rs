@@ -1,0 +1,430 @@
+//! OIDC token validation for trusted publishing from CI/CD environments.
+
+use std::sync::Mutex;
+use std::time::Instant;
+
+use jsonwebtoken::{decode, decode_header, jwk::JwkSet, DecodingKey, Validation};
+use serde::{Deserialize, Serialize};
+
+use crate::db::TrustedPublisher;
+use crate::error::RegistryError;
+
+const GITHUB_ISSUER: &str = "https://token.actions.githubusercontent.com";
+const GITHUB_JWKS_URL: &str = "https://token.actions.githubusercontent.com/.well-known/jwks";
+const GITLAB_ISSUER: &str = "https://gitlab.com";
+const GITLAB_JWKS_URL: &str = "https://gitlab.com/-/jwks";
+const JWKS_CACHE_DURATION_SECS: u64 = 3600;
+
+// ---------------------------------------------------------------------------
+// Claims
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GitHubClaims {
+    pub sub: String,
+    pub repository: String,
+    pub repository_owner: String,
+    #[serde(default)]
+    pub workflow_ref: Option<String>,
+    #[serde(default)]
+    pub environment: Option<String>,
+    pub iss: String,
+    #[serde(default)]
+    pub aud: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GitLabClaims {
+    pub sub: String,
+    pub project_path: String,
+    #[serde(default, rename = "ref")]
+    pub git_ref: Option<String>,
+    #[serde(default)]
+    pub environment: Option<String>,
+    pub iss: String,
+    #[serde(default)]
+    pub aud: String,
+}
+
+#[derive(Debug, Clone)]
+pub enum OidcClaims {
+    GitHub(GitHubClaims),
+    GitLab(GitLabClaims),
+}
+
+impl OidcClaims {
+    pub fn repository(&self) -> &str {
+        match self {
+            OidcClaims::GitHub(c) => &c.repository,
+            OidcClaims::GitLab(c) => &c.project_path,
+        }
+    }
+
+    pub fn provider(&self) -> &str {
+        match self {
+            OidcClaims::GitHub(_) => "github",
+            OidcClaims::GitLab(_) => "gitlab",
+        }
+    }
+
+    pub fn workflow(&self) -> Option<&str> {
+        match self {
+            OidcClaims::GitHub(c) => c.workflow_ref.as_deref(),
+            OidcClaims::GitLab(c) => c.git_ref.as_deref(),
+        }
+    }
+
+    pub fn environment(&self) -> Option<&str> {
+        match self {
+            OidcClaims::GitHub(c) => c.environment.as_deref(),
+            OidcClaims::GitLab(c) => c.environment.as_deref(),
+        }
+    }
+
+    #[allow(dead_code)]
+    pub fn subject(&self) -> &str {
+        match self {
+            OidcClaims::GitHub(c) => &c.sub,
+            OidcClaims::GitLab(c) => &c.sub,
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// JWKS Cache
+// ---------------------------------------------------------------------------
+
+pub struct JwksCache {
+    jwks: Option<JwkSet>,
+    fetched_at: Option<Instant>,
+}
+
+impl JwksCache {
+    pub fn new() -> Self {
+        Self {
+            jwks: None,
+            fetched_at: None,
+        }
+    }
+
+    fn is_expired(&self) -> bool {
+        match self.fetched_at {
+            Some(t) => t.elapsed().as_secs() > JWKS_CACHE_DURATION_SECS,
+            None => true,
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Token validation
+// ---------------------------------------------------------------------------
+
+/// Validate an OIDC token from a CI/CD provider.
+///
+/// Uses the `provider` hint (`"github"` or `"gitlab"`) to select the correct
+/// issuer and JWKS URL.  Falls back to inspecting the token's `iss` claim
+/// when no explicit provider is given.
+pub fn validate_oidc_token(
+    token: &str,
+    provider: &str,
+    jwks_cache: &Mutex<JwksCache>,
+) -> Result<OidcClaims, RegistryError> {
+    let (issuer, jwks_url) = match provider.to_ascii_lowercase().as_str() {
+        "github" => (GITHUB_ISSUER, GITHUB_JWKS_URL),
+        "gitlab" => (GITLAB_ISSUER, GITLAB_JWKS_URL),
+        _ => {
+            return Err(RegistryError::BadRequest(format!(
+                "unsupported OIDC provider: {provider}"
+            )));
+        }
+    };
+
+    // Fetch or use cached JWKS.
+    let jwks = {
+        let mut cache = jwks_cache
+            .lock()
+            .map_err(|e| RegistryError::Internal(format!("jwks cache lock poisoned: {e}")))?;
+        if cache.is_expired() {
+            let fetched = fetch_jwks(jwks_url)?;
+            cache.jwks = Some(fetched);
+            cache.fetched_at = Some(Instant::now());
+        }
+        cache
+            .jwks
+            .clone()
+            .ok_or_else(|| RegistryError::Internal("JWKS cache empty after fetch".into()))?
+    };
+
+    // Decode the JWT header to find the key ID.
+    let header = decode_header(token)
+        .map_err(|e| RegistryError::Unauthorized(format!("invalid JWT header: {e}")))?;
+
+    let kid = header
+        .kid
+        .as_ref()
+        .ok_or_else(|| RegistryError::Unauthorized("JWT header missing kid".into()))?;
+
+    // Find the matching key in the JWKS.
+    let jwk = jwks
+        .keys
+        .iter()
+        .find(|k| k.common.key_id.as_deref() == Some(kid.as_str()))
+        .ok_or_else(|| {
+            RegistryError::Unauthorized(format!("no matching key found for kid '{kid}'"))
+        })?;
+
+    let decoding_key = DecodingKey::from_jwk(jwk)
+        .map_err(|e| RegistryError::Unauthorized(format!("failed to build decoding key: {e}")))?;
+
+    let algorithm = header.alg;
+    let mut validation = Validation::new(algorithm);
+    validation.set_issuer(&[issuer]);
+    // Accept any audience for now; the trusted publisher matching handles authorization.
+    validation.validate_aud = false;
+
+    match provider.to_ascii_lowercase().as_str() {
+        "github" => {
+            let token_data = decode::<GitHubClaims>(token, &decoding_key, &validation)
+                .map_err(|e| RegistryError::Unauthorized(format!("JWT validation failed: {e}")))?;
+            Ok(OidcClaims::GitHub(token_data.claims))
+        }
+        "gitlab" => {
+            let token_data = decode::<GitLabClaims>(token, &decoding_key, &validation)
+                .map_err(|e| RegistryError::Unauthorized(format!("JWT validation failed: {e}")))?;
+            Ok(OidcClaims::GitLab(token_data.claims))
+        }
+        _ => Err(RegistryError::BadRequest(format!(
+            "unsupported OIDC provider: {provider}"
+        ))),
+    }
+}
+
+/// Fetch JWKS from a remote URL.
+fn fetch_jwks(url: &str) -> Result<JwkSet, RegistryError> {
+    let resp = reqwest::blocking::get(url)
+        .map_err(|e| RegistryError::Internal(format!("failed to fetch JWKS from {url}: {e}")))?;
+
+    if !resp.status().is_success() {
+        return Err(RegistryError::Internal(format!(
+            "JWKS endpoint returned HTTP {}",
+            resp.status()
+        )));
+    }
+
+    let jwks: JwkSet = resp
+        .json()
+        .map_err(|e| RegistryError::Internal(format!("failed to parse JWKS response: {e}")))?;
+
+    Ok(jwks)
+}
+
+// ---------------------------------------------------------------------------
+// Publisher matching
+// ---------------------------------------------------------------------------
+
+/// Match OIDC claims against a list of trusted publishers.
+///
+/// Returns the first matching publisher, or an error if none match.
+pub fn match_trusted_publisher<'a>(
+    claims: &OidcClaims,
+    publishers: &'a [TrustedPublisher],
+) -> Result<&'a TrustedPublisher, RegistryError> {
+    for publisher in publishers {
+        // Provider must match.
+        if !publisher.provider.eq_ignore_ascii_case(claims.provider()) {
+            continue;
+        }
+
+        // Repository must match (case-insensitive).
+        if !publisher
+            .repository
+            .eq_ignore_ascii_case(claims.repository())
+        {
+            continue;
+        }
+
+        // If the publisher specifies a workflow, it must match.
+        if let Some(ref required_workflow) = publisher.workflow {
+            match claims.workflow() {
+                Some(actual) => {
+                    if !actual.contains(required_workflow.as_str()) {
+                        continue;
+                    }
+                }
+                None => continue,
+            }
+        }
+
+        // If the publisher specifies an environment, it must match.
+        if let Some(ref required_env) = publisher.environment {
+            match claims.environment() {
+                Some(actual) => {
+                    if !actual.eq_ignore_ascii_case(required_env) {
+                        continue;
+                    }
+                }
+                None => continue,
+            }
+        }
+
+        return Ok(publisher);
+    }
+
+    Err(RegistryError::Unauthorized(
+        "no trusted publisher matches the OIDC token claims".into(),
+    ))
+}
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_github_claims(repo: &str, workflow: Option<&str>, env: Option<&str>) -> OidcClaims {
+        OidcClaims::GitHub(GitHubClaims {
+            sub: format!("repo:{repo}:ref:refs/heads/main"),
+            repository: repo.to_string(),
+            repository_owner: repo.split('/').next().unwrap_or("").to_string(),
+            workflow_ref: workflow.map(String::from),
+            environment: env.map(String::from),
+            iss: GITHUB_ISSUER.to_string(),
+            aud: "clawdstrike-registry".to_string(),
+        })
+    }
+
+    fn make_gitlab_claims(project: &str, git_ref: Option<&str>, env: Option<&str>) -> OidcClaims {
+        OidcClaims::GitLab(GitLabClaims {
+            sub: format!("project_path:{project}:ref_type:branch:ref:main"),
+            project_path: project.to_string(),
+            git_ref: git_ref.map(String::from),
+            environment: env.map(String::from),
+            iss: GITLAB_ISSUER.to_string(),
+            aud: "clawdstrike-registry".to_string(),
+        })
+    }
+
+    fn make_publisher(
+        provider: &str,
+        repo: &str,
+        workflow: Option<&str>,
+        env: Option<&str>,
+    ) -> TrustedPublisher {
+        TrustedPublisher {
+            id: 1,
+            package_name: "test-pkg".to_string(),
+            provider: provider.to_string(),
+            repository: repo.to_string(),
+            workflow: workflow.map(String::from),
+            environment: env.map(String::from),
+            created_at: "2025-01-01T00:00:00Z".to_string(),
+            created_by: "test".to_string(),
+        }
+    }
+
+    #[test]
+    fn match_github_repo_only() {
+        let claims = make_github_claims("acme/my-guard", None, None);
+        let publishers = [make_publisher("github", "acme/my-guard", None, None)];
+        let matched = match_trusted_publisher(&claims, &publishers).unwrap();
+        assert_eq!(matched.repository, "acme/my-guard");
+    }
+
+    #[test]
+    fn match_github_with_workflow() {
+        let claims = make_github_claims(
+            "acme/my-guard",
+            Some("acme/my-guard/.github/workflows/release.yml@refs/heads/main"),
+            None,
+        );
+        let publishers = [make_publisher(
+            "github",
+            "acme/my-guard",
+            Some("release.yml"),
+            None,
+        )];
+        let matched = match_trusted_publisher(&claims, &publishers).unwrap();
+        assert_eq!(matched.repository, "acme/my-guard");
+    }
+
+    #[test]
+    fn match_github_with_environment() {
+        let claims = make_github_claims("acme/my-guard", None, Some("production"));
+        let publishers = [make_publisher(
+            "github",
+            "acme/my-guard",
+            None,
+            Some("production"),
+        )];
+        let matched = match_trusted_publisher(&claims, &publishers).unwrap();
+        assert_eq!(matched.repository, "acme/my-guard");
+    }
+
+    #[test]
+    fn no_match_wrong_repo() {
+        let claims = make_github_claims("other/repo", None, None);
+        let publishers = [make_publisher("github", "acme/my-guard", None, None)];
+        let err = match_trusted_publisher(&claims, &publishers).unwrap_err();
+        assert!(err.to_string().contains("no trusted publisher"));
+    }
+
+    #[test]
+    fn no_match_wrong_provider() {
+        let claims = make_github_claims("acme/my-guard", None, None);
+        let publishers = [make_publisher("gitlab", "acme/my-guard", None, None)];
+        let err = match_trusted_publisher(&claims, &publishers).unwrap_err();
+        assert!(err.to_string().contains("no trusted publisher"));
+    }
+
+    #[test]
+    fn no_match_missing_workflow() {
+        let claims = make_github_claims("acme/my-guard", None, None);
+        let publishers = [make_publisher(
+            "github",
+            "acme/my-guard",
+            Some("release.yml"),
+            None,
+        )];
+        let err = match_trusted_publisher(&claims, &publishers).unwrap_err();
+        assert!(err.to_string().contains("no trusted publisher"));
+    }
+
+    #[test]
+    fn no_match_wrong_environment() {
+        let claims = make_github_claims("acme/my-guard", None, Some("staging"));
+        let publishers = [make_publisher(
+            "github",
+            "acme/my-guard",
+            None,
+            Some("production"),
+        )];
+        let err = match_trusted_publisher(&claims, &publishers).unwrap_err();
+        assert!(err.to_string().contains("no trusted publisher"));
+    }
+
+    #[test]
+    fn match_gitlab_repo() {
+        let claims = make_gitlab_claims("acme/my-guard", None, None);
+        let publishers = [make_publisher("gitlab", "acme/my-guard", None, None)];
+        let matched = match_trusted_publisher(&claims, &publishers).unwrap();
+        assert_eq!(matched.repository, "acme/my-guard");
+    }
+
+    #[test]
+    fn claims_accessors() {
+        let gh = make_github_claims("acme/guard", Some("wf.yml"), Some("prod"));
+        assert_eq!(gh.repository(), "acme/guard");
+        assert_eq!(gh.provider(), "github");
+        assert_eq!(gh.workflow(), Some("wf.yml"));
+        assert_eq!(gh.environment(), Some("prod"));
+        assert_eq!(gh.subject(), "repo:acme/guard:ref:refs/heads/main");
+
+        let gl = make_gitlab_claims("acme/guard", Some("main"), Some("staging"));
+        assert_eq!(gl.repository(), "acme/guard");
+        assert_eq!(gl.provider(), "gitlab");
+        assert_eq!(gl.workflow(), Some("main"));
+        assert_eq!(gl.environment(), Some("staging"));
+    }
+}

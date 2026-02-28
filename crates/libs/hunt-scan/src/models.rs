@@ -134,7 +134,7 @@ impl ScanError {
     pub fn skill_scan_error(message: impl Into<String>) -> Self {
         Self {
             message: Some(message.into()),
-            exception: Some("SkillScannError".into()),
+            exception: Some("SkillScanError".into()),
             traceback: None,
             is_failure: true,
             category: Some(ErrorCategory::SkillScanError),

@@ -206,6 +206,22 @@ impl HuntQuery {
             }
         }
 
+        // Entity: matches against pod name or namespace (case-insensitive substring)
+        if let Some(ref entity) = self.entity {
+            let entity_lower = entity.to_lowercase();
+            let pod_match = event
+                .pod
+                .as_ref()
+                .is_some_and(|p| p.to_lowercase().contains(&entity_lower));
+            let ns_match = event
+                .namespace
+                .as_ref()
+                .is_some_and(|n| n.to_lowercase().contains(&entity_lower));
+            if !pod_match && !ns_match {
+                return false;
+            }
+        }
+
         true
     }
 }
@@ -460,6 +476,36 @@ mod tests {
             process: Some("curl".to_string()),
             ..Default::default()
         };
+        assert!(!q.matches(&event));
+    }
+
+    #[test]
+    fn hunt_query_entity_matches_pod() {
+        let q = HuntQuery {
+            entity: Some("agent-pod".to_string()),
+            ..Default::default()
+        };
+        let event = make_event(); // pod is "agent-pod-abc123"
+        assert!(q.matches(&event));
+    }
+
+    #[test]
+    fn hunt_query_entity_matches_namespace() {
+        let q = HuntQuery {
+            entity: Some("default".to_string()),
+            ..Default::default()
+        };
+        let event = make_event(); // namespace is "default"
+        assert!(q.matches(&event));
+    }
+
+    #[test]
+    fn hunt_query_entity_no_match() {
+        let q = HuntQuery {
+            entity: Some("nonexistent".to_string()),
+            ..Default::default()
+        };
+        let event = make_event();
         assert!(!q.matches(&event));
     }
 }

@@ -686,7 +686,18 @@ fn mcp_error_to_scan_error(e: &mcp_client::McpError) -> ScanError {
 }
 
 fn compute_summary(results: &[ScanPathResult]) -> HuntScanSummary {
-    let clients_scanned = results.len();
+    let clients_scanned = {
+        let mut seen = std::collections::HashSet::new();
+        for r in results {
+            if let Some(ref client) = r.client {
+                seen.insert(client.as_str());
+            } else {
+                // Count results without a client name individually
+                seen.insert("");
+            }
+        }
+        seen.len()
+    };
     let mut servers_found = 0usize;
     let mut tools_found = 0usize;
     let mut issues_found = 0usize;
@@ -1397,12 +1408,17 @@ async fn cmd_hunt_correlate(
     all_alerts.extend(flush_alerts);
 
     let alerts_count = all_alerts.len();
+    let exit_code = if alerts_count > 0 {
+        ExitCode::Warn
+    } else {
+        ExitCode::Ok
+    };
 
     if is_json {
         let output = HuntCorrelateJsonOutput {
             version: CLI_JSON_VERSION,
             command: "hunt correlate",
-            exit_code: ExitCode::Ok.as_i32(),
+            exit_code: exit_code.as_i32(),
             error: None,
             data: Some(HuntCorrelateData {
                 alerts: all_alerts,
@@ -1427,7 +1443,7 @@ async fn cmd_hunt_correlate(
         }
     }
 
-    ExitCode::Ok
+    exit_code
 }
 
 // ---------------------------------------------------------------------------
@@ -1544,12 +1560,17 @@ async fn cmd_hunt_ioc(
     // Match events against IOC database
     let all_matches = hunt_correlate::ioc::match_events(&db, &events);
     let matches_count = all_matches.len();
+    let exit_code = if matches_count > 0 {
+        ExitCode::Warn
+    } else {
+        ExitCode::Ok
+    };
 
     if is_json {
         let output = HuntIocJsonOutput {
             version: CLI_JSON_VERSION,
             command: "hunt ioc",
-            exit_code: ExitCode::Ok.as_i32(),
+            exit_code: exit_code.as_i32(),
             error: None,
             data: Some(HuntIocData {
                 matches: all_matches,
@@ -1585,7 +1606,7 @@ async fn cmd_hunt_ioc(
         }
     }
 
-    ExitCode::Ok
+    exit_code
 }
 
 fn emit_hunt_correlate_error(

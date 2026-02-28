@@ -264,6 +264,15 @@ async fn approvals_list_and_resolve_publish_signed_payload_and_mark_outbox_sent(
         tenant_subject_prefix(&harness.tenant_slug),
         agent_id
     );
+    let js = async_nats::jetstream::new(harness.nats.clone());
+    spine::nats_transport::ensure_stream(
+        &js,
+        "approval-response-integration",
+        vec![subject.clone()],
+        1,
+    )
+    .await
+    .expect("approval response stream should exist");
     let mut subscriber = harness
         .nats
         .subscribe(subject.clone())
@@ -299,19 +308,17 @@ async fn approvals_list_and_resolve_publish_signed_payload_and_mark_outbox_sent(
     assert_eq!(envelope["fact"]["resolution"], "approved");
     assert_eq!(envelope["fact"]["resolved_by"], "integration-tester");
 
-    // Verify the outbox row was created.  The outbox poller claims rows with
-    // `FOR UPDATE SKIP LOCKED` and publishes via JetStream; however, the
-    // claim/ACK cycle is racy in a test that shares a single Postgres
-    // connection, so we only assert the row exists rather than checking
-    // status == "sent".  A future improvement could use a dedicated poller
-    // task with its own connection to make the full assertion reliable.
-    let row =
-        sqlx::query::query("SELECT status FROM approval_resolution_outbox WHERE approval_id = $1")
-            .bind(approval_id)
-            .fetch_one(&harness.db)
-            .await
-            .expect("outbox row should exist");
-    let _status: String = row.try_get("status").expect("status");
+    let row = sqlx::query::query(
+        "SELECT status, attempts FROM approval_resolution_outbox WHERE approval_id = $1",
+    )
+    .bind(approval_id)
+    .fetch_one(&harness.db)
+    .await
+    .expect("outbox row should exist");
+    let status: String = row.try_get("status").expect("status");
+    let attempts: i32 = row.try_get("attempts").expect("attempts");
+    assert_eq!(status, "sent");
+    assert!(attempts >= 1);
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -438,17 +445,6 @@ async fn setup_harness() -> Harness {
     apply_migrations(&db).await;
 
     let nats_client = async_nats::connect(&nats_url).await.expect("connect nats");
-
-    // Create a JetStream stream so outbox publishes get a valid ACK.
-    let js = async_nats::jetstream::new(nats_client.clone());
-    js.create_stream(async_nats::jetstream::stream::Config {
-        name: "approval".to_string(),
-        subjects: vec!["tenant-*.>".to_string()],
-        ..Default::default()
-    })
-    .await
-    .expect("create JetStream stream");
-
     let signing_keypair = Arc::new(hush_core::Keypair::generate());
 
     let config = Config {
@@ -553,10 +549,8 @@ async fn apply_migrations(db: &PgPool) {
 
     for file in files {
         let sql = std::fs::read_to_string(&file).expect("read migration file");
-        // Use Executor::execute with a &str directly so multi-statement
-        // migration files are sent as simple (non-prepared) queries.
-        use sqlx::executor::Executor;
-        db.execute(sql.as_str())
+        sqlx::raw_sql::raw_sql(&sql)
+            .execute(db)
             .await
             .unwrap_or_else(|err| panic!("migration {:?} failed: {}", file, err));
     }

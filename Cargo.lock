@@ -3291,6 +3291,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "hunt-correlate"
+version = "0.1.3"
+dependencies = [
+ "async-nats",
+ "chrono",
+ "crossterm",
+ "hex",
+ "hunt-query",
+ "hunt-scan",
+ "hush-core",
+ "hush-spine",
+ "regex",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "tokio-stream",
+ "tracing",
+]
+
+[[package]]
 name = "hunt-query"
 version = "0.1.3"
 dependencies = [
@@ -3363,6 +3386,7 @@ dependencies = [
  "clap_complete",
  "clawdstrike",
  "hex",
+ "hunt-correlate",
  "hunt-query",
  "hunt-scan",
  "hush-core",

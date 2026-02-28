@@ -1031,6 +1031,175 @@ enum HuntCommands {
         #[arg(long)]
         entity: Option<String>,
     },
+
+    /// Run correlation rules against spine envelopes in real-time watch mode
+    Watch {
+        /// Correlation rule YAML files
+        #[arg(long)]
+        rules: Vec<String>,
+
+        /// NATS server URL
+        #[arg(long, default_value = "nats://localhost:4222")]
+        nats_url: String,
+
+        /// Path to NATS credentials file
+        #[arg(long)]
+        nats_creds: Option<String>,
+
+        /// Signing key path (hex Ed25519 seed)
+        #[arg(long, default_value = "hush.key")]
+        signing_key: String,
+
+        /// Maximum sliding window duration (e.g. "5m", "1h")
+        #[arg(long, default_value = "5m")]
+        max_window: String,
+
+        /// Output as JSON
+        #[arg(long)]
+        json: bool,
+
+        /// Disable colored output
+        #[arg(long)]
+        no_color: bool,
+    },
+
+    /// Run correlation rules against queried spine envelopes (batch mode)
+    Correlate {
+        /// Correlation rule YAML files
+        #[arg(long)]
+        rules: Vec<String>,
+
+        /// Envelope source filters
+        #[arg(long)]
+        source: Option<Vec<String>>,
+
+        /// Filter by verdict (allow, deny, abstain)
+        #[arg(long)]
+        verdict: Option<String>,
+
+        /// Start of time range (RFC 3339 or relative like "1h")
+        #[arg(long)]
+        start: Option<String>,
+
+        /// End of time range (RFC 3339 or relative)
+        #[arg(long)]
+        end: Option<String>,
+
+        /// Filter by action type
+        #[arg(long)]
+        action_type: Option<String>,
+
+        /// Filter by process name or path
+        #[arg(long)]
+        process: Option<String>,
+
+        /// Filter by Kubernetes namespace
+        #[arg(long)]
+        namespace: Option<String>,
+
+        /// Filter by Kubernetes pod
+        #[arg(long)]
+        pod: Option<String>,
+
+        /// Maximum number of results
+        #[arg(long, default_value_t = 100)]
+        limit: usize,
+
+        /// Natural language query (translated to filters)
+        #[arg(long)]
+        nl: Option<String>,
+
+        /// NATS server URL
+        #[arg(long, default_value = "nats://localhost:4222")]
+        nats_url: String,
+
+        /// Path to NATS credentials file
+        #[arg(long)]
+        nats_creds: Option<String>,
+
+        /// Offline mode: query only local directories
+        #[arg(long)]
+        offline: bool,
+
+        /// Local directories to search for exported envelopes
+        #[arg(long)]
+        local_dir: Option<Vec<String>>,
+
+        /// Verify envelope signatures
+        #[arg(long)]
+        verify: bool,
+
+        /// Signing key path (hex Ed25519 seed)
+        #[arg(long, default_value = "hush.key")]
+        signing_key: String,
+
+        /// Output as JSON
+        #[arg(long)]
+        json: bool,
+
+        /// Output as JSON Lines (one object per line)
+        #[arg(long)]
+        jsonl: bool,
+
+        /// Disable colored output
+        #[arg(long)]
+        no_color: bool,
+    },
+
+    /// Match spine envelopes against IOC feeds
+    Ioc {
+        /// IOC feed files (CSV, text)
+        #[arg(long)]
+        feed: Option<Vec<String>>,
+
+        /// STIX 2.1 JSON bundle files
+        #[arg(long)]
+        stix: Option<Vec<String>>,
+
+        /// Envelope source filters
+        #[arg(long)]
+        source: Option<Vec<String>>,
+
+        /// Start of time range (RFC 3339 or relative like "1h")
+        #[arg(long)]
+        start: Option<String>,
+
+        /// End of time range (RFC 3339 or relative)
+        #[arg(long)]
+        end: Option<String>,
+
+        /// Maximum number of results
+        #[arg(long, default_value_t = 100)]
+        limit: usize,
+
+        /// NATS server URL
+        #[arg(long, default_value = "nats://localhost:4222")]
+        nats_url: String,
+
+        /// Path to NATS credentials file
+        #[arg(long)]
+        nats_creds: Option<String>,
+
+        /// Offline mode: query only local directories
+        #[arg(long)]
+        offline: bool,
+
+        /// Local directories to search for exported envelopes
+        #[arg(long)]
+        local_dir: Option<Vec<String>>,
+
+        /// Verify envelope signatures
+        #[arg(long)]
+        verify: bool,
+
+        /// Output as JSON
+        #[arg(long)]
+        json: bool,
+
+        /// Disable colored output
+        #[arg(long)]
+        no_color: bool,
+    },
 }
 
 #[tokio::main]

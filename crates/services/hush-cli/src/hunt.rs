@@ -148,6 +148,112 @@ pub async fn cmd_hunt(
         )
         .await
         .as_i32(),
+        HuntCommands::Watch {
+            rules,
+            nats_url,
+            nats_creds,
+            signing_key,
+            max_window,
+            json,
+            no_color,
+        } => cmd_hunt_watch(
+            HuntWatchArgs {
+                rules,
+                nats_url,
+                nats_creds,
+                signing_key,
+                max_window,
+                json,
+                no_color,
+            },
+            stdout,
+            stderr,
+        )
+        .await
+        .as_i32(),
+        HuntCommands::Correlate {
+            rules,
+            source,
+            verdict,
+            start,
+            end,
+            action_type,
+            process,
+            namespace,
+            pod,
+            limit,
+            nl,
+            nats_url,
+            nats_creds,
+            offline,
+            local_dir,
+            verify,
+            signing_key: _,
+            json,
+            jsonl,
+            no_color,
+        } => cmd_hunt_correlate(
+            HuntCorrelateArgs {
+                rules,
+                source,
+                verdict,
+                start,
+                end,
+                action_type,
+                process,
+                namespace,
+                pod,
+                limit,
+                nl,
+                nats_url,
+                nats_creds,
+                offline,
+                local_dir,
+                verify,
+                json,
+                jsonl,
+                no_color,
+            },
+            stdout,
+            stderr,
+        )
+        .await
+        .as_i32(),
+        HuntCommands::Ioc {
+            feed,
+            stix,
+            source,
+            start,
+            end,
+            limit,
+            nats_url,
+            nats_creds,
+            offline,
+            local_dir,
+            verify,
+            json,
+            no_color,
+        } => cmd_hunt_ioc(
+            HuntIocArgs {
+                feed,
+                stix,
+                source,
+                start,
+                end,
+                limit,
+                nats_url,
+                nats_creds,
+                offline,
+                local_dir,
+                verify,
+                json,
+                no_color,
+            },
+            stdout,
+            stderr,
+        )
+        .await
+        .as_i32(),
     }
 }
 
@@ -929,6 +1035,590 @@ fn emit_hunt_query_error(
         let output = HuntQueryJsonOutput {
             version: CLI_JSON_VERSION,
             command,
+            exit_code: code.as_i32(),
+            error: Some(HuntJsonError {
+                kind: "invalid_args",
+                message: message.to_string(),
+            }),
+            data: None,
+        };
+        if let Ok(json_str) = serde_json::to_string_pretty(&output) {
+            let _ = writeln!(stdout, "{json_str}");
+        }
+    } else {
+        let _ = writeln!(stderr, "Error: {message}");
+    }
+    code
+}
+
+// ---------------------------------------------------------------------------
+// Hunt Watch args
+// ---------------------------------------------------------------------------
+
+struct HuntWatchArgs {
+    rules: Vec<String>,
+    nats_url: String,
+    nats_creds: Option<String>,
+    signing_key: String,
+    max_window: String,
+    json: bool,
+    no_color: bool,
+}
+
+// ---------------------------------------------------------------------------
+// Hunt Correlate args
+// ---------------------------------------------------------------------------
+
+struct HuntCorrelateArgs {
+    rules: Vec<String>,
+    source: Option<Vec<String>>,
+    verdict: Option<String>,
+    start: Option<String>,
+    end: Option<String>,
+    action_type: Option<String>,
+    process: Option<String>,
+    namespace: Option<String>,
+    pod: Option<String>,
+    limit: usize,
+    nl: Option<String>,
+    nats_url: String,
+    nats_creds: Option<String>,
+    offline: bool,
+    local_dir: Option<Vec<String>>,
+    verify: bool,
+    json: bool,
+    jsonl: bool,
+    no_color: bool,
+}
+
+// ---------------------------------------------------------------------------
+// Hunt IOC args
+// ---------------------------------------------------------------------------
+
+struct HuntIocArgs {
+    feed: Option<Vec<String>>,
+    stix: Option<Vec<String>>,
+    source: Option<Vec<String>>,
+    start: Option<String>,
+    end: Option<String>,
+    limit: usize,
+    nats_url: String,
+    nats_creds: Option<String>,
+    offline: bool,
+    local_dir: Option<Vec<String>>,
+    verify: bool,
+    json: bool,
+    no_color: bool,
+}
+
+// ---------------------------------------------------------------------------
+// Hunt Watch / Correlate / IOC JSON output structs
+// ---------------------------------------------------------------------------
+
+#[derive(serde::Serialize)]
+struct HuntCorrelateJsonOutput {
+    version: u8,
+    command: &'static str,
+    exit_code: i32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    error: Option<HuntJsonError>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    data: Option<HuntCorrelateData>,
+}
+
+#[derive(serde::Serialize)]
+struct HuntCorrelateData {
+    alerts: Vec<hunt_correlate::engine::Alert>,
+    summary: HuntCorrelateSummary,
+}
+
+#[derive(serde::Serialize)]
+struct HuntCorrelateSummary {
+    events_processed: usize,
+    alerts_generated: usize,
+    rules_loaded: usize,
+}
+
+#[derive(serde::Serialize)]
+struct HuntIocJsonOutput {
+    version: u8,
+    command: &'static str,
+    exit_code: i32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    error: Option<HuntJsonError>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    data: Option<HuntIocData>,
+}
+
+#[derive(serde::Serialize)]
+struct HuntIocData {
+    matches: Vec<hunt_correlate::ioc::IocMatch>,
+    summary: HuntIocSummary,
+}
+
+#[derive(serde::Serialize)]
+struct HuntIocSummary {
+    events_scanned: usize,
+    iocs_loaded: usize,
+    matches_found: usize,
+}
+
+// ---------------------------------------------------------------------------
+// Hunt Watch command
+// ---------------------------------------------------------------------------
+
+async fn cmd_hunt_watch(
+    args: HuntWatchArgs,
+    stdout: &mut dyn Write,
+    stderr: &mut dyn Write,
+) -> ExitCode {
+    let is_json = args.json;
+
+    if args.rules.is_empty() {
+        return emit_hunt_correlate_error(
+            is_json,
+            "hunt watch",
+            stdout,
+            stderr,
+            "No correlation rule files specified. Use --rules <path>.",
+            ExitCode::InvalidArgs,
+        );
+    }
+
+    // Load rules
+    let rule_paths: Vec<PathBuf> = args.rules.iter().map(PathBuf::from).collect();
+    let all_rules = match hunt_correlate::rules::load_rules_from_files(&rule_paths) {
+        Ok(rules) => rules,
+        Err(e) => {
+            return emit_hunt_correlate_error(
+                is_json,
+                "hunt watch",
+                stdout,
+                stderr,
+                &format!("Failed to load rules: {e}"),
+                ExitCode::ConfigError,
+            );
+        }
+    };
+
+    let rules_loaded = all_rules.len();
+
+    // Parse max_window duration
+    let max_window = match hunt_correlate::rules::parse_duration_str(&args.max_window) {
+        Some(dur) => dur,
+        None => {
+            return emit_hunt_correlate_error(
+                is_json,
+                "hunt watch",
+                stdout,
+                stderr,
+                &format!(
+                    "Invalid --max-window value '{}'. Use e.g. '5m', '1h'.",
+                    args.max_window
+                ),
+                ExitCode::InvalidArgs,
+            );
+        }
+    };
+
+    if !is_json {
+        let _ = writeln!(
+            stdout,
+            "Loaded {} correlation rules, connecting to {}...",
+            rules_loaded, args.nats_url
+        );
+    }
+
+    let config = hunt_correlate::watch::WatchConfig {
+        nats_url: args.nats_url,
+        nats_creds: args.nats_creds,
+        signing_key: Some(args.signing_key),
+        rules: all_rules,
+        max_window,
+        color: !args.no_color,
+        json: is_json,
+    };
+
+    match hunt_correlate::watch::run_watch(config, stdout, stderr).await {
+        Ok(stats) => {
+            if is_json {
+                let output = HuntCorrelateJsonOutput {
+                    version: CLI_JSON_VERSION,
+                    command: "hunt watch",
+                    exit_code: ExitCode::Ok.as_i32(),
+                    error: None,
+                    data: Some(HuntCorrelateData {
+                        alerts: vec![],
+                        summary: HuntCorrelateSummary {
+                            events_processed: stats.events_processed as usize,
+                            alerts_generated: stats.alerts_triggered as usize,
+                            rules_loaded,
+                        },
+                    }),
+                };
+                if let Ok(json_str) = serde_json::to_string_pretty(&output) {
+                    let _ = writeln!(stdout, "{json_str}");
+                }
+            } else {
+                let _ = writeln!(
+                    stdout,
+                    "Watch session ended: {} events processed, {} alerts",
+                    stats.events_processed, stats.alerts_triggered
+                );
+            }
+            ExitCode::Ok
+        }
+        Err(e) => emit_hunt_correlate_error(
+            is_json,
+            "hunt watch",
+            stdout,
+            stderr,
+            &format!("Watch failed: {e}"),
+            ExitCode::RuntimeError,
+        ),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Hunt Correlate command
+// ---------------------------------------------------------------------------
+
+async fn cmd_hunt_correlate(
+    args: HuntCorrelateArgs,
+    stdout: &mut dyn Write,
+    stderr: &mut dyn Write,
+) -> ExitCode {
+    let is_json = args.json;
+
+    if args.rules.is_empty() {
+        return emit_hunt_correlate_error(
+            is_json,
+            "hunt correlate",
+            stdout,
+            stderr,
+            "No correlation rule files specified. Use --rules <path>.",
+            ExitCode::InvalidArgs,
+        );
+    }
+
+    // Load rules
+    let rule_paths: Vec<PathBuf> = args.rules.iter().map(PathBuf::from).collect();
+    let all_rules = match hunt_correlate::rules::load_rules_from_files(&rule_paths) {
+        Ok(rules) => rules,
+        Err(e) => {
+            return emit_hunt_correlate_error(
+                is_json,
+                "hunt correlate",
+                stdout,
+                stderr,
+                &format!("Failed to load rules: {e}"),
+                ExitCode::ConfigError,
+            );
+        }
+    };
+
+    let rules_loaded = all_rules.len();
+
+    // Build query args to reuse the existing query infrastructure
+    let query_args = HuntQueryArgs {
+        source: args.source,
+        verdict: args.verdict,
+        start: args.start,
+        end: args.end,
+        action_type: args.action_type,
+        process: args.process,
+        namespace: args.namespace,
+        pod: args.pod,
+        limit: args.limit,
+        nl: args.nl,
+        nats_url: args.nats_url,
+        nats_creds: args.nats_creds,
+        offline: args.offline,
+        local_dir: args.local_dir,
+        verify: args.verify,
+        json: args.json,
+        jsonl: args.jsonl,
+        no_color: args.no_color,
+        entity: None,
+    };
+
+    let query = match build_hunt_query(&query_args) {
+        Ok(q) => q,
+        Err((code, msg)) => {
+            return emit_hunt_correlate_error(
+                is_json,
+                "hunt correlate",
+                stdout,
+                stderr,
+                &msg,
+                code,
+            );
+        }
+    };
+
+    let events = fetch_events(&query_args, &query, stderr).await;
+    let events_count = events.len();
+
+    // Merge into timeline for chronological ordering
+    let timeline = hunt_query::timeline::merge_timeline(events);
+
+    // Run correlation engine
+    let mut engine = match hunt_correlate::engine::CorrelationEngine::new(all_rules) {
+        Ok(eng) => eng,
+        Err(e) => {
+            return emit_hunt_correlate_error(
+                is_json,
+                "hunt correlate",
+                stdout,
+                stderr,
+                &format!("Failed to initialize correlation engine: {e}"),
+                ExitCode::ConfigError,
+            );
+        }
+    };
+
+    let mut all_alerts = Vec::new();
+
+    for event in &timeline {
+        let alerts = engine.process_event(event);
+        all_alerts.extend(alerts);
+    }
+
+    // Flush remaining window buffers
+    let flush_alerts = engine.flush();
+    all_alerts.extend(flush_alerts);
+
+    let alerts_count = all_alerts.len();
+
+    if is_json {
+        let output = HuntCorrelateJsonOutput {
+            version: CLI_JSON_VERSION,
+            command: "hunt correlate",
+            exit_code: ExitCode::Ok.as_i32(),
+            error: None,
+            data: Some(HuntCorrelateData {
+                alerts: all_alerts,
+                summary: HuntCorrelateSummary {
+                    events_processed: events_count,
+                    alerts_generated: alerts_count,
+                    rules_loaded,
+                },
+            }),
+        };
+        if let Ok(json_str) = serde_json::to_string_pretty(&output) {
+            let _ = writeln!(stdout, "{json_str}");
+        }
+    } else {
+        let _ = writeln!(
+            stdout,
+            "{} events processed, {} alerts from {} rules",
+            events_count, alerts_count, rules_loaded
+        );
+        for alert in &all_alerts {
+            hunt_correlate::watch::render_alert(alert, !args.no_color, stdout).ok();
+        }
+    }
+
+    ExitCode::Ok
+}
+
+// ---------------------------------------------------------------------------
+// Hunt IOC command
+// ---------------------------------------------------------------------------
+
+async fn cmd_hunt_ioc(
+    args: HuntIocArgs,
+    stdout: &mut dyn Write,
+    stderr: &mut dyn Write,
+) -> ExitCode {
+    let is_json = args.json;
+
+    if args.feed.is_none() && args.stix.is_none() {
+        return emit_hunt_ioc_error(
+            is_json,
+            stdout,
+            stderr,
+            "No IOC feeds specified. Use --feed or --stix.",
+            ExitCode::InvalidArgs,
+        );
+    }
+
+    // Load IOC database
+    let mut db = hunt_correlate::ioc::IocDatabase::new();
+
+    if let Some(ref feeds) = args.feed {
+        for path in feeds {
+            let p = std::path::Path::new(path);
+            let result = if path.ends_with(".csv") {
+                hunt_correlate::ioc::IocDatabase::load_csv_file(p)
+            } else {
+                hunt_correlate::ioc::IocDatabase::load_text_file(p)
+            };
+            match result {
+                Ok(loaded_db) => {
+                    let count = loaded_db.len();
+                    if !is_json {
+                        let _ = writeln!(stdout, "Loaded {count} IOCs from {path}");
+                    }
+                    db.merge(loaded_db);
+                }
+                Err(e) => {
+                    return emit_hunt_ioc_error(
+                        is_json,
+                        stdout,
+                        stderr,
+                        &format!("Failed to load IOC feed '{path}': {e}"),
+                        ExitCode::ConfigError,
+                    );
+                }
+            }
+        }
+    }
+
+    if let Some(ref stix_files) = args.stix {
+        for path in stix_files {
+            match hunt_correlate::ioc::IocDatabase::load_stix_bundle(std::path::Path::new(path)) {
+                Ok(loaded_db) => {
+                    let count = loaded_db.len();
+                    if !is_json {
+                        let _ = writeln!(stdout, "Loaded {count} IOCs from STIX bundle {path}");
+                    }
+                    db.merge(loaded_db);
+                }
+                Err(e) => {
+                    return emit_hunt_ioc_error(
+                        is_json,
+                        stdout,
+                        stderr,
+                        &format!("Failed to load STIX bundle '{path}': {e}"),
+                        ExitCode::ConfigError,
+                    );
+                }
+            }
+        }
+    }
+
+    let iocs_loaded = db.len();
+
+    // Build query to fetch events
+    let query_args = HuntQueryArgs {
+        source: args.source,
+        verdict: None,
+        start: args.start,
+        end: args.end,
+        action_type: None,
+        process: None,
+        namespace: None,
+        pod: None,
+        limit: args.limit,
+        nl: None,
+        nats_url: args.nats_url,
+        nats_creds: args.nats_creds,
+        offline: args.offline,
+        local_dir: args.local_dir,
+        verify: args.verify,
+        json: args.json,
+        jsonl: false,
+        no_color: args.no_color,
+        entity: None,
+    };
+
+    let query = match build_hunt_query(&query_args) {
+        Ok(q) => q,
+        Err((code, msg)) => {
+            return emit_hunt_ioc_error(is_json, stdout, stderr, &msg, code);
+        }
+    };
+
+    let events = fetch_events(&query_args, &query, stderr).await;
+    let events_count = events.len();
+
+    // Match events against IOC database
+    let all_matches = hunt_correlate::ioc::match_events(&db, &events);
+    let matches_count = all_matches.len();
+
+    if is_json {
+        let output = HuntIocJsonOutput {
+            version: CLI_JSON_VERSION,
+            command: "hunt ioc",
+            exit_code: ExitCode::Ok.as_i32(),
+            error: None,
+            data: Some(HuntIocData {
+                matches: all_matches,
+                summary: HuntIocSummary {
+                    events_scanned: events_count,
+                    iocs_loaded,
+                    matches_found: matches_count,
+                },
+            }),
+        };
+        if let Ok(json_str) = serde_json::to_string_pretty(&output) {
+            let _ = writeln!(stdout, "{json_str}");
+        }
+    } else {
+        let _ = writeln!(
+            stdout,
+            "{} events scanned, {} IOCs loaded, {} matches found",
+            events_count, iocs_loaded, matches_count
+        );
+        for m in &all_matches {
+            let ioc_names: Vec<&str> = m
+                .matched_iocs
+                .iter()
+                .map(|e| e.indicator.as_str())
+                .collect();
+            let _ = writeln!(
+                stdout,
+                "  [{}] {} in {}",
+                m.match_field,
+                ioc_names.join(", "),
+                m.event.summary,
+            );
+        }
+    }
+
+    ExitCode::Ok
+}
+
+fn emit_hunt_correlate_error(
+    json: bool,
+    command: &'static str,
+    stdout: &mut dyn Write,
+    stderr: &mut dyn Write,
+    message: &str,
+    code: ExitCode,
+) -> ExitCode {
+    if json {
+        let output = HuntCorrelateJsonOutput {
+            version: CLI_JSON_VERSION,
+            command,
+            exit_code: code.as_i32(),
+            error: Some(HuntJsonError {
+                kind: "invalid_args",
+                message: message.to_string(),
+            }),
+            data: None,
+        };
+        if let Ok(json_str) = serde_json::to_string_pretty(&output) {
+            let _ = writeln!(stdout, "{json_str}");
+        }
+    } else {
+        let _ = writeln!(stderr, "Error: {message}");
+    }
+    code
+}
+
+fn emit_hunt_ioc_error(
+    json: bool,
+    stdout: &mut dyn Write,
+    stderr: &mut dyn Write,
+    message: &str,
+    code: ExitCode,
+) -> ExitCode {
+    if json {
+        let output = HuntIocJsonOutput {
+            version: CLI_JSON_VERSION,
+            command: "hunt ioc",
             exit_code: code.as_i32(),
             error: Some(HuntJsonError {
                 kind: "invalid_args",

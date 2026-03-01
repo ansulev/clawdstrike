@@ -299,6 +299,7 @@ pub async fn publish(
             "reserved leaf index mismatch: expected {leaf_index}, got {appended_index}"
         )));
     }
+    drop(db);
 
     tracing::info!(name = %name, version = %version, checksum = %checksum, leaf_index = leaf_index, "Package published");
 

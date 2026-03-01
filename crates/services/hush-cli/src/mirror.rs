@@ -138,7 +138,6 @@ struct MirrorSearchResponse {
 #[derive(Clone, Debug, serde::Deserialize)]
 struct MirrorSearchEntry {
     name: String,
-    latest_version: Option<String>,
 }
 
 fn urlencoding_simple(s: &str) -> String {
@@ -788,8 +787,16 @@ fn cmd_mirror_bulk_sync(
 
     let mut filtered: Vec<BulkPackageEntry> = Vec::new();
     for pkg in &packages {
-        let Some(version) = pkg.latest_version.as_deref() else {
-            continue;
+        let version = match resolve_latest_version(&client, from, &pkg.name) {
+            Ok(v) => v,
+            Err(e) => {
+                let _ = writeln!(
+                    stderr,
+                    "Warning: skipping {} (unable to resolve latest non-yanked version: {})",
+                    pkg.name, e
+                );
+                continue;
+            }
         };
         if let Some(s) = scope {
             if !package_matches_scope_filter(&pkg.name, s) {
@@ -797,7 +804,7 @@ fn cmd_mirror_bulk_sync(
             }
         }
 
-        let attestation = match fetch_attestation(&client, from, &pkg.name, version) {
+        let attestation = match fetch_attestation(&client, from, &pkg.name, &version) {
             Ok(a) => a,
             Err(e) => {
                 let _ = writeln!(
@@ -814,7 +821,7 @@ fn cmd_mirror_bulk_sync(
                     "{}/api/v1/packages/{}/{}/proof",
                     from.trim_end_matches('/'),
                     urlencoding_simple(&pkg.name),
-                    urlencoding_simple(version)
+                    urlencoding_simple(&version)
                 );
                 let certified = if registry_ok {
                     match client.get(&proof_url).send() {
@@ -825,7 +832,7 @@ fn cmd_mirror_bulk_sync(
                                     .is_some_and(|k| {
                                         verify_transparency_proof(
                                             &pkg.name,
-                                            version,
+                                            &version,
                                             &attestation,
                                             &proof,
                                             k,
@@ -867,7 +874,7 @@ fn cmd_mirror_bulk_sync(
 
         filtered.push(BulkPackageEntry {
             name: pkg.name.clone(),
-            version: version.to_string(),
+            version,
         });
     }
 
@@ -1166,10 +1173,9 @@ mod tests {
         assert!(err.contains("invalid trust level 'verfied'"));
     }
 
-    fn entry(name: &str, version: Option<&str>) -> MirrorSearchEntry {
+    fn entry(name: &str) -> MirrorSearchEntry {
         MirrorSearchEntry {
             name: name.to_string(),
-            latest_version: version.map(ToOwned::to_owned),
         }
     }
 
@@ -1180,15 +1186,15 @@ mod tests {
             seen_offsets.push(offset);
             Ok(match offset {
                 0 => MirrorSearchResponse {
-                    packages: vec![entry("a", Some("1.0.0")), entry("b", Some("1.0.0"))],
+                    packages: vec![entry("a"), entry("b")],
                     total: Some(5),
                 },
                 2 => MirrorSearchResponse {
-                    packages: vec![entry("c", Some("1.0.0")), entry("d", Some("1.0.0"))],
+                    packages: vec![entry("c"), entry("d")],
                     total: Some(5),
                 },
                 4 => MirrorSearchResponse {
-                    packages: vec![entry("e", Some("1.0.0"))],
+                    packages: vec![entry("e")],
                     total: Some(5),
                 },
                 _ => MirrorSearchResponse {
@@ -1211,15 +1217,11 @@ mod tests {
             calls += 1;
             Ok(match offset {
                 0 => MirrorSearchResponse {
-                    packages: vec![
-                        entry("a", Some("1.0.0")),
-                        entry("b", Some("1.0.0")),
-                        entry("c", Some("1.0.0")),
-                    ],
+                    packages: vec![entry("a"), entry("b"), entry("c")],
                     total: None,
                 },
                 3 => MirrorSearchResponse {
-                    packages: vec![entry("d", Some("1.0.0"))],
+                    packages: vec![entry("d")],
                     total: None,
                 },
                 _ => MirrorSearchResponse {

@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdtemp, writeFile, mkdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { queryLocalFiles } from './local.js';
+import { queryLocalFiles, hunt } from './local.js';
 import { createHuntQuery } from './query.js';
 
 function makeEnvelope(
@@ -241,5 +241,49 @@ describe('queryLocalFiles', () => {
     const query = createHuntQuery({ limit: 0 });
     const events = await queryLocalFiles(query, [tempDir]);
     expect(events).toHaveLength(0);
+  });
+});
+
+describe('hunt', () => {
+  let tempDir: string;
+
+  beforeEach(async () => {
+    tempDir = await mkdtemp(join(tmpdir(), 'hunt-fn-test-'));
+  });
+
+  afterEach(async () => {
+    await rm(tempDir, { recursive: true, force: true });
+  });
+
+  it('queries with explicit dirs', async () => {
+    const envelope = makeEnvelope(
+      'clawdstrike.sdr.fact.receipt.v1',
+      '2025-01-15T10:00:00Z',
+      'deny',
+      'blocked',
+    );
+    await writeFile(
+      join(tempDir, 'test.json'),
+      JSON.stringify(envelope),
+    );
+
+    const events = await hunt({ dirs: [tempDir] });
+    expect(events).toHaveLength(1);
+  });
+
+  it('accepts duration string for start', async () => {
+    const envelope = makeEnvelope(
+      'clawdstrike.sdr.fact.receipt.v1',
+      new Date().toISOString(),
+      'allow',
+      'recent event',
+    );
+    await writeFile(
+      join(tempDir, 'recent.json'),
+      JSON.stringify(envelope),
+    );
+
+    const events = await hunt({ start: '1h', dirs: [tempDir] });
+    expect(events).toHaveLength(1);
   });
 });

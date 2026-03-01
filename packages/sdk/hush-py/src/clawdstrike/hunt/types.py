@@ -40,7 +40,11 @@ class NormalizedVerdict(str, Enum):
 
 
 class QueryVerdict(str, Enum):
-    """Verdict filter for queries."""
+    """Verdict filter for queries.
+
+    .. deprecated::
+        Use :class:`NormalizedVerdict` instead. Will be removed in a future release.
+    """
 
     ALLOW = "allow"
     DENY = "deny"
@@ -93,7 +97,7 @@ class HuntQuery:
     """Structured query over historical events."""
 
     sources: tuple[EventSourceType, ...] = ()
-    verdict: QueryVerdict | None = None
+    verdict: NormalizedVerdict | None = None
     start: datetime | None = None
     end: datetime | None = None
     action_type: str | None = None
@@ -178,7 +182,7 @@ class EvidenceItem:
     source_type: str
     timestamp: datetime
     summary: str
-    data: Any
+    data: dict[str, Any]
 
 
 @dataclass(frozen=True)
@@ -202,8 +206,6 @@ class WatchConfig:
     rules: tuple[CorrelationRule, ...]
     max_window: timedelta
     nats_creds: str | None = None
-    color: bool = True
-    json: bool = False
 
 
 @dataclass(frozen=True)

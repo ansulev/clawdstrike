@@ -7,12 +7,19 @@ from __future__ import annotations
 
 import json
 import logging
+from datetime import datetime, timezone
 from pathlib import Path
 
+from clawdstrike.hunt.duration import parse_human_duration
 from clawdstrike.hunt.errors import IoError
 from clawdstrike.hunt.query import matches_query
 from clawdstrike.hunt.timeline import merge_timeline, parse_envelope
-from clawdstrike.hunt.types import HuntQuery, TimelineEvent
+from clawdstrike.hunt.types import (
+    EventSourceType,
+    HuntQuery,
+    NormalizedVerdict,
+    TimelineEvent,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +40,7 @@ def default_local_dirs() -> list[str]:
 
 def query_local_files(
     query: HuntQuery,
-    search_dirs: list[str],
+    search_dirs: list[str] | None = None,
     verify: bool = False,
 ) -> list[TimelineEvent]:
     """Query envelopes from local JSON/JSONL files.
@@ -41,10 +48,13 @@ def query_local_files(
     Reads all ``.json`` and ``.jsonl`` files from the given directories,
     parses envelopes, filters with the query predicates, merges by timestamp,
     and truncates to the newest ``query.limit`` events.
+
+    If *search_dirs* is ``None``, defaults to :func:`default_local_dirs`.
     """
+    dirs = search_dirs if search_dirs is not None else default_local_dirs()
     all_events: list[TimelineEvent] = []
 
-    for dir_str in search_dirs:
+    for dir_str in dirs:
         dir_path = Path(dir_str)
         if not dir_path.is_dir():
             logger.debug("skipping non-directory: %s", dir_path)
@@ -82,6 +92,49 @@ def query_local_files(
     merged = merge_timeline(all_events)
     _truncate_to_newest(merged, query.limit)
     return merged
+
+
+def hunt(
+    *,
+    sources: tuple[EventSourceType, ...] = (),
+    verdict: NormalizedVerdict | None = None,
+    start: datetime | str | None = None,
+    end: datetime | None = None,
+    action_type: str | None = None,
+    process: str | None = None,
+    namespace: str | None = None,
+    pod: str | None = None,
+    entity: str | None = None,
+    limit: int = 100,
+    dirs: list[str] | None = None,
+) -> list[TimelineEvent]:
+    """High-level convenience function for querying local events.
+
+    Parses duration strings for *start* (e.g. ``"1h"``, ``"30m"``),
+    applies defaults, builds a query, and calls :func:`query_local_files`.
+    """
+    start_dt: datetime | None = None
+    if isinstance(start, str):
+        td = parse_human_duration(start)
+        if td is not None:
+            start_dt = datetime.now(tz=timezone.utc) - td
+    elif isinstance(start, datetime):
+        start_dt = start
+
+    query = HuntQuery(
+        sources=sources,
+        verdict=verdict,
+        start=start_dt,
+        end=end,
+        action_type=action_type,
+        process=process,
+        namespace=namespace,
+        pod=pod,
+        entity=entity,
+        limit=limit,
+    )
+
+    return query_local_files(query, dirs)
 
 
 def _truncate_to_newest(events: list[TimelineEvent], limit: int) -> None:

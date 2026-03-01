@@ -8,6 +8,7 @@ import pytest
 
 from clawdstrike.hunt.correlate import (
     CorrelationEngine,
+    correlate,
     load_rules_from_files,
     parse_rule,
     validate_rule,
@@ -418,7 +419,7 @@ class TestWindowEviction:
         )
         engine.process_event(e1)
 
-        engine.evict_expired_at(new_ts)
+        engine._evict_expired_at(new_ts)
         # After eviction, windows should be clear
         alerts = engine.flush()
         assert len(alerts) == 0
@@ -667,3 +668,45 @@ output:
         rule = parse_rule(yaml_str)
         with pytest.raises(CorrelationError):
             CorrelationEngine([rule])
+
+
+# ---------------------------------------------------------------------------
+# correlate() convenience function
+# ---------------------------------------------------------------------------
+
+
+class TestCorrelateFunction:
+    def test_processes_events_and_returns_alerts(self) -> None:
+        rule = parse_rule(SINGLE_CONDITION_RULE)
+        ts = datetime(2025, 6, 15, 12, 0, 0, tzinfo=timezone.utc)
+        events = [
+            _make_event(EventSourceType.RECEIPT, "file", NormalizedVerdict.DENY, "/etc/passwd", ts),
+            _make_event(EventSourceType.RECEIPT, "file", NormalizedVerdict.DENY, "/etc/shadow", ts),
+        ]
+
+        alerts = correlate([rule], events)
+        assert len(alerts) == 2
+        assert alerts[0].rule_name == "Forbidden Path Access"
+
+    def test_multi_step_sequence(self) -> None:
+        rule = parse_rule(EXAMPLE_RULE)
+        ts1 = datetime(2025, 6, 15, 12, 0, 0, tzinfo=timezone.utc)
+        ts2 = datetime(2025, 6, 15, 12, 0, 10, tzinfo=timezone.utc)
+        events = [
+            _make_event(EventSourceType.RECEIPT, "file", NormalizedVerdict.ALLOW, "read /etc/passwd", ts1),
+            _make_event(EventSourceType.RECEIPT, "egress", NormalizedVerdict.ALLOW, "egress TCP -> 93.184.216.34:443", ts2),
+        ]
+
+        alerts = correlate([rule], events)
+        assert len(alerts) == 1
+        assert alerts[0].title == "Potential data exfiltration via MCP tool"
+
+    def test_returns_empty_for_no_matches(self) -> None:
+        rule = parse_rule(SINGLE_CONDITION_RULE)
+        ts = datetime(2025, 6, 15, 12, 0, 0, tzinfo=timezone.utc)
+        events = [
+            _make_event(EventSourceType.RECEIPT, "file", NormalizedVerdict.ALLOW, "test", ts),
+        ]
+
+        alerts = correlate([rule], events)
+        assert len(alerts) == 0

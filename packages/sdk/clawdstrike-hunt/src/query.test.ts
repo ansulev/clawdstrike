@@ -3,7 +3,6 @@ import type { TimelineEvent, HuntQuery } from './types.js';
 import {
   EventSourceType,
   NormalizedVerdict,
-  QueryVerdict,
   TimelineEventKind,
 } from './types.js';
 import {
@@ -124,33 +123,33 @@ describe('allEventSources', () => {
 
 describe('parseQueryVerdict', () => {
   it('parses allow variants', () => {
-    expect(parseQueryVerdict('allow')).toBe(QueryVerdict.Allow);
-    expect(parseQueryVerdict('ALLOWED')).toBe(QueryVerdict.Allow);
-    expect(parseQueryVerdict('pass')).toBe(QueryVerdict.Allow);
-    expect(parseQueryVerdict('passed')).toBe(QueryVerdict.Allow);
+    expect(parseQueryVerdict('allow')).toBe(NormalizedVerdict.Allow);
+    expect(parseQueryVerdict('ALLOWED')).toBe(NormalizedVerdict.Allow);
+    expect(parseQueryVerdict('pass')).toBe(NormalizedVerdict.Allow);
+    expect(parseQueryVerdict('passed')).toBe(NormalizedVerdict.Allow);
   });
 
   it('parses deny variants', () => {
-    expect(parseQueryVerdict('deny')).toBe(QueryVerdict.Deny);
-    expect(parseQueryVerdict('DENIED')).toBe(QueryVerdict.Deny);
-    expect(parseQueryVerdict('block')).toBe(QueryVerdict.Deny);
-    expect(parseQueryVerdict('blocked')).toBe(QueryVerdict.Deny);
+    expect(parseQueryVerdict('deny')).toBe(NormalizedVerdict.Deny);
+    expect(parseQueryVerdict('DENIED')).toBe(NormalizedVerdict.Deny);
+    expect(parseQueryVerdict('block')).toBe(NormalizedVerdict.Deny);
+    expect(parseQueryVerdict('blocked')).toBe(NormalizedVerdict.Deny);
   });
 
   it('parses warn variants', () => {
-    expect(parseQueryVerdict('warn')).toBe(QueryVerdict.Warn);
-    expect(parseQueryVerdict('warned')).toBe(QueryVerdict.Warn);
-    expect(parseQueryVerdict('warning')).toBe(QueryVerdict.Warn);
+    expect(parseQueryVerdict('warn')).toBe(NormalizedVerdict.Warn);
+    expect(parseQueryVerdict('warned')).toBe(NormalizedVerdict.Warn);
+    expect(parseQueryVerdict('warning')).toBe(NormalizedVerdict.Warn);
   });
 
   it('parses forwarded variants', () => {
-    expect(parseQueryVerdict('forwarded')).toBe(QueryVerdict.Forwarded);
-    expect(parseQueryVerdict('forward')).toBe(QueryVerdict.Forwarded);
+    expect(parseQueryVerdict('forwarded')).toBe(NormalizedVerdict.Forwarded);
+    expect(parseQueryVerdict('forward')).toBe(NormalizedVerdict.Forwarded);
   });
 
   it('parses dropped variants', () => {
-    expect(parseQueryVerdict('dropped')).toBe(QueryVerdict.Dropped);
-    expect(parseQueryVerdict('drop')).toBe(QueryVerdict.Dropped);
+    expect(parseQueryVerdict('dropped')).toBe(NormalizedVerdict.Dropped);
+    expect(parseQueryVerdict('drop')).toBe(NormalizedVerdict.Dropped);
   });
 
   it('returns undefined for unknown', () => {
@@ -221,28 +220,28 @@ describe('matchesQuery', () => {
   });
 
   it('filters by verdict', () => {
-    const q = createHuntQuery({ verdict: QueryVerdict.Deny });
+    const q = createHuntQuery({ verdict: NormalizedVerdict.Deny });
     expect(matchesQuery(q, makeEvent())).toBe(false);
 
-    const q2 = createHuntQuery({ verdict: QueryVerdict.Allow });
+    const q2 = createHuntQuery({ verdict: NormalizedVerdict.Allow });
     expect(matchesQuery(q2, makeEvent())).toBe(true);
   });
 
   it('filters by forwarded verdict', () => {
     const event = makeEvent({ verdict: NormalizedVerdict.Forwarded });
-    const q = createHuntQuery({ verdict: QueryVerdict.Forwarded });
+    const q = createHuntQuery({ verdict: NormalizedVerdict.Forwarded });
     expect(matchesQuery(q, event)).toBe(true);
 
-    const q2 = createHuntQuery({ verdict: QueryVerdict.Allow });
+    const q2 = createHuntQuery({ verdict: NormalizedVerdict.Allow });
     expect(matchesQuery(q2, event)).toBe(false);
   });
 
   it('filters by dropped verdict', () => {
     const event = makeEvent({ verdict: NormalizedVerdict.Dropped });
-    const q = createHuntQuery({ verdict: QueryVerdict.Dropped });
+    const q = createHuntQuery({ verdict: NormalizedVerdict.Dropped });
     expect(matchesQuery(q, event)).toBe(true);
 
-    const q2 = createHuntQuery({ verdict: QueryVerdict.Deny });
+    const q2 = createHuntQuery({ verdict: NormalizedVerdict.Deny });
     expect(matchesQuery(q2, event)).toBe(false);
   });
 
@@ -294,7 +293,7 @@ describe('matchesQuery', () => {
   it('handles combined predicates', () => {
     const q = createHuntQuery({
       sources: [EventSourceType.Tetragon],
-      verdict: QueryVerdict.Allow,
+      verdict: NormalizedVerdict.Allow,
       process: 'curl',
       namespace: 'default',
     });

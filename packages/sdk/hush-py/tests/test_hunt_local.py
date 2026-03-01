@@ -3,7 +3,7 @@
 import json
 from pathlib import Path
 
-from clawdstrike.hunt.local import default_local_dirs, query_local_files
+from clawdstrike.hunt.local import default_local_dirs, hunt, query_local_files
 from clawdstrike.hunt.types import HuntQuery
 
 
@@ -213,3 +213,31 @@ class TestQueryLocalFilesEdgeCases:
 
         events = query_local_files(HuntQuery(limit=0), [str(tmp_path)])
         assert events == []
+
+
+class TestHuntFunction:
+    def test_queries_with_explicit_dirs(self, tmp_path: Path) -> None:
+        envelope = _make_envelope(
+            "clawdstrike.sdr.fact.receipt.v1",
+            "2025-01-15T10:00:00Z",
+            "deny",
+            "blocked",
+        )
+        (tmp_path / "test.json").write_text(json.dumps(envelope))
+
+        events = hunt(dirs=[str(tmp_path)])
+        assert len(events) == 1
+
+    def test_accepts_duration_string_for_start(self, tmp_path: Path) -> None:
+        from datetime import datetime, timezone
+
+        envelope = _make_envelope(
+            "clawdstrike.sdr.fact.receipt.v1",
+            datetime.now(tz=timezone.utc).isoformat(),
+            "allow",
+            "recent event",
+        )
+        (tmp_path / "recent.json").write_text(json.dumps(envelope))
+
+        events = hunt(start="1h", dirs=[str(tmp_path)])
+        assert len(events) == 1

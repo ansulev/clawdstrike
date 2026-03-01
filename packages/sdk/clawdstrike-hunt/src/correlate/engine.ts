@@ -86,9 +86,17 @@ export class CorrelationEngine {
   }
 
   /**
-   * Remove expired windows using the given reference time.
+   * Evict expired windows, optionally capping at a maximum window duration (ms).
    */
-  evictExpiredAt(now: Date): void {
+  evict(maxWindow?: number): void {
+    if (maxWindow !== undefined) {
+      this.evictExpiredCapped(maxWindow);
+    } else {
+      this.evictExpired();
+    }
+  }
+
+  private evictExpiredAt(now: Date): void {
     const nowMs = now.getTime();
     for (const [ri, windows] of this.windows) {
       const rule = this._rules[ri];
@@ -104,17 +112,11 @@ export class CorrelationEngine {
     }
   }
 
-  /**
-   * Remove expired windows using wall-clock time.
-   */
-  evictExpired(): void {
+  private evictExpired(): void {
     this.evictExpiredAt(new Date());
   }
 
-  /**
-   * Remove expired windows capped at maxWindow milliseconds.
-   */
-  evictExpiredCapped(maxWindow: number): void {
+  private evictExpiredCapped(maxWindow: number): void {
     const nowMs = Date.now();
     for (const [ri, windows] of this.windows) {
       const rule = this._rules[ri];
@@ -250,6 +252,19 @@ export class CorrelationEngine {
 
     return alerts;
   }
+}
+
+/**
+ * High-level correlation: create an engine, process all events, flush, and return alerts.
+ */
+export function correlate(rules: CorrelationRule[], events: TimelineEvent[]): Alert[] {
+  const engine = new CorrelationEngine(rules);
+  const alerts: Alert[] = [];
+  for (const event of events) {
+    alerts.push(...engine.processEvent(event));
+  }
+  alerts.push(...engine.flush());
+  return alerts;
 }
 
 function allConditionsMet(rule: CorrelationRule, ws: WindowState): boolean {

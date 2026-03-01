@@ -9,7 +9,6 @@ from clawdstrike.hunt.types import (
     EventSourceType,
     HuntQuery,
     NormalizedVerdict,
-    QueryVerdict,
     TimelineEvent,
 )
 
@@ -82,26 +81,26 @@ def all_event_sources() -> list[EventSourceType]:
 # QueryVerdict parsing
 # ---------------------------------------------------------------------------
 
-_VERDICT_ALIASES: dict[str, QueryVerdict] = {
-    "allow": QueryVerdict.ALLOW,
-    "allowed": QueryVerdict.ALLOW,
-    "pass": QueryVerdict.ALLOW,
-    "passed": QueryVerdict.ALLOW,
-    "deny": QueryVerdict.DENY,
-    "denied": QueryVerdict.DENY,
-    "block": QueryVerdict.DENY,
-    "blocked": QueryVerdict.DENY,
-    "warn": QueryVerdict.WARN,
-    "warned": QueryVerdict.WARN,
-    "warning": QueryVerdict.WARN,
-    "forwarded": QueryVerdict.FORWARDED,
-    "forward": QueryVerdict.FORWARDED,
-    "dropped": QueryVerdict.DROPPED,
-    "drop": QueryVerdict.DROPPED,
+_VERDICT_ALIASES: dict[str, NormalizedVerdict] = {
+    "allow": NormalizedVerdict.ALLOW,
+    "allowed": NormalizedVerdict.ALLOW,
+    "pass": NormalizedVerdict.ALLOW,
+    "passed": NormalizedVerdict.ALLOW,
+    "deny": NormalizedVerdict.DENY,
+    "denied": NormalizedVerdict.DENY,
+    "block": NormalizedVerdict.DENY,
+    "blocked": NormalizedVerdict.DENY,
+    "warn": NormalizedVerdict.WARN,
+    "warned": NormalizedVerdict.WARN,
+    "warning": NormalizedVerdict.WARN,
+    "forwarded": NormalizedVerdict.FORWARDED,
+    "forward": NormalizedVerdict.FORWARDED,
+    "dropped": NormalizedVerdict.DROPPED,
+    "drop": NormalizedVerdict.DROPPED,
 }
 
 
-def parse_query_verdict(s: str) -> QueryVerdict | None:
+def parse_query_verdict(s: str) -> NormalizedVerdict | None:
     """Parse a verdict string (case-insensitive, supports aliases)."""
     return _VERDICT_ALIASES.get(s.strip().lower())
 
@@ -109,15 +108,6 @@ def parse_query_verdict(s: str) -> QueryVerdict | None:
 # ---------------------------------------------------------------------------
 # Query matching
 # ---------------------------------------------------------------------------
-
-_QUERY_TO_NORMALIZED: dict[QueryVerdict, NormalizedVerdict] = {
-    QueryVerdict.ALLOW: NormalizedVerdict.ALLOW,
-    QueryVerdict.DENY: NormalizedVerdict.DENY,
-    QueryVerdict.WARN: NormalizedVerdict.WARN,
-    QueryVerdict.FORWARDED: NormalizedVerdict.FORWARDED,
-    QueryVerdict.DROPPED: NormalizedVerdict.DROPPED,
-}
-
 
 def effective_sources(query: HuntQuery) -> list[EventSourceType]:
     """Return the effective source list: configured or all, deduplicated."""
@@ -140,8 +130,7 @@ def matches_query(query: HuntQuery, event: TimelineEvent) -> bool:
 
     # Verdict filter
     if query.verdict is not None:
-        expected = _QUERY_TO_NORMALIZED[query.verdict]
-        if event.verdict != expected:
+        if event.verdict != query.verdict:
             return False
 
     # Time range

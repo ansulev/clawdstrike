@@ -89,7 +89,7 @@ export async function runWatch(
       onEvent?.(event);
 
       // Feed to the correlation engine.
-      engine.evictExpiredCapped(config.maxWindow);
+      engine.evict(config.maxWindow);
       const alerts = engine.processEvent(event);
       for (const alert of alerts) {
         stats.alertsTriggered++;

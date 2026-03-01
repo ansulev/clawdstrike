@@ -16,7 +16,6 @@ from clawdstrike.hunt.types import (
     EventSourceType,
     HuntQuery,
     NormalizedVerdict,
-    QueryVerdict,
     TimelineEvent,
     TimelineEventKind,
 )
@@ -113,49 +112,49 @@ class TestAllEventSources:
 
 class TestParseQueryVerdict:
     def test_allow(self) -> None:
-        assert parse_query_verdict("allow") == QueryVerdict.ALLOW
+        assert parse_query_verdict("allow") == NormalizedVerdict.ALLOW
 
     def test_allowed(self) -> None:
-        assert parse_query_verdict("ALLOWED") == QueryVerdict.ALLOW
+        assert parse_query_verdict("ALLOWED") == NormalizedVerdict.ALLOW
 
     def test_pass(self) -> None:
-        assert parse_query_verdict("pass") == QueryVerdict.ALLOW
+        assert parse_query_verdict("pass") == NormalizedVerdict.ALLOW
 
     def test_passed(self) -> None:
-        assert parse_query_verdict("passed") == QueryVerdict.ALLOW
+        assert parse_query_verdict("passed") == NormalizedVerdict.ALLOW
 
     def test_deny(self) -> None:
-        assert parse_query_verdict("deny") == QueryVerdict.DENY
+        assert parse_query_verdict("deny") == NormalizedVerdict.DENY
 
     def test_denied(self) -> None:
-        assert parse_query_verdict("DENIED") == QueryVerdict.DENY
+        assert parse_query_verdict("DENIED") == NormalizedVerdict.DENY
 
     def test_block(self) -> None:
-        assert parse_query_verdict("block") == QueryVerdict.DENY
+        assert parse_query_verdict("block") == NormalizedVerdict.DENY
 
     def test_blocked(self) -> None:
-        assert parse_query_verdict("blocked") == QueryVerdict.DENY
+        assert parse_query_verdict("blocked") == NormalizedVerdict.DENY
 
     def test_warn(self) -> None:
-        assert parse_query_verdict("warn") == QueryVerdict.WARN
+        assert parse_query_verdict("warn") == NormalizedVerdict.WARN
 
     def test_warned(self) -> None:
-        assert parse_query_verdict("warned") == QueryVerdict.WARN
+        assert parse_query_verdict("warned") == NormalizedVerdict.WARN
 
     def test_warning(self) -> None:
-        assert parse_query_verdict("warning") == QueryVerdict.WARN
+        assert parse_query_verdict("warning") == NormalizedVerdict.WARN
 
     def test_forwarded(self) -> None:
-        assert parse_query_verdict("forwarded") == QueryVerdict.FORWARDED
+        assert parse_query_verdict("forwarded") == NormalizedVerdict.FORWARDED
 
     def test_forward(self) -> None:
-        assert parse_query_verdict("forward") == QueryVerdict.FORWARDED
+        assert parse_query_verdict("forward") == NormalizedVerdict.FORWARDED
 
     def test_dropped(self) -> None:
-        assert parse_query_verdict("dropped") == QueryVerdict.DROPPED
+        assert parse_query_verdict("dropped") == NormalizedVerdict.DROPPED
 
     def test_drop(self) -> None:
-        assert parse_query_verdict("drop") == QueryVerdict.DROPPED
+        assert parse_query_verdict("drop") == NormalizedVerdict.DROPPED
 
     def test_unknown(self) -> None:
         assert parse_query_verdict("unknown") is None
@@ -196,11 +195,11 @@ class TestMatchesQuery:
         assert matches_query(q, _make_event())
 
     def test_verdict_filter_miss(self) -> None:
-        q = HuntQuery(verdict=QueryVerdict.DENY)
+        q = HuntQuery(verdict=NormalizedVerdict.DENY)
         assert not matches_query(q, _make_event())
 
     def test_verdict_filter_hit(self) -> None:
-        q = HuntQuery(verdict=QueryVerdict.ALLOW)
+        q = HuntQuery(verdict=NormalizedVerdict.ALLOW)
         assert matches_query(q, _make_event())
 
     def test_forwarded_verdict(self) -> None:
@@ -211,9 +210,9 @@ class TestMatchesQuery:
             verdict=NormalizedVerdict.FORWARDED,
             summary="test",
         )
-        q = HuntQuery(verdict=QueryVerdict.FORWARDED)
+        q = HuntQuery(verdict=NormalizedVerdict.FORWARDED)
         assert matches_query(q, event)
-        q2 = HuntQuery(verdict=QueryVerdict.ALLOW)
+        q2 = HuntQuery(verdict=NormalizedVerdict.ALLOW)
         assert not matches_query(q2, event)
 
     def test_dropped_verdict(self) -> None:
@@ -224,9 +223,9 @@ class TestMatchesQuery:
             verdict=NormalizedVerdict.DROPPED,
             summary="test",
         )
-        q = HuntQuery(verdict=QueryVerdict.DROPPED)
+        q = HuntQuery(verdict=NormalizedVerdict.DROPPED)
         assert matches_query(q, event)
-        q2 = HuntQuery(verdict=QueryVerdict.DENY)
+        q2 = HuntQuery(verdict=NormalizedVerdict.DENY)
         assert not matches_query(q2, event)
 
     def test_time_range_start_miss(self) -> None:
@@ -271,7 +270,7 @@ class TestMatchesQuery:
     def test_combined_predicates(self) -> None:
         q = HuntQuery(
             sources=(EventSourceType.TETRAGON,),
-            verdict=QueryVerdict.ALLOW,
+            verdict=NormalizedVerdict.ALLOW,
             process="curl",
             namespace="default",
         )

@@ -60,19 +60,23 @@ export function buildReport(title: string, items: EvidenceItem[]): HuntReport {
 
 /**
  * Sign a report's Merkle root with an Ed25519 key (hex-encoded seed).
+ * Returns a new HuntReport with signature and signer set.
  */
 export async function signReport(
   report: HuntReport,
   signingKeyHex: string
-): Promise<void> {
+): Promise<HuntReport> {
   const seed = fromHex(signingKeyHex);
   const rootBytes = fromHex(report.merkleRoot);
 
   const signature = await signMessage(rootBytes, seed);
   const publicKey = await getBackend().publicKeyFromPrivate(seed);
 
-  report.signature = toHex(signature);
-  report.signer = toHex(publicKey);
+  return {
+    ...report,
+    signature: toHex(signature),
+    signer: toHex(publicKey),
+  };
 }
 
 /**
@@ -130,7 +134,7 @@ export async function verifyReport(report: HuntReport): Promise<boolean> {
  * Convert an Alert into EvidenceItems.
  * The alert itself becomes one item; each evidence event becomes another.
  */
-export function evidenceFromAlert(alert: Alert, startIndex: number): EvidenceItem[] {
+export function evidenceFromAlert(alert: Alert, startIndex: number = 0): EvidenceItem[] {
   const items: EvidenceItem[] = [];
 
   items.push({
@@ -166,7 +170,7 @@ export function evidenceFromAlert(alert: Alert, startIndex: number): EvidenceIte
  */
 export function evidenceFromEvents(
   events: TimelineEvent[],
-  startIndex: number
+  startIndex: number = 0
 ): EvidenceItem[] {
   return events.map((event, i) => ({
     index: startIndex + i,
@@ -182,7 +186,7 @@ export function evidenceFromEvents(
  */
 export function evidenceFromIocMatches(
   matches: IocMatch[],
-  startIndex: number
+  startIndex: number = 0
 ): EvidenceItem[] {
   return matches.map((m, i) => {
     const iocNames = m.matchedIocs.map((e) => e.indicator);
@@ -198,6 +202,58 @@ export function evidenceFromIocMatches(
       },
     };
   });
+}
+
+/**
+ * Collect evidence from mixed sources with auto-indexing.
+ *
+ * Accepts any combination of Alert, TimelineEvent[], or IocMatch[] items
+ * and returns a flat list of EvidenceItems with sequential indices.
+ */
+export function collectEvidence(
+  ...items: (Alert | TimelineEvent[] | IocMatch[])[]
+): EvidenceItem[] {
+  const result: EvidenceItem[] = [];
+  let nextIndex = 0;
+
+  for (const item of items) {
+    if (isAlert(item)) {
+      const evidence = evidenceFromAlert(item, nextIndex);
+      result.push(...evidence);
+      nextIndex += evidence.length;
+    } else if (Array.isArray(item) && item.length > 0 && isIocMatch(item[0])) {
+      const evidence = evidenceFromIocMatches(item as IocMatch[], nextIndex);
+      result.push(...evidence);
+      nextIndex += evidence.length;
+    } else if (Array.isArray(item)) {
+      const evidence = evidenceFromEvents(item as TimelineEvent[], nextIndex);
+      result.push(...evidence);
+      nextIndex += evidence.length;
+    }
+  }
+
+  return result;
+}
+
+function isAlert(value: unknown): value is Alert {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "ruleName" in value &&
+    "severity" in value &&
+    "triggeredAt" in value &&
+    "evidence" in value
+  );
+}
+
+function isIocMatch(value: unknown): value is IocMatch {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "matchedIocs" in value &&
+    "matchField" in value &&
+    "event" in value
+  );
 }
 
 // ---------------------------------------------------------------------------

@@ -10,6 +10,7 @@ from clawdstrike.core import generate_keypair
 from clawdstrike.hunt.errors import ReportError
 from clawdstrike.hunt.report import (
     build_report,
+    collect_evidence,
     evidence_from_alert,
     evidence_from_events,
     evidence_from_ioc_matches,
@@ -268,3 +269,43 @@ class TestEvidenceHelpers:
         priv, pub = generate_keypair()
         signed = sign_report(report, priv.hex())
         assert verify_report(signed)
+
+
+class TestCollectEvidence:
+    def test_auto_indexes_across_mixed_sources(self) -> None:
+        event1 = _make_event("read /etc/passwd")
+        event2 = _make_event("egress to evil.com")
+        alert = Alert(
+            rule_name="test_rule",
+            severity=RuleSeverity.HIGH,
+            title="Test alert",
+            triggered_at=_TS,
+            evidence=(event1,),
+            description="desc",
+        )
+        ioc_match = IocMatch(
+            event=event2,
+            matched_iocs=(IocEntry(
+                indicator="evil.com",
+                ioc_type=IocType.DOMAIN,
+            ),),
+            match_field="summary",
+        )
+
+        items = collect_evidence(alert, [event2], [ioc_match])
+
+        # Alert produces 2 items (alert + 1 evidence event)
+        # Events produces 1 item
+        # IOC matches produces 1 item
+        assert len(items) == 4
+        assert items[0].index == 0
+        assert items[1].index == 1
+        assert items[2].index == 2
+        assert items[3].index == 3
+        assert items[0].source_type == "alert"
+        assert items[2].source_type == "event"
+        assert items[3].source_type == "ioc_match"
+
+    def test_handles_empty_input(self) -> None:
+        items = collect_evidence()
+        assert len(items) == 0

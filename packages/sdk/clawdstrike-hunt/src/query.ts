@@ -2,14 +2,12 @@ import type {
   EventSourceType,
   HuntQuery,
   NormalizedVerdict,
-  QueryVerdict,
   TimelineEvent,
 } from './types.js';
 
 import {
   EventSourceType as EST,
   NormalizedVerdict as NV,
-  QueryVerdict as QV,
 } from './types.js';
 
 // ---------------------------------------------------------------------------
@@ -80,28 +78,28 @@ export function allEventSources(): EventSourceType[] {
 // ---------------------------------------------------------------------------
 
 /** Parse a verdict string (case-insensitive, with aliases). */
-export function parseQueryVerdict(s: string): QueryVerdict | undefined {
+export function parseQueryVerdict(s: string): NormalizedVerdict | undefined {
   switch (s.trim().toLowerCase()) {
     case 'allow':
     case 'allowed':
     case 'pass':
     case 'passed':
-      return QV.Allow;
+      return NV.Allow;
     case 'deny':
     case 'denied':
     case 'block':
     case 'blocked':
-      return QV.Deny;
+      return NV.Deny;
     case 'warn':
     case 'warned':
     case 'warning':
-      return QV.Warn;
+      return NV.Warn;
     case 'forwarded':
     case 'forward':
-      return QV.Forwarded;
+      return NV.Forwarded;
     case 'dropped':
     case 'drop':
-      return QV.Dropped;
+      return NV.Dropped;
     default:
       return undefined;
   }
@@ -134,22 +132,6 @@ export function effectiveSources(query: HuntQuery): EventSourceType[] {
   return deduped;
 }
 
-/** Map QueryVerdict to NormalizedVerdict. */
-function queryVerdictToNormalized(v: QueryVerdict): NormalizedVerdict {
-  switch (v) {
-    case QV.Allow:
-      return NV.Allow;
-    case QV.Deny:
-      return NV.Deny;
-    case QV.Warn:
-      return NV.Warn;
-    case QV.Forwarded:
-      return NV.Forwarded;
-    case QV.Dropped:
-      return NV.Dropped;
-  }
-}
-
 /** Returns true if the event matches ALL active predicates (AND logic). */
 export function matchesQuery(
   query: HuntQuery,
@@ -162,8 +144,7 @@ export function matchesQuery(
 
   // Verdict filter
   if (query.verdict !== undefined) {
-    const expected = queryVerdictToNormalized(query.verdict);
-    if (event.verdict !== expected) {
+    if (event.verdict !== query.verdict) {
       return false;
     }
   }

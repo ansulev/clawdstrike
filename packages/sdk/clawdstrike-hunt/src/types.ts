@@ -28,6 +28,7 @@ export const NormalizedVerdict = {
 } as const;
 export type NormalizedVerdict = (typeof NormalizedVerdict)[keyof typeof NormalizedVerdict];
 
+/** @deprecated Use {@link NormalizedVerdict} instead. Will be removed in a future release. */
 export const QueryVerdict = {
   Allow: 'allow',
   Deny: 'deny',
@@ -35,6 +36,7 @@ export const QueryVerdict = {
   Forwarded: 'forwarded',
   Dropped: 'dropped',
 } as const;
+/** @deprecated Use {@link NormalizedVerdict} instead. */
 export type QueryVerdict = (typeof QueryVerdict)[keyof typeof QueryVerdict];
 
 export const RuleSeverity = {
@@ -75,7 +77,7 @@ export interface TimelineEvent {
 
 export interface HuntQuery {
   sources: EventSourceType[];
-  verdict?: QueryVerdict;
+  verdict?: NormalizedVerdict;
   start?: Date;
   end?: Date;
   actionType?: string;
@@ -139,7 +141,7 @@ export interface EvidenceItem {
   sourceType: string;
   timestamp: Date;
   summary: string;
-  data: unknown;
+  data: Record<string, unknown>;
 }
 
 export interface HuntReport {
@@ -157,8 +159,6 @@ export interface WatchConfig {
   natsCreds?: string;
   rules: CorrelationRule[];
   maxWindow: number;
-  color: boolean;
-  json: boolean;
 }
 
 export interface WatchStats {

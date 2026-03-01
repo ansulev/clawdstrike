@@ -70,8 +70,6 @@
 
 ## Quick Start
 
-### CLI
-
 #### Install
 
 ```bash
@@ -179,6 +177,39 @@ const decision = await cs.checkNetwork("api.openai.com:443");
 console.log(decision.status); // "denied" - strict blocks all egress by default
 ```
 
+#### Hunt SDK
+
+```bash
+npm install @clawdstrike/hunt
+```
+
+```typescript
+import {
+  hunt,
+  correlate,
+  loadRulesFromFiles,
+  collectEvidence,
+  buildReport,
+  signReport,
+} from "@clawdstrike/hunt";
+
+const events = await hunt({
+  sources: ["receipt"],
+  verdict: "deny",
+  start: "1h",
+});
+
+const rules = await loadRulesFromFiles(["./rules/exfil.yaml"]);
+const alerts = correlate(rules, events);
+
+if (alerts.length > 0) {
+  const evidence = collectEvidence(alerts[0], events);
+  const report = buildReport("Threat Hunt", evidence);
+  const signed = await signReport(report, process.env.SIGNING_KEY_HEX!);
+  console.log(signed.merkleRoot);
+}
+```
+
 ### Python
 
 ```bash
@@ -192,6 +223,26 @@ cs = Clawdstrike.with_defaults("strict")
 decision = cs.check_file("/home/user/.ssh/id_rsa")
 print(decision.denied)   # True
 print(decision.message)  # "Access to forbidden path: ..."
+```
+
+#### Hunt SDK
+
+```python
+from clawdstrike.hunt import (
+    hunt, correlate, load_rules_from_files,
+    collect_evidence, build_report, sign_report,
+)
+
+events = hunt(sources=("receipt",), verdict="deny", start="1h")
+
+rules = load_rules_from_files(["./rules/exfil.yaml"])
+alerts = correlate(rules, events)
+
+if alerts:
+    evidence = collect_evidence(alerts[0], events)
+    report = build_report("Threat Hunt", evidence)
+    report = sign_report(report, signing_key_hex=os.environ["SIGNING_KEY_HEX"])
+    print(report.merkle_root)
 ```
 
 ### OpenClaw Plugin

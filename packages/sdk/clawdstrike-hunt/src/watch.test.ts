@@ -18,8 +18,6 @@ describe("watch module", () => {
       natsUrl: "nats://localhost:4222",
       rules: [],
       maxWindow: 60000,
-      color: false,
-      json: false,
     };
 
     try {

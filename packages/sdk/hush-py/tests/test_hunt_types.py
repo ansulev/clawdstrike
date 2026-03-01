@@ -131,11 +131,11 @@ class TestHuntQuery:
     def test_creation(self) -> None:
         q = HuntQuery(
             sources=(EventSourceType.TETRAGON,),
-            verdict=QueryVerdict.DENY,
+            verdict=NormalizedVerdict.DENY,
             limit=50,
         )
         assert q.sources == (EventSourceType.TETRAGON,)
-        assert q.verdict == QueryVerdict.DENY
+        assert q.verdict == NormalizedVerdict.DENY
         assert q.limit == 50
 
 
@@ -220,8 +220,6 @@ class TestWatchConfig:
             max_window=timedelta(minutes=10),
         )
         assert cfg.nats_url == "nats://localhost:4222"
-        assert cfg.color is True
-        assert cfg.json is False
 
 
 class TestWatchStats:

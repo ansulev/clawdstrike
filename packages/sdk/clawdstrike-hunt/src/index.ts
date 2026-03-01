@@ -33,28 +33,20 @@ export type {
   WatchStats,
 } from './types.js';
 
-export { parseHumanDuration } from './duration.js';
-
 export {
-  parseEventSource,
-  parseEventSourceList,
-  streamName,
-  subjectFilter,
-  allEventSources,
-  parseQueryVerdict,
-  createHuntQuery,
-  effectiveSources,
   matchesQuery,
+  parseQueryVerdict,
 } from './query.js';
 
 export { parseEnvelope, mergeTimeline } from './timeline.js';
 
-export { defaultLocalDirs, queryLocalFiles } from './local.js';
+export { defaultLocalDirs, queryLocalFiles, hunt } from './local.js';
+export type { HuntOptions } from './local.js';
 
 // Correlate
 export {
   CorrelationEngine,
-  containsWordBounded,
+  correlate,
   detectIocType,
   IocDatabase,
   loadRulesFromFiles,
@@ -68,6 +60,7 @@ export {
   evidenceFromAlert,
   evidenceFromEvents,
   evidenceFromIocMatches,
+  collectEvidence,
   signReport,
   verifyReport,
 } from './report.js';

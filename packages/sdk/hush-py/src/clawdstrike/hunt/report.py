@@ -242,6 +242,35 @@ def evidence_from_ioc_matches(
     return items
 
 
+def collect_evidence(
+    *items: Alert | list[TimelineEvent] | list[IocMatch],
+) -> list[EvidenceItem]:
+    """Collect evidence from mixed sources with auto-indexing.
+
+    Accepts any combination of :class:`Alert`, ``list[TimelineEvent]``, or
+    ``list[IocMatch]`` items and returns a flat list of evidence items with
+    sequential indices.
+    """
+    result: list[EvidenceItem] = []
+    next_index = 0
+
+    for item in items:
+        if isinstance(item, Alert):
+            evidence = evidence_from_alert(item, next_index)
+            result.extend(evidence)
+            next_index += len(evidence)
+        elif isinstance(item, list) and item and isinstance(item[0], IocMatch):
+            evidence = evidence_from_ioc_matches(item, next_index)  # type: ignore[arg-type]
+            result.extend(evidence)
+            next_index += len(evidence)
+        elif isinstance(item, list):
+            evidence = evidence_from_events(item, next_index)  # type: ignore[arg-type]
+            result.extend(evidence)
+            next_index += len(evidence)
+
+    return result
+
+
 __all__ = [
     "build_report",
     "sign_report",
@@ -249,4 +278,5 @@ __all__ = [
     "evidence_from_alert",
     "evidence_from_events",
     "evidence_from_ioc_matches",
+    "collect_evidence",
 ]

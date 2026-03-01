@@ -2,9 +2,10 @@ import { readdir, readFile, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join, extname } from 'node:path';
 
-import type { HuntQuery, TimelineEvent } from './types.js';
+import type { HuntQuery, NormalizedVerdict, TimelineEvent, EventSourceType } from './types.js';
 import { matchesQuery } from './query.js';
 import { mergeTimeline, parseEnvelope } from './timeline.js';
+import { parseHumanDuration } from './duration.js';
 
 /**
  * Default directories to search for local envelopes.
@@ -57,12 +58,13 @@ function truncateToNewest(
  */
 export async function queryLocalFiles(
   query: HuntQuery,
-  searchDirs: string[],
+  searchDirs?: string[],
   _verify?: boolean,
 ): Promise<TimelineEvent[]> {
+  const dirs = searchDirs ?? await defaultLocalDirs();
   const allEvents: TimelineEvent[] = [];
 
-  for (const dir of searchDirs) {
+  for (const dir of dirs) {
     let isDir: boolean;
     try {
       const s = await stat(dir);
@@ -123,6 +125,59 @@ export async function queryLocalFiles(
 
   const merged = mergeTimeline(allEvents);
   return truncateToNewest(merged, query.limit);
+}
+
+/**
+ * Options for the high-level `hunt()` convenience function.
+ */
+export interface HuntOptions {
+  sources?: EventSourceType[];
+  verdict?: NormalizedVerdict;
+  /** Accepts a Date or a human-duration string like "1h", "30m". */
+  start?: Date | string;
+  end?: Date;
+  actionType?: string;
+  process?: string;
+  namespace?: string;
+  pod?: string;
+  entity?: string;
+  limit?: number;
+  dirs?: string[];
+}
+
+/**
+ * High-level convenience function for querying local events.
+ *
+ * Parses duration strings for `start`, applies defaults, builds a query,
+ * and calls `queryLocalFiles`.
+ */
+export async function hunt(options?: HuntOptions): Promise<TimelineEvent[]> {
+  const opts = options ?? {};
+
+  let startDate: Date | undefined;
+  if (typeof opts.start === 'string') {
+    const ms = parseHumanDuration(opts.start);
+    if (ms !== undefined) {
+      startDate = new Date(Date.now() - ms);
+    }
+  } else {
+    startDate = opts.start;
+  }
+
+  const query: HuntQuery = {
+    sources: opts.sources ?? [],
+    verdict: opts.verdict,
+    start: startDate,
+    end: opts.end,
+    actionType: opts.actionType,
+    process: opts.process,
+    namespace: opts.namespace,
+    pod: opts.pod,
+    entity: opts.entity,
+    limit: opts.limit ?? 100,
+  };
+
+  return queryLocalFiles(query, opts.dirs);
 }
 
 async function readJsonFile(path: string): Promise<TimelineEvent[]> {

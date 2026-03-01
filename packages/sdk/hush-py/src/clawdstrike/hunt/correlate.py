@@ -308,14 +308,21 @@ class CorrelationEngine:
 
     def process_event(self, event: TimelineEvent) -> list[Alert]:
         """Process a single event. Returns alerts generated."""
-        self.evict_expired_at(event.timestamp)
+        self._evict_expired_at(event.timestamp)
 
         alerts: list[Alert] = []
         for ri in range(len(self._rules)):
             alerts.extend(self._evaluate_rule(ri, event))
         return alerts
 
-    def evict_expired_at(self, now: datetime) -> None:
+    def evict(self, max_window: timedelta | None = None) -> None:
+        """Evict expired windows, optionally capping at *max_window*."""
+        if max_window is not None:
+            self._evict_expired_capped(max_window)
+        else:
+            self._evict_expired()
+
+    def _evict_expired_at(self, now: datetime) -> None:
         """Remove windows older than their rule's window duration."""
         to_remove: list[int] = []
         for ri, windows in self._windows.items():
@@ -329,11 +336,11 @@ class CorrelationEngine:
         for ri in to_remove:
             del self._windows[ri]
 
-    def evict_expired(self) -> None:
+    def _evict_expired(self) -> None:
         """Evict expired windows using wall-clock time."""
-        self.evict_expired_at(datetime.now(tz=timezone.utc))
+        self._evict_expired_at(datetime.now(tz=timezone.utc))
 
-    def evict_expired_capped(self, max_window: timedelta) -> None:
+    def _evict_expired_capped(self, max_window: timedelta) -> None:
         """Evict windows using the shorter of rule window and *max_window*."""
         now = datetime.now(tz=timezone.utc)
         to_remove: list[int] = []
@@ -351,7 +358,7 @@ class CorrelationEngine:
 
     def flush(self) -> list[Alert]:
         """Flush all windows, returning alerts for fully-matched ones."""
-        self.evict_expired()
+        self._evict_expired()
         alerts: list[Alert] = []
         for ri, windows in list(self._windows.items()):
             rule = self._rules[ri]
@@ -442,10 +449,21 @@ class CorrelationEngine:
         return alerts
 
 
+def correlate(rules: list[CorrelationRule], events: list[TimelineEvent]) -> list[Alert]:
+    """High-level correlation: create an engine, process all events, flush, and return alerts."""
+    engine = CorrelationEngine(rules)
+    alerts: list[Alert] = []
+    for event in events:
+        alerts.extend(engine.process_event(event))
+    alerts.extend(engine.flush())
+    return alerts
+
+
 __all__ = [
     "SUPPORTED_SCHEMA",
     "parse_rule",
     "validate_rule",
     "load_rules_from_files",
     "CorrelationEngine",
+    "correlate",
 ]

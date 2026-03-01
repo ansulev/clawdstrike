@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { CorrelationEngine } from "./engine.js";
+import { CorrelationEngine, correlate } from "./engine.js";
 import { parseRule } from "./rules.js";
 import type { CorrelationRule, TimelineEvent } from "../types.js";
 
@@ -408,7 +408,7 @@ output:
     expect(alerts[0].triggeredAt.getTime()).toBe(ts2.getTime());
   });
 
-  it("evictExpiredCapped uses shorter of rule window and cap", () => {
+  it("evict uses shorter of rule window and cap", () => {
     const rule = parseRule(`
 schema: clawdstrike.hunt.correlation.v1
 name: "Long window"
@@ -435,7 +435,7 @@ output:
     engine.processEvent(makeEvent("receipt", "file", "allow", "test", ts));
 
     // Cap at 1ms — should evict immediately
-    engine.evictExpiredCapped(1);
+    engine.evict(1);
 
     // Now the window should be gone
     const alerts = engine.processEvent(
@@ -447,6 +447,46 @@ output:
         new Date("2025-06-15T12:00:05Z")
       )
     );
+    expect(alerts).toHaveLength(0);
+  });
+});
+
+describe("correlate", () => {
+  it("processes events and returns alerts", () => {
+    const rules = [singleConditionRule()];
+    const ts = new Date("2025-06-15T12:00:00Z");
+    const events = [
+      makeEvent("receipt", "file", "deny", "/etc/passwd", ts),
+      makeEvent("receipt", "file", "deny", "/etc/shadow", ts),
+    ];
+
+    const alerts = correlate(rules, events);
+    expect(alerts).toHaveLength(2);
+    expect(alerts[0].ruleName).toBe("Forbidden Path Access");
+  });
+
+  it("handles multi-step sequence", () => {
+    const rules = [exfilRule()];
+    const ts1 = new Date("2025-06-15T12:00:00Z");
+    const ts2 = new Date("2025-06-15T12:00:10Z");
+    const events = [
+      makeEvent("receipt", "file", "allow", "read /etc/passwd", ts1),
+      makeEvent("receipt", "egress", "allow", "egress TCP -> 93.184.216.34:443", ts2),
+    ];
+
+    const alerts = correlate(rules, events);
+    expect(alerts).toHaveLength(1);
+    expect(alerts[0].title).toBe("Potential data exfiltration via MCP tool");
+  });
+
+  it("returns empty for no matches", () => {
+    const rules = [singleConditionRule()];
+    const ts = new Date("2025-06-15T12:00:00Z");
+    const events = [
+      makeEvent("receipt", "file", "allow", "test", ts),
+    ];
+
+    const alerts = correlate(rules, events);
     expect(alerts).toHaveLength(0);
   });
 });

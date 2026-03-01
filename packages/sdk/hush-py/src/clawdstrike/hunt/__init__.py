@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from clawdstrike.hunt.duration import parse_human_duration
 from clawdstrike.hunt.errors import (
     CorrelationError,
     HuntError,
@@ -15,28 +14,23 @@ from clawdstrike.hunt.errors import (
 )
 from clawdstrike.hunt.correlate import (
     CorrelationEngine,
+    correlate,
     load_rules_from_files,
     parse_rule,
     validate_rule,
 )
 from clawdstrike.hunt.ioc import (
     IocDatabase,
-    contains_word_bounded,
     detect_ioc_type,
 )
-from clawdstrike.hunt.local import default_local_dirs, query_local_files
+from clawdstrike.hunt.local import default_local_dirs, hunt, query_local_files
 from clawdstrike.hunt.query import (
-    all_event_sources,
-    effective_sources,
     matches_query,
-    parse_event_source,
-    parse_event_source_list,
     parse_query_verdict,
-    stream_name,
-    subject_filter,
 )
 from clawdstrike.hunt.report import (
     build_report,
+    collect_evidence,
     evidence_from_alert,
     evidence_from_events,
     evidence_from_ioc_matches,
@@ -94,16 +88,8 @@ __all__ = [
     "HuntReport",
     "WatchConfig",
     "WatchStats",
-    # duration
-    "parse_human_duration",
     # query
-    "parse_event_source",
-    "parse_event_source_list",
-    "stream_name",
-    "subject_filter",
-    "all_event_sources",
     "parse_query_verdict",
-    "effective_sources",
     "matches_query",
     # timeline
     "parse_envelope",
@@ -111,15 +97,16 @@ __all__ = [
     # local
     "default_local_dirs",
     "query_local_files",
+    "hunt",
     # correlate
     "CorrelationEngine",
+    "correlate",
     "parse_rule",
     "validate_rule",
     "load_rules_from_files",
     # ioc
     "IocDatabase",
     "detect_ioc_type",
-    "contains_word_bounded",
     # report
     "build_report",
     "sign_report",
@@ -127,6 +114,7 @@ __all__ = [
     "evidence_from_alert",
     "evidence_from_events",
     "evidence_from_ioc_matches",
+    "collect_evidence",
     # watch (lazy import — requires nats-py)
     "run_watch",
 ]

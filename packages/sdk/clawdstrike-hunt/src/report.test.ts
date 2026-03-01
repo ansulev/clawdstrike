@@ -6,6 +6,7 @@ import {
   evidenceFromAlert,
   evidenceFromEvents,
   evidenceFromIocMatches,
+  collectEvidence,
 } from "./report.js";
 import type {
   Alert,
@@ -103,12 +104,14 @@ describe("signReport and verifyReport", () => {
 
     // Generate a deterministic seed (32 bytes of 0x01)
     const seed = "0101010101010101010101010101010101010101010101010101010101010101";
-    await signReport(report, seed);
+    const signed = await signReport(report, seed);
 
-    expect(report.signature).toBeTruthy();
-    expect(report.signer).toBeTruthy();
+    expect(signed.signature).toBeTruthy();
+    expect(signed.signer).toBeTruthy();
+    // Original report should be unchanged
+    expect(report.signature).toBeUndefined();
 
-    const valid = await verifyReport(report);
+    const valid = await verifyReport(signed);
     expect(valid).toBe(true);
   });
 
@@ -117,15 +120,15 @@ describe("signReport and verifyReport", () => {
     const report = buildReport("Tampered", items);
 
     const seed = "0202020202020202020202020202020202020202020202020202020202020202";
-    await signReport(report, seed);
+    const signed = await signReport(report, seed);
 
     // Tamper with the signature
-    const sig = report.signature!;
+    const sig = signed.signature!;
     const chars = sig.split("");
     chars[0] = chars[0] === "a" ? "b" : "a";
-    report.signature = chars.join("");
+    const tampered = { ...signed, signature: chars.join("") };
 
-    const valid = await verifyReport(report);
+    const valid = await verifyReport(tampered);
     // Either false or throws (invalid hex)
     expect(valid).toBe(false);
   });
@@ -135,10 +138,10 @@ describe("signReport and verifyReport", () => {
     const report = buildReport("Missing Signer", items);
 
     const seed = "0303030303030303030303030303030303030303030303030303030303030303";
-    await signReport(report, seed);
-    report.signer = undefined;
+    const signed = await signReport(report, seed);
+    const broken = { ...signed, signer: undefined };
 
-    const valid = await verifyReport(report);
+    const valid = await verifyReport(broken);
     expect(valid).toBe(false);
   });
 
@@ -146,9 +149,9 @@ describe("signReport and verifyReport", () => {
     const items = sampleItems();
     const report = buildReport("Missing Signature", items);
 
-    report.signer = "aa".repeat(32);
+    const broken = { ...report, signer: "aa".repeat(32) };
 
-    const valid = await verifyReport(report);
+    const valid = await verifyReport(broken);
     expect(valid).toBe(false);
   });
 });
@@ -222,5 +225,45 @@ describe("evidence conversion helpers", () => {
     expect(items[0].sourceType).toBe("ioc_match");
     expect(items[0].summary).toContain("evil.com");
     expect(items[0].summary).toContain("summary");
+  });
+});
+
+describe("collectEvidence", () => {
+  it("auto-indexes across mixed sources", () => {
+    const ts = new Date("2025-06-15T12:00:00Z");
+    const event1 = makeTimelineEvent("read /etc/passwd", ts);
+    const event2 = makeTimelineEvent("egress to evil.com", ts);
+    const alert: Alert = {
+      ruleName: "test_rule",
+      severity: "high",
+      title: "Test alert",
+      triggeredAt: ts,
+      evidence: [event1],
+      description: "desc",
+    };
+    const iocMatch: IocMatch = {
+      event: event2,
+      matchedIocs: [{ indicator: "evil.com", iocType: "domain" }],
+      matchField: "summary",
+    };
+
+    const items = collectEvidence(alert, [event2], [iocMatch]);
+
+    // Alert produces 2 items (alert + 1 evidence event)
+    // Events produces 1 item
+    // IOC matches produces 1 item
+    expect(items).toHaveLength(4);
+    expect(items[0].index).toBe(0);
+    expect(items[1].index).toBe(1);
+    expect(items[2].index).toBe(2);
+    expect(items[3].index).toBe(3);
+    expect(items[0].sourceType).toBe("alert");
+    expect(items[2].sourceType).toBe("event");
+    expect(items[3].sourceType).toBe("ioc_match");
+  });
+
+  it("handles empty input", () => {
+    const items = collectEvidence();
+    expect(items).toHaveLength(0);
   });
 });

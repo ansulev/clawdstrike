@@ -83,7 +83,7 @@ async def run_watch(
             if on_event is not None:
                 on_event(event)
 
-            engine.evict_expired_capped(config.max_window)
+            engine.evict(config.max_window)
             alerts = engine.process_event(event)
             for alert in alerts:
                 alerts_triggered += 1

@@ -746,9 +746,9 @@ function sanitizeStreamChunkIfNeeded(
     if (!result) {
       return null;
     }
-    if (!result.wasRedacted) {
-      return chunk;
-    }
+    // Always use result.sanitized — it contains the full buffered content
+    // (prior suppressed chunks + current delta). Using the original chunk
+    // would discard the buffered prefix accumulated while write() returned null.
     return { ...chunk, textDelta: result.sanitized };
   }
 
@@ -774,7 +774,10 @@ function sanitizeStreamChunkIfNeeded(
       });
     }
 
-    if (type === "finish" && final.wasRedacted) {
+    // Always emit remaining buffered text before the finish/error event.
+    // Without this, clean (non-redacted) text accumulated in the buffer
+    // since the last flush would be silently dropped.
+    if (type === "finish" && final.sanitized.length > 0) {
       return [{ type: "text-delta", textDelta: final.sanitized }, chunk];
     }
     return chunk;

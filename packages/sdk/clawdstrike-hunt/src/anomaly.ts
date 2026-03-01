@@ -14,7 +14,7 @@ export interface BaselineData {
   actionTypeCounts: Record<string, number>;
   processCounts: Record<string, number>;
   namespaceCounts: Record<string, number>;
-  hourOfDayCounts: Record<number, number>;
+  hourOfDayCounts: Record<string, number>;
 }
 
 export class Baseline {

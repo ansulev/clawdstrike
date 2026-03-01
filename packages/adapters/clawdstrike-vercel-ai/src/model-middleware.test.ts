@@ -1,7 +1,17 @@
 import type { PolicyEngineLike } from "@clawdstrike/adapter-core";
+import { initWasm, isWasmBackend } from "@clawdstrike/sdk";
 import { describe, expect, it, vi } from "vitest";
 import { ClawdstrikePromptSecurityError } from "./errors.js";
 import { createClawdstrikeMiddleware } from "./middleware.js";
+
+// Attempt WASM initialization — detection features require it.
+let wasmAvailable = false;
+try {
+  const ok = await initWasm();
+  wasmAvailable = ok && isWasmBackend();
+} catch {
+  // WASM module not installed — skip detection tests.
+}
 
 describe("wrapLanguageModel", () => {
   it("wraps doGenerate and annotates blocked tool calls", async () => {
@@ -113,7 +123,7 @@ describe("wrapLanguageModel", () => {
     expect(toolCall.__clawdstrike_blocked).toBe(true);
   });
 
-  it("blocks doGenerate on jailbreak detection in block mode", async () => {
+  it.skipIf(!wasmAvailable)("blocks doGenerate on jailbreak detection in block mode", async () => {
     const engine: PolicyEngineLike = {
       evaluate: () => ({ allowed: true, denied: false, warn: false }),
     };
@@ -163,7 +173,7 @@ describe("wrapLanguageModel", () => {
     expect(security.getAuditLog().some((e) => e.type === "prompt_security_jailbreak")).toBe(true);
   });
 
-  it("sanitizes generated text when promptSecurity.outputSanitization is enabled", async () => {
+  it.skipIf(!wasmAvailable)("sanitizes generated text when promptSecurity.outputSanitization is enabled", async () => {
     const engine: PolicyEngineLike = {
       evaluate: () => ({ allowed: true, denied: false, warn: false }),
     };
@@ -211,7 +221,7 @@ describe("wrapLanguageModel", () => {
     );
   });
 
-  it("sanitizes streaming text deltas when promptSecurity.outputSanitization is enabled", async () => {
+  it.skipIf(!wasmAvailable)("sanitizes streaming text deltas when promptSecurity.outputSanitization is enabled", async () => {
     const engine: PolicyEngineLike = {
       evaluate: () => ({ allowed: true, denied: false, warn: false }),
     };

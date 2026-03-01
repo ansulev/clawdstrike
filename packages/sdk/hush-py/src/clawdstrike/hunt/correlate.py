@@ -390,9 +390,16 @@ class CorrelationEngine:
         for ri in to_remove:
             del self._windows[ri]
 
-    def flush(self) -> list[Alert]:
-        """Flush all windows, returning alerts for fully-matched ones."""
-        self._evict_expired()
+    def flush(self, as_of: datetime | None = None) -> list[Alert]:
+        """Flush all windows, returning alerts for fully-matched ones.
+
+        When *as_of* is provided, eviction uses that timestamp instead of
+        wall-clock time — critical for deterministic replay of historical data.
+        """
+        if as_of is not None:
+            self._evict_expired_at(as_of)
+        else:
+            self._evict_expired()
         alerts: list[Alert] = []
         for ri, windows in list(self._windows.items()):
             rule = self._rules[ri]
@@ -489,7 +496,9 @@ def correlate(rules: list[CorrelationRule], events: list[TimelineEvent]) -> list
     alerts: list[Alert] = []
     for event in events:
         alerts.extend(engine.process_event(event))
-    alerts.extend(engine.flush())
+    # Use last event's timestamp for deterministic replay instead of wall-clock.
+    as_of = events[-1].timestamp if events else None
+    alerts.extend(engine.flush(as_of=as_of))
     return alerts
 
 

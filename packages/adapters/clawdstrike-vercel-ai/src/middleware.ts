@@ -457,20 +457,38 @@ function createPromptSecurityRuntime(
   const jailbreakWarnThreshold = cfg.jailbreakDetection?.config?.warnThreshold ?? 30;
   const jailbreakBlockThreshold = cfg.jailbreakDetection?.config?.blockThreshold ?? 70;
 
-  const hierarchy = instructionHierarchyEnabled
-    ? new InstructionHierarchyEnforcer({
+  let hierarchy: InstructionHierarchyEnforcer | undefined;
+  if (instructionHierarchyEnabled) {
+    try {
+      hierarchy = new InstructionHierarchyEnforcer({
         reminders: { enabled: false },
         ...(cfg.instructionHierarchy?.config ?? {}),
-      })
-    : undefined;
+      });
+    } catch {
+      // biome-ignore lint/suspicious/noConsole: WASM unavailable diagnostic
+      console.warn("[clawdstrike/vercel-ai] InstructionHierarchyEnforcer skipped — WASM unavailable");
+    }
+  }
 
-  const jailbreak = jailbreakEnabled
-    ? new JailbreakDetector(cfg.jailbreakDetection?.config ?? {})
-    : undefined;
+  let jailbreak: JailbreakDetector | undefined;
+  if (jailbreakEnabled) {
+    try {
+      jailbreak = new JailbreakDetector(cfg.jailbreakDetection?.config ?? {});
+    } catch {
+      // biome-ignore lint/suspicious/noConsole: WASM unavailable diagnostic
+      console.warn("[clawdstrike/vercel-ai] JailbreakDetector skipped — WASM unavailable");
+    }
+  }
 
-  const outputSanitizer = outputSanitizationEnabled
-    ? new OutputSanitizer(cfg.outputSanitization?.config ?? {})
-    : undefined;
+  let outputSanitizer: OutputSanitizer | undefined;
+  if (outputSanitizationEnabled) {
+    try {
+      outputSanitizer = new OutputSanitizer(cfg.outputSanitization?.config ?? {});
+    } catch {
+      // biome-ignore lint/suspicious/noConsole: WASM unavailable diagnostic
+      console.warn("[clawdstrike/vercel-ai] OutputSanitizer skipped — WASM unavailable");
+    }
+  }
 
   let watermarkerPromise: Promise<PromptWatermarker> | null = null;
   const getWatermarker = watermarkingEnabled

@@ -31,6 +31,10 @@ pub struct StoreMetadata {
     /// ambiguity when denormalizing directory names that contain `--`.
     #[serde(default)]
     pub name: Option<String>,
+    /// Deterministic fingerprint of installed package contents (excluding
+    /// `.pkg-meta.json`), used for local tamper detection.
+    #[serde(default)]
+    pub content_fingerprint: Option<Hash>,
 }
 
 /// Local package store rooted at `~/.clawdstrike/packages/` by default.
@@ -57,6 +61,63 @@ fn cmp_package_versions(lhs: &str, rhs: &str) -> std::cmp::Ordering {
         (Ok(a), Ok(b)) => a.cmp(&b),
         _ => lhs.cmp(rhs),
     }
+}
+
+fn normalize_relative_path(path: &Path) -> String {
+    path.components()
+        .map(|c| c.as_os_str().to_string_lossy().to_string())
+        .collect::<Vec<_>>()
+        .join("/")
+}
+
+fn append_fingerprint_material(base: &Path, dir: &Path, out: &mut Vec<u8>) -> Result<()> {
+    let mut entries = Vec::new();
+    for entry in fs::read_dir(dir)? {
+        entries.push(entry?);
+    }
+    entries.sort_by_key(|entry| entry.file_name());
+
+    for entry in entries {
+        let path = entry.path();
+        let rel = path
+            .strip_prefix(base)
+            .map_err(|e| Error::PkgError(format!("failed to fingerprint package path: {e}")))?;
+        if rel == Path::new(".pkg-meta.json") {
+            continue;
+        }
+
+        let rel_norm = normalize_relative_path(rel);
+        let file_type = entry.file_type()?;
+        if file_type.is_dir() {
+            out.extend_from_slice(b"D\0");
+            out.extend_from_slice(rel_norm.as_bytes());
+            out.push(0);
+            append_fingerprint_material(base, &path, out)?;
+        } else if file_type.is_file() {
+            out.extend_from_slice(b"F\0");
+            out.extend_from_slice(rel_norm.as_bytes());
+            out.push(0);
+            let bytes = fs::read(&path)?;
+            out.extend_from_slice(&(bytes.len() as u64).to_le_bytes());
+            out.extend_from_slice(&bytes);
+        } else {
+            return Err(Error::PkgError(format!(
+                "unsupported entry type in installed package: {rel_norm}"
+            )));
+        }
+    }
+
+    Ok(())
+}
+
+/// Compute a deterministic fingerprint of installed package contents.
+///
+/// The fingerprint includes file paths, directory paths, and file bytes while
+/// excluding store metadata (`.pkg-meta.json`).
+pub fn compute_content_fingerprint(package_dir: &Path) -> Result<Hash> {
+    let mut material = Vec::new();
+    append_fingerprint_material(package_dir, package_dir, &mut material)?;
+    Ok(hush_core::sha256(&material))
 }
 
 impl PackageStore {
@@ -147,11 +208,25 @@ impl PackageStore {
         // Disarm the guard — the temp dir no longer exists (it was renamed).
         guard.disarmed = true;
 
+        let content_fingerprint = match compute_content_fingerprint(&target) {
+            Ok(f) => f,
+            Err(e) => {
+                if let Some(ref backup_path) = backup {
+                    let _ = fs::remove_dir_all(&target);
+                    let _ = fs::rename(backup_path, &target);
+                } else {
+                    let _ = fs::remove_dir_all(&target);
+                }
+                return Err(e);
+            }
+        };
+
         // Write metadata file.
         let meta = StoreMetadata {
             content_hash,
             installed_at: chrono::Utc::now().to_rfc3339(),
             name: Some(name.clone()),
+            content_fingerprint: Some(content_fingerprint),
         };
         let meta_path = target.join(".pkg-meta.json");
         let meta_json = match serde_json::to_string_pretty(&meta) {
@@ -393,6 +468,11 @@ sandbox = "native"
         let got = store.get("my-guard", "1.0.0").unwrap().unwrap();
         assert_eq!(got.name, "my-guard");
         assert_eq!(got.content_hash, installed.content_hash);
+
+        let meta_path = got.path.join(".pkg-meta.json");
+        let meta_raw = fs::read_to_string(meta_path).unwrap();
+        let meta: StoreMetadata = serde_json::from_str(&meta_raw).unwrap();
+        assert!(meta.content_fingerprint.is_some());
     }
 
     #[test]
@@ -590,5 +670,30 @@ sandbox = "native"
         // The original scoped name is preserved via StoreMetadata.name,
         // NOT via denormalize_name heuristics.
         assert_eq!(list[0].name, "@acme/firewall");
+    }
+
+    #[test]
+    fn content_fingerprint_ignores_metadata_file() {
+        let tmp = tempfile::tempdir().unwrap();
+        let store = PackageStore::with_root(tmp.path().join("store")).unwrap();
+
+        let archive = create_test_package(tmp.path(), "demo", "1.0.0", "guard", "fp-meta");
+        let installed = store.install_from_file(&archive).unwrap();
+
+        let meta_path = installed.path.join(".pkg-meta.json");
+        let initial_meta: StoreMetadata =
+            serde_json::from_str(&fs::read_to_string(&meta_path).unwrap()).unwrap();
+        let expected = initial_meta.content_fingerprint.unwrap();
+
+        let mut modified_meta = initial_meta.clone();
+        modified_meta.installed_at = "2099-01-01T00:00:00Z".to_string();
+        fs::write(
+            &meta_path,
+            serde_json::to_string_pretty(&modified_meta).unwrap(),
+        )
+        .unwrap();
+
+        let recomputed = compute_content_fingerprint(&installed.path).unwrap();
+        assert_eq!(recomputed, expected);
     }
 }

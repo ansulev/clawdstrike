@@ -11,7 +11,7 @@ use clawdstrike::pkg::archive;
 use clawdstrike::pkg::integrity::sign_package;
 use clawdstrike::pkg::manifest::{parse_pkg_manifest_toml, PkgManifest, PkgType};
 use clawdstrike::pkg::merkle::{verify_inclusion_proof, InclusionProof, LeafData};
-use clawdstrike::pkg::store::PackageStore;
+use clawdstrike::pkg::store::{compute_content_fingerprint, PackageStore, StoreMetadata};
 
 use crate::registry_config::{is_file_source, load_or_generate_publisher_keypair, RegistryConfig};
 use crate::ExitCode;
@@ -1232,42 +1232,9 @@ fn select_default_registry_version(info: &serde_json::Value) -> Option<String> {
     latest_hint.map(ToOwned::to_owned)
 }
 
-fn copy_dir_recursive_without_store_metadata(src: &Path, dst: &Path) -> Result<(), std::io::Error> {
-    std::fs::create_dir_all(dst)?;
-    for entry in std::fs::read_dir(src)? {
-        let entry = entry?;
-        if entry.file_name() == std::ffi::OsStr::new(".pkg-meta.json") {
-            continue;
-        }
-        let entry_type = entry.file_type()?;
-        let src_path = entry.path();
-        let dst_path = dst.join(entry.file_name());
-        if entry_type.is_dir() {
-            copy_dir_recursive_without_store_metadata(&src_path, &dst_path)?;
-        } else {
-            std::fs::copy(&src_path, &dst_path)?;
-        }
-    }
-    Ok(())
-}
-
-fn recompute_installed_content_hash(package_dir: &Path) -> Result<hush_core::Hash, String> {
-    let tmp_dir =
-        tempdir_for_download().map_err(|e| format!("cannot create verification temp dir: {e}"))?;
-    let result = (|| {
-        let staged_dir = tmp_dir.join("staged");
-        copy_dir_recursive_without_store_metadata(package_dir, &staged_dir).map_err(|e| {
-            format!(
-                "cannot stage installed package '{}' for hashing: {e}",
-                package_dir.display()
-            )
-        })?;
-        let repacked_archive = tmp_dir.join("verify.cpkg");
-        archive::pack(&staged_dir, &repacked_archive)
-            .map_err(|e| format!("failed to repack installed package for hashing: {e}"))
-    })();
-    let _ = std::fs::remove_dir_all(&tmp_dir);
-    result
+fn recompute_installed_content_fingerprint(package_dir: &Path) -> Result<hush_core::Hash, String> {
+    compute_content_fingerprint(package_dir)
+        .map_err(|e| format!("failed to recompute installed package fingerprint: {e}"))
 }
 
 fn cmd_pkg_install_registry(
@@ -1989,50 +1956,61 @@ fn cmd_pkg_verify(
         return ExitCode::Fail;
     }
 
+    let metadata = match std::fs::read_to_string(&meta_path)
+        .ok()
+        .and_then(|s| serde_json::from_str::<StoreMetadata>(&s).ok())
+    {
+        Some(m) => m,
+        None => {
+            let _ = writeln!(stdout, "Trust Level: FAIL\n");
+            let _ = writeln!(stdout, "  x Content integrity    Invalid store metadata");
+            return ExitCode::Fail;
+        }
+    };
+
+    let installed_at = metadata.installed_at.clone();
+    let expected_fingerprint = metadata.content_fingerprint;
+
     let mut content_ok = true;
     let mut content_error: Option<String> = None;
-    let recomputed_hash = match recompute_installed_content_hash(&pkg.path) {
+    let recomputed_fingerprint = match recompute_installed_content_fingerprint(&pkg.path) {
         Ok(h) => h,
         Err(e) => {
             content_ok = false;
             content_error = Some(e);
-            pkg.content_hash
+            Hash::zero()
         }
     };
-    if content_ok && recomputed_hash != pkg.content_hash {
-        content_ok = false;
-        content_error = Some(format!(
-            "hash mismatch (expected {}..., got {}...)",
-            &pkg.content_hash.to_hex()[..16],
-            &recomputed_hash.to_hex()[..16]
-        ));
+    if content_ok {
+        match expected_fingerprint {
+            Some(expected) if recomputed_fingerprint != expected => {
+                content_ok = false;
+                content_error = Some(format!(
+                    "fingerprint mismatch (expected {}..., got {}...)",
+                    &expected.to_hex()[..16],
+                    &recomputed_fingerprint.to_hex()[..16]
+                ));
+            }
+            Some(_) => {}
+            None => {
+                content_ok = false;
+                content_error = Some(
+                    "missing content fingerprint in store metadata; reinstall package".to_string(),
+                );
+            }
+        }
     }
 
-    let hash_hex = recomputed_hash.to_hex();
-    let hash_display = if hash_hex.len() > 16 {
-        &hash_hex[..16]
+    let fingerprint_hex = recomputed_fingerprint.to_hex();
+    let fingerprint_display = if fingerprint_hex.len() > 16 {
+        &fingerprint_hex[..16]
     } else {
-        &hash_hex
+        &fingerprint_hex
     };
 
     let mut publisher_ok = false;
     let mut registry_ok = false;
     let mut attestation_error: Option<String> = None;
-
-    // Read store metadata for installed_at timestamp.
-    let installed_at = match std::fs::read_to_string(&meta_path) {
-        Ok(s) => {
-            let meta: serde_json::Value = serde_json::from_str(&s).unwrap_or_default();
-            meta.get("installed_at")
-                .and_then(|v| v.as_str())
-                .unwrap_or("unknown")
-                .to_string()
-        }
-        Err(_) => {
-            content_ok = false;
-            "unknown".to_string()
-        }
-    };
 
     // If trust level is unverified, we only check content integrity.
     if trust_level == "unverified" {
@@ -2040,8 +2018,8 @@ fn cmd_pkg_verify(
         if content_ok {
             let _ = writeln!(
                 stdout,
-                "  + Content integrity    SHA-256: {}...",
-                hash_display
+                "  + Content integrity    Fingerprint: {}...",
+                fingerprint_display
             );
         } else {
             let _ = writeln!(
@@ -2097,7 +2075,7 @@ fn cmd_pkg_verify(
         .and_then(|r| r.json().ok());
 
     if let Some(ref att) = attestation {
-        match verify_attestation_against_hash(att, &recomputed_hash, expected_registry_key) {
+        match verify_attestation_against_hash(att, &pkg.content_hash, expected_registry_key) {
             Ok(v) => {
                 publisher_ok = v.publisher_verified;
                 registry_ok = v.registry_verified;
@@ -2185,9 +2163,9 @@ fn cmd_pkg_verify(
     if content_ok {
         let _ = writeln!(
             stdout,
-            "  {} Content integrity    SHA-256: {}...",
+            "  {} Content integrity    Fingerprint: {}...",
             mark(content_ok),
-            hash_display
+            fingerprint_display
         );
     } else {
         let _ = writeln!(
@@ -4678,7 +4656,7 @@ sandbox = "native"
     }
 
     #[test]
-    fn recompute_installed_content_hash_detects_tampering() {
+    fn recompute_installed_content_fingerprint_detects_tampering() {
         let tmp = tempfile::tempdir().unwrap();
         let src = tmp.path().join("src");
         std::fs::create_dir_all(&src).unwrap();
@@ -4703,12 +4681,18 @@ sandbox = "native"
         let installed = store.install_from_file(&archive_path).unwrap();
         assert_eq!(installed.content_hash, archive_hash);
 
-        let recomputed = recompute_installed_content_hash(&installed.path).unwrap();
-        assert_eq!(recomputed, installed.content_hash);
+        let meta: StoreMetadata = serde_json::from_str(
+            &std::fs::read_to_string(installed.path.join(".pkg-meta.json")).unwrap(),
+        )
+        .unwrap();
+        let expected = meta.content_fingerprint.unwrap();
+
+        let recomputed = recompute_installed_content_fingerprint(&installed.path).unwrap();
+        assert_eq!(recomputed, expected);
 
         std::fs::write(installed.path.join("README.md"), "tampered").unwrap();
-        let tampered = recompute_installed_content_hash(&installed.path).unwrap();
-        assert_ne!(tampered, installed.content_hash);
+        let tampered = recompute_installed_content_fingerprint(&installed.path).unwrap();
+        assert_ne!(tampered, expected);
     }
 
     #[test]

@@ -14,7 +14,6 @@ from clawdstrike.hunt.types import (
     EventSourceType,
     IocMatch,
     NormalizedVerdict,
-    TimelineEvent,
 )
 
 

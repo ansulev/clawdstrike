@@ -5,7 +5,6 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from clawdstrike.hunt.mitre import (
-    MitreTechnique,
     coverage_matrix,
     map_alert_to_mitre,
     map_event_to_mitre,

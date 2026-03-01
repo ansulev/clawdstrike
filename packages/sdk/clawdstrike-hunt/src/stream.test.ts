@@ -1,5 +1,4 @@
 import { describe, it, expect } from 'vitest';
-import { WatchError } from './errors.js';
 import type { StreamItem, StreamOptions } from './stream.js';
 import type { TimelineEvent, Alert } from './types.js';
 import { EventSourceType, TimelineEventKind, NormalizedVerdict, RuleSeverity } from './types.js';

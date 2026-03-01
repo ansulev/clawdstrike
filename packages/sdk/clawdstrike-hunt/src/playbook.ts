@@ -127,7 +127,7 @@ export class Playbook {
         if (evidence.length > 0) {
           report = buildReport(this._reportTitle, evidence);
           // 7. Sign
-          if (this._signKey && report) {
+          if (this._signKey) {
             report = await signReport(report, this._signKey);
           }
         }

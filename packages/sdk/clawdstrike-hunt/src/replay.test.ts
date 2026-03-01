@@ -5,8 +5,6 @@ import { tmpdir } from "node:os";
 import { replay } from "./replay.js";
 import { parseRule } from "./correlate/index.js";
 import { IocDatabase } from "./correlate/index.js";
-import type { TimelineEvent } from "./types.js";
-
 const SINGLE_RULE_YAML = `
 schema: clawdstrike.hunt.correlation.v1
 name: "Forbidden Path Access"
@@ -23,23 +21,6 @@ output:
   evidence:
     - denied_access
 `;
-
-function makeEvent(
-  source: string,
-  actionType: string,
-  verdict: string,
-  summary: string,
-  ts: Date,
-): TimelineEvent {
-  return {
-    timestamp: ts,
-    source: source as TimelineEvent["source"],
-    kind: "guard_decision" as TimelineEvent["kind"],
-    verdict: verdict as TimelineEvent["verdict"],
-    summary,
-    actionType,
-  };
-}
 
 describe("replay", () => {
   it("returns alerts when rules match events", async () => {

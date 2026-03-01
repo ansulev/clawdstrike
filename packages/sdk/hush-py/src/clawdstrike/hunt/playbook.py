@@ -6,8 +6,8 @@ deduplicate, and report generation steps.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from dataclasses import dataclass
+from datetime import datetime, timedelta
 from typing import Any
 
 from clawdstrike.hunt.correlate import CorrelationEngine, correlate

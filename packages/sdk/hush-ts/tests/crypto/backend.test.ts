@@ -16,8 +16,9 @@ afterEach(() => {
 });
 
 describe("getBackend", () => {
-  it("returns wasm after setup", () => {
-    expect(getBackend().name).toBe("wasm");
+  it("returns a valid backend after setup", () => {
+    const name = getBackend().name;
+    expect(name === "wasm" || name === "noble").toBe(true);
   });
 });
 

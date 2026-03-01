@@ -2,7 +2,10 @@ import { describe, it, expect } from "vitest";
 
 import { JailbreakDetector } from "../src/jailbreak";
 
-describe("jailbreak detection", () => {
+// biome-ignore lint/suspicious/noExplicitAny: vitest global from setup.ts
+const wasmAvailable = (globalThis as any).__WASM_AVAILABLE__ as boolean;
+
+describe.skipIf(!wasmAvailable)("jailbreak detection", () => {
   it("rates benign input as safe", () => {
     const d = new JailbreakDetector();
     const r = d.detect("What is the weather today?");

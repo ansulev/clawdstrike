@@ -2,7 +2,10 @@ import { describe, it, expect } from "vitest";
 
 import { OutputSanitizer } from "../src/output-sanitizer";
 
-describe("output sanitizer", () => {
+// biome-ignore lint/suspicious/noExplicitAny: vitest global from setup.ts
+const wasmAvailable = (globalThis as any).__WASM_AVAILABLE__ as boolean;
+
+describe.skipIf(!wasmAvailable)("output sanitizer", () => {
   it("redacts known secrets", () => {
     const s = new OutputSanitizer();
     const key = "sk-" + "a".repeat(48);

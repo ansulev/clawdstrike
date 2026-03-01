@@ -868,4 +868,32 @@ mod tests {
             .to_string()
             .contains("caller is not authorized to administer unscoped package 'demo'"));
     }
+
+    #[tokio::test]
+    async fn search_total_reports_full_match_count_with_pagination() {
+        let (state, _tmp) = test_state();
+        {
+            let db = state.db.lock().unwrap();
+            db.upsert_package("secret-a", Some("secret scanner"), "2025-01-01T00:00:00Z")
+                .unwrap();
+            db.upsert_package("secret-b", Some("secret scanner"), "2025-01-02T00:00:00Z")
+                .unwrap();
+            db.upsert_package("secret-c", Some("secret scanner"), "2025-01-03T00:00:00Z")
+                .unwrap();
+        }
+
+        let page = search::search(
+            State(state),
+            Query(search::SearchQuery {
+                q: "secret".to_string(),
+                limit: 1,
+                offset: 1,
+            }),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(page.0.packages.len(), 1);
+        assert_eq!(page.0.total, 3);
+    }
 }

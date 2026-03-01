@@ -40,8 +40,8 @@ pub async fn search(
         .lock()
         .map_err(|e| RegistryError::Internal(format!("db lock poisoned: {e}")))?;
 
+    let total = db.count_search_results(&params.q)? as usize;
     let results = db.search(&params.q, limit, params.offset)?;
-    let total = results.len();
 
     Ok(Json(SearchResponse {
         packages: results,

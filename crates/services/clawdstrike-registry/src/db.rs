@@ -655,6 +655,25 @@ impl RegistryDb {
         }
     }
 
+    /// Count total search matches for pagination.
+    pub fn count_search_results(&self, query: &str) -> Result<u64, RegistryError> {
+        if query.is_empty() {
+            let count: i64 = self
+                .conn
+                .query_row("SELECT COUNT(*) FROM packages", [], |row| row.get(0))?;
+            return Ok(count as u64);
+        }
+
+        // Keep query sanitation aligned with `search`.
+        let safe_query = format!("\"{}\"", query.replace('"', "\"\""));
+        let count: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM search_index si JOIN packages p ON p.name = si.name WHERE search_index MATCH ?1",
+            params![safe_query],
+            |row| row.get(0),
+        )?;
+        Ok(count as u64)
+    }
+
     // -----------------------------------------------------------------------
     // API Keys
     // -----------------------------------------------------------------------
@@ -1203,6 +1222,32 @@ mod tests {
 
         let results = db.search("", 10, 0).unwrap();
         assert_eq!(results.len(), 2);
+    }
+
+    #[test]
+    fn count_search_results_for_query_and_empty() {
+        let db = test_db();
+        db.upsert_package(
+            "secret-scanner-a",
+            Some("Scans for secrets"),
+            "2025-01-01T00:00:00Z",
+        )
+        .unwrap();
+        db.upsert_package(
+            "secret-scanner-b",
+            Some("Also scans for secrets"),
+            "2025-01-02T00:00:00Z",
+        )
+        .unwrap();
+        db.upsert_package(
+            "path-guard",
+            Some("Path access control"),
+            "2025-01-03T00:00:00Z",
+        )
+        .unwrap();
+
+        assert_eq!(db.count_search_results("secret").unwrap(), 2);
+        assert_eq!(db.count_search_results("").unwrap(), 3);
     }
 
     #[test]

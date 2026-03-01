@@ -61,9 +61,9 @@ fn parse_pkg_ref(reference: &str) -> Result<PkgRef> {
             .find('/')
             .ok_or_else(|| Error::PkgError(format!("invalid scoped pkg reference: {reference}")))?;
 
-        let version_at = body[after_scope..]
+        let version_at = body[after_scope + 1..]
             .find('@')
-            .map(|i| i + after_scope)
+            .map(|i| i + after_scope + 1)
             .ok_or_else(|| {
                 Error::PkgError(format!("pkg reference missing version: {reference}"))
             })?;
@@ -71,29 +71,17 @@ fn parse_pkg_ref(reference: &str) -> Result<PkgRef> {
         let name = &body[..version_at];
         let rest = &body[version_at + 1..];
 
-        if name.is_empty() || rest.is_empty() {
+        if name.is_empty() {
             return Err(Error::PkgError(format!(
                 "pkg reference has empty name or version: {reference}"
             )));
         }
 
-        let (version, sub_path) = match rest.find('/') {
-            Some(slash) => {
-                let v = &rest[..slash];
-                let p = &rest[slash + 1..];
-                if v.is_empty() {
-                    return Err(Error::PkgError(format!(
-                        "pkg reference has empty version: {reference}"
-                    )));
-                }
-                (v, Some(p.to_string()))
-            }
-            None => (rest, None),
-        };
+        let (version, sub_path) = split_version_and_sub_path(rest, reference)?;
 
         Ok(PkgRef {
             name: name.to_string(),
-            version: version.to_string(),
+            version,
             sub_path,
         })
     } else {
@@ -105,32 +93,46 @@ fn parse_pkg_ref(reference: &str) -> Result<PkgRef> {
         let name = &body[..at_pos];
         let rest = &body[at_pos + 1..];
 
-        if name.is_empty() || rest.is_empty() {
+        if name.is_empty() {
             return Err(Error::PkgError(format!(
                 "pkg reference has empty name or version: {reference}"
             )));
         }
 
-        let (version, sub_path) = match rest.find('/') {
-            Some(slash) => {
-                let v = &rest[..slash];
-                let p = &rest[slash + 1..];
-                if v.is_empty() {
-                    return Err(Error::PkgError(format!(
-                        "pkg reference has empty version: {reference}"
-                    )));
-                }
-                (v, Some(p.to_string()))
-            }
-            None => (rest, None),
-        };
+        let (version, sub_path) = split_version_and_sub_path(rest, reference)?;
 
         Ok(PkgRef {
             name: name.to_string(),
-            version: version.to_string(),
+            version,
             sub_path,
         })
     }
+}
+
+fn split_version_and_sub_path(rest: &str, reference: &str) -> Result<(String, Option<String>)> {
+    if rest.is_empty() {
+        return Err(Error::PkgError(format!(
+            "pkg reference has empty version: {reference}"
+        )));
+    }
+
+    let (version, sub_path) = match rest.find('/') {
+        Some(slash) => (&rest[..slash], Some(rest[slash + 1..].to_string())),
+        None => (rest, None),
+    };
+
+    if version.is_empty() {
+        return Err(Error::PkgError(format!(
+            "pkg reference has empty version: {reference}"
+        )));
+    }
+    if version.contains('@') {
+        return Err(Error::PkgError(format!(
+            "pkg reference has invalid version delimiter placement: {reference}"
+        )));
+    }
+
+    Ok((version.to_string(), sub_path))
 }
 
 /// Find the policy YAML file within a package directory.
@@ -366,6 +368,14 @@ mod tests {
     fn rejects_empty_version_unscoped() {
         let err = parse_pkg_ref("pkg:name@").unwrap_err();
         assert!(err.to_string().contains("empty"));
+    }
+
+    #[test]
+    fn rejects_scoped_ref_with_extra_at_in_version_segment() {
+        let err = parse_pkg_ref("pkg:@scope/na@me@1.0.0").unwrap_err();
+        assert!(err
+            .to_string()
+            .contains("invalid version delimiter placement"));
     }
 
     // -----------------------------------------------------------------------

@@ -3009,11 +3009,7 @@ fn cmd_pkg_search(
             .get("description")
             .and_then(|d| d.as_str())
             .unwrap_or("");
-        let desc_display = if description.len() > 40 {
-            format!("{}...", &description[..37])
-        } else {
-            description.to_string()
-        };
+        let desc_display = truncate_with_ellipsis(description, 37);
         let _ = writeln!(stdout, "{:<40} {:<12} {}", name, version, desc_display);
     }
 
@@ -3049,6 +3045,14 @@ fn urlencoding_simple(s: &str) -> String {
         }
     }
     out
+}
+
+fn truncate_with_ellipsis(input: &str, max_chars: usize) -> String {
+    if input.chars().count() <= max_chars {
+        return input.to_string();
+    }
+    let truncated: String = input.chars().take(max_chars).collect();
+    format!("{truncated}...")
 }
 
 const HEX_UPPER: [u8; 16] = *b"0123456789ABCDEF";
@@ -4324,6 +4328,18 @@ auth_token = "tok_secret"
         assert_eq!(urlencoding_simple("@scope/name"), "%40scope%2Fname");
         assert_eq!(urlencoding_simple("a b"), "a%20b");
         assert_eq!(urlencoding_simple("foo+bar"), "foo%2Bbar");
+    }
+
+    #[test]
+    fn test_truncate_with_ellipsis_handles_utf8_boundaries() {
+        let input = "naive cafe from a roastery with emoji cafe";
+        assert_eq!(truncate_with_ellipsis(input, 12), "naive cafe f...");
+
+        let unicode_input = "naive cafe 日本語で説明する";
+        assert_eq!(
+            truncate_with_ellipsis(unicode_input, 12),
+            "naive cafe 日..."
+        );
     }
 
     #[test]

@@ -126,6 +126,38 @@ pub struct RegistryDb {
     conn: Connection,
 }
 
+/// Build a conservative FTS5 MATCH query from user text.
+///
+/// The resulting expression contains only quoted literal tokens joined with
+/// `AND`, preventing user-supplied FTS operators from changing query semantics.
+fn build_fts_literal_query(query: &str) -> Option<String> {
+    let mut tokens = Vec::new();
+    let mut current = String::new();
+
+    for ch in query.chars() {
+        if ch.is_ascii_alphanumeric() || matches!(ch, '.' | '_' | '-' | '/' | '@' | ':' | '%') {
+            current.push(ch);
+        } else if !current.is_empty() {
+            tokens.push(std::mem::take(&mut current));
+        }
+    }
+    if !current.is_empty() {
+        tokens.push(current);
+    }
+
+    if tokens.is_empty() {
+        return None;
+    }
+
+    Some(
+        tokens
+            .into_iter()
+            .map(|token| format!("\"{}\"", token.replace('"', "\"\"")))
+            .collect::<Vec<_>>()
+            .join(" AND "),
+    )
+}
+
 impl RegistryDb {
     /// Open (or create) the registry database at the given path.
     pub fn open(path: &Path) -> Result<Self, RegistryError> {
@@ -718,9 +750,11 @@ impl RegistryDb {
                 .collect::<Result<Vec<_>, _>>()?;
             Ok(rows)
         } else {
-            // Sanitize query: wrap in double quotes to prevent FTS5 syntax errors from
-            // user-supplied special characters.
-            let safe_query = format!("\"{}\"", query.replace('"', "\"\""));
+            // Build a strict literal-token query so user-provided input cannot
+            // inject FTS5 operators.
+            let Some(safe_query) = build_fts_literal_query(query) else {
+                return Ok(Vec::new());
+            };
             let mut stmt = self.conn.prepare(
                 "SELECT p.name, p.description, (SELECT v.version FROM versions v WHERE v.name = p.name ORDER BY v.published_at DESC LIMIT 1) FROM search_index si JOIN packages p ON p.name = si.name WHERE search_index MATCH ?1 ORDER BY rank LIMIT ?2 OFFSET ?3",
             )?;
@@ -747,7 +781,9 @@ impl RegistryDb {
         }
 
         // Keep query sanitation aligned with `search`.
-        let safe_query = format!("\"{}\"", query.replace('"', "\"\""));
+        let Some(safe_query) = build_fts_literal_query(query) else {
+            return Ok(0);
+        };
         let count: i64 = self.conn.query_row(
             "SELECT COUNT(*) FROM search_index si JOIN packages p ON p.name = si.name WHERE search_index MATCH ?1",
             params![safe_query],
@@ -1489,6 +1525,38 @@ mod tests {
 
         assert_eq!(db.count_search_results("secret").unwrap(), 2);
         assert_eq!(db.count_search_results("").unwrap(), 3);
+    }
+
+    #[test]
+    fn build_fts_literal_query_blocks_operator_injection() {
+        let q = build_fts_literal_query("alpha\" OR beta").unwrap();
+        assert_eq!(q, "\"alpha\" AND \"OR\" AND \"beta\"");
+    }
+
+    #[test]
+    fn search_and_count_handle_operator_like_input_safely() {
+        let db = test_db();
+        db.upsert_package("alpha", Some("first"), "2025-01-01T00:00:00Z")
+            .unwrap();
+        db.upsert_package("beta", Some("second"), "2025-01-02T00:00:00Z")
+            .unwrap();
+
+        let q = "alpha\" OR beta";
+        let results = db.search(q, 10, 0).unwrap();
+        assert!(results.is_empty());
+        assert_eq!(db.count_search_results(q).unwrap(), 0);
+    }
+
+    #[test]
+    fn search_and_count_ignore_punctuation_only_queries() {
+        let db = test_db();
+        db.upsert_package("alpha", Some("first"), "2025-01-01T00:00:00Z")
+            .unwrap();
+
+        let q = "\"\"\" !!!";
+        let results = db.search(q, 10, 0).unwrap();
+        assert!(results.is_empty());
+        assert_eq!(db.count_search_results(q).unwrap(), 0);
     }
 
     #[test]

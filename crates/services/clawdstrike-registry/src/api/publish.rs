@@ -124,13 +124,8 @@ pub async fn publish(
         let oidc_token = headers
             .get("Authorization")
             .and_then(|v| v.to_str().ok())
-            .and_then(|h| {
-                if h.len() > 7 && h[..7].eq_ignore_ascii_case("Bearer ") {
-                    Some(h[7..].to_string())
-                } else {
-                    None
-                }
-            })
+            .and_then(crate::auth::extract_bearer_token_value)
+            .map(ToOwned::to_owned)
             .ok_or_else(|| {
                 RegistryError::Unauthorized("missing bearer token for OIDC auth".into())
             })?;

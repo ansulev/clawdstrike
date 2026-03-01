@@ -19,21 +19,24 @@ const CALLER_SIG_HEADER: &str = "X-Clawdstrike-Caller-Sig";
 const CALLER_TS_HEADER: &str = "X-Clawdstrike-Caller-Ts";
 const MAX_CALLER_CLOCK_SKEW_SECS: i64 = 300;
 
+pub(crate) fn extract_bearer_token_value(header: &str) -> Option<&str> {
+    let mut parts = header.split_ascii_whitespace();
+    let scheme = parts.next()?;
+    let token = parts.next()?;
+    if parts.next().is_none() && scheme.eq_ignore_ascii_case("Bearer") {
+        return Some(token);
+    }
+
+    None
+}
+
 /// Extract bearer token from the Authorization header.
 fn extract_bearer_token(req: &Request<Body>) -> Option<String> {
     let header = req
         .headers()
         .get("Authorization")
         .and_then(|v| v.to_str().ok())?;
-
-    let mut parts = header.split_ascii_whitespace();
-    let scheme = parts.next()?;
-    let token = parts.next()?;
-    if parts.next().is_none() && scheme.eq_ignore_ascii_case("Bearer") {
-        return Some(token.to_string());
-    }
-
-    None
+    extract_bearer_token_value(header).map(ToOwned::to_owned)
 }
 
 /// Check whether the request uses OIDC authentication.

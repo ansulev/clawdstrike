@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseRule, validateRule } from "./rules.js";
+import { parseRule } from "./rules.js";
 import { correlate } from "./engine.js";
 import type { TimelineEvent } from "../types.js";
 

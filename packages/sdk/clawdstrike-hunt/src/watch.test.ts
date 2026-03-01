@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect } from "vitest";
 
 // We can't easily test the full NATS integration without a running server,
 // but we can verify the module structure and error handling.

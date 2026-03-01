@@ -59,6 +59,7 @@ export async function runWatch(
   // Connect to NATS.
   const nc = await natsModule.connect({
     servers: config.natsUrl,
+    ...(config.natsCreds ? { credentials: config.natsCreds } : {}),
   });
 
   const sub = nc.subscribe(NATS_SUBJECT);

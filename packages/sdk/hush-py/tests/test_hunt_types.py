@@ -6,7 +6,6 @@ from clawdstrike.hunt.types import (
     Alert,
     CorrelationRule,
     EventSourceType,
-    EvidenceItem,
     HuntQuery,
     HuntReport,
     IocEntry,

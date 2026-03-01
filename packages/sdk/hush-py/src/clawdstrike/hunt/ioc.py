@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import json
 import re
-from typing import Any
 
 from clawdstrike.hunt.errors import IocError
 from clawdstrike.hunt.types import (
@@ -37,6 +36,9 @@ def _is_ipv4(s: str) -> bool:
         except ValueError:
             return False
         if n < 0 or n > 255:
+            return False
+        # Reject non-canonical representations (leading zeros, sign prefixes)
+        if str(n) != p:
             return False
     return True
 
@@ -429,7 +431,7 @@ class IocDatabase:
     # -- Matching ----------------------------------------------------------
 
     def match_event(self, event: TimelineEvent) -> IocMatch | None:
-        """Match a single event against all IOCs. Returns first match or ``None``."""
+        """Match a single event against all IOCs. Returns accumulated matches or ``None``."""
         summary_lower = event.summary.lower()
         process_lower = (event.process or "").lower()
         raw_lower = ""
@@ -439,71 +441,47 @@ class IocDatabase:
             else:
                 raw_lower = json.dumps(event.raw, default=str).lower()
 
+        all_matched: list[IocEntry] = []
+        match_field: str | None = None
+
+        def _scan_index(
+            index: dict[str, list[IocEntry]],
+            matcher: object,
+        ) -> None:
+            nonlocal match_field
+            for needle, entries in index.items():
+                field = None
+                if matcher(summary_lower, needle):  # type: ignore[operator]
+                    field = "summary"
+                elif matcher(process_lower, needle):  # type: ignore[operator]
+                    field = "process"
+                elif matcher(raw_lower, needle):  # type: ignore[operator]
+                    field = "raw"
+                if field is not None:
+                    if match_field is None:
+                        match_field = field
+                    all_matched.extend(entries)
+
         # Hash index: plain substring match
-        for needle, entries in self._hash_index.items():
-            field = None
-            if needle in summary_lower:
-                field = "summary"
-            elif needle in process_lower:
-                field = "process"
-            elif needle in raw_lower:
-                field = "raw"
-            if field is not None:
-                return IocMatch(
-                    event=event,
-                    matched_iocs=tuple(entries),
-                    match_field=field,
-                )
+        _scan_index(self._hash_index, lambda haystack, needle: needle in haystack)
 
         # Domain index: word-boundary match
-        for needle, entries in self._domain_index.items():
-            field = None
-            if contains_word_bounded(summary_lower, needle):
-                field = "summary"
-            elif contains_word_bounded(process_lower, needle):
-                field = "process"
-            elif contains_word_bounded(raw_lower, needle):
-                field = "raw"
-            if field is not None:
-                return IocMatch(
-                    event=event,
-                    matched_iocs=tuple(entries),
-                    match_field=field,
-                )
+        _scan_index(self._domain_index, contains_word_bounded)
 
         # IP index: word-boundary match
-        for needle, entries in self._ip_index.items():
-            field = None
-            if contains_word_bounded(summary_lower, needle):
-                field = "summary"
-            elif contains_word_bounded(process_lower, needle):
-                field = "process"
-            elif contains_word_bounded(raw_lower, needle):
-                field = "raw"
-            if field is not None:
-                return IocMatch(
-                    event=event,
-                    matched_iocs=tuple(entries),
-                    match_field=field,
-                )
+        _scan_index(self._ip_index, contains_word_bounded)
 
         # URL index: word-boundary match
-        for needle, entries in self._url_index.items():
-            field = None
-            if contains_word_bounded(summary_lower, needle):
-                field = "summary"
-            elif contains_word_bounded(process_lower, needle):
-                field = "process"
-            elif contains_word_bounded(raw_lower, needle):
-                field = "raw"
-            if field is not None:
-                return IocMatch(
-                    event=event,
-                    matched_iocs=tuple(entries),
-                    match_field=field,
-                )
+        _scan_index(self._url_index, contains_word_bounded)
 
-        return None
+        if not all_matched:
+            return None
+
+        return IocMatch(
+            event=event,
+            matched_iocs=tuple(all_matched),
+            match_field=match_field,  # type: ignore[arg-type]
+        )
 
     def match_events(self, events: list[TimelineEvent]) -> list[IocMatch]:
         """Match multiple events. Returns all matches."""

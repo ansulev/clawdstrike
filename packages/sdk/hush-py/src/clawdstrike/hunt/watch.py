@@ -75,6 +75,9 @@ async def run_watch(
             except (json.JSONDecodeError, UnicodeDecodeError):
                 continue
 
+            if not isinstance(envelope, dict):
+                continue
+
             event = parse_envelope(envelope)
             if event is None:
                 continue
@@ -89,7 +92,7 @@ async def run_watch(
                 alerts_triggered += 1
                 on_alert(alert)
     except asyncio.CancelledError:
-        pass
+        pass  # Graceful shutdown: stop consuming messages and proceed to flush
     finally:
         # Flush remaining partial windows on shutdown.
         remaining = engine.flush()

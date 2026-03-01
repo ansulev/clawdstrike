@@ -9,7 +9,7 @@ import json
 from datetime import datetime, timezone
 
 from clawdstrike.canonical import canonicalize
-from clawdstrike.core import generate_keypair, sign_message, verify_signature
+from clawdstrike.core import sign_message, verify_signature
 from clawdstrike.hunt.errors import ReportError
 from clawdstrike.hunt.types import (
     Alert,
@@ -60,9 +60,9 @@ def build_report(title: str, items: list[EvidenceItem]) -> HuntReport:
     for i in range(len(items)):
         proof = tree.inclusion_proof(i)
         proof_dict = {
-            "tree_size": proof.tree_size,
-            "leaf_index": proof.leaf_index,
-            "audit_path": [p.hex() for p in proof.audit_path],
+            "treeSize": proof.tree_size,
+            "leafIndex": proof.leaf_index,
+            "auditPath": [p.hex() for p in proof.audit_path],
         }
         proofs.append(json.dumps(proof_dict, separators=(",", ":")))
 
@@ -145,13 +145,13 @@ def verify_report(report: HuntReport) -> bool:
 
         from clawdstrike.merkle import MerkleProof
         try:
-            audit_path = [bytes.fromhex(h) for h in proof_dict.get("audit_path", [])]
+            audit_path = [bytes.fromhex(h) for h in proof_dict.get("auditPath", [])]
         except ValueError:
             return False
 
         proof = MerkleProof(
-            tree_size=proof_dict.get("tree_size", 0),
-            leaf_index=proof_dict.get("leaf_index", 0),
+            tree_size=proof_dict.get("treeSize", 0),
+            leaf_index=proof_dict.get("leafIndex", 0),
             audit_path=audit_path,
         )
 

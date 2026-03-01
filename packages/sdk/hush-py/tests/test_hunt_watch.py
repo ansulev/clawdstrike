@@ -26,7 +26,7 @@ class TestRunWatch:
 
             pytest.skip("nats-py is installed; cannot test missing-package path")
         except ImportError:
-            pass
+            pass  # nats-py not installed, proceed to test the missing-package error path
 
         from clawdstrike.hunt.watch import run_watch
 

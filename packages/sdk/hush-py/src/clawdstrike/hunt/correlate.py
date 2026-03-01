@@ -6,7 +6,7 @@ Port of ``hunt-correlate/src/rules.rs`` and ``hunt-correlate/src/engine.rs``.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any
 

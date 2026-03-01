@@ -34,34 +34,45 @@ export function parseHumanDuration(input: string): number | undefined {
     return undefined;
   }
 
+  let result: number | undefined;
   switch (suffix) {
     case 's':
     case 'sec':
     case 'secs':
     case 'second':
     case 'seconds':
-      return value * 1000;
+      result = value * 1000;
+      break;
 
     case 'm':
     case 'min':
     case 'mins':
     case 'minute':
     case 'minutes':
-      return value * 60 * 1000;
+      result = value * 60 * 1000;
+      break;
 
     case 'h':
     case 'hr':
     case 'hrs':
     case 'hour':
     case 'hours':
-      return value * 60 * 60 * 1000;
+      result = value * 60 * 60 * 1000;
+      break;
 
     case 'd':
     case 'day':
     case 'days':
-      return value * 24 * 60 * 60 * 1000;
+      result = value * 24 * 60 * 60 * 1000;
+      break;
 
     default:
       return undefined;
   }
+
+  // Guard against overflow producing Infinity
+  if (!Number.isFinite(result)) {
+    return undefined;
+  }
+  return result;
 }

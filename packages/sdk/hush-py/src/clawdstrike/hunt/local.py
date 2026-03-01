@@ -63,7 +63,8 @@ def query_local_files(
         try:
             entries = list(dir_path.iterdir())
         except OSError as exc:
-            raise IoError(f"failed to read directory {dir_path}: {exc}") from exc
+            logger.warning("skipping unreadable directory %s: %s", dir_path, exc)
+            continue
 
         for entry in entries:
             if not entry.is_file():

@@ -66,6 +66,67 @@
 
 ---
 
+## The Problem
+
+Google's 2026 Cybersecurity Forecast calls it the **"Shadow Agent" crisis**: employees and teams spinning up AI agents without corporate oversight, creating invisible pipelines that exfiltrate sensitive data, violate compliance, and leak IP. No one sanctioned them. No one is watching them. And your security stack wasn't built for this.
+
+Your org provisioned 50 agents. Shadow IT spun up 50 more outside your asset inventory. One is exfiltrating `.env` secrets to an unclassified endpoint. Another is patching auth middleware with no peer review, no receipt, no rollback. A third just ran `chmod 777` against a production filesystem. Your SIEM shows green across the board because none of these actions generate the signals it was built to detect.
+
+**Logs tell you what happened. Clawdstrike stops it before it happens.**
+
+**Every decision is signed. Every receipt is non-repudiable. If it didn't get a signature, it didn't get permission.**
+
+## What Clawdstrike Is
+
+Clawdstrike is a **fail-closed policy engine and cryptographic attestation runtime** for autonomous AI agents. It sits at the tool boundary, the exact point where an agent's intent becomes a real-world action, and enforces security policy with signed proof. From a single SDK install to a fleet of thousands of managed agents, the same engine, the same receipts, the same guarantees.
+
+Every action. Every agent. Every time. No exceptions.
+
+```mermaid
+flowchart LR
+    A[Agent Swarm<br/>OpenAI / Claude / OpenClaw / LangChain] --> B[Clawdstrike Adapter]
+    B --> C[Canonical Action Event]
+    C --> D[Policy Engine<br/>+ Guard Stack]
+    D -->|allow| E[Tool Execution]
+    D -->|deny| F[Fail-Closed Block]
+    D --> G[Ed25519 Signed Receipt]
+    G -.->|enterprise| H[Spine Audit Trail]
+    H -.-> I[Cloud API + Dashboard]
+```
+
+---
+
+## Why This Matters
+
+<table>
+<tr>
+<td width="50%">
+
+### Without Clawdstrike
+
+- Agent reads `~/.ssh/id_rsa`. You find out from the incident report
+- Secret leaks into model output. Compliance discovers it 3 months later
+- Jailbreak prompt bypasses safety. No one notices until the damage is public
+- Multi-agent delegation escalates privileges. Who authorized what?
+- "We have logging." Logs are stories anyone can rewrite
+
+</td>
+<td width="50%">
+
+### With Clawdstrike
+
+- `ForbiddenPathGuard` blocks the read, signs a receipt
+- `OutputSanitizer` redacts the secret before it ever leaves the pipeline
+- 4-layer jailbreak detection catches it across the session, even across multi-turn grooming attempts
+- Delegation tokens with cryptographic capability ceilings. Privilege escalation is mathematically impossible
+- Ed25519 signed receipts. Tamper-evident proof, not narratives
+
+</td>
+</tr>
+</table>
+
+---
+
 > **Alpha software.** APIs and import paths may change between releases.
 
 ## Quick Start
@@ -261,67 +322,6 @@ openclaw plugins enable clawdstrike-security
 Framework adapters: [OpenAI](packages/adapters/clawdstrike-openai/README.md) · [Claude](packages/adapters/clawdstrike-claude/README.md) · [Vercel AI](docs/src/guides/vercel-ai-integration.md) · [LangChain](docs/src/guides/langchain-integration.md)
 
 [C, Go, C#](docs/src/concepts/multi-language.md) via FFI · [WebAssembly](crates/libs/hush-wasm/README.md)
-
----
-
-## The Problem
-
-Google's 2026 Cybersecurity Forecast calls it the **"Shadow Agent" crisis**: employees and teams spinning up AI agents without corporate oversight, creating invisible pipelines that exfiltrate sensitive data, violate compliance, and leak IP. No one sanctioned them. No one is watching them. And your security stack wasn't built for this.
-
-Your org provisioned 50 agents. Shadow IT spun up 50 more outside your asset inventory. One is exfiltrating `.env` secrets to an unclassified endpoint. Another is patching auth middleware with no peer review, no receipt, no rollback. A third just ran `chmod 777` against a production filesystem. Your SIEM shows green across the board because none of these actions generate the signals it was built to detect.
-
-**Logs tell you what happened. Clawdstrike stops it before it happens.**
-
-**Every decision is signed. Every receipt is non-repudiable. If it didn't get a signature, it didn't get permission.**
-
-## What Clawdstrike Is
-
-Clawdstrike is a **fail-closed policy engine and cryptographic attestation runtime** for autonomous AI agents. It sits at the tool boundary, the exact point where an agent's intent becomes a real-world action, and enforces security policy with signed proof. From a single SDK install to a fleet of thousands of managed agents, the same engine, the same receipts, the same guarantees.
-
-Every action. Every agent. Every time. No exceptions.
-
-```mermaid
-flowchart LR
-    A[Agent Swarm<br/>OpenAI / Claude / OpenClaw / LangChain] --> B[Clawdstrike Adapter]
-    B --> C[Canonical Action Event]
-    C --> D[Policy Engine<br/>+ Guard Stack]
-    D -->|allow| E[Tool Execution]
-    D -->|deny| F[Fail-Closed Block]
-    D --> G[Ed25519 Signed Receipt]
-    G -.->|enterprise| H[Spine Audit Trail]
-    H -.-> I[Cloud API + Dashboard]
-```
-
----
-
-## Why This Matters
-
-<table>
-<tr>
-<td width="50%">
-
-### Without Clawdstrike
-
-- Agent reads `~/.ssh/id_rsa`. You find out from the incident report
-- Secret leaks into model output. Compliance discovers it 3 months later
-- Jailbreak prompt bypasses safety. No one notices until the damage is public
-- Multi-agent delegation escalates privileges. Who authorized what?
-- "We have logging." Logs are stories anyone can rewrite
-
-</td>
-<td width="50%">
-
-### With Clawdstrike
-
-- `ForbiddenPathGuard` blocks the read, signs a receipt
-- `OutputSanitizer` redacts the secret before it ever leaves the pipeline
-- 4-layer jailbreak detection catches it across the session, even across multi-turn grooming attempts
-- Delegation tokens with cryptographic capability ceilings. Privilege escalation is mathematically impossible
-- Ed25519 signed receipts. Tamper-evident proof, not narratives
-
-</td>
-</tr>
-</table>
 
 ---
 

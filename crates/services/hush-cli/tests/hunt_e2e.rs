@@ -1055,7 +1055,8 @@ output:
         "hunt".to_string(),
         "query".to_string(),
         "--nats-url".to_string(),
-        "nats://127.0.0.1:1".to_string(),
+        // Use an invalid NATS URL so fallback is deterministic in CI and local.
+        "nats://127.0.0.1:abc".to_string(),
         "--source".to_string(),
         "receipt".to_string(),
         "--local-dir".to_string(),
@@ -1080,6 +1081,17 @@ output:
         fallback_result.stderr
     );
     let fallback_json = parse_stdout_json(&fallback_result);
+    assert_eq!(
+        fallback_json["data"]["summary"]["data_source"], "local_fallback",
+        "fallback query should report local_fallback data source"
+    );
+    assert!(
+        fallback_json["data"]["summary"]["fallback_reason"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("NATS replay failed"),
+        "fallback query should include explicit replay failure reason"
+    );
     assert!(
         fallback_json["data"]["summary"]["total_events"]
             .as_u64()

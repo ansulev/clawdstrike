@@ -931,33 +931,30 @@ pub fn parse_mcp_config(path: &std::path::Path) -> Result<HashMap<String, Server
 
     // 1. ClaudeCodeConfigFile: must have "projects" key
     if obj.is_some_and(|o| o.contains_key("projects")) {
-        if let Ok(config) = serde_json::from_value::<ClaudeCodeConfigFile>(value.clone()) {
-            let servers = config.get_servers();
-            if !servers.is_empty() {
-                return Ok(servers);
-            }
-        }
+        return serde_json::from_value::<ClaudeCodeConfigFile>(value.clone())
+            .map(|config| config.get_servers())
+            .map_err(|e| McpError::ConfigParse(format!("invalid Claude Code MCP config: {e}")));
     }
 
     // 2. ClaudeConfigFile: must have "mcpServers" key
     if obj.is_some_and(|o| o.contains_key("mcpServers")) {
-        if let Ok(config) = serde_json::from_value::<ClaudeConfigFile>(value.clone()) {
-            return Ok(config.get_servers());
-        }
+        return serde_json::from_value::<ClaudeConfigFile>(value.clone())
+            .map(|config| config.get_servers())
+            .map_err(|e| McpError::ConfigParse(format!("invalid Claude MCP config: {e}")));
     }
 
     // 3. VSCodeConfigFile: must have "mcp" key
     if obj.is_some_and(|o| o.contains_key("mcp")) {
-        if let Ok(config) = serde_json::from_value::<VSCodeConfigFile>(value.clone()) {
-            return Ok(config.get_servers());
-        }
+        return serde_json::from_value::<VSCodeConfigFile>(value.clone())
+            .map(|config| config.get_servers())
+            .map_err(|e| McpError::ConfigParse(format!("invalid VS Code MCP config: {e}")));
     }
 
     // 4. VSCodeMCPConfig: must have "servers" key
     if obj.is_some_and(|o| o.contains_key("servers")) {
-        if let Ok(config) = serde_json::from_value::<VSCodeMCPConfig>(value) {
-            return Ok(config.get_servers());
-        }
+        return serde_json::from_value::<VSCodeMCPConfig>(value)
+            .map(|config| config.get_servers())
+            .map_err(|e| McpError::ConfigParse(format!("invalid VS Code mcp.json config: {e}")));
     }
 
     // 5. Unrecognized format - return empty map
@@ -1393,6 +1390,29 @@ mod tests {
         let path = std::path::Path::new("/nonexistent/path/abc123.json");
         let result = parse_mcp_config(path);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_mcp_config_malformed_claude_schema_returns_error() {
+        let tmp_dir = tempfile::tempdir().unwrap();
+        let path = tmp_dir.path().join("bad-mcp.json");
+        std::fs::write(
+            &path,
+            r#"{
+                "mcpServers": {
+                    "broken": {
+                        "command": 42
+                    }
+                }
+            }"#,
+        )
+        .unwrap();
+
+        let result = parse_mcp_config(&path);
+        match result {
+            Err(McpError::ConfigParse(msg)) => assert!(msg.contains("invalid Claude MCP config")),
+            other => panic!("expected config parse error, got: {other:?}"),
+        }
     }
 
     #[test]

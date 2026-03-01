@@ -482,21 +482,21 @@ Clawdstrike scales from a single developer's laptop to a fleet of thousands of m
 <tr>
 <td width="55%" valign="top">
 
-The `@clawdstrike/engine-adaptive` package is built for production turbulence: packet loss, control-plane outages, restarts, and partial partitions.
+The `@clawdstrike/engine-adaptive` package is designed for production turbulence: packet loss, control-plane outages, restarts, and partial partitions.
 
-Build once against `PolicyEngineLike`; deploy from laptop to fleet without changing enforcement code.
+Build once against `PolicyEngineLike`; run from laptop to fleet with the same enforcement code.
 
-- **Health-aware routing** between local and remote evaluators.
-- **Automatic continuity** without manual failover playbooks.
+- **Health-aware routing** across local and remote evaluators.
+- **Automatic continuity** without failover playbooks.
 - **Signed, attributable decisions** in every mode.
-- **Offline receipt buffering and replay** for audit continuity across disconnect/reconnect cycles.
-- **Consistent behavior** across local dev, CI, and production agents.
+- **Offline receipt buffering/replay** to preserve audit continuity through disconnects.
+- **Consistent behavior** across dev, CI, and production agents.
 - **No blind window** where actions bypass policy evaluation.
 
-The threat model is explicit: uncertainty increases restriction, not exposure.
+Its threat model is explicit: uncertainty tightens restriction, not exposure.
 
 - Connectivity loss never creates implicit allow paths.
-- Ambiguous failure paths resolve to deny.
+- Ambiguous failures resolve to deny.
 - Recovery is stateful, with queued evidence reconciliation.
 - Control-plane failure degrades to containment, not policy drift.
 

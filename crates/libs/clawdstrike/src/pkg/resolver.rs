@@ -8,7 +8,7 @@ use std::path::Path;
 use crate::error::{Error, Result};
 use crate::policy::{LocalPolicyResolver, PolicyLocation, PolicyResolver, ResolvedPolicySource};
 
-use super::store::PackageStore;
+use super::{normalize_relative_path_for_key, store::PackageStore};
 
 /// Default policy file path within a policy-pack package.
 const DEFAULT_POLICY_PATH: &str = "policies/main.yaml";
@@ -198,13 +198,6 @@ fn find_policy_file(pkg_dir: &Path, sub_path: Option<&str>) -> Result<std::path:
     )))
 }
 
-fn normalize_rel_path_for_key(path: &Path) -> String {
-    path.components()
-        .map(|c| c.as_os_str().to_string_lossy().to_string())
-        .collect::<Vec<_>>()
-        .join("/")
-}
-
 fn resolved_sub_path_for_key(
     pkg_dir: &Path,
     policy_path: &Path,
@@ -223,7 +216,7 @@ fn resolved_sub_path_for_key(
             .map(Path::to_path_buf)
     });
 
-    rel.map(|p| normalize_rel_path_for_key(&p))
+    rel.map(|p| normalize_relative_path_for_key(&p))
         .or_else(|| requested_sub_path.map(|s| s.trim_start_matches('/').to_string()))
         .filter(|s| !s.is_empty())
         .unwrap_or_else(|| DEFAULT_POLICY_PATH.to_string())

@@ -3,6 +3,8 @@
 //! Provides manifest parsing, archive creation/extraction, a local package
 //! store, lockfile management, and cryptographic integrity verification.
 
+use std::path::Path;
+
 pub mod archive;
 pub mod index;
 pub mod integrity;
@@ -50,6 +52,14 @@ pub(crate) fn encode_url_path_segment(name: &str) -> String {
         }
     }
     out
+}
+
+/// Normalize a relative path into a stable forward-slash separated key form.
+pub(crate) fn normalize_relative_path_for_key(path: &Path) -> String {
+    path.components()
+        .map(|c| c.as_os_str().to_string_lossy().to_string())
+        .collect::<Vec<_>>()
+        .join("/")
 }
 
 pub use archive::{content_hash, pack, unpack};

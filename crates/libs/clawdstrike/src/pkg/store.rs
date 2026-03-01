@@ -12,6 +12,7 @@ use crate::error::{Error, Result};
 use super::archive;
 use super::manifest::parse_pkg_manifest_toml;
 use super::normalize_package_name;
+use super::normalize_relative_path_for_key;
 
 /// An installed package record.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -77,13 +78,6 @@ fn is_safe_version_segment(version: &str) -> bool {
         && components.next().is_none()
 }
 
-fn normalize_relative_path(path: &Path) -> String {
-    path.components()
-        .map(|c| c.as_os_str().to_string_lossy().to_string())
-        .collect::<Vec<_>>()
-        .join("/")
-}
-
 fn append_fingerprint_material(base: &Path, dir: &Path, out: &mut Vec<u8>) -> Result<()> {
     let mut entries = Vec::new();
     for entry in fs::read_dir(dir)? {
@@ -100,7 +94,7 @@ fn append_fingerprint_material(base: &Path, dir: &Path, out: &mut Vec<u8>) -> Re
             continue;
         }
 
-        let rel_norm = normalize_relative_path(rel);
+        let rel_norm = normalize_relative_path_for_key(rel);
         let file_type = entry.file_type()?;
         if file_type.is_dir() {
             out.extend_from_slice(b"D\0");

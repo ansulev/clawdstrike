@@ -52,9 +52,11 @@ export function secureTools<TTools extends Record<string, ClaudeToolLike>>(
       continue;
     }
 
+    const wrapped = wrapExecute(toolName, originalExecute.bind(tool), interceptor, defaultContext, options?.getContext);
     (secured as Record<string, ClaudeToolLike>)[toolName] = {
       ...(tool as object),
-      execute: wrapExecute(toolName, originalExecute, interceptor, defaultContext, options?.getContext),
+      execute: wrapped,
+      call: wrapped,
     } as ClaudeToolLike;
   }
 

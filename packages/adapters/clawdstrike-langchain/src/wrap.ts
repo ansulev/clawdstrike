@@ -129,28 +129,6 @@ function wrapToolWithConfig<TTool extends LangChainToolLike>(
   });
 }
 
-function wrapToolsWithConfig<TTool extends LangChainToolLike>(
-  tools: readonly TTool[],
-  engine: PolicyEngineLike,
-  config: AdapterConfig = {},
-  options?: WrapToolOptions,
-): TTool[] {
-  const interceptor = createLangChainInterceptor(engine, config);
-  const context =
-    options?.context ??
-    createSecurityContext({
-      metadata: { framework: "langchain" },
-    });
-
-  return tools.map((tool) =>
-    wrapToolWithContext(tool, interceptor, context, options?.getContext, {
-      engine,
-      config,
-      options,
-    }),
-  );
-}
-
 function wrapToolWithContext<TTool extends LangChainToolLike>(
   tool: TTool,
   interceptor: ToolInterceptor,

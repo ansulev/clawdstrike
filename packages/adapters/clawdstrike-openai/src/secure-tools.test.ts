@@ -71,6 +71,41 @@ describe("secureTools (OpenAI)", () => {
     ).rejects.toThrow(ClawdstrikeBlockedError);
   });
 
+  it("wraps call() so it cannot bypass security", async () => {
+    const engine = createDenyEngine("command_exec");
+    const tools = {
+      bash: {
+        call: async (input: { command: string }) => input.command,
+      },
+    };
+
+    const secured = secureTools(tools, engine);
+
+    // call() should be wrapped with the same security interceptor
+    await expect(secured.bash.call!({ command: "rm -rf /" })).rejects.toThrow(
+      ClawdstrikeBlockedError,
+    );
+  });
+
+  it("preserves this binding for tool methods", async () => {
+    const engine: PolicyEngineLike = {
+      evaluate: async () => ({ status: "allow" as const }),
+    };
+
+    class StatefulTool {
+      private prefix = "output:";
+      async execute(input: { text: string }) {
+        return this.prefix + input.text;
+      }
+    }
+
+    const tools = { stateful: new StatefulTool() as { execute: (input: { text: string }) => Promise<string> } };
+    const secured = secureTools(tools, engine);
+
+    const result = await secured.stateful.execute({ text: "hello" });
+    expect(result).toBe("output:hello");
+  });
+
   it("fails closed when translator sees unknown CUA action", async () => {
     const engine: PolicyEngineLike = {
       evaluate: async () => ({ status: "allow" as const }),

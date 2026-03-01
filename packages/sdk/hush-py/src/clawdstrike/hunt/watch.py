@@ -63,7 +63,7 @@ async def run_watch(
 
     nc = await nats_pkg.connect(
         config.nats_url,
-        **({"credentials": config.nats_creds} if config.nats_creds else {}),
+        **({"user_credentials": config.nats_creds} if config.nats_creds else {}),
     )
 
     sub = await nc.subscribe(_NATS_SUBJECT)

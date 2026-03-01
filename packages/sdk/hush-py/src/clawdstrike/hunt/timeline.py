@@ -42,9 +42,9 @@ def parse_envelope(envelope: dict[str, Any]) -> TimelineEvent | None:
         return _parse_tetragon(fact, timestamp, envelope)
     elif schema == "clawdstrike.sdr.fact.hubble_flow.v1":
         return _parse_hubble(fact, timestamp, envelope)
-    elif "receipt" in schema:
+    elif schema.startswith("clawdstrike.sdr.fact.receipt"):
         return _parse_receipt(fact, timestamp, envelope)
-    elif "scan" in schema:
+    elif schema.startswith("clawdstrike.sdr.fact.scan"):
         return _parse_scan(fact, timestamp, envelope)
     else:
         return None

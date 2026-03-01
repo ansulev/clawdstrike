@@ -6,6 +6,7 @@ export class HuntError extends Error {
 
   constructor(code: string, message: string) {
     super(message);
+    Object.setPrototypeOf(this, new.target.prototype);
     this.name = 'HuntError';
     this.code = code;
   }

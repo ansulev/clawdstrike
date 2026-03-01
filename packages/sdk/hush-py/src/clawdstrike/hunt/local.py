@@ -63,13 +63,13 @@ def query_local_files(
             if suffix == ".jsonl":
                 try:
                     events = _read_jsonl_file(entry)
-                except Exception:
+                except (OSError, json.JSONDecodeError, ValueError, UnicodeDecodeError):
                     logger.warning("skipping unreadable/invalid JSONL file %s", entry)
                     continue
             elif suffix == ".json":
                 try:
                     events = _read_json_file(entry)
-                except Exception:
+                except (OSError, json.JSONDecodeError, ValueError, UnicodeDecodeError):
                     logger.warning("skipping unreadable/invalid JSON file %s", entry)
                     continue
             else:

@@ -23,11 +23,7 @@ from clawdstrike.merkle import MerkleTree, hash_leaf
 
 def _evidence_to_dict(item: EvidenceItem) -> dict:
     """Serialize an evidence item to a plain dict for canonical JSON."""
-    ts = item.timestamp
-    if ts.tzinfo is not None:
-        ts_str = ts.isoformat()
-    else:
-        ts_str = ts.isoformat()
+    ts_str = item.timestamp.isoformat()
 
     return {
         "index": item.index,
@@ -91,10 +87,11 @@ def sign_report(report: HuntReport, signing_key_hex: str) -> HuntReport:
     root_bytes = bytes.fromhex(report.merkle_root)
     sig = sign_message(root_bytes, key_bytes)
 
-    # Derive public key
-    from nacl.signing import SigningKey
-    sk = SigningKey(key_bytes)
-    pub_hex = bytes(sk.verify_key).hex()
+    # Derive public key from the signing key seed.
+    # pynacl is a required dependency of clawdstrike (see pyproject.toml).
+    from nacl.signing import SigningKey as _SigningKey
+
+    pub_hex = bytes(_SigningKey(key_bytes).verify_key).hex()
 
     return HuntReport(
         title=report.title,

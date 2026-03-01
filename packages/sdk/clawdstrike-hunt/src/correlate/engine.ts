@@ -2,7 +2,6 @@ import { CorrelationError } from "../errors.js";
 import type {
   Alert,
   CorrelationRule,
-  NormalizedVerdict,
   RuleCondition,
   TimelineEvent,
 } from "../types.js";
@@ -14,7 +13,7 @@ interface CompiledPatterns {
 
 interface WindowState {
   startedAt: Date;
-  boundEvents: Map<string, TimelineEvent>;
+  boundEvents: Map<string, TimelineEvent[]>;
   preExistingCount: number;
   dependentAdvanced: number;
 }
@@ -181,7 +180,7 @@ export class CorrelationEngine {
         // Root condition — start a new window.
         const ws: WindowState = {
           startedAt: event.timestamp,
-          boundEvents: new Map([[cond.bind, event]]),
+          boundEvents: new Map([[cond.bind, [event]]]),
           preExistingCount: this.windows.get(ri)?.length ?? 0,
           dependentAdvanced: 0,
         };
@@ -206,10 +205,12 @@ export class CorrelationEngine {
           if (ws.boundEvents.has(cond.bind)) continue;
 
           // Check that the `after` bind exists in this window.
-          if (!ws.boundEvents.has(cond.after)) continue;
+          const afterEvents = ws.boundEvents.get(cond.after);
+          if (!afterEvents || afterEvents.length === 0) continue;
 
           // Dependent events must never be earlier than the prerequisite event.
-          const afterEvent = ws.boundEvents.get(cond.after)!;
+          // Use the last event from the prerequisite bind.
+          const afterEvent = afterEvents[afterEvents.length - 1];
           const elapsed = event.timestamp.getTime() - afterEvent.timestamp.getTime();
           if (elapsed < 0) continue;
 
@@ -217,7 +218,12 @@ export class CorrelationEngine {
           if (cond.within !== undefined && elapsed > cond.within) continue;
 
           // Bind this event.
-          ws.boundEvents.set(cond.bind, event);
+          const existing = ws.boundEvents.get(cond.bind);
+          if (existing) {
+            existing.push(event);
+          } else {
+            ws.boundEvents.set(cond.bind, [event]);
+          }
           dependentAdvanced[wi] = true;
         }
       }
@@ -247,7 +253,10 @@ export class CorrelationEngine {
 }
 
 function allConditionsMet(rule: CorrelationRule, ws: WindowState): boolean {
-  return rule.conditions.every((cond) => ws.boundEvents.has(cond.bind));
+  return rule.conditions.every((cond) => {
+    const evts = ws.boundEvents.get(cond.bind);
+    return evts !== undefined && evts.length > 0;
+  });
 }
 
 function conditionMatches(
@@ -268,8 +277,8 @@ function conditionMatches(
 
   // Verdict check (case-insensitive).
   if (cond.verdict !== undefined) {
-    const expected = cond.verdict.toLowerCase() as NormalizedVerdict;
-    if (event.verdict !== expected) return false;
+    const expected = cond.verdict.toLowerCase();
+    if (event.verdict.toLowerCase() !== expected) return false;
   }
 
   // Target pattern: regex must match event.summary.
@@ -289,9 +298,9 @@ function buildAlert(rule: CorrelationRule, ws: WindowState): Alert {
   // Collect evidence events in the order specified by output.evidence.
   const evidence: TimelineEvent[] = [];
   for (const bindName of rule.output.evidence) {
-    const evt = ws.boundEvents.get(bindName);
-    if (evt) {
-      evidence.push(evt);
+    const evts = ws.boundEvents.get(bindName);
+    if (evts) {
+      evidence.push(...evts);
     }
   }
 

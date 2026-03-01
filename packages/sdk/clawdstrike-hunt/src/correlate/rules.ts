@@ -53,6 +53,25 @@ export function parseRule(yamlStr: string): CorrelationRule {
     throw new ParseError("YAML did not produce a valid object");
   }
 
+  if (typeof raw.schema !== "string") {
+    throw new ParseError("missing or invalid 'schema' field");
+  }
+  if (typeof raw.name !== "string") {
+    throw new ParseError("missing or invalid 'name' field");
+  }
+  if (typeof raw.severity !== "string") {
+    throw new ParseError("missing or invalid 'severity' field");
+  }
+  if (typeof raw.description !== "string") {
+    throw new ParseError("missing or invalid 'description' field");
+  }
+  if (typeof raw.window !== "string") {
+    throw new ParseError("missing or invalid 'window' field (expected duration string)");
+  }
+  if (!raw.output || typeof raw.output !== "object") {
+    throw new ParseError("missing or invalid 'output' field");
+  }
+
   const windowMs = parseHumanDuration(raw.window);
   if (windowMs === undefined) {
     throw new ParseError(`invalid duration: ${raw.window}`);

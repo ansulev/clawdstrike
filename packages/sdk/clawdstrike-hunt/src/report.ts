@@ -31,10 +31,11 @@ export function buildReport(title: string, items: EvidenceItem[]): HuntReport {
   }
 
   // Serialize each item to canonical JSON bytes.
+  const encoder = new TextEncoder();
   const canonicalLeaves: Uint8Array[] = items.map((item) => {
     const val = itemToJsonValue(item);
     const canonical = canonicalize(val);
-    return new TextEncoder().encode(canonical);
+    return encoder.encode(canonical);
   });
 
   // Build the Merkle tree from raw data (will hash leaves internally).

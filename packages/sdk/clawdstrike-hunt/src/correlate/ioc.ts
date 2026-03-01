@@ -386,7 +386,14 @@ export class IocDatabase {
   matchEvent(event: TimelineEvent): IocMatch | undefined {
     const summary = event.summary.toLowerCase();
     const process = (event.process ?? "").toLowerCase();
-    const raw = event.raw !== undefined ? JSON.stringify(event.raw).toLowerCase() : "";
+    let raw = "";
+    if (event.raw !== undefined) {
+      try {
+        raw = JSON.stringify(event.raw).toLowerCase();
+      } catch {
+        // Skip raw field if it cannot be serialized (e.g. circular refs).
+      }
+    }
 
     const allMatched: IocEntry[] = [];
     let matchField: string | undefined;

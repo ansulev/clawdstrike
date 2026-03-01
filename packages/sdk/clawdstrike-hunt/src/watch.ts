@@ -71,39 +71,41 @@ export async function runWatch(
     signal.addEventListener("abort", onAbort, { once: true });
   }
 
-  for await (const msg of sub) {
-    if (signal?.aborted) break;
+  try {
+    for await (const msg of sub) {
+      if (signal?.aborted) break;
 
-    let envelope: unknown;
-    try {
-      envelope = JSON.parse(new TextDecoder().decode(msg.data));
-    } catch {
-      continue; // skip unparseable messages
+      let envelope: unknown;
+      try {
+        envelope = JSON.parse(new TextDecoder().decode(msg.data));
+      } catch {
+        continue; // skip unparseable messages
+      }
+
+      const event = parseEnvelope(envelope);
+      if (!event) continue;
+
+      stats.eventsProcessed++;
+      onEvent?.(event);
+
+      // Feed to the correlation engine.
+      engine.evictExpiredCapped(config.maxWindow);
+      const alerts = engine.processEvent(event);
+      for (const alert of alerts) {
+        stats.alertsTriggered++;
+        onAlert(alert);
+      }
     }
 
-    const event = parseEnvelope(envelope);
-    if (!event) continue;
-
-    stats.eventsProcessed++;
-    onEvent?.(event);
-
-    // Feed to the correlation engine.
-    engine.evictExpiredCapped(config.maxWindow);
-    const alerts = engine.processEvent(event);
-    for (const alert of alerts) {
+    // Flush remaining partial windows on shutdown.
+    const remaining = engine.flush();
+    for (const alert of remaining) {
       stats.alertsTriggered++;
       onAlert(alert);
     }
+  } finally {
+    await nc.drain();
   }
-
-  // Flush remaining partial windows on shutdown.
-  const remaining = engine.flush();
-  for (const alert of remaining) {
-    stats.alertsTriggered++;
-    onAlert(alert);
-  }
-
-  await nc.drain();
 
   return {
     eventsProcessed: stats.eventsProcessed,

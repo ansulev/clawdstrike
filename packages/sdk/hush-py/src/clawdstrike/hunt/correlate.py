@@ -199,7 +199,7 @@ class _CompiledPatterns:
 @dataclass
 class _WindowState:
     started_at: datetime
-    bound_events: dict[str, TimelineEvent]
+    bound_events: dict[str, list[TimelineEvent]]
     preexisting_count: int = 0
     dependent_advanced: int = 0
 
@@ -249,15 +249,18 @@ def _condition_matches(
 
 
 def _all_conditions_met(rule: CorrelationRule, ws: _WindowState) -> bool:
-    return all(cond.bind in ws.bound_events for cond in rule.conditions)
+    return all(
+        cond.bind in ws.bound_events and len(ws.bound_events[cond.bind]) > 0
+        for cond in rule.conditions
+    )
 
 
 def _build_alert(rule: CorrelationRule, ws: _WindowState) -> Alert:
     evidence: list[TimelineEvent] = []
     for bind_name in rule.output.evidence:
-        ev = ws.bound_events.get(bind_name)
-        if ev is not None:
-            evidence.append(ev)
+        evts = ws.bound_events.get(bind_name)
+        if evts is not None:
+            evidence.extend(evts)
 
     triggered_at = max((e.timestamp for e in evidence), default=datetime.now(tz=timezone.utc))
 
@@ -377,7 +380,7 @@ class CorrelationEngine:
                 # Root condition: create new window
                 ws = _WindowState(
                     started_at=event.timestamp,
-                    bound_events={cond.bind: event},
+                    bound_events={cond.bind: [event]},
                     preexisting_count=pre_existing_count,
                     dependent_advanced=0,
                 )
@@ -403,11 +406,13 @@ class CorrelationEngine:
                         continue
 
                     # Check prerequisite
-                    if cond.after not in ws.bound_events:
+                    after_events = ws.bound_events.get(cond.after)
+                    if not after_events:
                         continue
 
                     # Time ordering: event must be >= prerequisite timestamp
-                    after_event = ws.bound_events[cond.after]
+                    # Use the last event from the prerequisite bind.
+                    after_event = after_events[-1]
                     elapsed = event.timestamp - after_event.timestamp
                     if elapsed < timedelta(0):
                         continue
@@ -417,7 +422,7 @@ class CorrelationEngine:
                         continue
 
                     # Bind event
-                    ws.bound_events[cond.bind] = event
+                    ws.bound_events.setdefault(cond.bind, []).append(event)
                     if wi < len(dependent_advanced):
                         dependent_advanced[wi] = True
 

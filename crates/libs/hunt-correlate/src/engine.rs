@@ -234,15 +234,21 @@ impl CorrelationEngine {
                         continue;
                     }
 
-                    // Check `within` constraint: event timestamp must be within
-                    // `within` duration of the most recent `after` event.
-                    if let (Some(within_dur), Some(ab)) = (cond.within, after_bind) {
+                    // Dependent events must never be earlier than the latest
+                    // prerequisite event, even when `within` is not set.
+                    if let Some(ab) = after_bind {
                         if let Some(after_events) = ws.bound_events.get(ab) {
-                            let latest_after = after_events.iter().map(|e| e.timestamp).max();
-                            if let Some(lat) = latest_after {
-                                let elapsed = event.timestamp.signed_duration_since(lat);
-                                if elapsed > within_dur || elapsed < chrono::Duration::zero() {
+                            if let Some(latest_after) =
+                                after_events.iter().map(|e| e.timestamp).max()
+                            {
+                                let elapsed = event.timestamp.signed_duration_since(latest_after);
+                                if elapsed < chrono::Duration::zero() {
                                     continue;
+                                }
+                                if let Some(within_dur) = cond.within {
+                                    if elapsed > within_dur {
+                                        continue;
+                                    }
                                 }
                             }
                         }
@@ -764,6 +770,74 @@ output:
         assert!(
             alerts.is_empty(),
             "event outside within window should not trigger"
+        );
+    }
+
+    #[test]
+    fn after_without_within_rejects_out_of_order_event() {
+        let rule = parse_rule(
+            r#"
+schema: clawdstrike.hunt.correlation.v1
+name: "Ordered Dependent Sequence"
+severity: medium
+description: "Dependent events must occur after their prerequisite"
+window: 5m
+conditions:
+  - source: receipt
+    action_type: file
+    bind: first
+  - source: receipt
+    action_type: egress
+    after: first
+    bind: second
+output:
+  title: "Ordered sequence matched"
+  evidence:
+    - first
+    - second
+"#,
+        )
+        .unwrap();
+        let mut engine = CorrelationEngine::new(vec![rule]).unwrap();
+
+        let ts_first = Utc.with_ymd_and_hms(2025, 6, 15, 12, 0, 10).unwrap();
+        let ts_older = Utc.with_ymd_and_hms(2025, 6, 15, 12, 0, 5).unwrap();
+        let ts_newer = Utc.with_ymd_and_hms(2025, 6, 15, 12, 0, 20).unwrap();
+
+        let first = make_event(
+            EventSource::Receipt,
+            "file",
+            NormalizedVerdict::Allow,
+            "read /etc/passwd",
+            ts_first,
+        );
+        engine.process_event(&first);
+
+        let out_of_order = make_event(
+            EventSource::Receipt,
+            "egress",
+            NormalizedVerdict::Allow,
+            "egress TCP 10.0.0.1:8080 -> 93.184.216.34:443",
+            ts_older,
+        );
+        let alerts = engine.process_event(&out_of_order);
+        assert!(
+            alerts.is_empty(),
+            "dependent event older than prerequisite must not match"
+        );
+
+        let ordered = make_event(
+            EventSource::Receipt,
+            "egress",
+            NormalizedVerdict::Allow,
+            "egress TCP 10.0.0.1:8080 -> 93.184.216.34:443",
+            ts_newer,
+        );
+        let alerts = engine.process_event(&ordered);
+        assert_eq!(
+            alerts.len(),
+            1,
+            "dependent event after prerequisite should still match"
         );
     }
 

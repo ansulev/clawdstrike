@@ -134,7 +134,13 @@ impl HuntQuery {
         if self.sources.is_empty() {
             EventSource::all()
         } else {
-            self.sources.clone()
+            let mut deduped = Vec::with_capacity(self.sources.len());
+            for source in &self.sources {
+                if !deduped.contains(source) {
+                    deduped.push(*source);
+                }
+            }
+            deduped
         }
     }
 
@@ -401,6 +407,24 @@ mod tests {
             ..Default::default()
         };
         assert_eq!(q.effective_sources(), vec![EventSource::Tetragon]);
+    }
+
+    #[test]
+    fn hunt_query_effective_sources_deduplicates_preserving_order() {
+        let q = HuntQuery {
+            sources: vec![
+                EventSource::Receipt,
+                EventSource::Receipt,
+                EventSource::Hubble,
+                EventSource::Receipt,
+                EventSource::Hubble,
+            ],
+            ..Default::default()
+        };
+        assert_eq!(
+            q.effective_sources(),
+            vec![EventSource::Receipt, EventSource::Hubble]
+        );
     }
 
     #[test]

@@ -14,8 +14,6 @@ interface CompiledPatterns {
 interface WindowState {
   startedAt: Date;
   boundEvents: Map<string, TimelineEvent[]>;
-  preExistingCount: number;
-  dependentAdvanced: number;
 }
 
 /**
@@ -188,8 +186,6 @@ export class CorrelationEngine {
         const ws: WindowState = {
           startedAt: event.timestamp,
           boundEvents: new Map([[cond.bind, [event]]]),
-          preExistingCount: this.windows.get(ri)?.length ?? 0,
-          dependentAdvanced: 0,
         };
         if (!this.windows.has(ri)) {
           this.windows.set(ri, []);

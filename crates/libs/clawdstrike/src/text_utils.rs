@@ -7,40 +7,55 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 use unicode_normalization::UnicodeNormalization;
 
-// `std::time::Instant` panics on `wasm32-unknown-unknown`.  On WASM we
-// use `js_sys::Date::now()` (millisecond resolution, always available).
+// `std::time::Instant` panics on `wasm32-unknown-unknown`.  On WASM we fall
+// back to `js_sys::Date::now()`.  On native targets we use `Instant` for
+// monotonic elapsed-time and `SystemTime` only for epoch timestamps.
 
 #[derive(Clone, Copy)]
 pub struct Timestamp {
+    #[cfg(not(target_arch = "wasm32"))]
+    instant: std::time::Instant,
+    #[cfg(target_arch = "wasm32")]
     epoch_ms: f64,
 }
 
 pub fn now() -> Timestamp {
-    Timestamp {
-        epoch_ms: epoch_ms_f64(),
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        Timestamp {
+            instant: std::time::Instant::now(),
+        }
+    }
+    #[cfg(target_arch = "wasm32")]
+    {
+        Timestamp {
+            epoch_ms: js_sys::Date::now(),
+        }
     }
 }
 
 pub fn elapsed_ms(ts: &Timestamp) -> f64 {
-    (epoch_ms_f64() - ts.epoch_ms).max(0.0)
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        ts.instant.elapsed().as_secs_f64() * 1000.0
+    }
+    #[cfg(target_arch = "wasm32")]
+    {
+        (js_sys::Date::now() - ts.epoch_ms).max(0.0)
+    }
 }
 
 pub fn now_epoch_ms() -> u64 {
-    epoch_ms_f64() as u64
-}
-
-fn epoch_ms_f64() -> f64 {
     #[cfg(not(target_arch = "wasm32"))]
     {
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
-            .as_secs_f64()
-            * 1000.0
+            .as_millis() as u64
     }
     #[cfg(target_arch = "wasm32")]
     {
-        js_sys::Date::now()
+        js_sys::Date::now() as u64
     }
 }
 

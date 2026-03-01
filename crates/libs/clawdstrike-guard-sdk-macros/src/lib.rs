@@ -98,7 +98,7 @@ pub fn clawdstrike_guard(_attr: TokenStream, item: TokenStream) -> TokenStream {
                 core::slice::from_raw_parts(ptr as *const u8, len)
             };
 
-            let input: clawdstrike_guard_sdk::GuardInput = match serde_json::from_slice(slice) {
+            let input: clawdstrike_guard_sdk::GuardInput = match clawdstrike_guard_sdk::serde_json::from_slice(slice) {
                 Ok(v) => v,
                 Err(_) => {
                     // Write an explicit deny output so the host can surface the

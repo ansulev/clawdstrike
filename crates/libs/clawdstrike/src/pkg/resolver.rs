@@ -117,7 +117,16 @@ fn split_version_and_sub_path(rest: &str, reference: &str) -> Result<(String, Op
     }
 
     let (version, sub_path) = match rest.find('/') {
-        Some(slash) => (&rest[..slash], Some(rest[slash + 1..].to_string())),
+        Some(slash) => {
+            let version = &rest[..slash];
+            let sub_path = &rest[slash + 1..];
+            if sub_path.is_empty() {
+                return Err(Error::PkgError(format!(
+                    "pkg reference has empty sub-path: {reference}"
+                )));
+            }
+            (version, Some(sub_path.to_string()))
+        }
         None => (rest, None),
     };
 
@@ -376,6 +385,18 @@ mod tests {
         assert!(err
             .to_string()
             .contains("invalid version delimiter placement"));
+    }
+
+    #[test]
+    fn rejects_trailing_slash_empty_subpath_unscoped() {
+        let err = parse_pkg_ref("pkg:name@1.0.0/").unwrap_err();
+        assert!(err.to_string().contains("empty sub-path"));
+    }
+
+    #[test]
+    fn rejects_trailing_slash_empty_subpath_scoped() {
+        let err = parse_pkg_ref("pkg:@scope/name@1.0.0/").unwrap_err();
+        assert!(err.to_string().contains("empty sub-path"));
     }
 
     // -----------------------------------------------------------------------

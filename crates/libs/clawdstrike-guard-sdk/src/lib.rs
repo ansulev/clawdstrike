@@ -27,6 +27,7 @@ pub mod host;
 pub mod prelude;
 
 pub use clawdstrike_guard_sdk_macros::clawdstrike_guard;
+pub use serde_json;
 pub use types::{Capability, GuardInput, GuardOutput, Severity, Verdict};
 
 /// Trait that guest-side guards must implement.

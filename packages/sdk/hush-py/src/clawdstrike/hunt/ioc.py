@@ -88,7 +88,16 @@ def detect_ioc_type(indicator: str) -> IocType | None:
 
 def _is_ioc_word_char(ch: str) -> bool:
     """IOC word character: alphanumeric, dot, or hyphen."""
-    return ch.isalnum() or ch == "." or ch == "-"
+    if len(ch) != 1:
+        return False
+    code = ord(ch)
+    return (
+        (ord("0") <= code <= ord("9"))
+        or (ord("A") <= code <= ord("Z"))
+        or (ord("a") <= code <= ord("z"))
+        or ch == "."
+        or ch == "-"
+    )
 
 
 def contains_word_bounded(haystack: str, needle: str) -> bool:

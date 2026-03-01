@@ -105,6 +105,11 @@ class TestContainsWordBounded:
         assert not contains_word_bounded("abc", "")
         assert not contains_word_bounded("", "")
 
+    def test_unicode_prefix_counts_as_boundary_for_ts_parity(self) -> None:
+        # Match TS behavior: only ASCII alnum are IOC "word" chars.
+        # The accented character does not block a boundary before evil.com.
+        assert contains_word_bounded("prefixéevil.com", "evil.com")
+
 
 # ---------------------------------------------------------------------------
 # IocDatabase — CRUD

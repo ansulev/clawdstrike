@@ -435,6 +435,34 @@ impl RegistryDb {
         Ok(count > 0)
     }
 
+    /// Roll back a previously inserted package version.
+    ///
+    /// This is used as a compensating action when publish fails after DB
+    /// writes (for example sparse index write failures) but before Merkle
+    /// append. If the package has no remaining versions after deletion, the
+    /// package row and search index row are also removed.
+    pub fn rollback_published_version(
+        &self,
+        name: &str,
+        version: &str,
+    ) -> Result<(), RegistryError> {
+        let tx = self.conn.unchecked_transaction()?;
+        tx.execute(
+            "DELETE FROM versions WHERE name = ?1 AND version = ?2",
+            params![name, version],
+        )?;
+        tx.execute(
+            "DELETE FROM packages WHERE name = ?1 AND NOT EXISTS (SELECT 1 FROM versions WHERE name = ?1)",
+            params![name],
+        )?;
+        tx.execute(
+            "DELETE FROM search_index WHERE name = ?1 AND NOT EXISTS (SELECT 1 FROM packages WHERE name = ?1)",
+            params![name],
+        )?;
+        tx.commit()?;
+        Ok(())
+    }
+
     // -----------------------------------------------------------------------
     // Registry Keys
     // -----------------------------------------------------------------------
@@ -1223,6 +1251,87 @@ mod tests {
         // Yanking again returns false.
         let yanked_again = db.yank_version("pkg", "1.0.0").unwrap();
         assert!(!yanked_again);
+    }
+
+    #[test]
+    fn rollback_published_version_removes_orphaned_package_and_search_row() {
+        let db = test_db();
+        db.upsert_package("pkg", Some("Pkg"), "2025-01-01T00:00:00Z")
+            .unwrap();
+        db.insert_version(&VersionRow {
+            name: "pkg".into(),
+            version: "1.0.0".into(),
+            pkg_type: "guard".into(),
+            checksum: "abc".into(),
+            manifest_toml: "".into(),
+            publisher_key: "pk".into(),
+            publisher_sig: "sig".into(),
+            registry_sig: None,
+            dependencies_json: "{}".into(),
+            yanked: false,
+            published_at: "2025-01-01T00:00:00Z".into(),
+            attestation_hash: None,
+            key_id: None,
+            leaf_index: Some(0),
+            download_count: 0,
+        })
+        .unwrap();
+
+        db.rollback_published_version("pkg", "1.0.0").unwrap();
+
+        assert!(db.get_version("pkg", "1.0.0").unwrap().is_none());
+        assert!(db.get_package("pkg").unwrap().is_none());
+        assert!(db.search("pkg", 10, 0).unwrap().is_empty());
+    }
+
+    #[test]
+    fn rollback_published_version_keeps_package_when_other_versions_exist() {
+        let db = test_db();
+        db.upsert_package("pkg", Some("Pkg"), "2025-01-01T00:00:00Z")
+            .unwrap();
+        db.insert_version(&VersionRow {
+            name: "pkg".into(),
+            version: "1.0.0".into(),
+            pkg_type: "guard".into(),
+            checksum: "abc".into(),
+            manifest_toml: "".into(),
+            publisher_key: "pk".into(),
+            publisher_sig: "sig".into(),
+            registry_sig: None,
+            dependencies_json: "{}".into(),
+            yanked: false,
+            published_at: "2025-01-01T00:00:00Z".into(),
+            attestation_hash: None,
+            key_id: None,
+            leaf_index: Some(0),
+            download_count: 0,
+        })
+        .unwrap();
+        db.insert_version(&VersionRow {
+            name: "pkg".into(),
+            version: "1.1.0".into(),
+            pkg_type: "guard".into(),
+            checksum: "def".into(),
+            manifest_toml: "".into(),
+            publisher_key: "pk".into(),
+            publisher_sig: "sig".into(),
+            registry_sig: None,
+            dependencies_json: "{}".into(),
+            yanked: false,
+            published_at: "2025-01-02T00:00:00Z".into(),
+            attestation_hash: None,
+            key_id: None,
+            leaf_index: Some(1),
+            download_count: 0,
+        })
+        .unwrap();
+
+        db.rollback_published_version("pkg", "1.1.0").unwrap();
+
+        assert!(db.get_package("pkg").unwrap().is_some());
+        assert!(db.get_version("pkg", "1.0.0").unwrap().is_some());
+        assert!(db.get_version("pkg", "1.1.0").unwrap().is_none());
+        assert!(!db.search("pkg", 10, 0).unwrap().is_empty());
     }
 
     #[test]

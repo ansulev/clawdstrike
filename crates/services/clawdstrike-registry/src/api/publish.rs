@@ -283,8 +283,22 @@ pub async fn publish(
         download_count: 0,
     })?;
 
-    // 10. Update sparse index.
-    index::update_index(&db, &state.config.index_dir(), &name)?;
+    // 10. Update sparse index. If this fails, roll back the DB write so
+    // retries can safely republish with the same version + leaf index.
+    if let Err(index_err) = index::update_index(&db, &state.config.index_dir(), &name) {
+        match db.rollback_published_version(&name, &version) {
+            Ok(()) => {
+                return Err(RegistryError::Internal(format!(
+                    "failed to update sparse index; rolled back publish state: {index_err}"
+                )));
+            }
+            Err(rollback_err) => {
+                return Err(RegistryError::Internal(format!(
+                    "failed to update sparse index ({index_err}); rollback failed ({rollback_err})"
+                )));
+            }
+        }
+    }
 
     // 11. Append to Merkle tree only after DB + index commit succeeds.
     let appended_index = {

@@ -107,11 +107,8 @@ pub fn clawdstrike_guard(_attr: TokenStream, item: TokenStream) -> TokenStream {
                         clawdstrike_guard_sdk::Severity::Error,
                         "Failed to deserialize guard input envelope",
                     );
-                    return if clawdstrike_guard_sdk::host::set_output(&err_output).is_ok() {
-                        0
-                    } else {
-                        1
-                    };
+                    let _ = clawdstrike_guard_sdk::host::set_output(&err_output);
+                    return 1;
                 }
             };
 

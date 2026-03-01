@@ -44,12 +44,16 @@ pub async fn yank(
         db.yank_version(&name, &version)?
     };
 
+    // Always regenerate sparse index after a successful yank request.
+    // This keeps retries self-healing if a previous request already toggled
+    // the DB row but failed while writing index files.
+    let db = state
+        .db
+        .lock()
+        .map_err(|e| RegistryError::Internal(format!("db lock poisoned: {e}")))?;
+    index::update_index(&db, &state.config.index_dir(), &name)?;
+
     if yanked {
-        let db = state
-            .db
-            .lock()
-            .map_err(|e| RegistryError::Internal(format!("db lock poisoned: {e}")))?;
-        index::update_index(&db, &state.config.index_dir(), &name)?;
         tracing::info!(name = %name, version = %version, "Version yanked");
     }
 

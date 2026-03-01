@@ -35,9 +35,21 @@ pub(crate) fn normalize_package_name(name: &str) -> String {
 
 /// Percent-encode a package name for use in a single URL path segment.
 pub(crate) fn encode_url_path_segment(name: &str) -> String {
-    name.replace('%', "%25")
-        .replace('@', "%40")
-        .replace('/', "%2F")
+    let mut out = String::with_capacity(name.len());
+    const HEX: &[u8; 16] = b"0123456789ABCDEF";
+    for &byte in name.as_bytes() {
+        if matches!(
+            byte,
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~'
+        ) {
+            out.push(byte as char);
+        } else {
+            out.push('%');
+            out.push(HEX[(byte >> 4) as usize] as char);
+            out.push(HEX[(byte & 0x0F) as usize] as char);
+        }
+    }
+    out
 }
 
 pub use archive::{content_hash, pack, unpack};
@@ -59,3 +71,26 @@ pub use test_runner::{
 };
 pub use trust::{check_trust, compute_trust_level, TrustError, TrustLevel, TrustRequirement};
 pub use version::{parse_version, parse_version_req, VersionReq};
+
+#[cfg(test)]
+mod tests {
+    use super::encode_url_path_segment;
+
+    #[test]
+    fn encode_url_path_segment_encodes_all_non_unreserved_bytes() {
+        assert_eq!(
+            encode_url_path_segment("@acme/firewall"),
+            "%40acme%2Ffirewall"
+        );
+        assert_eq!(
+            encode_url_path_segment("name with?#[]"),
+            "name%20with%3F%23%5B%5D"
+        );
+        assert_eq!(encode_url_path_segment("pkg%v1"), "pkg%25v1");
+    }
+
+    #[test]
+    fn encode_url_path_segment_encodes_utf8_bytes() {
+        assert_eq!(encode_url_path_segment("caf\u{00e9}"), "caf%C3%A9");
+    }
+}

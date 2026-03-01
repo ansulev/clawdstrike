@@ -191,6 +191,14 @@ class ElasticAdapter:
                     raise ExportError(
                         f"Elasticsearch export failed: {resp.status_code}"
                     )
+                try:
+                    payload = resp.json()
+                except ValueError:
+                    payload = None
+                if isinstance(payload, dict) and payload.get("errors") is True:
+                    raise ExportError(
+                        f"Elasticsearch export failed: {resp.status_code}"
+                    )
 
         await _with_retry(_do, self.retry)
 

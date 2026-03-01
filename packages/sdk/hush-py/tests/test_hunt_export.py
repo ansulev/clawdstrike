@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timezone
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -57,16 +58,18 @@ def _make_alert(**kwargs) -> Alert:
     return Alert(**defaults)
 
 
-def _mock_httpx_response(status_code: int = 200):
+def _mock_httpx_response(status_code: int = 200, json_body: Any | None = None):
     """Create a mock httpx response."""
     resp = MagicMock()
     resp.status_code = status_code
+    if json_body is not None:
+        resp.json = MagicMock(return_value=json_body)
     return resp
 
 
-def _make_mock_client(status_code: int = 200) -> AsyncMock:
+def _make_mock_client(status_code: int = 200, json_body: Any | None = None) -> AsyncMock:
     """Create a mock httpx.AsyncClient context manager."""
-    mock_resp = _mock_httpx_response(status_code)
+    mock_resp = _mock_httpx_response(status_code, json_body)
     mock_client = AsyncMock()
     mock_client.post = AsyncMock(return_value=mock_resp)
     mock_client.__aenter__ = AsyncMock(return_value=mock_client)
@@ -184,6 +187,30 @@ class TestElasticAdapter:
                 "https://elastic.example.com:9200", "hunt-events"
             )
             with pytest.raises(ExportError, match="Elasticsearch export failed"):
+                await adapter.export([_make_alert()])
+
+    @pytest.mark.asyncio
+    async def test_raises_on_bulk_item_errors_in_2xx_response(self) -> None:
+        mock_client = _make_mock_client(
+            200,
+            {
+                "errors": True,
+                "items": [
+                    {
+                        "index": {
+                            "status": 400,
+                            "error": {"type": "mapper_parsing_exception"},
+                        }
+                    }
+                ],
+            },
+        )
+
+        with patch("httpx.AsyncClient", return_value=mock_client):
+            adapter = ElasticAdapter(
+                "https://elastic.example.com:9200", "hunt-events"
+            )
+            with pytest.raises(ExportError, match="Elasticsearch export failed: 200"):
                 await adapter.export([_make_alert()])
 
 

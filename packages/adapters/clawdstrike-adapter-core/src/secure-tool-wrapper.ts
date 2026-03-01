@@ -29,7 +29,12 @@ export function wrapExecuteWithInterceptor<TInput, TOutput>(
       throw new ClawdstrikeBlockedError(toolName, decision);
     }
 
-    const nextInput = (interceptResult.modifiedParameters as unknown as TInput) ?? input;
+    const nextInput =
+      interceptResult.modifiedInput !== undefined
+        ? (interceptResult.modifiedInput as TInput)
+        : interceptResult.modifiedParameters !== undefined
+          ? (interceptResult.modifiedParameters as unknown as TInput)
+          : input;
 
     if (interceptResult.replacementResult !== undefined) {
       const processed = await interceptor.afterExecute(

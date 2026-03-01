@@ -1,18 +1,14 @@
 import type {
   Decision,
-  PolicyEngineLike,
   SecurityContext,
   ToolInterceptor,
 } from "@clawdstrike/adapter-core";
 import {
   ClawdstrikeBlockedError,
   createSecurityContext,
-  isClawdstrikeLike,
-  isToolInterceptor,
+  resolveInterceptor,
   type SecuritySource,
 } from "@clawdstrike/adapter-core";
-
-import { createLangChainInterceptor } from "./interceptor.js";
 
 type LangChainInvokeLike<TInput = unknown, TOutput = unknown> = {
   invoke: (input: TInput, config?: unknown) => Promise<TOutput> | TOutput;
@@ -30,16 +26,6 @@ type LangChainToolLike = Partial<LangChainInvokeLike> &
 export interface WrapToolOptions {
   context?: SecurityContext;
   getContext?: (toolName: string, input: unknown) => SecurityContext;
-}
-
-function resolveInterceptor(source: SecuritySource): ToolInterceptor {
-  if (isToolInterceptor(source)) {
-    return source;
-  }
-  if (isClawdstrikeLike(source)) {
-    return source.createInterceptor!();
-  }
-  return createLangChainInterceptor(source as PolicyEngineLike);
 }
 
 /**

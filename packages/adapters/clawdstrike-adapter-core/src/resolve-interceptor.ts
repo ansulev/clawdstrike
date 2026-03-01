@@ -8,7 +8,9 @@ import type { ToolInterceptor } from "./interceptor.js";
  * an interceptor factory method.
  */
 export interface ClawdstrikeLike {
-  createInterceptor?: () => ToolInterceptor;
+  createInterceptor?: (
+    config?: AdapterConfig,
+  ) => Partial<ToolInterceptor> | ToolInterceptor;
 }
 
 /**
@@ -37,9 +39,33 @@ export function resolveInterceptor(
     return source;
   }
   if (isClawdstrikeLike(source)) {
-    return source.createInterceptor!();
+    const interceptor = source.createInterceptor?.(config);
+    if (!interceptor) {
+      throw new Error("ClawdstrikeLike source must provide createInterceptor()");
+    }
+    return withDefaultOnError(interceptor);
   }
   return new BaseToolInterceptor(source as PolicyEngineLike, config ?? {});
+}
+
+function withDefaultOnError(interceptor: Partial<ToolInterceptor>): ToolInterceptor {
+  if (
+    typeof interceptor.beforeExecute !== "function" ||
+    typeof interceptor.afterExecute !== "function"
+  ) {
+    throw new Error(
+      "createInterceptor() must return an object with beforeExecute and afterExecute methods",
+    );
+  }
+
+  return {
+    beforeExecute: interceptor.beforeExecute,
+    afterExecute: interceptor.afterExecute,
+    onError:
+      typeof interceptor.onError === "function"
+        ? interceptor.onError
+        : async () => undefined,
+  };
 }
 
 export function isToolInterceptor(value: unknown): value is ToolInterceptor {

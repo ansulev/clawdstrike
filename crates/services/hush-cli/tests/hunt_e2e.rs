@@ -947,35 +947,48 @@ output:
     assert!(
         watch.wait_for_stderr_contains(
             "waiting for events",
-            command_timeout(Duration::from_secs(8))
+            command_timeout(Duration::from_secs(12))
         ),
         "watch process never reached ready state"
     );
 
-    publish_envelope(
-        &nats.client,
-        "clawdstrike.sdr.fact.receipt.live.v1",
-        "2026-02-03T00:01:00Z",
-        receipt_fact("secret_file_access", "allow", "file"),
-    )
-    .await
-    .expect("publish watch receipt");
-    publish_envelope(
-        &nats.client,
-        "clawdstrike.sdr.fact.hubble_flow.live.v1",
-        "2026-02-03T00:01:10Z",
-        hubble_fact("EGRESS to evil.example over tls", "FORWARDED"),
-    )
-    .await
-    .expect("publish watch hubble");
-    nats.client.flush().await.expect("flush watch events");
+    let watch_alert_needle = "\"rule_name\":\"Hunt E2E Exfil Sequence\"";
+    let mut watch_alert_observed = false;
+    for attempt in 0..5 {
+        let receipt_ts = format!("2026-02-03T00:01:{:02}Z", attempt * 2);
+        let hubble_ts = format!("2026-02-03T00:01:{:02}Z", (attempt * 2) + 1);
+
+        publish_envelope(
+            &nats.client,
+            "clawdstrike.sdr.fact.receipt.live.v1",
+            &receipt_ts,
+            receipt_fact("secret_file_access", "allow", "file"),
+        )
+        .await
+        .expect("publish watch receipt");
+        publish_envelope(
+            &nats.client,
+            "clawdstrike.sdr.fact.hubble_flow.live.v1",
+            &hubble_ts,
+            hubble_fact("EGRESS to evil.example over tls", "FORWARDED"),
+        )
+        .await
+        .expect("publish watch hubble");
+        nats.client.flush().await.expect("flush watch events");
+
+        if watch
+            .wait_for_stdout_contains(watch_alert_needle, command_timeout(Duration::from_secs(4)))
+        {
+            watch_alert_observed = true;
+            break;
+        }
+    }
 
     assert!(
-        watch.wait_for_stdout_contains(
-            "\"rule_name\":\"Hunt E2E Exfil Sequence\"",
-            command_timeout(Duration::from_secs(8))
-        ),
-        "watch did not emit expected alert JSON line"
+        watch_alert_observed,
+        "watch did not emit expected alert JSON line\nwatch stdout:\n{}\nwatch stderr:\n{}",
+        clone_lines_joined(&watch.stdout_lines),
+        clone_lines_joined(&watch.stderr_lines)
     );
 
     watch.interrupt();

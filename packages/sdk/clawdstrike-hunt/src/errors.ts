@@ -60,3 +60,24 @@ export class ReportError extends HuntError {
     this.name = 'ReportError';
   }
 }
+
+export class HuntAlertError extends HuntError {
+  constructor(message: string) {
+    super('ALERT_DENIED', message);
+    this.name = 'HuntAlertError';
+  }
+}
+
+export class PlaybookError extends HuntError {
+  constructor(message: string) {
+    super('PLAYBOOK_ERROR', message);
+    this.name = 'PlaybookError';
+  }
+}
+
+export class ExportError extends HuntError {
+  constructor(message: string) {
+    super('EXPORT_ERROR', message);
+    this.name = 'ExportError';
+  }
+}

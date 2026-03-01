@@ -316,6 +316,13 @@ profile = "release"
     }
 
     #[test]
+    fn rejects_semver_with_leading_zeros() {
+        let raw = minimal_toml("ok-name", "01.0.0", "guard");
+        let err = parse_pkg_manifest_toml(&raw).unwrap_err();
+        assert!(err.to_string().contains("invalid package version"));
+    }
+
+    #[test]
     fn rejects_empty_dep_constraint() {
         let raw = r#"
 [package]

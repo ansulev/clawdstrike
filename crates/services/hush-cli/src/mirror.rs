@@ -716,6 +716,18 @@ fn cmd_mirror_bulk_sync(
     stdout: &mut dyn Write,
     stderr: &mut dyn Write,
 ) -> ExitCode {
+    let trust_order = match trust_level_order(min_trust) {
+        Some(v) => v,
+        None => {
+            let _ = writeln!(
+                stderr,
+                "Error: invalid trust level '{}'. Must be one of: unverified, signed, verified, certified",
+                min_trust
+            );
+            return ExitCode::ConfigError;
+        }
+    };
+
     let cfg = RegistryConfig::load(None);
     let expected_registry_key = match required_registry_public_key_for_trust(&cfg, min_trust) {
         Ok(k) => k,
@@ -780,7 +792,6 @@ fn cmd_mirror_bulk_sync(
         min_trust
     );
 
-    let trust_order = trust_level_order(min_trust);
     let mut filtered: Vec<BulkPackageEntry> = Vec::new();
     for pkg in &search.packages {
         let Some(version) = pkg.latest_version.as_deref() else {
@@ -853,7 +864,10 @@ fn cmd_mirror_bulk_sync(
             }
         };
 
-        if trust_level_order(trust_level) < trust_order {
+        let Some(candidate_order) = trust_level_order(trust_level) else {
+            continue;
+        };
+        if candidate_order < trust_order {
             continue;
         }
 
@@ -913,13 +927,13 @@ struct BulkPackageEntry {
     version: String,
 }
 
-fn trust_level_order(level: &str) -> u8 {
+fn trust_level_order(level: &str) -> Option<u8> {
     match level {
-        "unverified" => 0,
-        "signed" => 1,
-        "verified" => 2,
-        "certified" => 3,
-        _ => 0,
+        "unverified" => Some(0),
+        "signed" => Some(1),
+        "verified" => Some(2),
+        "certified" => Some(3),
+        _ => None,
     }
 }
 
@@ -1047,6 +1061,25 @@ mod tests {
         assert!(trust_level_order("certified") > trust_level_order("verified"));
         assert!(trust_level_order("verified") > trust_level_order("signed"));
         assert!(trust_level_order("signed") > trust_level_order("unverified"));
+        assert_eq!(trust_level_order("verfied"), None);
+    }
+
+    #[test]
+    fn bulk_sync_rejects_invalid_min_trust() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut stdout = Vec::new();
+        let mut stderr = Vec::new();
+        let code = cmd_mirror_bulk_sync(
+            None,
+            "verfied",
+            "https://registry.example.invalid",
+            tmp.path(),
+            &mut stdout,
+            &mut stderr,
+        );
+        assert_eq!(code, ExitCode::ConfigError);
+        let err = String::from_utf8_lossy(&stderr);
+        assert!(err.contains("invalid trust level 'verfied'"));
     }
 
     #[test]

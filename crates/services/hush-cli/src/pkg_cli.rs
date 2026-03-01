@@ -1022,6 +1022,126 @@ fn requested_identity_matches_install(
     installed.name == requested_name && installed.version == requested_version
 }
 
+#[derive(Debug)]
+struct InstallRollbackBackup {
+    original_path: PathBuf,
+    backup_path: PathBuf,
+}
+
+fn copy_dir_recursive(src: &Path, dst: &Path) -> Result<(), std::io::Error> {
+    std::fs::create_dir_all(dst)?;
+    for entry in std::fs::read_dir(src)? {
+        let entry = entry?;
+        let entry_type = entry.file_type()?;
+        let src_path = entry.path();
+        let dst_path = dst.join(entry.file_name());
+        if entry_type.is_dir() {
+            copy_dir_recursive(&src_path, &dst_path)?;
+        } else {
+            std::fs::copy(&src_path, &dst_path)?;
+        }
+    }
+    Ok(())
+}
+
+fn create_install_rollback_backup(
+    existing: Option<&clawdstrike::pkg::store::InstalledPackage>,
+) -> Result<Option<InstallRollbackBackup>, String> {
+    let Some(existing) = existing else {
+        return Ok(None);
+    };
+
+    let nonce: u64 = rand::Rng::random(&mut rand::rng());
+    let backup_path = existing
+        .path
+        .with_extension(format!("pretrust.bak.{nonce:x}"));
+    if backup_path.exists() {
+        std::fs::remove_dir_all(&backup_path).map_err(|e| {
+            format!(
+                "failed to clear stale rollback backup {}: {e}",
+                backup_path.display()
+            )
+        })?;
+    }
+    copy_dir_recursive(&existing.path, &backup_path).map_err(|e| {
+        format!(
+            "failed to create rollback backup for {}: {e}",
+            existing.path.display()
+        )
+    })?;
+    Ok(Some(InstallRollbackBackup {
+        original_path: existing.path.clone(),
+        backup_path,
+    }))
+}
+
+fn restore_install_from_backup(backup: &InstallRollbackBackup) -> Result<(), String> {
+    if !backup.backup_path.exists() {
+        return Err(format!(
+            "rollback backup not found at {}",
+            backup.backup_path.display()
+        ));
+    }
+    if backup.original_path.exists() {
+        std::fs::remove_dir_all(&backup.original_path).map_err(|e| {
+            format!(
+                "failed to remove failed install at {}: {e}",
+                backup.original_path.display()
+            )
+        })?;
+    }
+    if let Some(parent) = backup.original_path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| {
+            format!(
+                "failed to create install parent directory {}: {e}",
+                parent.display()
+            )
+        })?;
+    }
+    match std::fs::rename(&backup.backup_path, &backup.original_path) {
+        Ok(()) => Ok(()),
+        Err(_) => {
+            copy_dir_recursive(&backup.backup_path, &backup.original_path).map_err(|e| {
+                format!(
+                    "failed to restore install from backup {}: {e}",
+                    backup.backup_path.display()
+                )
+            })?;
+            std::fs::remove_dir_all(&backup.backup_path).map_err(|e| {
+                format!(
+                    "failed to clean rollback backup {}: {e}",
+                    backup.backup_path.display()
+                )
+            })?;
+            Ok(())
+        }
+    }
+}
+
+fn cleanup_install_backup(backup: Option<InstallRollbackBackup>) {
+    if let Some(backup) = backup {
+        let _ = std::fs::remove_dir_all(&backup.backup_path);
+    }
+}
+
+fn select_default_registry_version(info: &serde_json::Value) -> Option<String> {
+    if let Some(versions) = info.get("versions").and_then(|v| v.as_array()) {
+        return versions
+            .iter()
+            .find(|entry| {
+                !entry
+                    .get("yanked")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false)
+            })
+            .and_then(|entry| entry.get("version").and_then(|v| v.as_str()))
+            .map(ToOwned::to_owned);
+    }
+    info.get("latest_version")
+        .and_then(|v| v.as_str())
+        .map(ToOwned::to_owned)
+}
+
 fn cmd_pkg_install_registry(
     name: &str,
     version: Option<&str>,
@@ -1080,23 +1200,18 @@ fn cmd_pkg_install_registry(
                     return ExitCode::RuntimeError;
                 }
             };
-            // The stats endpoint returns versions newest-first (DESC), so
-            // index 0 is the latest.
-            let latest = info["versions"]
-                .as_array()
-                .and_then(|arr| arr.first())
-                .and_then(|entry| entry["version"].as_str())
-                .or_else(|| info["latest_version"].as_str());
+            // Prefer the newest non-yanked version from stats data.
+            let latest = select_default_registry_version(&info);
             match latest {
                 Some(v) => {
-                    resolved_version = v.to_string();
+                    resolved_version = v;
                     &resolved_version
                 }
                 None => {
                     let _ = writeln!(
                         stderr,
-                        "Error: cannot determine latest version for '{name}'. \
-                         Specify --version explicitly."
+                        "Error: cannot determine installable version for '{name}'. \
+                         All available versions may be yanked; specify --version explicitly."
                     );
                     return ExitCode::RuntimeError;
                 }
@@ -1163,9 +1278,25 @@ fn cmd_pkg_install_registry(
         }
     };
 
+    let existing_install = match store.get(name, version_segment) {
+        Ok(v) => v,
+        Err(e) => {
+            let _ = writeln!(stderr, "Error: cannot check existing install state: {e}");
+            return ExitCode::RuntimeError;
+        }
+    };
+    let mut rollback_backup = match create_install_rollback_backup(existing_install.as_ref()) {
+        Ok(v) => v,
+        Err(e) => {
+            let _ = writeln!(stderr, "Error: {e}");
+            return ExitCode::RuntimeError;
+        }
+    };
+
     let installed = match store.install_from_file(&cpkg_path) {
         Ok(p) => p,
         Err(e) => {
+            cleanup_install_backup(rollback_backup.take());
             let _ = writeln!(stderr, "Error: install failed: {e}");
             return ExitCode::RuntimeError;
         }
@@ -1173,6 +1304,12 @@ fn cmd_pkg_install_registry(
 
     if !requested_identity_matches_install(name, version_segment, &installed) {
         let _ = store.remove(&installed.name, &installed.version);
+        if let Some(backup) = rollback_backup.take() {
+            if let Err(e) = restore_install_from_backup(&backup) {
+                let _ = writeln!(stderr, "Error: failed to restore previous install: {e}");
+                return ExitCode::RuntimeError;
+            }
+        }
         let _ = writeln!(
             stderr,
             "Error: downloaded package identity mismatch (requested {}@{}, installed {}@{})",
@@ -1201,14 +1338,32 @@ fn cmd_pkg_install_registry(
         if !trust_ok {
             // Remove the installed package since trust verification failed.
             let _ = store.remove(&installed.name, &installed.version);
-            let _ = writeln!(
-                stderr,
-                "Error: package removed because trust verification failed. \
-                 Use --allow-unverified to skip trust checks."
-            );
+            let mut restored_previous = false;
+            if let Some(backup) = rollback_backup.take() {
+                if let Err(e) = restore_install_from_backup(&backup) {
+                    let _ = writeln!(stderr, "Error: failed to restore previous install: {e}");
+                    return ExitCode::RuntimeError;
+                }
+                restored_previous = true;
+            }
+            if restored_previous {
+                let _ = writeln!(
+                    stderr,
+                    "Error: trust verification failed. Existing install was restored. \
+                     Use --allow-unverified to skip trust checks."
+                );
+            } else {
+                let _ = writeln!(
+                    stderr,
+                    "Error: package removed because trust verification failed. \
+                     Use --allow-unverified to skip trust checks."
+                );
+            }
             return ExitCode::Fail;
         }
     }
+
+    cleanup_install_backup(rollback_backup.take());
 
     let _ = writeln!(
         stdout,
@@ -4227,6 +4382,75 @@ sandbox = "native"
         assert!(requested_identity_matches_install(
             "actual", "1.2.3", &installed
         ));
+    }
+
+    #[test]
+    fn select_default_registry_version_skips_yanked_entries() {
+        let stats = serde_json::json!({
+            "versions": [
+                { "version": "2.0.0", "yanked": true },
+                { "version": "1.9.9", "yanked": false },
+                { "version": "1.9.8" }
+            ],
+            "latest_version": "2.0.0"
+        });
+        assert_eq!(
+            select_default_registry_version(&stats).as_deref(),
+            Some("1.9.9")
+        );
+    }
+
+    #[test]
+    fn select_default_registry_version_returns_none_when_all_yanked() {
+        let stats = serde_json::json!({
+            "versions": [
+                { "version": "2.0.0", "yanked": true },
+                { "version": "1.9.9", "yanked": true }
+            ],
+            "latest_version": "2.0.0"
+        });
+        assert_eq!(select_default_registry_version(&stats), None);
+    }
+
+    #[test]
+    fn select_default_registry_version_falls_back_when_versions_missing() {
+        let stats = serde_json::json!({
+            "latest_version": "1.4.2"
+        });
+        assert_eq!(
+            select_default_registry_version(&stats).as_deref(),
+            Some("1.4.2")
+        );
+    }
+
+    #[test]
+    fn rollback_backup_restores_previous_install_contents() {
+        let tmp = tempfile::tempdir().unwrap();
+        let install_path = tmp.path().join("pkg").join("1.0.0");
+        std::fs::create_dir_all(&install_path).unwrap();
+        std::fs::write(install_path.join("marker.txt"), b"old").unwrap();
+
+        let installed = clawdstrike::pkg::store::InstalledPackage {
+            name: "demo".to_string(),
+            version: "1.0.0".to_string(),
+            path: install_path.clone(),
+            content_hash: hush_core::sha256(b"old"),
+        };
+
+        let backup = create_install_rollback_backup(Some(&installed))
+            .unwrap()
+            .expect("backup should exist");
+        assert!(backup.backup_path.exists());
+
+        std::fs::remove_dir_all(&install_path).unwrap();
+        std::fs::create_dir_all(&install_path).unwrap();
+        std::fs::write(install_path.join("marker.txt"), b"new").unwrap();
+
+        restore_install_from_backup(&backup).unwrap();
+
+        let restored = std::fs::read(install_path.join("marker.txt")).unwrap();
+        assert_eq!(restored, b"old");
+        assert!(!backup.backup_path.exists());
     }
 
     #[test]

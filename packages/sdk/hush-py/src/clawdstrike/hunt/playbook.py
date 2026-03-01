@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any
 
-from clawdstrike.hunt.correlate import CorrelationEngine, correlate
+from clawdstrike.hunt.correlate import correlate
 from clawdstrike.hunt.duration import parse_human_duration
 from clawdstrike.hunt.ioc import IocDatabase
 from clawdstrike.hunt.local import hunt

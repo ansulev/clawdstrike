@@ -11,7 +11,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from clawdstrike.hunt.duration import parse_human_duration
-from clawdstrike.hunt.errors import IoError
 from clawdstrike.hunt.query import matches_query
 from clawdstrike.hunt.timeline import merge_timeline, parse_envelope
 from clawdstrike.hunt.types import (

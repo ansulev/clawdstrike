@@ -31,7 +31,7 @@ pub(crate) fn normalize_package_name(name: &str) -> String {
         // collide on the same filesystem key.
         format!("s--{}", encode_url_path_segment(rest))
     } else {
-        format!("u--{name}")
+        format!("u--{}", encode_url_path_segment(name))
     }
 }
 
@@ -84,7 +84,7 @@ pub use version::{parse_version, parse_version_req, VersionReq};
 
 #[cfg(test)]
 mod tests {
-    use super::encode_url_path_segment;
+    use super::{encode_url_path_segment, normalize_package_name};
 
     #[test]
     fn encode_url_path_segment_encodes_all_non_unreserved_bytes() {
@@ -102,5 +102,11 @@ mod tests {
     #[test]
     fn encode_url_path_segment_encodes_utf8_bytes() {
         assert_eq!(encode_url_path_segment("caf\u{00e9}"), "caf%C3%A9");
+    }
+
+    #[test]
+    fn normalize_package_name_encodes_unscoped_names_too() {
+        assert_eq!(normalize_package_name("simple-name"), "u--simple-name");
+        assert_eq!(normalize_package_name("pkg%v1"), "u--pkg%25v1");
     }
 }

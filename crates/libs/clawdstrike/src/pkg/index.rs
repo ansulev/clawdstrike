@@ -25,6 +25,8 @@ pub struct RegistryIndex {
     base_url: String,
     /// Local cache directory for index entries.
     cache_dir: PathBuf,
+    /// Shared blocking client for connection/TLS reuse across fetches.
+    http_client: reqwest::blocking::Client,
 }
 
 /// All known versions for a single package.
@@ -75,9 +77,11 @@ impl RegistryIndex {
     /// Create an index client with a custom cache directory.
     pub fn with_cache_dir(base_url: &str, cache_dir: PathBuf) -> Result<Self> {
         fs::create_dir_all(&cache_dir)?;
+        let http_client = build_blocking_client()?;
         Ok(Self {
             base_url: base_url.trim_end_matches('/').to_string(),
             cache_dir,
+            http_client,
         })
     }
 
@@ -109,9 +113,9 @@ impl RegistryIndex {
             encode_url_path_segment(name)
         );
         let package_name = name.to_string();
+        let client = self.http_client.clone();
 
         let (status, etag, body) = run_blocking_http(move || {
-            let client = build_blocking_client()?;
             let mut request = client.get(&url);
             if let Some(etag) = cached_etag.as_deref() {
                 request = request.header("If-None-Match", etag);
@@ -367,6 +371,7 @@ mod tests {
             "s--acme%2Ffirewall"
         );
         assert_eq!(normalize_package_name("simple-name"), "u--simple-name");
+        assert_eq!(normalize_package_name("pkg%v1"), "u--pkg%25v1");
         assert_ne!(
             normalize_package_name("@acme/foo"),
             normalize_package_name("acme--foo")

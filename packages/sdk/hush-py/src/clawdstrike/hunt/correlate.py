@@ -1,0 +1,446 @@
+"""Correlation rule parsing, validation, and sliding-window engine.
+
+Port of ``hunt-correlate/src/rules.rs`` and ``hunt-correlate/src/engine.rs``.
+"""
+
+from __future__ import annotations
+
+import re
+from dataclasses import dataclass, field
+from datetime import datetime, timedelta, timezone
+from typing import Any
+
+import yaml
+
+from clawdstrike.hunt.duration import parse_human_duration
+from clawdstrike.hunt.errors import CorrelationError
+from clawdstrike.hunt.types import (
+    Alert,
+    CorrelationRule,
+    NormalizedVerdict,
+    RuleCondition,
+    RuleOutput,
+    RuleSeverity,
+    TimelineEvent,
+)
+
+SUPPORTED_SCHEMA = "clawdstrike.hunt.correlation.v1"
+
+# ---------------------------------------------------------------------------
+# Parsing
+# ---------------------------------------------------------------------------
+
+_VERDICT_MAP: dict[str, NormalizedVerdict] = {
+    "allow": NormalizedVerdict.ALLOW,
+    "deny": NormalizedVerdict.DENY,
+    "warn": NormalizedVerdict.WARN,
+    "none": NormalizedVerdict.NONE,
+    "forwarded": NormalizedVerdict.FORWARDED,
+    "dropped": NormalizedVerdict.DROPPED,
+}
+
+_SEVERITY_MAP: dict[str, RuleSeverity] = {
+    "low": RuleSeverity.LOW,
+    "medium": RuleSeverity.MEDIUM,
+    "high": RuleSeverity.HIGH,
+    "critical": RuleSeverity.CRITICAL,
+}
+
+
+def _parse_source(val: Any) -> tuple[str, ...]:
+    if isinstance(val, str):
+        return (val,)
+    if isinstance(val, list):
+        return tuple(str(s) for s in val)
+    return (str(val),)
+
+
+def parse_rule(yaml_str: str) -> CorrelationRule:
+    """Parse and validate a correlation rule from a YAML string."""
+    try:
+        raw = yaml.safe_load(yaml_str)
+    except yaml.YAMLError as exc:
+        raise CorrelationError(f"YAML parse error: {exc}") from exc
+
+    if not isinstance(raw, dict):
+        raise CorrelationError("rule must be a YAML mapping")
+
+    severity_str = str(raw.get("severity", "low")).lower()
+    severity = _SEVERITY_MAP.get(severity_str)
+    if severity is None:
+        raise CorrelationError(f"invalid severity: {severity_str}")
+
+    window_str = str(raw.get("window", ""))
+    window = parse_human_duration(window_str)
+    if window is None:
+        raise CorrelationError(f"invalid duration: {window_str}")
+
+    raw_conditions = raw.get("conditions", [])
+    if not isinstance(raw_conditions, list):
+        raise CorrelationError("conditions must be a list")
+
+    conditions: list[RuleCondition] = []
+    for rc in raw_conditions:
+        within: timedelta | None = None
+        if "within" in rc and rc["within"] is not None:
+            within = parse_human_duration(str(rc["within"]))
+            if within is None:
+                raise CorrelationError(f"invalid duration: {rc['within']}")
+
+        conditions.append(
+            RuleCondition(
+                bind=str(rc.get("bind", "")),
+                source=_parse_source(rc.get("source", [])),
+                action_type=rc.get("action_type"),
+                verdict=rc.get("verdict"),
+                target_pattern=rc.get("target_pattern"),
+                not_target_pattern=rc.get("not_target_pattern"),
+                after=rc.get("after"),
+                within=within,
+            )
+        )
+
+    raw_output = raw.get("output", {})
+    if not isinstance(raw_output, dict):
+        raise CorrelationError("output must be a mapping")
+
+    output = RuleOutput(
+        title=str(raw_output.get("title", "")),
+        evidence=tuple(str(e) for e in raw_output.get("evidence", [])),
+    )
+
+    rule = CorrelationRule(
+        schema=str(raw.get("schema", "")),
+        name=str(raw.get("name", "")),
+        severity=severity,
+        description=str(raw.get("description", "")),
+        window=window,
+        conditions=tuple(conditions),
+        output=output,
+    )
+
+    validate_rule(rule)
+    return rule
+
+
+def validate_rule(rule: CorrelationRule) -> None:
+    """Validate a parsed correlation rule, raising :class:`CorrelationError` on failure."""
+    if rule.schema != SUPPORTED_SCHEMA:
+        raise CorrelationError(
+            f"unsupported schema '{rule.schema}', expected '{SUPPORTED_SCHEMA}'"
+        )
+
+    if not rule.conditions:
+        raise CorrelationError("rule must have at least one condition")
+
+    known_binds: list[str] = []
+
+    for i, cond in enumerate(rule.conditions):
+        if cond.after is not None:
+            if cond.after not in known_binds:
+                raise CorrelationError(
+                    f"condition {i} references unknown bind '{cond.after}' in 'after'"
+                )
+
+        if cond.within is not None and cond.after is None:
+            raise CorrelationError(
+                f"condition {i} has 'within' but no 'after'; "
+                "'within' only makes sense with 'after'"
+            )
+
+        if cond.within is not None and cond.within > rule.window:
+            raise CorrelationError(
+                f"condition {i} 'within' ({cond.within}) exceeds global window ({rule.window})"
+            )
+
+        if cond.bind in known_binds:
+            raise CorrelationError(
+                f"condition {i} reuses bind name '{cond.bind}'; bind names must be unique"
+            )
+
+        known_binds.append(cond.bind)
+
+    for ev in rule.output.evidence:
+        if ev not in known_binds:
+            raise CorrelationError(
+                f"output evidence references unknown bind '{ev}'"
+            )
+
+
+def load_rules_from_files(paths: list[str]) -> list[CorrelationRule]:
+    """Load and validate correlation rules from YAML files."""
+    rules: list[CorrelationRule] = []
+    for path in paths:
+        try:
+            with open(path) as f:
+                content = f.read()
+        except OSError as exc:
+            raise CorrelationError(f"failed to read {path}: {exc}") from exc
+        rules.append(parse_rule(content))
+    return rules
+
+
+# ---------------------------------------------------------------------------
+# Compiled patterns
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class _CompiledPatterns:
+    target: re.Pattern[str] | None = None
+    not_target: re.Pattern[str] | None = None
+
+
+# ---------------------------------------------------------------------------
+# Window state
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class _WindowState:
+    started_at: datetime
+    bound_events: dict[str, TimelineEvent]
+    preexisting_count: int = 0
+    dependent_advanced: int = 0
+
+
+# ---------------------------------------------------------------------------
+# Engine
+# ---------------------------------------------------------------------------
+
+
+def _condition_matches(
+    cond: RuleCondition,
+    cp: _CompiledPatterns,
+    event: TimelineEvent,
+) -> bool:
+    """Check if a single condition matches a timeline event."""
+    # Source check
+    event_source_str = event.source.value.lower()
+    if not any(s.lower() == event_source_str for s in cond.source):
+        return False
+
+    # Action type (case-insensitive)
+    if cond.action_type is not None:
+        if event.action_type is None:
+            return False
+        if event.action_type.lower() != cond.action_type.lower():
+            return False
+
+    # Verdict
+    if cond.verdict is not None:
+        expected = _VERDICT_MAP.get(cond.verdict.lower())
+        if expected is None:
+            return False
+        if event.verdict != expected:
+            return False
+
+    # Target pattern
+    if cp.target is not None:
+        if not cp.target.search(event.summary):
+            return False
+
+    # Not target pattern
+    if cp.not_target is not None:
+        if cp.not_target.search(event.summary):
+            return False
+
+    return True
+
+
+def _all_conditions_met(rule: CorrelationRule, ws: _WindowState) -> bool:
+    return all(cond.bind in ws.bound_events for cond in rule.conditions)
+
+
+def _build_alert(rule: CorrelationRule, ws: _WindowState) -> Alert:
+    evidence: list[TimelineEvent] = []
+    for bind_name in rule.output.evidence:
+        ev = ws.bound_events.get(bind_name)
+        if ev is not None:
+            evidence.append(ev)
+
+    triggered_at = max((e.timestamp for e in evidence), default=datetime.now(tz=timezone.utc))
+
+    return Alert(
+        rule_name=rule.name,
+        severity=rule.severity,
+        title=rule.output.title,
+        triggered_at=triggered_at,
+        evidence=tuple(evidence),
+        description=rule.description,
+    )
+
+
+class CorrelationEngine:
+    """Sliding-window correlation engine that evaluates events against rules."""
+
+    def __init__(self, rules: list[CorrelationRule]) -> None:
+        self._rules = tuple(rules)
+        self._patterns: dict[tuple[int, int], _CompiledPatterns] = {}
+        self._windows: dict[int, list[_WindowState]] = {}
+
+        for ri, rule in enumerate(self._rules):
+            for ci, cond in enumerate(rule.conditions):
+                target = None
+                not_target = None
+                if cond.target_pattern is not None:
+                    try:
+                        target = re.compile(cond.target_pattern)
+                    except re.error as exc:
+                        raise CorrelationError(
+                            f"rule '{rule.name}' condition {ci}: {exc}"
+                        ) from exc
+                if cond.not_target_pattern is not None:
+                    try:
+                        not_target = re.compile(cond.not_target_pattern)
+                    except re.error as exc:
+                        raise CorrelationError(
+                            f"rule '{rule.name}' condition {ci} not_target: {exc}"
+                        ) from exc
+                self._patterns[(ri, ci)] = _CompiledPatterns(target=target, not_target=not_target)
+
+    @property
+    def rules(self) -> tuple[CorrelationRule, ...]:
+        return self._rules
+
+    def process_event(self, event: TimelineEvent) -> list[Alert]:
+        """Process a single event. Returns alerts generated."""
+        self.evict_expired_at(event.timestamp)
+
+        alerts: list[Alert] = []
+        for ri in range(len(self._rules)):
+            alerts.extend(self._evaluate_rule(ri, event))
+        return alerts
+
+    def evict_expired_at(self, now: datetime) -> None:
+        """Remove windows older than their rule's window duration."""
+        to_remove: list[int] = []
+        for ri, windows in self._windows.items():
+            window_dur = self._rules[ri].window
+            self._windows[ri] = [
+                ws for ws in windows
+                if (now - ws.started_at) <= window_dur
+            ]
+            if not self._windows[ri]:
+                to_remove.append(ri)
+        for ri in to_remove:
+            del self._windows[ri]
+
+    def evict_expired(self) -> None:
+        """Evict expired windows using wall-clock time."""
+        self.evict_expired_at(datetime.now(tz=timezone.utc))
+
+    def evict_expired_capped(self, max_window: timedelta) -> None:
+        """Evict windows using the shorter of rule window and *max_window*."""
+        now = datetime.now(tz=timezone.utc)
+        to_remove: list[int] = []
+        for ri, windows in self._windows.items():
+            rule_dur = self._rules[ri].window
+            effective = min(max_window, rule_dur)
+            self._windows[ri] = [
+                ws for ws in windows
+                if (now - ws.started_at) <= effective
+            ]
+            if not self._windows[ri]:
+                to_remove.append(ri)
+        for ri in to_remove:
+            del self._windows[ri]
+
+    def flush(self) -> list[Alert]:
+        """Flush all windows, returning alerts for fully-matched ones."""
+        self.evict_expired()
+        alerts: list[Alert] = []
+        for ri, windows in list(self._windows.items()):
+            rule = self._rules[ri]
+            for ws in windows:
+                if _all_conditions_met(rule, ws):
+                    alerts.append(_build_alert(rule, ws))
+        self._windows.clear()
+        return alerts
+
+    def _evaluate_rule(self, ri: int, event: TimelineEvent) -> list[Alert]:
+        rule = self._rules[ri]
+
+        # Snapshot pre-existing window count
+        pre_existing_count = len(self._windows.get(ri, []))
+        dependent_advanced = [False] * pre_existing_count
+
+        for ci, cond in enumerate(rule.conditions):
+            cp = self._patterns.get((ri, ci))
+            if cp is None:
+                continue
+
+            if not _condition_matches(cond, cp, event):
+                continue
+
+            if cond.after is None:
+                # Root condition: create new window
+                ws = _WindowState(
+                    started_at=event.timestamp,
+                    bound_events={cond.bind: event},
+                    preexisting_count=pre_existing_count,
+                    dependent_advanced=0,
+                )
+                self._windows.setdefault(ri, []).append(ws)
+            else:
+                # Dependent condition: advance existing windows
+                if pre_existing_count == 0:
+                    continue
+
+                windows = self._windows.get(ri)
+                if windows is None:
+                    continue
+
+                for wi in range(min(pre_existing_count, len(windows))):
+                    ws = windows[wi]
+
+                    # Single event advances at most one dependent per window
+                    if wi < len(dependent_advanced) and dependent_advanced[wi]:
+                        continue
+
+                    # Skip if already bound
+                    if cond.bind in ws.bound_events:
+                        continue
+
+                    # Check prerequisite
+                    if cond.after not in ws.bound_events:
+                        continue
+
+                    # Time ordering: event must be >= prerequisite timestamp
+                    after_event = ws.bound_events[cond.after]
+                    elapsed = event.timestamp - after_event.timestamp
+                    if elapsed < timedelta(0):
+                        continue
+
+                    # Within constraint
+                    if cond.within is not None and elapsed > cond.within:
+                        continue
+
+                    # Bind event
+                    ws.bound_events[cond.bind] = event
+                    if wi < len(dependent_advanced):
+                        dependent_advanced[wi] = True
+
+        # Check for fully matched windows
+        alerts: list[Alert] = []
+        windows = self._windows.get(ri)
+        if windows is not None:
+            completed: list[int] = []
+            for wi, ws in enumerate(windows):
+                if _all_conditions_met(rule, ws):
+                    alerts.append(_build_alert(rule, ws))
+                    completed.append(wi)
+
+            for wi in reversed(completed):
+                windows.pop(wi)
+
+        return alerts
+
+
+__all__ = [
+    "SUPPORTED_SCHEMA",
+    "parse_rule",
+    "validate_rule",
+    "load_rules_from_files",
+    "CorrelationEngine",
+]

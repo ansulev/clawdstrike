@@ -1,11 +1,5 @@
 /* @ts-self-types="./hush_wasm.d.ts" */
 
-/**
- * Instruction hierarchy enforcer for maintaining privilege ordering.
- *
- * Wraps low-privilege content, detects conflicts, and enforces the hierarchy:
- * Platform > System > User > ToolOutput > External.
- */
 class WasmInstructionHierarchyEnforcer {
     __destroy_into_raw() {
         const ptr = this.__wbg_ptr;
@@ -18,13 +12,6 @@ class WasmInstructionHierarchyEnforcer {
         wasm.__wbg_wasminstructionhierarchyenforcer_free(ptr, 0);
     }
     /**
-     * Enforce instruction hierarchy on a set of messages.
-     *
-     * # Arguments
-     * * `messages_json` - JSON array of `HierarchyMessage` objects
-     *
-     * # Returns
-     * JSON string of `HierarchyEnforcementResult` with camelCase keys.
      * @param {string} messages_json
      * @returns {string}
      */
@@ -49,10 +36,6 @@ class WasmInstructionHierarchyEnforcer {
         }
     }
     /**
-     * Create a new instruction hierarchy enforcer.
-     *
-     * # Arguments
-     * * `config_json` - Optional JSON-serialized `HierarchyEnforcerConfig`. Uses defaults if omitted.
      * @param {string | null} [config_json]
      */
     constructor(config_json) {
@@ -70,11 +53,6 @@ class WasmInstructionHierarchyEnforcer {
 if (Symbol.dispose) WasmInstructionHierarchyEnforcer.prototype[Symbol.dispose] = WasmInstructionHierarchyEnforcer.prototype.free;
 exports.WasmInstructionHierarchyEnforcer = WasmInstructionHierarchyEnforcer;
 
-/**
- * Jailbreak detector with 4-layer detection: heuristic, statistical, ML, and optional LLM judge.
- *
- * Holds internal session aggregation state and an LRU cache. Create one instance and reuse it.
- */
 class WasmJailbreakDetector {
     __destroy_into_raw() {
         const ptr = this.__wbg_ptr;
@@ -87,14 +65,6 @@ class WasmJailbreakDetector {
         wasm.__wbg_wasmjailbreakdetector_free(ptr, 0);
     }
     /**
-     * Run synchronous jailbreak detection on the given text.
-     *
-     * # Arguments
-     * * `text` - The input text to analyze
-     * * `session_id` - Optional session ID for session-level risk aggregation
-     *
-     * # Returns
-     * JSON string of `JailbreakDetectionResult` with camelCase keys.
      * @param {string} text
      * @param {string | null} [session_id]
      * @returns {string}
@@ -122,13 +92,6 @@ class WasmJailbreakDetector {
         }
     }
     /**
-     * Create a new jailbreak detector.
-     *
-     * # Arguments
-     * * `config_json` - Optional JSON-serialized `JailbreakGuardConfig`. Uses defaults if omitted.
-     *
-     * # Returns
-     * A new `WasmJailbreakDetector` instance.
      * @param {string | null} [config_json]
      */
     constructor(config_json) {
@@ -146,11 +109,6 @@ class WasmJailbreakDetector {
 if (Symbol.dispose) WasmJailbreakDetector.prototype[Symbol.dispose] = WasmJailbreakDetector.prototype.free;
 exports.WasmJailbreakDetector = WasmJailbreakDetector;
 
-/**
- * Output sanitizer for redacting secrets, PII, and internal data from model/tool outputs.
- *
- * Holds compiled regex patterns. Create one instance and reuse it.
- */
 class WasmOutputSanitizer {
     __destroy_into_raw() {
         const ptr = this.__wbg_ptr;
@@ -163,13 +121,6 @@ class WasmOutputSanitizer {
         wasm.__wbg_wasmoutputsanitizer_free(ptr, 0);
     }
     /**
-     * Create a new output sanitizer.
-     *
-     * # Arguments
-     * * `config_json` - Optional JSON-serialized `OutputSanitizerConfig`. Uses defaults if omitted.
-     *
-     * # Returns
-     * A new `WasmOutputSanitizer` instance.
      * @param {string | null} [config_json]
      */
     constructor(config_json) {
@@ -184,13 +135,6 @@ class WasmOutputSanitizer {
         return this;
     }
     /**
-     * Sanitize text by detecting and redacting sensitive data.
-     *
-     * # Arguments
-     * * `text` - The text to sanitize
-     *
-     * # Returns
-     * JSON string of `SanitizationResult` with camelCase keys.
      * @param {string} text
      * @returns {string}
      */
@@ -219,13 +163,6 @@ if (Symbol.dispose) WasmOutputSanitizer.prototype[Symbol.dispose] = WasmOutputSa
 exports.WasmOutputSanitizer = WasmOutputSanitizer;
 
 /**
- * Canonicalize a JSON string according to RFC 8785 (JCS).
- *
- * # Arguments
- * * `json_str` - A valid JSON string
- *
- * # Returns
- * Canonical JSON string with sorted keys, no extra whitespace.
  * @param {string} json_str
  * @returns {string}
  */
@@ -285,14 +222,6 @@ function compute_merkle_root(leaf_hashes_json) {
 exports.compute_merkle_root = compute_merkle_root;
 
 /**
- * Detect prompt-injection signals in untrusted text.
- *
- * # Arguments
- * * `text` - The untrusted text to analyze
- * * `max_scan_bytes` - Optional limit on bytes to scan (default: 200,000)
- *
- * # Returns
- * JSON string of `PromptInjectionReport` with camelCase keys.
  * @param {string} text
  * @param {number | null} [max_scan_bytes]
  * @returns {string}
@@ -845,6 +774,10 @@ function __wbg_get_imports() {
         },
         __wbg_node_84ea875411254db1: function(arg0) {
             const ret = arg0.node;
+            return ret;
+        },
+        __wbg_now_054cfe5280165f10: function() {
+            const ret = Date.now();
             return ret;
         },
         __wbg_process_44c7a14e11e9f69e: function(arg0) {

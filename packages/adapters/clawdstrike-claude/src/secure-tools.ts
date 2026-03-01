@@ -1,9 +1,7 @@
 import type { SecurityContext } from "@clawdstrike/adapter-core";
 import {
-  createSecurityContext,
-  resolveInterceptor,
+  secureToolSet,
   type SecuritySource,
-  wrapExecuteWithInterceptor,
 } from "@clawdstrike/adapter-core";
 
 import { claudeCuaTranslator } from "./claude-cua-translator.js";
@@ -23,37 +21,10 @@ export function secureTools<TTools extends Record<string, ClaudeToolLike>>(
   source: SecuritySource,
   options?: SecureToolsOptions,
 ): TTools {
-  const interceptor = resolveInterceptor(source, {
+  return secureToolSet(tools, source, {
+    framework: "claude",
     translateToolCall: claudeCuaTranslator,
+    context: options?.context,
+    getContext: options?.getContext,
   });
-
-  const defaultContext =
-    options?.context ??
-    createSecurityContext({
-      metadata: { framework: "claude" },
-    });
-
-  const secured = {} as TTools;
-  for (const [toolName, tool] of Object.entries(tools)) {
-    const originalExecute = tool.execute ?? tool.call;
-    if (typeof originalExecute !== "function") {
-      (secured as Record<string, ClaudeToolLike>)[toolName] = tool;
-      continue;
-    }
-
-    const wrapped = wrapExecuteWithInterceptor(
-      toolName,
-      originalExecute.bind(tool),
-      interceptor,
-      defaultContext,
-      options?.getContext,
-    );
-    (secured as Record<string, ClaudeToolLike>)[toolName] = {
-      ...(tool as object),
-      execute: wrapped,
-      call: wrapped,
-    } as ClaudeToolLike;
-  }
-
-  return secured;
 }

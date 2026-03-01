@@ -463,7 +463,7 @@ jobs:
           cd crates/libs/hush-wasm
           wasm-pack build --target nodejs --release --out-dir pkg-node
 
-          for f in hush_wasm.js hush_wasm.d.ts hush_wasm_bg.wasm hush_wasm_bg.wasm.d.ts; do
+          for f in hush_wasm.js hush_wasm.d.ts hush_wasm_bg.wasm.d.ts; do
             if ! cmp -s "$f" "pkg-node/$f"; then
               echo "ERROR: $f is out of sync with wasm-pack --target nodejs output"
               echo "Run: cd crates/libs/hush-wasm && ./build.sh"

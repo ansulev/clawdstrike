@@ -99,4 +99,5 @@ export {
   isToolInterceptor,
   resolveInterceptor,
 } from "./resolve-interceptor.js";
-export { wrapExecuteWithInterceptor } from "./secure-tool-wrapper.js";
+export type { ExecuteOrCallToolLike, SecureToolSetOptions } from "./secure-tool-wrapper.js";
+export { secureToolSet, wrapExecuteWithInterceptor } from "./secure-tool-wrapper.js";

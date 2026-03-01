@@ -1,6 +1,9 @@
+import type { AdapterConfig } from "./adapter.js";
 import type { SecurityContext } from "./context.js";
+import { createSecurityContext } from "./context.js";
 import { ClawdstrikeBlockedError } from "./errors.js";
 import type { ToolInterceptor } from "./interceptor.js";
+import { resolveInterceptor, type SecuritySource } from "./resolve-interceptor.js";
 
 export function wrapExecuteWithInterceptor<TInput, TOutput>(
   toolName: string,
@@ -48,4 +51,56 @@ export function wrapExecuteWithInterceptor<TInput, TOutput>(
       throw err;
     }
   };
+}
+
+export type ExecuteOrCallToolLike<TInput = unknown, TOutput = unknown> = {
+  execute?: (input: TInput, ...rest: unknown[]) => Promise<TOutput> | TOutput;
+  call?: (input: TInput, ...rest: unknown[]) => Promise<TOutput> | TOutput;
+};
+
+export interface SecureToolSetOptions {
+  framework: string;
+  context?: SecurityContext;
+  getContext?: (toolName: string, input: unknown) => SecurityContext;
+  translateToolCall?: AdapterConfig["translateToolCall"];
+}
+
+export function secureToolSet<TTools extends Record<string, ExecuteOrCallToolLike>>(
+  tools: TTools,
+  source: SecuritySource,
+  options: SecureToolSetOptions,
+): TTools {
+  const interceptor = resolveInterceptor(source, {
+    translateToolCall: options.translateToolCall,
+  });
+
+  const defaultContext =
+    options.context ??
+    createSecurityContext({
+      metadata: { framework: options.framework },
+    });
+
+  const secured = {} as TTools;
+  for (const [toolName, tool] of Object.entries(tools)) {
+    const originalExecute = tool.execute ?? tool.call;
+    if (typeof originalExecute !== "function") {
+      (secured as Record<string, ExecuteOrCallToolLike>)[toolName] = tool;
+      continue;
+    }
+
+    const wrapped = wrapExecuteWithInterceptor(
+      toolName,
+      originalExecute.bind(tool),
+      interceptor,
+      defaultContext,
+      options.getContext,
+    );
+    (secured as Record<string, ExecuteOrCallToolLike>)[toolName] = {
+      ...(tool as object),
+      execute: wrapped,
+      call: wrapped,
+    } as ExecuteOrCallToolLike;
+  }
+
+  return secured;
 }

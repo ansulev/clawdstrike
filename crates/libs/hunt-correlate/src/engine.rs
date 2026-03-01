@@ -426,7 +426,7 @@ conditions:
     bind: file_access
   - source: [receipt, hubble]
     action_type: egress
-    not_target_pattern: "->\\s*(localhost|127\\.(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])\\.(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])\\.(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])|10\\.(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])\\.(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])\\.(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])|172\\.(1[6-9]|2[0-9]|3[01])\\.(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])\\.(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])|192\\.168\\.(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])\\.(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9]))(?::[0-9]{1,5})?(?:\\b|$)"
+    not_target_pattern: "->\\s*(localhost|127\\.(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])\\.(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])\\.(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])|10\\.(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])\\.(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])\\.(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])|172\\.(1[6-9]|2[0-9]|3[01])\\.(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])\\.(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])|192\\.168\\.(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])\\.(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9]))(?::[0-9]{1,5})?(?:$|[^A-Za-z0-9.:-])"
     after: file_access
     within: 30s
     bind: egress_event
@@ -565,6 +565,39 @@ output:
         assert!(
             alerts.is_empty(),
             "internal egress should not trigger alert"
+        );
+    }
+
+    #[test]
+    fn egress_to_localhost_subdomain_still_alerts() {
+        // localhost.evil.com must not be treated as plain localhost.
+        let rule = exfil_rule();
+        let mut engine = CorrelationEngine::new(vec![rule]).unwrap();
+
+        let ts1 = Utc.with_ymd_and_hms(2025, 6, 15, 12, 0, 0).unwrap();
+        let ts2 = Utc.with_ymd_and_hms(2025, 6, 15, 12, 0, 10).unwrap();
+
+        let e1 = make_event(
+            EventSource::Receipt,
+            "file",
+            NormalizedVerdict::Allow,
+            "read /etc/passwd",
+            ts1,
+        );
+        engine.process_event(&e1);
+
+        let e2 = make_event(
+            EventSource::Receipt,
+            "egress",
+            NormalizedVerdict::Allow,
+            "egress TCP 10.0.0.1:8080 -> localhost.evil.com:443",
+            ts2,
+        );
+        let alerts = engine.process_event(&e2);
+        assert_eq!(
+            alerts.len(),
+            1,
+            "localhost subdomains are external and should not be excluded"
         );
     }
 

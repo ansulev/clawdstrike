@@ -4,7 +4,7 @@
 # Copy this file to your repo's .github/workflows/ directory to enable.
 #
 # Features:
-#   - Builds the guard as a WASM component (wasm32-wasip2)
+#   - Builds the guard for WASM (wasm32-unknown-unknown)
 #   - Runs guard test fixtures
 #   - Packs the guard as a .cpkg archive
 #   - Uploads the artifact for downstream use
@@ -26,7 +26,7 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: wasm32-wasip2
+          targets: wasm32-unknown-unknown
 
       - name: Install Clawdstrike CLI
         run: cargo install hush-cli --locked
@@ -35,7 +35,7 @@ jobs:
         run: cargo build --release
 
       - name: Build guard (WASM)
-        run: cargo build --target wasm32-wasip2 --release
+        run: cargo build --target wasm32-unknown-unknown --release
 
       - name: Run guard test fixtures
         run: clawdstrike pkg test

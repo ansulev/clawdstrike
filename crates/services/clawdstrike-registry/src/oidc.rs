@@ -298,18 +298,16 @@ pub fn match_trusted_publisher<'a>(
             continue;
         }
 
-        // If the publisher specifies a workflow, it must match.
-        // GitHub workflow_ref looks like "owner/repo/.github/workflows/release.yml@refs/heads/main".
-        // We strip the ref suffix and check that the path ends with the required workflow
-        // at a path boundary to prevent partial-name attacks (e.g., "pre-release.yml"
-        // should not match a requirement of "release.yml").
+        // If the publisher specifies a workflow/ref, it must match.
+        //
+        // Provider-specific behavior:
+        // - GitHub: `workflow_ref` is "<path>@<ref>", so we compare the path portion and
+        //   allow exact path or path-suffix matches at a boundary.
+        // - GitLab: this claim is the git ref (branch/tag), so we require exact match.
         if let Some(ref required_workflow) = publisher.workflow {
             match claims.workflow() {
                 Some(actual) => {
-                    let workflow_path = actual.split('@').next().unwrap_or(actual);
-                    let matches = workflow_path == required_workflow.as_str()
-                        || workflow_path.ends_with(&format!("/{}", required_workflow));
-                    if !matches {
+                    if !workflow_matches(claims, actual, required_workflow) {
                         continue;
                     }
                 }
@@ -335,6 +333,17 @@ pub fn match_trusted_publisher<'a>(
     Err(RegistryError::Unauthorized(
         "no trusted publisher matches the OIDC token claims".into(),
     ))
+}
+
+fn workflow_matches(claims: &OidcClaims, actual: &str, required_workflow: &str) -> bool {
+    match claims {
+        OidcClaims::GitHub(_) => {
+            let workflow_path = actual.split('@').next().unwrap_or(actual);
+            workflow_path == required_workflow
+                || workflow_path.ends_with(&format!("/{}", required_workflow))
+        }
+        OidcClaims::GitLab(_) => actual == required_workflow,
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -472,6 +481,32 @@ mod tests {
         let publishers = [make_publisher("gitlab", "acme/my-guard", None, None)];
         let matched = match_trusted_publisher(&claims, &publishers).unwrap();
         assert_eq!(matched.repository, "acme/my-guard");
+    }
+
+    #[test]
+    fn match_gitlab_with_exact_ref() {
+        let claims = make_gitlab_claims("acme/my-guard", Some("main"), None);
+        let publishers = [make_publisher(
+            "gitlab",
+            "acme/my-guard",
+            Some("main"),
+            None,
+        )];
+        let matched = match_trusted_publisher(&claims, &publishers).unwrap();
+        assert_eq!(matched.repository, "acme/my-guard");
+    }
+
+    #[test]
+    fn no_match_gitlab_ref_suffix_bypass() {
+        let claims = make_gitlab_claims("acme/my-guard", Some("feature/main"), None);
+        let publishers = [make_publisher(
+            "gitlab",
+            "acme/my-guard",
+            Some("main"),
+            None,
+        )];
+        let err = match_trusted_publisher(&claims, &publishers).unwrap_err();
+        assert!(err.to_string().contains("no trusted publisher"));
     }
 
     #[test]

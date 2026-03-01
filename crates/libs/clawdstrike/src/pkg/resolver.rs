@@ -198,6 +198,37 @@ fn find_policy_file(pkg_dir: &Path, sub_path: Option<&str>) -> Result<std::path:
     )))
 }
 
+fn normalize_rel_path_for_key(path: &Path) -> String {
+    path.components()
+        .map(|c| c.as_os_str().to_string_lossy().to_string())
+        .collect::<Vec<_>>()
+        .join("/")
+}
+
+fn resolved_sub_path_for_key(
+    pkg_dir: &Path,
+    policy_path: &Path,
+    requested_sub_path: Option<&str>,
+) -> String {
+    let rel = policy_path
+        .strip_prefix(pkg_dir)
+        .ok()
+        .map(Path::to_path_buf);
+    let rel = rel.or_else(|| {
+        let canonical_policy = policy_path.canonicalize().ok()?;
+        let canonical_pkg = pkg_dir.canonicalize().ok()?;
+        canonical_policy
+            .strip_prefix(canonical_pkg)
+            .ok()
+            .map(Path::to_path_buf)
+    });
+
+    rel.map(|p| normalize_rel_path_for_key(&p))
+        .or_else(|| requested_sub_path.map(|s| s.trim_start_matches('/').to_string()))
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| DEFAULT_POLICY_PATH.to_string())
+}
+
 impl PolicyResolver for PackagePolicyResolver {
     fn resolve(&self, reference: &str, from: &PolicyLocation) -> Result<ResolvedPolicySource> {
         if !reference.starts_with("pkg:") {
@@ -217,10 +248,12 @@ impl PolicyResolver for PackagePolicyResolver {
             })?;
 
         let policy_path = find_policy_file(&installed.path, pkg_ref.sub_path.as_deref())?;
+        let key_sub_path =
+            resolved_sub_path_for_key(&installed.path, &policy_path, pkg_ref.sub_path.as_deref());
         let yaml = std::fs::read_to_string(&policy_path)?;
 
         Ok(ResolvedPolicySource {
-            key: format!("pkg:{}@{}", pkg_ref.name, pkg_ref.version),
+            key: format!("pkg:{}@{}/{}", pkg_ref.name, pkg_ref.version, key_sub_path),
             yaml,
             location: PolicyLocation::Package {
                 name: pkg_ref.name,
@@ -383,7 +416,7 @@ mod tests {
             .resolve("pkg:test-pack@1.0.0", &PolicyLocation::None)
             .unwrap();
 
-        assert_eq!(resolved.key, "pkg:test-pack@1.0.0");
+        assert_eq!(resolved.key, "pkg:test-pack@1.0.0/policies/main.yaml");
         assert!(resolved.yaml.contains("name: test-pack"));
         assert_eq!(
             resolved.location,
@@ -417,7 +450,10 @@ mod tests {
             )
             .unwrap();
 
-        assert_eq!(resolved.key, "pkg:@acme/policies@2.0.0");
+        assert_eq!(
+            resolved.key,
+            "pkg:@acme/policies@2.0.0/rulesets/strict.yaml"
+        );
         assert!(resolved.yaml.contains("name: acme-strict"));
     }
 
@@ -441,7 +477,41 @@ mod tests {
             .resolve("pkg:fb-pack@0.1.0", &PolicyLocation::None)
             .unwrap();
 
+        assert_eq!(resolved.key, "pkg:fb-pack@0.1.0/policies/alpha.yaml");
         assert!(resolved.yaml.contains("name: alpha"));
+    }
+
+    #[test]
+    fn resolver_key_distinguishes_package_subpaths() {
+        let tmp = tempfile::tempdir().unwrap();
+        let store_root = tmp.path().join("store");
+        let store = PackageStore::with_root(store_root.clone()).unwrap();
+
+        let pkg_dir = fake_install(&store_root, "pack", "1.0.0");
+        let policies_dir = pkg_dir.join("policies");
+        std::fs::create_dir_all(&policies_dir).unwrap();
+        std::fs::write(
+            policies_dir.join("base.yaml"),
+            "version: \"1.2.0\"\nname: base\n",
+        )
+        .unwrap();
+        std::fs::write(
+            policies_dir.join("strict.yaml"),
+            "version: \"1.2.0\"\nname: strict\n",
+        )
+        .unwrap();
+
+        let resolver = PackagePolicyResolver::new(store);
+        let base = resolver
+            .resolve("pkg:pack@1.0.0/policies/base.yaml", &PolicyLocation::None)
+            .unwrap();
+        let strict = resolver
+            .resolve("pkg:pack@1.0.0/policies/strict.yaml", &PolicyLocation::None)
+            .unwrap();
+
+        assert_eq!(base.key, "pkg:pack@1.0.0/policies/base.yaml");
+        assert_eq!(strict.key, "pkg:pack@1.0.0/policies/strict.yaml");
+        assert_ne!(base.key, strict.key);
     }
 
     #[test]

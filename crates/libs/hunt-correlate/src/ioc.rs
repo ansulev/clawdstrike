@@ -481,7 +481,7 @@ fn contains_word_bounded(haystack: &str, needle: &str) -> bool {
 
     let bytes = haystack.as_bytes();
     let mut start = 0;
-    while let Some(pos) = haystack[start..].find(needle) {
+    while let Some(pos) = haystack.get(start..).and_then(|slice| slice.find(needle)) {
         let abs_pos = start + pos;
         let end_pos = abs_pos + needle.len();
 
@@ -494,7 +494,12 @@ fn contains_word_bounded(haystack: &str, needle: &str) -> bool {
         if left_ok && right_ok {
             return true;
         }
-        start = abs_pos + 1;
+        let next_char_len = haystack[abs_pos..]
+            .chars()
+            .next()
+            .map(char::len_utf8)
+            .unwrap_or(1);
+        start = abs_pos + next_char_len;
     }
     false
 }
@@ -1183,6 +1188,18 @@ mod tests {
     fn contains_word_bounded_empty_needle_is_false() {
         assert!(!contains_word_bounded("abc", ""));
         assert!(!contains_word_bounded("", ""));
+    }
+
+    #[test]
+    fn contains_word_bounded_handles_non_ascii_needle_without_panicking() {
+        assert!(contains_word_bounded(
+            "blocked: δοκιμή.example",
+            "δοκιμή.example"
+        ));
+        assert!(!contains_word_bounded(
+            "blocked: xδοκιμή.example",
+            "δοκιμή.example"
+        ));
     }
 
     // -- CSV edge cases ----------------------------------------------------

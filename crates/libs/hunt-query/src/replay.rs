@@ -28,6 +28,17 @@ fn is_past_end(end: Option<&DateTime<Utc>>, event_ts: DateTime<Utc>) -> bool {
     end.is_some_and(|e| event_ts > *e)
 }
 
+fn truncate_to_newest(events: &mut Vec<TimelineEvent>, limit: usize) {
+    if limit == 0 {
+        events.clear();
+        return;
+    }
+    if events.len() > limit {
+        let keep_from = events.len() - limit;
+        *events = events.split_off(keep_from);
+    }
+}
+
 fn deliver_policy_for(
     start: Option<&DateTime<Utc>>,
 ) -> async_nats::jetstream::consumer::DeliverPolicy {
@@ -163,9 +174,6 @@ pub async fn replay_stream_with_timeout(
 
             if query.matches(&event) {
                 events.push(event);
-                if events.len() >= query.limit {
-                    break;
-                }
             }
         }
     }
@@ -204,7 +212,7 @@ pub async fn replay_all(
     }
 
     let mut merged = timeline::merge_timeline(all_events);
-    merged.truncate(query.limit);
+    truncate_to_newest(&mut merged, query.limit);
     Ok(merged)
 }
 
@@ -287,6 +295,59 @@ mod tests {
         let event = event.unwrap();
         assert_eq!(event.source, crate::query::EventSource::Scan);
         assert_eq!(event.action_type.as_deref(), Some("scan"));
+    }
+
+    #[test]
+    fn truncate_to_newest_keeps_most_recent_events() {
+        let mut events = vec![
+            TimelineEvent {
+                timestamp: Utc.with_ymd_and_hms(2026, 2, 1, 10, 0, 0).unwrap(),
+                source: EventSource::Receipt,
+                kind: timeline::TimelineEventKind::GuardDecision,
+                verdict: timeline::NormalizedVerdict::Allow,
+                severity: None,
+                summary: "oldest".to_string(),
+                process: None,
+                namespace: None,
+                pod: None,
+                action_type: None,
+                signature_valid: None,
+                raw: None,
+            },
+            TimelineEvent {
+                timestamp: Utc.with_ymd_and_hms(2026, 2, 1, 11, 0, 0).unwrap(),
+                source: EventSource::Receipt,
+                kind: timeline::TimelineEventKind::GuardDecision,
+                verdict: timeline::NormalizedVerdict::Allow,
+                severity: None,
+                summary: "middle".to_string(),
+                process: None,
+                namespace: None,
+                pod: None,
+                action_type: None,
+                signature_valid: None,
+                raw: None,
+            },
+            TimelineEvent {
+                timestamp: Utc.with_ymd_and_hms(2026, 2, 1, 12, 0, 0).unwrap(),
+                source: EventSource::Receipt,
+                kind: timeline::TimelineEventKind::GuardDecision,
+                verdict: timeline::NormalizedVerdict::Allow,
+                severity: None,
+                summary: "newest".to_string(),
+                process: None,
+                namespace: None,
+                pod: None,
+                action_type: None,
+                signature_valid: None,
+                raw: None,
+            },
+        ];
+
+        truncate_to_newest(&mut events, 2);
+        assert_eq!(events.len(), 2);
+        assert_eq!(events[0].summary, "middle");
+        assert_eq!(events[1].summary, "newest");
     }
 
     /// Verify that `replay_all` returns an error (not a hang) when NATS is

@@ -122,6 +122,10 @@ pub async fn run_watch(
 
                 stats.events_processed += 1;
 
+                // Enforce the configured sliding-window cap for every processed
+                // event so stale windows never participate in a correlation.
+                engine.evict_expired_capped(config.max_window);
+
                 // Process event through correlation engine
                 let alerts = engine.process_event(&event);
 
@@ -134,10 +138,6 @@ pub async fn run_watch(
                     }
                 }
 
-                // Periodically evict expired windows, capped by max_window
-                if stats.events_processed.is_multiple_of(100) {
-                    engine.evict_expired_capped(config.max_window);
-                }
             }
             _ = &mut shutdown => {
                 writeln!(stderr, "\nwatch: shutting down (ctrl-c)").map_err(Error::Io)?;

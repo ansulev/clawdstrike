@@ -1,51 +1,31 @@
-import { keccak256, sha256 } from "./crypto/hash";
+import { getWasmModule } from "./crypto/backend";
+import { sha256, keccak256 } from "./crypto/hash";
 
-type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
+export type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
 
 /**
  * Serialize object to canonical JSON per RFC 8785 (JCS).
  *
- * - No whitespace between elements
- * - Object keys sorted lexicographically
- * - Unicode preserved (except control characters escaped)
+ * Delegates to the WASM module's `canonicalize_json` for deterministic output.
  *
  * @param obj - Object to serialize
  * @returns Canonical JSON string
- * @throws If object contains non-finite numbers (NaN, Infinity)
+ * @throws If WASM is not initialized
  */
 export function canonicalize(obj: JsonValue): string {
-  if (obj === null) {
-    return "null";
-  }
-
-  if (typeof obj === "boolean") {
-    return obj ? "true" : "false";
-  }
-
-  if (typeof obj === "number") {
-    if (!Number.isFinite(obj)) {
-      throw new Error("Non-finite numbers are not valid JSON");
+  // Pre-validate: RFC 8785 rejects non-finite numbers.
+  // JSON.stringify silently converts NaN/Infinity to null, so check first.
+  JSON.stringify(obj, (_, value) => {
+    if (typeof value === "number" && !Number.isFinite(value)) {
+      throw new Error(`RFC 8785 does not support non-finite numbers: ${value}`);
     }
-    // RFC 8785 references ECMAScript JSON number serialization rules.
-    return JSON.stringify(obj);
-  }
-
-  if (typeof obj === "string") {
-    return JSON.stringify(obj);
-  }
-
-  if (Array.isArray(obj)) {
-    const items = obj.map((item) => canonicalize(item));
-    return "[" + items.join(",") + "]";
-  }
-
-  // Object: sort keys lexicographically
-  const keys = Object.keys(obj).sort();
-  const pairs = keys.map((key) => {
-    const value = canonicalize(obj[key]);
-    return JSON.stringify(key) + ":" + value;
+    return value;
   });
-  return "{" + pairs.join(",") + "}";
+  const wasm = getWasmModule();
+  if (!wasm?.canonicalize_json) {
+    throw new Error("WASM not initialized. Call initWasm() before using canonicalize.");
+  }
+  return wasm.canonicalize_json(JSON.stringify(obj));
 }
 
 /**
@@ -54,21 +34,15 @@ export function canonicalize(obj: JsonValue): string {
  * @param obj - Object to serialize and hash
  * @param algorithm - Hash algorithm ("sha256" or "keccak256")
  * @returns 32-byte hash
- * @throws If algorithm is not supported
  */
 export function canonicalHash(
   obj: JsonValue,
   algorithm: "sha256" | "keccak256" = "sha256",
 ): Uint8Array {
+  if (algorithm !== "sha256" && algorithm !== "keccak256") {
+    throw new Error(`Unknown algorithm: ${algorithm}`);
+  }
   const canonical = canonicalize(obj);
   const bytes = new TextEncoder().encode(canonical);
-
-  switch (algorithm) {
-    case "sha256":
-      return sha256(bytes);
-    case "keccak256":
-      return keccak256(bytes);
-    default:
-      throw new Error(`Unknown algorithm: ${algorithm}`);
-  }
+  return algorithm === "sha256" ? sha256(bytes) : keccak256(bytes);
 }

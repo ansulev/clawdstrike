@@ -5,6 +5,7 @@
     "format:check": "biome check"
   },
   "workspaces": [
+    "crates/libs/hush-wasm",
     "packages/adapters/clawdstrike-adapter-core",
     "packages/sdk/hush-ts",
     "packages/sdk/clawdstrike",

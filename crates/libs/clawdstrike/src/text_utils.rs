@@ -7,6 +7,55 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 use unicode_normalization::UnicodeNormalization;
 
+// ── WASM-compatible timing ──────────────────────────────────────────────
+//
+// `std::time::Instant` panics on `wasm32-unknown-unknown`.  We provide a
+// thin abstraction that reports real elapsed time on native targets and
+// simply returns 0 on WASM.
+
+/// Opaque timestamp.  Obtain one with [`now()`], then call [`elapsed_ms`].
+#[derive(Clone, Copy)]
+pub struct Timestamp {
+    #[cfg(not(target_arch = "wasm32"))]
+    inner: std::time::Instant,
+}
+
+/// Capture the current point in time.
+pub fn now() -> Timestamp {
+    Timestamp {
+        #[cfg(not(target_arch = "wasm32"))]
+        inner: std::time::Instant::now(),
+    }
+}
+
+/// Milliseconds elapsed since the given timestamp.
+pub fn elapsed_ms(ts: &Timestamp) -> f64 {
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        ts.inner.elapsed().as_secs_f64() * 1000.0
+    }
+    #[cfg(target_arch = "wasm32")]
+    {
+        let _ = ts;
+        0.0
+    }
+}
+
+/// Current Unix-epoch milliseconds.  Returns 0 on WASM.
+pub fn now_epoch_ms() -> u64 {
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as u64
+    }
+    #[cfg(target_arch = "wasm32")]
+    {
+        0
+    }
+}
+
 /// Returns `true` if `c` is a zero-width or Unicode formatting character that is commonly used
 /// for text obfuscation attacks.
 pub fn is_zero_width_or_formatting(c: char) -> bool {

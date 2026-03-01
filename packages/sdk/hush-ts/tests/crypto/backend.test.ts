@@ -17,12 +17,8 @@ afterEach(() => {
 
 describe("getBackend", () => {
   it("returns noble by default", () => {
-    // In `test:wasm` mode we initialize WASM in a global setup file.
-    if (process.env.WASM_AVAILABLE === "1") {
-      expect(getBackend().name).toBe("wasm");
-    } else {
-      expect(getBackend().name).toBe("noble");
-    }
+    // WASM is always initialized in the setup file (detection modules require it).
+    expect(getBackend().name).toBe("wasm");
   });
 });
 

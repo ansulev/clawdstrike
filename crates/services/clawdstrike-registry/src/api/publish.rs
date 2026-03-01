@@ -137,7 +137,8 @@ pub async fn publish(
 
         let provider = extract_oidc_provider(&headers).unwrap_or_else(|| "github".to_string());
 
-        let claims = crate::oidc::validate_oidc_token(&oidc_token, &provider, &state.jwks_cache)?;
+        let claims =
+            crate::oidc::validate_oidc_token(&oidc_token, &provider, &state.jwks_cache).await?;
 
         let db = state
             .db

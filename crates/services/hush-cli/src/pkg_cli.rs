@@ -1072,6 +1072,29 @@ fn requested_identity_matches_install(
     installed.name == requested_name && installed.version == requested_version
 }
 
+fn read_archive_identity(cpkg_path: &Path) -> Result<(String, String), String> {
+    let nonce: u64 = rand::Rng::random(&mut rand::rng());
+    let scratch = std::env::temp_dir().join(format!("clawdstrike_identity_{nonce:x}"));
+    std::fs::create_dir_all(&scratch).map_err(|e| {
+        format!("cannot create temporary directory to inspect downloaded package: {e}")
+    })?;
+
+    let result = (|| {
+        let unpack_dir = scratch.join("unpacked");
+        archive::unpack(cpkg_path, &unpack_dir)
+            .map_err(|e| format!("downloaded package is not a valid .cpkg archive: {e}"))?;
+        let manifest_path = unpack_dir.join("clawdstrike-pkg.toml");
+        let manifest_str = std::fs::read_to_string(&manifest_path)
+            .map_err(|e| format!("downloaded archive missing clawdstrike-pkg.toml: {e}"))?;
+        let manifest = parse_pkg_manifest_toml(&manifest_str)
+            .map_err(|e| format!("downloaded archive manifest is invalid: {e}"))?;
+        Ok((manifest.package.name, manifest.package.version))
+    })();
+
+    let _ = std::fs::remove_dir_all(&scratch);
+    result
+}
+
 #[derive(Debug)]
 struct InstallRollbackBackup {
     original_path: PathBuf,
@@ -1363,6 +1386,23 @@ fn cmd_pkg_install_registry(
     if let Err(e) = std::fs::write(&cpkg_path, &bytes) {
         let _ = writeln!(stderr, "Error: cannot write temp file: {e}");
         return ExitCode::RuntimeError;
+    }
+
+    let (archive_name, archive_version) = match read_archive_identity(&cpkg_path) {
+        Ok(identity) => identity,
+        Err(e) => {
+            let _ = writeln!(stderr, "Error: {e}");
+            return ExitCode::RuntimeError;
+        }
+    };
+    if archive_name != name || archive_version != version_segment {
+        let _ = writeln!(
+            stderr,
+            "Error: downloaded package identity mismatch (requested {}@{}, archive {}@{}). \
+             Installation aborted before modifying local installs.",
+            name, version_segment, archive_name, archive_version
+        );
+        return ExitCode::Fail;
     }
 
     let store = match PackageStore::new() {
@@ -4557,6 +4597,33 @@ sandbox = "native"
         assert!(requested_identity_matches_install(
             "actual", "1.2.3", &installed
         ));
+    }
+
+    #[test]
+    fn read_archive_identity_returns_manifest_name_and_version() {
+        let tmp = tempfile::tempdir().unwrap();
+        let src = tmp.path().join("src");
+        std::fs::create_dir_all(&src).unwrap();
+        std::fs::write(
+            src.join("clawdstrike-pkg.toml"),
+            r#"[package]
+name = "identity-demo"
+version = "1.2.3"
+pkg_type = "guard"
+
+[trust]
+level = "trusted"
+sandbox = "native"
+"#,
+        )
+        .unwrap();
+        std::fs::write(src.join("README.md"), "ok").unwrap();
+        let archive_path = tmp.path().join("identity-demo-1.2.3.cpkg");
+        archive::pack(&src, &archive_path).unwrap();
+
+        let (name, version) = read_archive_identity(&archive_path).unwrap();
+        assert_eq!(name, "identity-demo");
+        assert_eq!(version, "1.2.3");
     }
 
     #[test]

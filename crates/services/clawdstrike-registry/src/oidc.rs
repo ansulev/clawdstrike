@@ -115,25 +115,28 @@ impl JwksCache {
         }
     }
 
-    fn get_or_fetch(&mut self, provider: &str, jwks_url: &str) -> Result<JwkSet, RegistryError> {
+    fn get_fresh(&self, provider: &str) -> Option<JwkSet> {
         let is_valid = self
             .entries
             .get(provider)
             .map(|e| e.fetched_at.elapsed().as_secs() <= JWKS_CACHE_DURATION_SECS)
             .unwrap_or(false);
 
-        if !is_valid {
-            let fetched = fetch_jwks(jwks_url)?;
-            self.entries.insert(
-                provider.to_string(),
-                CachedJwks {
-                    jwks: fetched,
-                    fetched_at: Instant::now(),
-                },
-            );
+        if is_valid {
+            self.entries.get(provider).map(|e| e.jwks.clone())
+        } else {
+            None
         }
+    }
 
-        Ok(self.entries[provider].jwks.clone())
+    fn insert(&mut self, provider: &str, jwks: JwkSet) {
+        self.entries.insert(
+            provider.to_string(),
+            CachedJwks {
+                jwks,
+                fetched_at: Instant::now(),
+            },
+        );
     }
 }
 
@@ -146,7 +149,7 @@ impl JwksCache {
 /// Uses the `provider` hint (`"github"` or `"gitlab"`) to select the correct
 /// issuer and JWKS URL.  Falls back to inspecting the token's `iss` claim
 /// when no explicit provider is given.
-pub fn validate_oidc_token(
+pub async fn validate_oidc_token(
     token: &str,
     provider: &str,
     jwks_cache: &Mutex<JwksCache>,
@@ -162,11 +165,25 @@ pub fn validate_oidc_token(
     };
 
     // Fetch or use cached JWKS (keyed by provider to avoid cross-provider confusion).
-    let jwks = {
+    let cached_jwks = {
+        let cache = jwks_cache
+            .lock()
+            .map_err(|e| RegistryError::Internal(format!("jwks cache lock poisoned: {e}")))?;
+        cache.get_fresh(provider)
+    };
+    let jwks = if let Some(jwks) = cached_jwks {
+        jwks
+    } else {
+        let fetched = fetch_jwks(jwks_url).await?;
         let mut cache = jwks_cache
             .lock()
             .map_err(|e| RegistryError::Internal(format!("jwks cache lock poisoned: {e}")))?;
-        cache.get_or_fetch(provider, jwks_url)?
+        if let Some(existing) = cache.get_fresh(provider) {
+            existing
+        } else {
+            cache.insert(provider, fetched.clone());
+            fetched
+        }
     };
 
     // Decode the JWT header to find the key ID.
@@ -236,8 +253,9 @@ fn parse_allowed_audiences(raw: &str) -> Vec<String> {
 }
 
 /// Fetch JWKS from a remote URL.
-fn fetch_jwks(url: &str) -> Result<JwkSet, RegistryError> {
-    let resp = reqwest::blocking::get(url)
+async fn fetch_jwks(url: &str) -> Result<JwkSet, RegistryError> {
+    let resp = reqwest::get(url)
+        .await
         .map_err(|e| RegistryError::Internal(format!("failed to fetch JWKS from {url}: {e}")))?;
 
     if !resp.status().is_success() {
@@ -249,6 +267,7 @@ fn fetch_jwks(url: &str) -> Result<JwkSet, RegistryError> {
 
     let jwks: JwkSet = resp
         .json()
+        .await
         .map_err(|e| RegistryError::Internal(format!("failed to parse JWKS response: {e}")))?;
 
     Ok(jwks)

@@ -392,6 +392,7 @@ fn comparator_to_range(comp: &semver::Comparator) -> std::result::Result<VS, Res
     let major = comp.major;
     let minor = comp.minor;
     let patch = comp.patch;
+    let pre = &comp.pre;
 
     match comp.op {
         semver::Op::Exact => {
@@ -399,16 +400,28 @@ fn comparator_to_range(comp: &semver::Comparator) -> std::result::Result<VS, Res
             // =I.J   → [I.J.0, I.(J+1).0)
             // =I     → [I.0.0, (I+1).0.0)
             match (minor, patch) {
-                (Some(min_val), Some(pat_val)) => {
-                    let v = semver::Version::new(major, min_val, pat_val);
+                (Some(_), Some(_)) => {
+                    let v = make_version(major, minor, patch, pre);
                     Ok(Ranges::singleton(v))
                 }
                 (Some(min_val), None) => {
+                    if !pre.is_empty() {
+                        return Err(ResolverError::ConstraintParse(format!(
+                            "invalid prerelease comparator '{}': prerelease requires explicit patch",
+                            comp
+                        )));
+                    }
                     let lo = semver::Version::new(major, min_val, 0);
                     let hi = semver::Version::new(major, min_val + 1, 0);
                     Ok(Ranges::between(lo, hi))
                 }
                 _ => {
+                    if !pre.is_empty() {
+                        return Err(ResolverError::ConstraintParse(format!(
+                            "invalid prerelease comparator '{}': prerelease requires explicit minor/patch",
+                            comp
+                        )));
+                    }
                     let lo = semver::Version::new(major, 0, 0);
                     let hi = semver::Version::new(major + 1, 0, 0);
                     Ok(Ranges::between(lo, hi))
@@ -420,9 +433,9 @@ fn comparator_to_range(comp: &semver::Comparator) -> std::result::Result<VS, Res
             // >I.J   → higher_than(I.(J+1).0)  (greater than all I.J.*)
             // >I     → higher_than((I+1).0.0)   (greater than all I.*.*)
             match (minor, patch) {
-                (Some(min_val), Some(pat_val)) => Ok(Ranges::strictly_higher_than(
-                    semver::Version::new(major, min_val, pat_val),
-                )),
+                (Some(_), Some(_)) => Ok(Ranges::strictly_higher_than(make_version(
+                    major, minor, patch, pre,
+                ))),
                 (Some(min_val), None) => Ok(Ranges::higher_than(semver::Version::new(
                     major,
                     min_val + 1,
@@ -432,29 +445,39 @@ fn comparator_to_range(comp: &semver::Comparator) -> std::result::Result<VS, Res
             }
         }
         semver::Op::GreaterEq => {
-            let v = make_version(major, minor, patch);
+            let v = make_version(major, minor, patch, pre);
             Ok(Ranges::higher_than(v))
         }
         semver::Op::Less => {
-            let v = make_version(major, minor, patch);
+            let v = make_version(major, minor, patch, pre);
             Ok(Ranges::strictly_lower_than(v))
         }
         semver::Op::LessEq => {
-            // <=I.J.K → strictly_lower_than(I.J.(K+1))
+            // <=I.J.K → (<I.J.K) OR (=I.J.K)
             // <=I.J   → strictly_lower_than(I.(J+1).0)
             // <=I     → strictly_lower_than((I+1).0.0)
-            let hi = match (minor, patch) {
-                (Some(min_val), Some(pat_val)) => semver::Version::new(major, min_val, pat_val + 1),
-                (Some(min_val), None) => semver::Version::new(major, min_val + 1, 0),
-                _ => semver::Version::new(major + 1, 0, 0),
-            };
-            Ok(Ranges::strictly_lower_than(hi))
+            match (minor, patch) {
+                (Some(_), Some(_)) => {
+                    let v = make_version(major, minor, patch, pre);
+                    Ok(Ranges::strictly_lower_than(v.clone()).union(&Ranges::singleton(v)))
+                }
+                (Some(min_val), None) => Ok(Ranges::strictly_lower_than(semver::Version::new(
+                    major,
+                    min_val + 1,
+                    0,
+                ))),
+                _ => Ok(Ranges::strictly_lower_than(semver::Version::new(
+                    major + 1,
+                    0,
+                    0,
+                ))),
+            }
         }
         semver::Op::Tilde => {
             // ~I.J.K → [I.J.K, I.(J+1).0)
             // ~I.J   → [I.J.0, I.(J+1).0)
             // ~I     → [I.0.0, (I+1).0.0)
-            let lo = make_version(major, minor, patch);
+            let lo = make_version(major, minor, patch, pre);
             let hi = match minor {
                 Some(min_val) => semver::Version::new(major, min_val + 1, 0),
                 None => semver::Version::new(major + 1, 0, 0),
@@ -474,7 +497,7 @@ fn comparator_to_range(comp: &semver::Comparator) -> std::result::Result<VS, Res
             //       patch value        → 0.0.(patch+1)
             //     minor == 0, patch unspecified (^0.0) → 0.1.0
             //   major == 0, minor unspecified (^0) → 1.0.0
-            let lo = make_version(major, minor, patch);
+            let lo = make_version(major, minor, patch, pre);
             let hi = if major > 0 {
                 semver::Version::new(major + 1, 0, 0)
             } else {
@@ -520,8 +543,17 @@ fn comparator_to_range(comp: &semver::Comparator) -> std::result::Result<VS, Res
 }
 
 /// Build a `semver::Version` from major/optional-minor/optional-patch.
-fn make_version(major: u64, minor: Option<u64>, patch: Option<u64>) -> semver::Version {
-    semver::Version::new(major, minor.unwrap_or(0), patch.unwrap_or(0))
+fn make_version(
+    major: u64,
+    minor: Option<u64>,
+    patch: Option<u64>,
+    pre: &semver::Prerelease,
+) -> semver::Version {
+    let mut v = semver::Version::new(major, minor.unwrap_or(0), patch.unwrap_or(0));
+    if !pre.is_empty() {
+        v.pre = pre.clone();
+    }
+    v
 }
 
 // ---------------------------------------------------------------------------
@@ -906,6 +938,15 @@ mod tests {
         let range = version_req_to_range(&req).unwrap();
         assert!(range.contains(&semver::Version::new(1, 0, 0)));
         assert!(!range.contains(&semver::Version::new(1, 0, 1)));
+    }
+
+    #[test]
+    fn version_req_to_range_exact_prerelease() {
+        let req = VersionReq::parse("=1.2.3-alpha.1").unwrap();
+        let range = version_req_to_range(&req).unwrap();
+        assert!(range.contains(&semver::Version::parse("1.2.3-alpha.1").unwrap()));
+        assert!(!range.contains(&semver::Version::new(1, 2, 3)));
+        assert!(!range.contains(&semver::Version::parse("1.2.3-alpha.2").unwrap()));
     }
 
     #[test]

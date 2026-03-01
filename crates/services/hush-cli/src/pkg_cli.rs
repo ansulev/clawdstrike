@@ -5,7 +5,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use clap::Subcommand;
-use hush_core::{PublicKey, Signature};
+use hush_core::{Hash, PublicKey, Signature};
 
 use clawdstrike::pkg::archive;
 use clawdstrike::pkg::integrity::sign_package;
@@ -818,6 +818,60 @@ sandbox = "wasm"
 // pkg pack
 // ---------------------------------------------------------------------------
 
+fn archive_file_name(name: &str, version: &str) -> String {
+    format!(
+        "{}-{}.cpkg",
+        name.replace('/', "-").replace('@', ""),
+        version
+    )
+}
+
+fn copy_dir_recursive_excluding_cpkg(src: &Path, dst: &Path) -> Result<(), std::io::Error> {
+    std::fs::create_dir_all(dst)?;
+    for entry in std::fs::read_dir(src)? {
+        let entry = entry?;
+        let entry_type = entry.file_type()?;
+        let src_path = entry.path();
+        let dst_path = dst.join(entry.file_name());
+        if entry_type.is_dir() {
+            copy_dir_recursive_excluding_cpkg(&src_path, &dst_path)?;
+        } else if entry_type.is_file() {
+            if src_path
+                .extension()
+                .and_then(|ext| ext.to_str())
+                .is_some_and(|ext| ext.eq_ignore_ascii_case("cpkg"))
+            {
+                continue;
+            }
+            std::fs::copy(&src_path, &dst_path)?;
+        }
+    }
+    Ok(())
+}
+
+fn pack_source_dir_without_embedded_archives(
+    source_dir: &Path,
+    output_path: &Path,
+) -> Result<Hash, String> {
+    let staging_root =
+        tempdir_for_download().map_err(|e| format!("cannot create pack staging dir: {e}"))?;
+    let staged_source = staging_root.join("source");
+    let staged_archive = staging_root.join("package.cpkg");
+
+    let result = (|| {
+        copy_dir_recursive_excluding_cpkg(source_dir, &staged_source)
+            .map_err(|e| format!("failed to stage package contents: {e}"))?;
+        let hash = archive::pack(&staged_source, &staged_archive)
+            .map_err(|e| format!("pack failed: {e}"))?;
+        std::fs::copy(&staged_archive, output_path)
+            .map_err(|e| format!("cannot write archive output {}: {e}", output_path.display()))?;
+        Ok(hash)
+    })();
+
+    let _ = std::fs::remove_dir_all(staging_root);
+    result
+}
+
 fn cmd_pkg_pack(path: Option<&Path>, stdout: &mut dyn Write, stderr: &mut dyn Write) -> ExitCode {
     let source_dir = match path {
         Some(p) => p.to_path_buf(),
@@ -860,18 +914,14 @@ fn cmd_pkg_pack(path: Option<&Path>, stdout: &mut dyn Write, stderr: &mut dyn Wr
     }
 
     // Build archive name
-    let archive_name = format!(
-        "{}-{}.cpkg",
-        manifest.package.name.replace('/', "-").replace('@', ""),
-        manifest.package.version
-    );
+    let archive_name = archive_file_name(&manifest.package.name, &manifest.package.version);
     let output_path = source_dir.join(&archive_name);
 
     // Pack
-    let hash = match archive::pack(&source_dir, &output_path) {
+    let hash = match pack_source_dir_without_embedded_archives(&source_dir, &output_path) {
         Ok(h) => h,
         Err(e) => {
-            let _ = writeln!(stderr, "Error: pack failed: {e}");
+            let _ = writeln!(stderr, "Error: {e}");
             return ExitCode::RuntimeError;
         }
     };
@@ -1132,10 +1182,7 @@ fn select_default_registry_version(info: &serde_json::Value) -> Option<String> {
         let hint_allowed = versions.is_none_or(|arr| {
             arr.iter().any(|entry| {
                 entry.get("version").and_then(|v| v.as_str()) == Some(latest)
-                    && !entry
-                        .get("yanked")
-                        .and_then(|v| v.as_bool())
-                        .unwrap_or(false)
+                    && matches!(entry.get("yanked").and_then(|v| v.as_bool()), Some(false))
             })
         });
         if hint_allowed {
@@ -1149,11 +1196,11 @@ fn select_default_registry_version(info: &serde_json::Value) -> Option<String> {
             let Some(version) = entry.get("version").and_then(|v| v.as_str()) else {
                 continue;
             };
-            if entry
-                .get("yanked")
-                .and_then(|v| v.as_bool())
-                .unwrap_or(false)
-            {
+            let yanked = match entry.get("yanked").and_then(|v| v.as_bool()) {
+                Some(flag) => flag,
+                None => continue,
+            };
+            if yanked {
                 continue;
             }
             let published_at = entry
@@ -1251,7 +1298,7 @@ fn cmd_pkg_install_registry(
         Some(v) => v,
         None => {
             let info_url = format!(
-                "{}/api/v1/packages/{}/stats",
+                "{}/api/v1/packages/{}",
                 cfg.registry_url.trim_end_matches('/'),
                 urlencoding_simple(name)
             );
@@ -1260,7 +1307,7 @@ fn cmd_pkg_install_registry(
                 Err(e) => {
                     let _ = writeln!(
                         stderr,
-                        "Error: cannot fetch package info to resolve latest version: {e}"
+                        "Error: cannot fetch package metadata to resolve install version: {e}"
                     );
                     return ExitCode::RuntimeError;
                 }
@@ -1269,7 +1316,7 @@ fn cmd_pkg_install_registry(
                 let status = info_resp.status();
                 let _ = writeln!(
                     stderr,
-                    "Error: cannot resolve latest version (HTTP {status}). \
+                    "Error: cannot resolve default install version (HTTP {status}). \
                      Specify --version explicitly."
                 );
                 return ExitCode::RuntimeError;
@@ -1281,7 +1328,7 @@ fn cmd_pkg_install_registry(
                     return ExitCode::RuntimeError;
                 }
             };
-            // Prefer the newest non-yanked version from stats data.
+            // Prefer the newest non-yanked version from package metadata.
             let latest = select_default_registry_version(&info);
             match latest {
                 Some(v) => {
@@ -2415,17 +2462,13 @@ fn cmd_pkg_publish(
     let pkg_version = &manifest.package.version;
 
     // Pack the archive
-    let archive_name = format!(
-        "{}-{}.cpkg",
-        pkg_name.replace('/', "-").replace('@', ""),
-        pkg_version
-    );
+    let archive_name = archive_file_name(pkg_name, pkg_version);
     let output_path = source_dir.join(&archive_name);
 
     let _ = writeln!(stdout, "Packing {} v{} ...", pkg_name, pkg_version);
 
-    if let Err(e) = archive::pack(&source_dir, &output_path) {
-        let _ = writeln!(stderr, "Error: pack failed: {e}");
+    if let Err(e) = pack_source_dir_without_embedded_archives(&source_dir, &output_path) {
+        let _ = writeln!(stderr, "Error: {e}");
         return ExitCode::RuntimeError;
     }
 
@@ -4162,6 +4205,41 @@ sandbox = "native"
     }
 
     #[test]
+    fn test_pack_excludes_existing_cpkg_files_from_archive() {
+        let tmp = tempfile::tempdir().unwrap();
+        let pkg_dir = tmp.path().join("mypkg");
+        std::fs::create_dir_all(&pkg_dir).unwrap();
+        std::fs::write(
+            pkg_dir.join("clawdstrike-pkg.toml"),
+            r#"[package]
+name = "test-pkg"
+version = "0.1.0"
+pkg_type = "guard"
+
+[trust]
+level = "trusted"
+sandbox = "native"
+"#,
+        )
+        .unwrap();
+        std::fs::create_dir_all(pkg_dir.join("src")).unwrap();
+        std::fs::write(pkg_dir.join("src/lib.rs"), "// guard code").unwrap();
+        std::fs::write(pkg_dir.join("stale-build.cpkg"), b"stale").unwrap();
+
+        let (_stdout, stderr, code) = run_cmd(PkgCommands::Pack {
+            path: Some(pkg_dir.clone()),
+        });
+        assert_eq!(code, ExitCode::Ok, "stderr: {stderr}");
+
+        let cpkg = pkg_dir.join("test-pkg-0.1.0.cpkg");
+        let unpacked = tmp.path().join("unpacked");
+        archive::unpack(&cpkg, &unpacked).unwrap();
+
+        assert!(!unpacked.join("stale-build.cpkg").exists());
+        assert!(unpacked.join("src/lib.rs").exists());
+    }
+
+    #[test]
     fn test_list_empty() {
         let tmp = tempfile::tempdir().unwrap();
         let store = PackageStore::with_root(tmp.path().join("store")).unwrap();
@@ -4540,6 +4618,18 @@ sandbox = "native"
             "versions": [
                 { "version": "2.0.0", "yanked": true },
                 { "version": "1.9.9", "yanked": true }
+            ],
+            "latest_version": "2.0.0"
+        });
+        assert_eq!(select_default_registry_version(&stats), None);
+    }
+
+    #[test]
+    fn select_default_registry_version_fails_closed_without_yank_state() {
+        let stats = serde_json::json!({
+            "versions": [
+                { "version": "2.0.0", "published_at": "2026-03-01T00:00:00Z" },
+                { "version": "1.9.9", "published_at": "2026-02-01T00:00:00Z" }
             ],
             "latest_version": "2.0.0"
         });

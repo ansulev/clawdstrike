@@ -4,6 +4,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use hush_core::Hash;
+use semver::Version;
 use serde::{Deserialize, Serialize};
 
 use crate::error::{Error, Result};
@@ -52,6 +53,13 @@ fn denormalize_name(dir_name: &str) -> String {
     dir_name.to_string()
 }
 
+fn cmp_package_versions(lhs: &str, rhs: &str) -> std::cmp::Ordering {
+    match (Version::parse(lhs), Version::parse(rhs)) {
+        (Ok(a), Ok(b)) => a.cmp(&b),
+        _ => lhs.cmp(rhs),
+    }
+}
+
 impl PackageStore {
     /// Create a store at the default location (`~/.clawdstrike/packages/`).
     pub fn new() -> Result<Self> {
@@ -78,6 +86,12 @@ impl PackageStore {
     /// the legacy normalization (if different) for backward compatibility.
     fn package_dir_candidates(&self, name: &str, version: &str) -> Vec<PathBuf> {
         let current = self.root.join(normalize_package_name(name)).join(version);
+        // Legacy unscoped names that start with `s--` can collide with the
+        // new scoped normalization prefix (`@scope/name` -> `s--scope--name`).
+        // Skip that fallback in this one ambiguous case.
+        if !name.starts_with('@') && name.starts_with("s--") {
+            return vec![current];
+        }
         let legacy = self
             .root
             .join(legacy_normalize_package_name(name))
@@ -296,7 +310,11 @@ impl PackageStore {
             }
         }
 
-        packages.sort_by(|a, b| a.name.cmp(&b.name).then(a.version.cmp(&b.version)));
+        packages.sort_by(|a, b| {
+            a.name
+                .cmp(&b.name)
+                .then_with(|| cmp_package_versions(&a.version, &b.version))
+        });
         Ok(packages)
     }
 
@@ -458,6 +476,18 @@ sandbox = "native"
     }
 
     #[test]
+    fn scoped_lookup_does_not_match_unscoped_s_prefix_legacy_fallback() {
+        let tmp = tempfile::tempdir().unwrap();
+        let store = PackageStore::with_root(tmp.path().join("store")).unwrap();
+
+        let scoped = create_test_package(tmp.path(), "@scope/name", "1.0.0", "guard", "scoped");
+        store.install_from_file(&scoped).unwrap();
+
+        let got = store.get("s--scope--name", "1.0.0").unwrap();
+        assert!(got.is_none());
+    }
+
+    #[test]
     fn list_packages() {
         let tmp = tempfile::tempdir().unwrap();
         let store = PackageStore::with_root(tmp.path().join("store")).unwrap();
@@ -472,6 +502,26 @@ sandbox = "native"
         assert_eq!(list.len(), 2);
         assert_eq!(list[0].name, "alpha");
         assert_eq!(list[1].name, "beta");
+    }
+
+    #[test]
+    fn list_sorts_versions_by_semver_not_lexicographic() {
+        let tmp = tempfile::tempdir().unwrap();
+        let store = PackageStore::with_root(tmp.path().join("store")).unwrap();
+
+        let v1 = create_test_package(tmp.path(), "alpha", "1.2.0", "guard", "semver-a");
+        let v2 = create_test_package(tmp.path(), "alpha", "1.10.0", "guard", "semver-b");
+
+        store.install_from_file(&v2).unwrap();
+        store.install_from_file(&v1).unwrap();
+
+        let list = store.list().unwrap();
+        let alpha_versions: Vec<_> = list
+            .iter()
+            .filter(|pkg| pkg.name == "alpha")
+            .map(|pkg| pkg.version.as_str())
+            .collect();
+        assert_eq!(alpha_versions, vec!["1.2.0", "1.10.0"]);
     }
 
     #[test]

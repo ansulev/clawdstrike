@@ -226,7 +226,7 @@ impl RegistryKeyManager {
         let signature = Signature::from_hex(sig_hex)
             .map_err(|e| RegistryError::Integrity(format!("invalid signature hex: {e}")))?;
 
-        let now = chrono::Utc::now().to_rfc3339();
+        let now = chrono::Utc::now();
 
         for managed in &self.keys {
             // Skip revoked keys.
@@ -237,7 +237,12 @@ impl RegistryKeyManager {
             // Skip deprecated keys past their validity window.
             if managed.info.status == KeyStatus::Deprecated {
                 if let Some(ref until) = managed.info.valid_until {
-                    if now.as_str() > until.as_str() {
+                    let until_ts = match chrono::DateTime::parse_from_rfc3339(until) {
+                        Ok(ts) => ts.with_timezone(&chrono::Utc),
+                        // Fail closed for malformed external timestamp values.
+                        Err(_) => continue,
+                    };
+                    if now > until_ts {
                         continue;
                     }
                 }
@@ -364,6 +369,29 @@ mod tests {
         // Should verify with the deprecated key (within overlap window).
         let key_info = mgr.verify_with_any_valid_key(data, &sig.to_hex()).unwrap();
         assert_eq!(key_info.status, KeyStatus::Deprecated);
+    }
+
+    #[test]
+    fn verify_with_any_valid_key_parses_rfc3339_offsets_for_expiry() {
+        let old_kp = Keypair::from_seed(&[1u8; 32]);
+        let new_kp = Keypair::from_seed(&[2u8; 32]);
+        let data = b"test message";
+        let sig = old_kp.sign(data);
+
+        let mut mgr = RegistryKeyManager::new(old_kp);
+        mgr.rotate(new_kp, 30).unwrap();
+
+        // Use an expired instant represented with a non-UTC offset. String
+        // comparison can mis-order this; parsed datetime comparison must not.
+        let expired_instant = chrono::Utc::now() - chrono::Duration::minutes(30);
+        let offset = chrono::FixedOffset::east_opt(3600).unwrap();
+        mgr.keys[1].info.valid_until = Some(expired_instant.with_timezone(&offset).to_rfc3339());
+
+        let result = mgr.verify_with_any_valid_key(data, &sig.to_hex());
+        assert!(
+            result.is_err(),
+            "deprecated key past expiry must be rejected"
+        );
     }
 
     #[test]

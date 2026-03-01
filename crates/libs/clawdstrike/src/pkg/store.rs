@@ -63,6 +63,20 @@ fn cmp_package_versions(lhs: &str, rhs: &str) -> std::cmp::Ordering {
     }
 }
 
+const INVALID_VERSION_SEGMENT: &str = "__invalid_version__";
+
+fn is_safe_version_segment(version: &str) -> bool {
+    if version.is_empty() || version == "." || version == ".." {
+        return false;
+    }
+    if version.contains('/') || version.contains('\\') {
+        return false;
+    }
+    let mut components = Path::new(version).components();
+    matches!(components.next(), Some(std::path::Component::Normal(_)))
+        && components.next().is_none()
+}
+
 fn normalize_relative_path(path: &Path) -> String {
     path.components()
         .map(|c| c.as_os_str().to_string_lossy().to_string())
@@ -137,7 +151,14 @@ impl PackageStore {
 
     /// Return the directory path for a given package name and version.
     pub fn package_dir(&self, name: &str, version: &str) -> PathBuf {
-        self.root.join(normalize_package_name(name)).join(version)
+        let safe_version = if is_safe_version_segment(version) {
+            version
+        } else {
+            INVALID_VERSION_SEGMENT
+        };
+        self.root
+            .join(normalize_package_name(name))
+            .join(safe_version)
     }
 
     /// Install a package from a `.cpkg` archive file.
@@ -670,6 +691,41 @@ sandbox = "native"
         // The original scoped name is preserved via StoreMetadata.name,
         // NOT via denormalize_name heuristics.
         assert_eq!(list[0].name, "@acme/firewall");
+    }
+
+    #[test]
+    fn package_dir_sanitizes_traversal_like_versions() {
+        let tmp = tempfile::tempdir().unwrap();
+        let store = PackageStore::with_root(tmp.path().join("store")).unwrap();
+        let pkg_root = store.root.join(normalize_package_name("demo"));
+
+        assert_eq!(
+            store.package_dir("demo", ".."),
+            pkg_root.join(INVALID_VERSION_SEGMENT)
+        );
+        assert_eq!(
+            store.package_dir("demo", "1.0.0/../../evil"),
+            pkg_root.join(INVALID_VERSION_SEGMENT)
+        );
+        assert_eq!(
+            store.package_dir("demo", "1.0.0\\..\\evil"),
+            pkg_root.join(INVALID_VERSION_SEGMENT)
+        );
+        assert_eq!(store.package_dir("demo", "1.0.0"), pkg_root.join("1.0.0"));
+    }
+
+    #[test]
+    fn get_with_traversal_like_version_cannot_escape_package_root() {
+        let tmp = tempfile::tempdir().unwrap();
+        let store = PackageStore::with_root(tmp.path().join("store")).unwrap();
+
+        let package_root = store.root.join(normalize_package_name("demo"));
+        fs::create_dir_all(&package_root).unwrap();
+        // Even if a metadata file exists at package root, version traversal
+        // strings must not resolve to it.
+        fs::write(package_root.join(".pkg-meta.json"), "{}").unwrap();
+
+        assert!(store.get("demo", "..").unwrap().is_none());
     }
 
     #[test]

@@ -72,6 +72,13 @@ pub async fn run_watch(
         .await
         .map_err(|e| Error::Nats(format!("failed to subscribe: {e}")))?;
 
+    // Ensure SUB interest is processed by the server before callers publish
+    // probe events; otherwise the first burst can be missed under CI timing.
+    client
+        .flush()
+        .await
+        .map_err(|e| Error::Nats(format!("failed to flush watch subscription: {e}")))?;
+
     let mut engine = CorrelationEngine::new(config.rules)?;
 
     let mut stats = WatchStats {

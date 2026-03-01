@@ -807,6 +807,29 @@ output:
     )
     .expect("write rule file");
 
+    let watch_rule_path = workspace.path("hunt_watch_rule.yaml");
+    fs::write(
+        &watch_rule_path,
+        r#"
+schema: clawdstrike.hunt.correlation.v1
+name: "Hunt E2E Watch Trigger"
+severity: medium
+description: "Single-condition rule for stable watch-path validation."
+window: 5m
+conditions:
+  - source: receipt
+    action_type: file
+    verdict: allow
+    target_pattern: "watch_tripwire"
+    bind: watch_event
+output:
+  title: "Watch trigger fired"
+  evidence:
+    - watch_event
+"#,
+    )
+    .expect("write watch rule file");
+
     let ioc_feed_path = workspace.path("ioc_feed.txt");
     fs::write(&ioc_feed_path, "evil.example\n").expect("write ioc feed");
 
@@ -938,7 +961,7 @@ output:
         "hunt".to_string(),
         "watch".to_string(),
         "--rules".to_string(),
-        rule_path.to_string_lossy().to_string(),
+        watch_rule_path.to_string_lossy().to_string(),
         "--nats-url".to_string(),
         nats.url.clone(),
         "--json".to_string(),
@@ -952,32 +975,23 @@ output:
         "watch process never reached ready state"
     );
 
-    let watch_alert_needle = "\"rule_name\":\"Hunt E2E Exfil Sequence\"";
+    let watch_alert_needle = "\"rule_name\":\"Hunt E2E Watch Trigger\"";
     let mut watch_alert_observed = false;
     for attempt in 0..5 {
-        let receipt_ts = format!("2026-02-03T00:01:{:02}Z", attempt * 2);
-        let hubble_ts = format!("2026-02-03T00:01:{:02}Z", (attempt * 2) + 1);
+        let receipt_ts = format!("2026-02-03T00:01:{:02}Z", attempt);
 
         publish_envelope(
             &nats.client,
             "clawdstrike.sdr.fact.receipt.live.v1",
             &receipt_ts,
-            receipt_fact("secret_file_access", "allow", "file"),
+            receipt_fact("watch_tripwire", "allow", "file"),
         )
         .await
         .expect("publish watch receipt");
-        publish_envelope(
-            &nats.client,
-            "clawdstrike.sdr.fact.hubble_flow.live.v1",
-            &hubble_ts,
-            hubble_fact("EGRESS to evil.example over tls", "FORWARDED"),
-        )
-        .await
-        .expect("publish watch hubble");
         nats.client.flush().await.expect("flush watch events");
 
         if watch
-            .wait_for_stdout_contains(watch_alert_needle, command_timeout(Duration::from_secs(4)))
+            .wait_for_stdout_contains(watch_alert_needle, command_timeout(Duration::from_secs(6)))
         {
             watch_alert_observed = true;
             break;

@@ -4,7 +4,7 @@ import { correlate } from './correlate/index.js';
 import { IocDatabase } from './correlate/index.js';
 import { buildReport, signReport, collectEvidence } from './report.js';
 import { parseHumanDuration } from './duration.js';
-import type { CorrelationRule, TimelineEvent, Alert, IocMatch, HuntReport, NormalizedVerdict } from './types.js';
+import type { CorrelationRule, TimelineEvent, Alert, IocMatch, HuntReport, NormalizedVerdict, EvidenceItem } from './types.js';
 
 export interface PlaybookResult {
   events: TimelineEvent[];
@@ -123,7 +123,7 @@ export class Playbook {
         evidenceSources.push(iocMatches);
       }
       if (evidenceSources.length > 0) {
-        const evidence = collectEvidence(...evidenceSources);
+        const evidence = deduplicateEvidence(collectEvidence(...evidenceSources));
         if (evidence.length > 0) {
           report = buildReport(this._reportTitle, evidence);
           // 7. Sign
@@ -171,6 +171,21 @@ export class Playbook {
       huntOptions: this._huntOptions,
     };
   }
+}
+
+function deduplicateEvidence(items: EvidenceItem[]): EvidenceItem[] {
+  const seen = new Set<string>();
+  const result: EvidenceItem[] = [];
+  let nextIndex = 0;
+  for (const item of items) {
+    const key = `${item.sourceType}|${item.timestamp instanceof Date ? item.timestamp.toISOString() : String(item.timestamp)}|${item.summary}`;
+    if (!seen.has(key)) {
+      seen.add(key);
+      result.push({ ...item, index: nextIndex });
+      nextIndex++;
+    }
+  }
+  return result;
 }
 
 function deduplicateAlerts(alerts: Alert[], windowMs: number): Alert[] {

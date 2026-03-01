@@ -64,7 +64,7 @@ class TestStream:
 
             pytest.skip("nats-py is installed; cannot test missing-package path")
         except ImportError:
-            pass
+            pass  # nats-py not installed, expected
 
         config = _make_config()
         with pytest.raises(WatchError, match="nats-py"):
@@ -91,7 +91,7 @@ class TestStreamAll:
 
             pytest.skip("nats-py is installed; cannot test missing-package path")
         except ImportError:
-            pass
+            pass  # nats-py not installed, expected
 
         config = _make_config()
         with pytest.raises(WatchError, match="nats-py"):

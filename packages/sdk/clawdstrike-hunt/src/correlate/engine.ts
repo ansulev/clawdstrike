@@ -135,9 +135,14 @@ export class CorrelationEngine {
 
   /**
    * Flush all windows and return alerts for any fully-matched sequences.
+   * When `asOf` is provided, eviction uses that timestamp instead of wall-clock time.
    */
-  flush(): Alert[] {
-    this.evictExpired();
+  flush(asOf?: Date): Alert[] {
+    if (asOf !== undefined) {
+      this.evictExpiredAt(asOf);
+    } else {
+      this.evictExpired();
+    }
 
     const alerts: Alert[] = [];
     for (const [ri, windows] of this.windows) {
@@ -263,7 +268,8 @@ export function correlate(rules: CorrelationRule[], events: TimelineEvent[]): Al
   for (const event of events) {
     alerts.push(...engine.processEvent(event));
   }
-  alerts.push(...engine.flush());
+  const lastTimestamp = events.length > 0 ? events[events.length - 1].timestamp : undefined;
+  alerts.push(...engine.flush(lastTimestamp));
   return alerts;
 }
 

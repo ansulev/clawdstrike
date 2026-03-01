@@ -14,7 +14,8 @@ from clawdstrike.hunt.types import Alert, IocEntry, IocMatch, TimelineEvent
 class ExportAdapter(Protocol):
     """Protocol for export adapters."""
 
-    async def export(self, items: list[Union[Alert, TimelineEvent]]) -> None: ...
+    async def export(self, items: list[Union[Alert, TimelineEvent]]) -> None:
+        pass
 
 
 class WebhookAdapter:
@@ -127,7 +128,7 @@ def to_stix(
                 "name": alert.title,
                 "description": alert.description,
                 "pattern_type": "clawdstrike",
-                "pattern": f"[alert:rule_name = '{alert.rule_name}']",
+                "pattern": f"[alert:rule_name = '{_escape_stix_value(alert.rule_name)}']",
                 "valid_from": alert.triggered_at.isoformat(),
                 "labels": [alert.severity.value],
             }
@@ -235,18 +236,24 @@ def _item_to_json(item: Union[Alert, TimelineEvent]) -> dict:
     }
 
 
+def _escape_stix_value(value: str) -> str:
+    """Escape backslashes and single quotes for embedding in STIX patterns."""
+    return value.replace("\\", "\\\\").replace("'", "\\'")
+
+
 def _ioc_to_stix_pattern(ioc: IocEntry) -> str:
     ioc_type_val = ioc.ioc_type.value if hasattr(ioc.ioc_type, "value") else str(ioc.ioc_type)
+    escaped = _escape_stix_value(ioc.indicator)
     mapping = {
-        "sha256": f"[file:hashes.'SHA-256' = '{ioc.indicator}']",
-        "sha1": f"[file:hashes.'SHA-1' = '{ioc.indicator}']",
-        "md5": f"[file:hashes.MD5 = '{ioc.indicator}']",
-        "domain": f"[domain-name:value = '{ioc.indicator}']",
-        "ipv4": f"[ipv4-addr:value = '{ioc.indicator}']",
-        "ipv6": f"[ipv6-addr:value = '{ioc.indicator}']",
-        "url": f"[url:value = '{ioc.indicator}']",
+        "sha256": f"[file:hashes.'SHA-256' = '{escaped}']",
+        "sha1": f"[file:hashes.'SHA-1' = '{escaped}']",
+        "md5": f"[file:hashes.MD5 = '{escaped}']",
+        "domain": f"[domain-name:value = '{escaped}']",
+        "ipv4": f"[ipv4-addr:value = '{escaped}']",
+        "ipv6": f"[ipv6-addr:value = '{escaped}']",
+        "url": f"[url:value = '{escaped}']",
     }
-    return mapping.get(ioc_type_val, f"[x-clawdstrike:value = '{ioc.indicator}']")
+    return mapping.get(ioc_type_val, f"[x-clawdstrike:value = '{escaped}']")
 
 
 def _csv_escape(value: str) -> str:

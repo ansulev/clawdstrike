@@ -160,12 +160,16 @@ export function toStix(
 }
 
 /**
- * Convert items to CSV string. Auto-detects Alert vs TimelineEvent.
+ * Convert items to CSV string. Handles alerts, events, and mixed arrays.
  */
 export function toCSV(items: (Alert | TimelineEvent)[]): string {
   if (items.length === 0) return '';
 
   const alerts = items.filter(isAlert);
+  const events = items.filter((item): item is TimelineEvent => !isAlert(item));
+
+  const sections: string[] = [];
+
   if (alerts.length > 0) {
     const headers = [
       'ruleName',
@@ -187,9 +191,10 @@ export function toCSV(items: (Alert | TimelineEvent)[]): string {
         .map(csvEscape)
         .join(','),
     );
-    return [headers.join(','), ...rows].join('\n');
-  } else {
-    const events = items as TimelineEvent[];
+    sections.push([headers.join(','), ...rows].join('\n'));
+  }
+
+  if (events.length > 0) {
     const headers = [
       'timestamp',
       'source',
@@ -212,8 +217,10 @@ export function toCSV(items: (Alert | TimelineEvent)[]): string {
         .map(csvEscape)
         .join(','),
     );
-    return [headers.join(','), ...rows].join('\n');
+    sections.push([headers.join(','), ...rows].join('\n'));
   }
+
+  return sections.join('\n');
 }
 
 function isAlert(item: unknown): item is Alert {

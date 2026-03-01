@@ -794,7 +794,7 @@ conditions:
   - source: hubble
     action_type: egress
     verdict: forwarded
-    target_pattern: "evil\.example"
+    target_pattern: "evil\\.example"
     after: file_access
     within: 1m
     bind: egress_event

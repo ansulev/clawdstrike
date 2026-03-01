@@ -11,7 +11,7 @@ use crate::error::{Error, Result};
 
 use super::archive;
 use super::manifest::parse_pkg_manifest_toml;
-use super::{legacy_normalize_package_name, normalize_package_name};
+use super::normalize_package_name;
 
 /// An installed package record.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -38,7 +38,7 @@ pub struct PackageStore {
     root: PathBuf,
 }
 
-/// Reverse the directory name back to a package name (**legacy fallback**).
+/// Derive a display name from a package directory name when metadata is absent.
 ///
 /// New installs always persist the original name in [`StoreMetadata`],
 /// so [`PackageStore::list`] prefers that authoritative value and only
@@ -80,29 +80,6 @@ impl PackageStore {
         self.root.join(normalize_package_name(name)).join(version)
     }
 
-    /// Return candidate directory paths for a package version.
-    ///
-    /// The first path is the current collision-free normalization, followed by
-    /// the legacy normalization (if different) for backward compatibility.
-    fn package_dir_candidates(&self, name: &str, version: &str) -> Vec<PathBuf> {
-        let current = self.root.join(normalize_package_name(name)).join(version);
-        // Legacy unscoped names that start with `s--` can collide with the
-        // new scoped normalization prefix (`@scope/name` -> `s--scope--name`).
-        // Skip that fallback in this one ambiguous case.
-        if !name.starts_with('@') && name.starts_with("s--") {
-            return vec![current];
-        }
-        let legacy = self
-            .root
-            .join(legacy_normalize_package_name(name))
-            .join(version);
-        if legacy != current {
-            vec![current, legacy]
-        } else {
-            vec![current]
-        }
-    }
-
     /// Install a package from a `.cpkg` archive file.
     ///
     /// Atomically unpacks to a temp dir, validates the manifest, then moves
@@ -142,13 +119,7 @@ impl PackageStore {
 
         let name = &manifest.package.name;
         let version = &manifest.package.version;
-        let mut target = self.package_dir(name, version);
-        for candidate in self.package_dir_candidates(name, version) {
-            if candidate.exists() {
-                target = candidate;
-                break;
-            }
-        }
+        let target = self.package_dir(name, version);
 
         if let Some(parent) = target.parent() {
             fs::create_dir_all(parent)?;
@@ -223,14 +194,7 @@ impl PackageStore {
 
     /// Look up an installed package by name and version.
     pub fn get(&self, name: &str, version: &str) -> Result<Option<InstalledPackage>> {
-        let pkg_dir = match self
-            .package_dir_candidates(name, version)
-            .into_iter()
-            .find(|p| p.exists())
-        {
-            Some(path) => path,
-            None => return Ok(None),
-        };
+        let pkg_dir = self.package_dir(name, version);
         if !pkg_dir.exists() {
             return Ok(None);
         }
@@ -320,11 +284,7 @@ impl PackageStore {
 
     /// Remove an installed package.
     pub fn remove(&self, name: &str, version: &str) -> Result<()> {
-        let pkg_dir = self
-            .package_dir_candidates(name, version)
-            .into_iter()
-            .find(|p| p.exists())
-            .ok_or_else(|| Error::PkgError(format!("package {name}@{version} is not installed")))?;
+        let pkg_dir = self.package_dir(name, version);
         if !pkg_dir.exists() {
             return Err(Error::PkgError(format!(
                 "package {name}@{version} is not installed"
@@ -476,7 +436,7 @@ sandbox = "native"
     }
 
     #[test]
-    fn scoped_lookup_does_not_match_unscoped_s_prefix_legacy_fallback() {
+    fn scoped_lookup_does_not_match_unscoped_s_prefix() {
         let tmp = tempfile::tempdir().unwrap();
         let store = PackageStore::with_root(tmp.path().join("store")).unwrap();
 
@@ -592,9 +552,8 @@ sandbox = "native"
 
     #[test]
     fn denormalize_returns_dir_name_unchanged() {
-        // `denormalize_name` is a legacy fallback that no longer attempts
-        // to reverse `--` into scoped names because the mapping is
-        // ambiguous.  New installs store the original name in metadata.
+        // `denormalize_name` intentionally does not interpret `--` as scope
+        // separators because that mapping is ambiguous.
         assert_eq!(denormalize_name("acme--firewall"), "acme--firewall");
         assert_eq!(denormalize_name("my--pkg"), "my--pkg");
         assert_eq!(denormalize_name("a--b--c"), "a--b--c");

@@ -31,17 +31,6 @@ pub(crate) fn normalize_package_name(name: &str) -> String {
     }
 }
 
-/// Legacy package-name normalization used by older releases.
-///
-/// This is retained for backward-compatible lookups of pre-existing installs.
-pub(crate) fn legacy_normalize_package_name(name: &str) -> String {
-    if let Some(rest) = name.strip_prefix('@') {
-        rest.replace('/', "--")
-    } else {
-        name.to_string()
-    }
-}
-
 /// Percent-encode a package name for use in a single URL path segment.
 pub(crate) fn encode_url_path_segment(name: &str) -> String {
     name.replace('%', "%25")

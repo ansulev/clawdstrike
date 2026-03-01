@@ -4,10 +4,10 @@ import type {
   ToolInterceptor,
 } from "@clawdstrike/adapter-core";
 import {
-  ClawdstrikeBlockedError,
   createSecurityContext,
   resolveInterceptor,
   type SecuritySource,
+  wrapExecuteWithInterceptor,
 } from "@clawdstrike/adapter-core";
 
 type LangChainInvokeLike<TInput = unknown, TOutput = unknown> = {
@@ -111,37 +111,36 @@ function wrapToolWithContext<TTool extends LangChainToolLike>(
   const originalCall = hasCall ? tool._call!.bind(tool) : undefined;
 
   let lastDecision: Decision | null = null;
+  const trackingInterceptor: ToolInterceptor = {
+    beforeExecute: async (name, input, resolvedContext) => {
+      const result = await interceptor.beforeExecute(name, input, resolvedContext);
+      lastDecision = result.decision;
+      return result;
+    },
+    afterExecute: async (name, input, output, resolvedContext) =>
+      interceptor.afterExecute(name, input, output, resolvedContext),
+    onError: async (name, input, error, resolvedContext) =>
+      interceptor.onError(name, input, error, resolvedContext),
+  };
 
   const wrappedInvoke = hasInvoke
-    ? async (input: unknown, config?: unknown) => {
-        const resolvedContext = getContext ? getContext(toolName, input) : context;
-        return runIntercepted(
-          toolName,
-          interceptor,
-          resolvedContext,
-          input,
-          (decision) => {
-            lastDecision = decision;
-          },
-          (nextInput: unknown) => originalInvoke!(nextInput, config),
-        );
-      }
+    ? wrapExecuteWithInterceptor(
+        toolName,
+        (input: unknown, config?: unknown) => originalInvoke!(input, config),
+        trackingInterceptor,
+        context,
+        getContext,
+      )
     : undefined;
 
   const wrappedCall = hasCall
-    ? async (input: unknown, ...rest: unknown[]) => {
-        const resolvedContext = getContext ? getContext(toolName, input) : context;
-        return runIntercepted(
-          toolName,
-          interceptor,
-          resolvedContext,
-          input,
-          (decision) => {
-            lastDecision = decision;
-          },
-          (nextInput: unknown) => originalCall!(nextInput, ...rest),
-        );
-      }
+    ? wrapExecuteWithInterceptor(
+        toolName,
+        (input: unknown, ...rest: unknown[]) => originalCall!(input, ...rest),
+        trackingInterceptor,
+        context,
+        getContext,
+      )
     : undefined;
 
   return new Proxy(tool, {
@@ -163,51 +162,4 @@ function wrapToolWithContext<TTool extends LangChainToolLike>(
       return value;
     },
   });
-}
-
-async function runIntercepted<TOutput>(
-  toolName: string,
-  interceptor: ToolInterceptor,
-  context: SecurityContext,
-  input: unknown,
-  onDecision: (decision: Decision) => void,
-  invoke: (nextInput: unknown) => Promise<TOutput> | TOutput,
-): Promise<TOutput> {
-  let interceptResult;
-  try {
-    interceptResult = await interceptor.beforeExecute(toolName, input, context);
-  } catch (error) {
-    const err = error instanceof Error ? error : new Error(String(error));
-    await interceptor.onError(toolName, input, err, context);
-    throw err;
-  }
-
-  onDecision(interceptResult.decision);
-
-  if (!interceptResult.proceed) {
-    const { decision } = interceptResult;
-    throw new ClawdstrikeBlockedError(toolName, decision);
-  }
-
-  const nextInput = interceptResult.modifiedParameters ?? input;
-
-  if (interceptResult.replacementResult !== undefined) {
-    const processed = await interceptor.afterExecute(
-      toolName,
-      nextInput,
-      interceptResult.replacementResult as TOutput,
-      context,
-    );
-    return processed.output as TOutput;
-  }
-
-  try {
-    const output = await invoke(nextInput);
-    const processed = await interceptor.afterExecute(toolName, nextInput, output, context);
-    return processed.output as TOutput;
-  } catch (error) {
-    const err = error instanceof Error ? error : new Error(String(error));
-    await interceptor.onError(toolName, nextInput, err, context);
-    throw err;
-  }
 }

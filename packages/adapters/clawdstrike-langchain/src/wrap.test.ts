@@ -64,6 +64,34 @@ describe("secureTool", () => {
     await expect(secured.invoke({})).rejects.toThrow("boom");
     expect(onError).toHaveBeenCalledTimes(1);
   });
+
+  it("forwards sanitize modifiedInput through wrapped invoke()", async () => {
+    const interceptor: ToolInterceptor = {
+      beforeExecute: async () => ({
+        proceed: true,
+        decision: {
+          status: "sanitize",
+          reason_code: "ADC_POLICY_SANITIZE",
+        },
+        modifiedInput: "safe input",
+        duration: 0,
+      }),
+      afterExecute: async (_name, _input, output) => ({ output, modified: false }),
+      onError: async () => undefined,
+    };
+
+    const tool = {
+      name: "echo",
+      invoke: vi.fn(async (input: string) => input),
+    };
+
+    const secured = secureTool(tool, interceptor);
+    await expect(secured.invoke("unsafe input")).resolves.toBe("safe input");
+    expect(tool.invoke).toHaveBeenCalledWith("safe input", undefined);
+    expect((secured as { getLastDecision?: () => unknown }).getLastDecision?.()).toMatchObject({
+      status: "sanitize",
+    });
+  });
 });
 
 describe("secureTools", () => {

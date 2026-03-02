@@ -119,6 +119,7 @@ pub fn create_router(state: AppState) -> Router {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::keys::RegistryKeyManager;
     use axum::extract::{Path, Query, State};
     use axum::http::{header, HeaderMap, HeaderValue, StatusCode};
     use axum::Json;
@@ -437,6 +438,51 @@ mod tests {
 
         assert_ne!(publish_time_key, rotated_key);
         assert_eq!(proof.0.checkpoint_key, publish_time_key);
+    }
+
+    #[tokio::test]
+    async fn proof_falls_back_to_active_key_when_historical_private_key_is_missing() {
+        let (mut state, _tmp) = test_state();
+        let publisher = Keypair::from_seed(&[92u8; 32]);
+        let package = "proof-key-fallback-test";
+        let version = "1.0.0";
+
+        let (req, _archive) = publish_request(package, version, &publisher);
+        let _published = publish::publish(State(state.clone()), HeaderMap::new(), Json(req))
+            .await
+            .unwrap();
+
+        let att = attestation::get_attestation(
+            State(state.clone()),
+            Path((package.to_string(), version.to_string())),
+        )
+        .await
+        .unwrap();
+        let publish_time_key = att.0.registry_key.clone().unwrap();
+
+        let rotated = Keypair::from_seed(&[93u8; 32]);
+        let rotated_key = rotated.public_key().to_hex();
+
+        {
+            let mut key_mgr = state.key_manager.lock().unwrap();
+            key_mgr.rotate(rotated.clone(), 30).unwrap();
+        }
+
+        // Simulate restart behavior where only the active key is restored.
+        state.key_manager = std::sync::Arc::new(std::sync::Mutex::new(RegistryKeyManager::new(
+            rotated.clone(),
+        )));
+        state.registry_keypair = std::sync::Arc::new(rotated);
+
+        let proof = proof::get_proof(
+            State(state.clone()),
+            Path((package.to_string(), version.to_string())),
+        )
+        .await
+        .unwrap();
+
+        assert_ne!(publish_time_key, rotated_key);
+        assert_eq!(proof.0.checkpoint_key, rotated_key);
     }
 
     #[tokio::test]

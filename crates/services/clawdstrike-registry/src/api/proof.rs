@@ -87,11 +87,18 @@ pub async fn get_proof(
             .lock()
             .map_err(|e| RegistryError::Internal(format!("key_manager lock poisoned: {e}")))?;
         let signing_keypair = if let Some(ref kid) = key_id {
-            key_mgr.keypair_for_key_id(kid).ok_or_else(|| {
-                RegistryError::Internal(format!(
-                    "missing signing key material for published key_id {kid}"
-                ))
-            })?
+            match key_mgr.keypair_for_key_id(kid) {
+                Some(kp) => kp,
+                None => {
+                    tracing::warn!(
+                        key_id = %kid,
+                        package = %name,
+                        version = %version,
+                        "missing historical signing key material; falling back to active key for proof checkpoint"
+                    );
+                    key_mgr.current_keypair()
+                }
+            }
         } else {
             key_mgr.current_keypair()
         };

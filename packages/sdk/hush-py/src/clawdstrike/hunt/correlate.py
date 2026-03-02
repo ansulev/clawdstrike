@@ -59,6 +59,21 @@ def _parse_source(val: Any, condition_index: int) -> tuple[str, ...]:
     )
 
 
+def _parse_optional_condition_str(
+    condition: dict[str, Any],
+    field: str,
+    condition_index: int,
+) -> str | None:
+    value = condition.get(field)
+    if value is None:
+        return None
+    if isinstance(value, str):
+        return value
+    raise CorrelationError(
+        f"condition {condition_index} has invalid '{field}' (expected string)"
+    )
+
+
 def _desugar_sequence(items: list[dict]) -> list[dict]:
     """Transform a sequence shorthand into standard condition dicts.
 
@@ -148,11 +163,15 @@ def parse_rule(yaml_str: str) -> CorrelationRule:
             RuleCondition(
                 bind=bind,
                 source=source,
-                action_type=rc.get("action_type"),
-                verdict=rc.get("verdict"),
-                target_pattern=rc.get("target_pattern"),
-                not_target_pattern=rc.get("not_target_pattern"),
-                after=rc.get("after"),
+                action_type=_parse_optional_condition_str(rc, "action_type", idx),
+                verdict=_parse_optional_condition_str(rc, "verdict", idx),
+                target_pattern=_parse_optional_condition_str(rc, "target_pattern", idx),
+                not_target_pattern=_parse_optional_condition_str(
+                    rc,
+                    "not_target_pattern",
+                    idx,
+                ),
+                after=_parse_optional_condition_str(rc, "after", idx),
                 within=within,
             )
         )

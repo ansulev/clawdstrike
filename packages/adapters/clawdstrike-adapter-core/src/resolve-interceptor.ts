@@ -27,7 +27,7 @@ export type SecuritySource = ClawdstrikeLike | PolicyEngineLike | ToolIntercepto
  * Resolve a {@link SecuritySource} into a concrete {@link ToolInterceptor}.
  *
  * Resolution order:
- * 1. Already a `ToolInterceptor` → return as-is
+ * 1. Already a `ToolInterceptor` → return as-is or apply config via `withConfig`
  * 2. `ClawdstrikeLike` with `createInterceptor` → call it
  * 3. `PolicyEngineLike` → wrap in a new `BaseToolInterceptor`
  */
@@ -55,11 +55,27 @@ export function resolveInterceptor(
   return new BaseToolInterceptor(source as PolicyEngineLike, config ?? {});
 }
 
+type ConfigurableToolInterceptor = ToolInterceptor & {
+  withConfig(config: AdapterConfig): ToolInterceptor;
+};
+
 function withAdapterConfig(source: ToolInterceptor, config?: AdapterConfig): ToolInterceptor {
-  if (!(source instanceof BaseToolInterceptor) || config === undefined) {
+  if (config === undefined) {
     return source;
   }
-  return source.withConfig(config);
+
+  if (isConfigurableToolInterceptor(source)) {
+    return source.withConfig(config);
+  }
+
+  if (config.translateToolCall !== undefined) {
+    throw new Error(
+      "ToolInterceptor source does not support adapter translator config. " +
+        "Use a PolicyEngineLike/ClawdstrikeLike source or a configurable interceptor.",
+    );
+  }
+
+  return source;
 }
 
 function withDefaultOnError(interceptor: Partial<ToolInterceptor>): ToolInterceptor {
@@ -97,5 +113,12 @@ export function isClawdstrikeLike(value: unknown): value is ClawdstrikeLike {
     typeof value === "object" &&
     value !== null &&
     typeof (value as ClawdstrikeLike).createInterceptor === "function"
+  );
+}
+
+function isConfigurableToolInterceptor(value: ToolInterceptor): value is ConfigurableToolInterceptor {
+  return (
+    value instanceof BaseToolInterceptor ||
+    typeof (value as Partial<ConfigurableToolInterceptor>).withConfig === "function"
   );
 }

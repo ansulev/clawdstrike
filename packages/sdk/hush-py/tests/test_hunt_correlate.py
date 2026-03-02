@@ -400,6 +400,35 @@ output:
         with pytest.raises(CorrelationError, match="condition 0 has invalid 'source'"):
             parse_rule(yaml_str)
 
+    @pytest.mark.parametrize(
+        ("field", "value"),
+        [
+            ("action_type", "123"),
+            ("verdict", "true"),
+            ("target_pattern", "[oops]"),
+            ("not_target_pattern", "{bad: value}"),
+            ("after", "[first]"),
+        ],
+    )
+    def test_reject_non_string_optional_condition_fields(self, field: str, value: str) -> None:
+        yaml_str = f"""\
+schema: clawdstrike.hunt.correlation.v1
+name: "Bad optional field"
+severity: low
+description: "test"
+window: 10s
+conditions:
+  - source: receipt
+    bind: evt
+    {field}: {value}
+output:
+  title: "test"
+  evidence:
+    - evt
+"""
+        with pytest.raises(CorrelationError, match=f"condition 0 has invalid '{field}'"):
+            parse_rule(yaml_str)
+
 
 # ---------------------------------------------------------------------------
 # Load from files

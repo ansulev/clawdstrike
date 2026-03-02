@@ -190,13 +190,33 @@ mod platform {
                 kFSEventStreamCreateFlagFileEvents | kFSEventStreamCreateFlagUseCFTypes,
             );
 
+            if stream.is_null() {
+                warn!("FSEventStreamCreate returned null; collector will not start");
+                cf::CFRelease(paths_array);
+                for cf_str in cf_paths {
+                    cf::CFRelease(cf_str);
+                }
+                drop(Box::from_raw(raw_ptr));
+                return;
+            }
+
             FSEventStreamScheduleWithRunLoop(
                 stream,
                 cf::CFRunLoopGetCurrent(),
                 cf::kCFRunLoopDefaultMode,
             );
 
-            FSEventStreamStart(stream);
+            if FSEventStreamStart(stream) == 0 {
+                warn!("failed to start FSEventStream");
+                FSEventStreamInvalidate(stream);
+                FSEventStreamRelease(stream);
+                cf::CFRelease(paths_array);
+                for cf_str in cf_paths {
+                    cf::CFRelease(cf_str);
+                }
+                drop(Box::from_raw(raw_ptr));
+                return;
+            }
 
             // CFRunLoopRun() blocks forever. Everything below is unreachable
             // during normal operation but kept for completeness if the run

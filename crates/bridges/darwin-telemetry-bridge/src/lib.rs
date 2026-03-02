@@ -31,10 +31,15 @@ pub mod unified_log;
 
 #[cfg(target_os = "macos")]
 mod bridge {
-    use std::sync::Mutex;
+    use std::sync::Arc;
     use std::time::Duration;
 
+    use bridge_runtime::{
+        publish_fact, spawn_admin_server, spawn_outbox_worker, BridgeMetrics, ChainState,
+        OutboxConfig, PublishContext, PublishError, PublishRequest, SqliteOutbox,
+    };
     use hush_core::Keypair;
+    use tokio::sync::Mutex;
     use tracing::{debug, info, warn};
 
     use crate::error::{Error, Result};
@@ -70,6 +75,24 @@ mod bridge {
         pub max_consecutive_errors: u64,
         /// Path to SPIFFE SVID PEM file.
         pub svid_path: Option<String>,
+        /// Admin HTTP listen address for /healthz, /readyz, /metrics.
+        pub admin_listen_addr: String,
+        /// Enable durable outbox enqueue/retry.
+        pub outbox_enabled: bool,
+        /// Optional SQLite file path for durable outbox.
+        pub outbox_path: Option<String>,
+        /// Outbox flush interval.
+        pub outbox_flush_interval_ms: u64,
+        /// Maximum pending outbox rows before enqueue rejects.
+        pub outbox_max_pending: u64,
+        /// Initial retry backoff.
+        pub outbox_retry_base_ms: u64,
+        /// Maximum retry backoff.
+        pub outbox_retry_max_ms: u64,
+        /// Readiness degrades when outbox pending exceeds this threshold.
+        pub readiness_outbox_degraded_threshold: u64,
+        /// Test-only failpoint to force publish failure.
+        pub force_publish_failures: bool,
 
         // --- Process collector ---
         /// Whether the process collector is enabled.
@@ -103,6 +126,15 @@ mod bridge {
                 stream_max_age_seconds: 86_400,
                 max_consecutive_errors: 50,
                 svid_path: None,
+                admin_listen_addr: "0.0.0.0:2112".to_string(),
+                outbox_enabled: false,
+                outbox_path: Some("/tmp/darwin-telemetry-bridge-outbox.db".to_string()),
+                outbox_flush_interval_ms: 1000,
+                outbox_max_pending: 10_000,
+                outbox_retry_base_ms: 500,
+                outbox_retry_max_ms: 30_000,
+                readiness_outbox_degraded_threshold: 100,
+                force_publish_failures: false,
                 process_collector_enabled: true,
                 process_poll_interval_secs: 10,
                 fsevents_collector_enabled: true,
@@ -112,12 +144,6 @@ mod bridge {
                 log_predicate: None,
             }
         }
-    }
-
-    /// Combined sequence + hash state protected by a single lock.
-    struct ChainState {
-        seq: u64,
-        prev_hash: Option<String>,
     }
 
     /// The darwin-telemetry-to-NATS bridge.
@@ -130,6 +156,8 @@ mod bridge {
         js: async_nats::jetstream::Context,
         config: BridgeConfig,
         chain_state: Mutex<ChainState>,
+        metrics: Arc<BridgeMetrics>,
+        outbox: Option<Arc<SqliteOutbox>>,
         /// SPIFFE ID read from the workload SVID, if configured.
         spiffe_id: Option<String>,
     }
@@ -183,15 +211,41 @@ mod bridge {
                 None => None,
             };
 
+            let metrics = Arc::new(BridgeMetrics::new("darwin-telemetry-bridge"));
+            metrics.set_nats_connected(
+                nats_client.connection_state() == async_nats::connection::State::Connected,
+            );
+
+            let outbox = if config.outbox_enabled {
+                let outbox_cfg = OutboxConfig {
+                    path: config
+                        .outbox_path
+                        .clone()
+                        .unwrap_or_else(|| "/tmp/darwin-telemetry-bridge-outbox.db".to_string()),
+                    max_pending: config.outbox_max_pending,
+                    retry_base_ms: config.outbox_retry_base_ms,
+                    retry_max_ms: config.outbox_retry_max_ms,
+                };
+                let outbox = Arc::new(
+                    SqliteOutbox::open(outbox_cfg)
+                        .await
+                        .map_err(Error::Config)?,
+                );
+                let pending = outbox.pending_count().await.map_err(Error::Config)?;
+                metrics.set_outbox_pending(pending);
+                Some(outbox)
+            } else {
+                None
+            };
+
             Ok(Self {
                 keypair,
                 nats_client,
                 js,
                 config,
-                chain_state: Mutex::new(ChainState {
-                    seq: 1,
-                    prev_hash: None,
-                }),
+                chain_state: Mutex::new(ChainState::default()),
+                metrics,
+                outbox,
                 spiffe_id,
             })
         }
@@ -201,6 +255,30 @@ mod bridge {
         /// Spawns all enabled collectors and processes events through the
         /// signing + NATS publish pipeline until an unrecoverable error occurs.
         pub async fn run(&self) -> Result<()> {
+            let admin_handle = spawn_admin_server(
+                self.config.admin_listen_addr.clone(),
+                self.metrics.clone(),
+                self.config.readiness_outbox_degraded_threshold,
+            );
+            let outbox_worker = self.outbox.as_ref().map(|outbox| {
+                spawn_outbox_worker(
+                    "darwin-telemetry-bridge".to_string(),
+                    outbox.clone(),
+                    self.nats_client.clone(),
+                    self.js.clone(),
+                    self.metrics.clone(),
+                    Duration::from_millis(self.config.outbox_flush_interval_ms),
+                )
+            });
+            let result = self.run_internal().await;
+            admin_handle.abort();
+            if let Some(handle) = outbox_worker {
+                handle.abort();
+            }
+            result
+        }
+
+        async fn run_internal(&self) -> Result<()> {
             let (tx, mut rx) = tokio::sync::mpsc::channel::<DarwinEvent>(4096);
 
             // Spawn enabled collectors
@@ -248,6 +326,9 @@ mod bridge {
             let max_backoff = Duration::from_secs(30);
 
             loop {
+                self.metrics.set_nats_connected(
+                    self.nats_client.connection_state() == async_nats::connection::State::Connected,
+                );
                 match rx.recv().await {
                     Some(event) => {
                         if let Err(e) = self.handle_event(&event).await {
@@ -306,50 +387,21 @@ mod bridge {
                 fact["spiffe_id"] = serde_json::Value::String(spiffe_id.clone());
             }
 
-            // Build and sign the Spine envelope under a single lock, then drop
-            // the guard before the async NATS publish.
-            let (envelope, seq) = {
-                let mut state = self.chain_state.lock().unwrap_or_else(|poisoned| {
-                    tracing::warn!("chain_state mutex was poisoned, recovering");
-                    poisoned.into_inner()
-                });
-                let seq = state.seq;
-                let prev_hash = state.prev_hash.clone();
-
-                let envelope = spine::build_signed_envelope(
-                    &self.keypair,
-                    seq,
-                    prev_hash,
-                    fact,
-                    spine::now_rfc3339(),
-                )?;
-
-                // Update chain state atomically.
-                state.seq += 1;
-                if let Some(hash) = envelope.get("envelope_hash").and_then(|v| v.as_str()) {
-                    state.prev_hash = Some(hash.to_string());
-                }
-                (envelope, seq)
-            };
-
-            // Publish to NATS.
             let subject = format!("{NATS_SUBJECT_PREFIX}.{}.v1", event.subject_suffix());
+            let publish_context = PublishContext {
+                chain_state: &self.chain_state,
+                keypair: &self.keypair,
+                nats_client: &self.nats_client,
+                js: &self.js,
+                outbox: self.outbox.as_deref(),
+                metrics: &self.metrics,
+            };
+            let publish_request = PublishRequest::new(subject.clone(), fact)
+                .with_forced_failure(self.config.force_publish_failures);
 
-            if subject.is_empty()
-                || !subject.is_ascii()
-                || subject.contains(' ')
-                || subject.contains('\n')
-            {
-                tracing::error!(subject = %subject, "invalid NATS subject, skipping publish");
-                return Err(Error::Config(format!("invalid NATS subject: {subject}")));
-            }
-
-            let payload = serde_json::to_vec(&envelope)?;
-
-            self.nats_client
-                .publish(subject.clone(), payload.into())
+            let seq = publish_fact(&publish_context, publish_request)
                 .await
-                .map_err(|e| Error::Nats(format!("publish failed: {e}")))?;
+                .map_err(map_publish_error)?;
 
             debug!(
                 subject,
@@ -370,6 +422,16 @@ mod bridge {
         /// Get the keypair issuer string.
         pub fn issuer(&self) -> String {
             spine::issuer_from_keypair(&self.keypair)
+        }
+    }
+
+    fn map_publish_error(err: PublishError) -> Error {
+        match err {
+            PublishError::Config(message) => Error::Config(message),
+            PublishError::Spine(err) => Error::Spine(err),
+            PublishError::Json(err) => Error::Json(err),
+            PublishError::Publish(message) => Error::Nats(message),
+            PublishError::Outbox(message) => Error::Config(message),
         }
     }
 }

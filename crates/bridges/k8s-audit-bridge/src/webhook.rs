@@ -43,7 +43,10 @@ impl AuditVerb {
 
     /// Whether this verb is a mutation (write operation).
     pub fn is_mutation(&self) -> bool {
-        matches!(self, Self::Create | Self::Update | Self::Delete | Self::Patch | Self::Exec)
+        matches!(
+            self,
+            Self::Create | Self::Update | Self::Delete | Self::Patch | Self::Exec
+        )
     }
 }
 
@@ -145,7 +148,9 @@ pub struct EventList {
 }
 
 /// Parse incoming webhook payload as either an EventList or a single Event.
-pub fn parse_webhook_payload(body: &[u8]) -> std::result::Result<Vec<AuditEvent>, serde_json::Error> {
+pub fn parse_webhook_payload(
+    body: &[u8],
+) -> std::result::Result<Vec<AuditEvent>, serde_json::Error> {
     // First try to parse as a raw JSON value to check the "kind" field.
     let value: serde_json::Value = serde_json::from_slice(body)?;
 
@@ -187,7 +192,10 @@ mod tests {
         assert_eq!(events.len(), 1);
         assert_eq!(events[0].verb, AuditVerb::Create);
         assert_eq!(events[0].user.username, "admin");
-        assert_eq!(events[0].object_ref.as_ref().map(|r| r.resource.as_str()), Some("pods"));
+        assert_eq!(
+            events[0].object_ref.as_ref().map(|r| r.resource.as_str()),
+            Some("pods")
+        );
         // Verify K8s wire-format fields (auditID, requestURI, sourceIPs) are deserialized
         assert_eq!(events[0].audit_id, "abc-123");
         assert_eq!(events[0].request_uri, "/api/v1/namespaces/default/pods");

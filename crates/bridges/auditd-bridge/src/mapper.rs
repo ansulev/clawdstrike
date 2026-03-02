@@ -101,9 +101,7 @@ pub fn classify_severity(event: &AuditEvent) -> Severity {
         AuditEventType::IntegrityData => Severity::Critical,
 
         // Authentication failures are high severity.
-        AuditEventType::UserAuth | AuditEventType::UserLogin => {
-            classify_auth_severity(event)
-        }
+        AuditEventType::UserAuth | AuditEventType::UserLogin => classify_auth_severity(event),
 
         // Execve: check for uid=0 + sensitive paths.
         AuditEventType::Execve => classify_execve_severity(event),
@@ -190,7 +188,7 @@ fn classify_syscall_severity(event: &AuditEvent) -> Severity {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::audit::{AuditRecord, AuditEventType};
+    use crate::audit::{AuditEventType, AuditRecord};
 
     fn make_record(event_type: AuditEventType, fields: &[(&str, &str)]) -> AuditRecord {
         AuditRecord {
@@ -198,7 +196,10 @@ mod tests {
             raw_type: format!("{event_type:?}").to_uppercase(),
             timestamp: 1_614_556_843.937,
             serial: 100,
-            fields: fields.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect(),
+            fields: fields
+                .iter()
+                .map(|(k, v)| (k.to_string(), v.to_string()))
+                .collect(),
             raw_line: String::new(),
         }
     }
@@ -252,7 +253,10 @@ mod tests {
         let event = make_event(
             AuditEventType::Execve,
             vec![
-                make_record(AuditEventType::Syscall, &[("uid", "0"), ("exe", "/usr/bin/cat")]),
+                make_record(
+                    AuditEventType::Syscall,
+                    &[("uid", "0"), ("exe", "/usr/bin/cat")],
+                ),
                 make_record(AuditEventType::Execve, &[("a0", "cat")]),
                 make_record(AuditEventType::Path, &[("name", "/etc/shadow")]),
             ],
@@ -264,7 +268,10 @@ mod tests {
     fn root_execve_normal_path_is_medium() {
         let event = make_event(
             AuditEventType::Execve,
-            vec![make_record(AuditEventType::Syscall, &[("uid", "0"), ("exe", "/usr/bin/ls")])],
+            vec![make_record(
+                AuditEventType::Syscall,
+                &[("uid", "0"), ("exe", "/usr/bin/ls")],
+            )],
         );
         assert_eq!(classify_severity(&event), Severity::Medium);
     }
@@ -273,7 +280,10 @@ mod tests {
     fn nonroot_execve_is_low() {
         let event = make_event(
             AuditEventType::Execve,
-            vec![make_record(AuditEventType::Syscall, &[("uid", "1000"), ("exe", "/usr/bin/ls")])],
+            vec![make_record(
+                AuditEventType::Syscall,
+                &[("uid", "1000"), ("exe", "/usr/bin/ls")],
+            )],
         );
         assert_eq!(classify_severity(&event), Severity::Low);
     }
@@ -303,11 +313,10 @@ mod tests {
     fn map_event_produces_valid_fact() {
         let event = make_event(
             AuditEventType::Syscall,
-            vec![make_record(AuditEventType::Syscall, &[
-                ("uid", "1000"),
-                ("exe", "/usr/bin/ls"),
-                ("comm", "ls"),
-            ])],
+            vec![make_record(
+                AuditEventType::Syscall,
+                &[("uid", "1000"), ("exe", "/usr/bin/ls"), ("comm", "ls")],
+            )],
         );
         let fact = map_event(&event);
         assert!(fact.is_some());

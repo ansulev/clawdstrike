@@ -4,36 +4,27 @@
 //!
 //! Receives Kubernetes API server audit webhooks and publishes them as signed
 //! Spine envelopes to NATS JetStream.
-//!
-//! ## Architecture
-//!
-//! ```text
-//! K8s API Server (webhook POST) ─► axum HTTP ─► mapper ─► Spine envelope ─► NATS
-//! ```
-//!
-//! The bridge:
-//! 1. Runs an axum HTTP server that receives audit webhook POSTs
-//! 2. Parses `EventList` or single `Event` payloads
-//! 3. Maps each event to a Spine fact via [`mapper`]
-//! 4. Signs the fact into a [`spine::envelope`] using an Ed25519 keypair
-//! 5. Publishes to NATS subject `clawdstrike.spine.envelope.k8s_audit.{verb}.v1`
-//!
-//! Filtering is configurable: verbs, resources, and namespaces can be filtered.
 
 pub mod error;
 pub mod mapper;
 pub mod webhook;
 
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::Duration;
 
 use axum::body::Bytes;
 use axum::extract::State;
-use axum::http::StatusCode;
-use axum::response::IntoResponse;
+use axum::http::header::CONTENT_TYPE;
+use axum::http::{HeaderValue, StatusCode};
+use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
-use axum::Router;
+use axum::{Json, Router};
+use bridge_runtime::{
+    publish_fact, spawn_outbox_worker, BridgeMetrics, ChainState, OutboxConfig, PublishContext,
+    PublishError, PublishRequest, SqliteOutbox,
+};
 use hush_core::Keypair;
+use tokio::sync::Mutex;
 use tracing::{debug, error, info, warn};
 
 use crate::error::{Error, Result};
@@ -76,6 +67,22 @@ pub struct BridgeConfig {
     /// Path to SPIFFE SVID PEM file. When set, the bridge reads the workload
     /// SPIFFE ID and includes it in every published fact.
     pub svid_path: Option<String>,
+    /// Enable local durable outbox enqueue/retry on publish failures.
+    pub outbox_enabled: bool,
+    /// Optional SQLite path for outbox persistence.
+    pub outbox_path: Option<String>,
+    /// Outbox worker poll interval.
+    pub outbox_flush_interval_ms: u64,
+    /// Maximum pending rows before enqueue rejects.
+    pub outbox_max_pending: u64,
+    /// Initial retry backoff after failed publish.
+    pub outbox_retry_base_ms: u64,
+    /// Maximum retry backoff.
+    pub outbox_retry_max_ms: u64,
+    /// Readiness degrades when outbox pending exceeds this threshold.
+    pub readiness_outbox_degraded_threshold: u64,
+    /// Test-only flag to force publish failure path.
+    pub force_publish_failures: bool,
 }
 
 impl Default for BridgeConfig {
@@ -92,24 +99,27 @@ impl Default for BridgeConfig {
             stream_max_age_seconds: 86_400,
             max_consecutive_errors: 50,
             svid_path: None,
+            outbox_enabled: false,
+            outbox_path: Some("/tmp/k8s-audit-bridge-outbox.db".to_string()),
+            outbox_flush_interval_ms: 1000,
+            outbox_max_pending: 10_000,
+            outbox_retry_base_ms: 500,
+            outbox_retry_max_ms: 30_000,
+            readiness_outbox_degraded_threshold: 100,
+            force_publish_failures: false,
         }
     }
-}
-
-/// Combined sequence + hash state protected by a single lock.
-struct ChainState {
-    seq: u64,
-    prev_hash: Option<String>,
 }
 
 /// Shared bridge state passed to axum handlers via `Arc`.
 pub struct Bridge {
     keypair: Keypair,
     nats_client: async_nats::Client,
-    #[allow(dead_code)]
     js: async_nats::jetstream::Context,
     config: BridgeConfig,
     chain_state: Mutex<ChainState>,
+    metrics: Arc<BridgeMetrics>,
+    outbox: Option<Arc<SqliteOutbox>>,
     /// SPIFFE ID read from the workload SVID, if configured.
     spiffe_id: Option<String>,
 }
@@ -163,30 +173,67 @@ impl Bridge {
             None => None,
         };
 
+        let metrics = Arc::new(BridgeMetrics::new("k8s-audit-bridge"));
+        metrics.set_nats_connected(
+            nats_client.connection_state() == async_nats::connection::State::Connected,
+        );
+
+        let outbox = if config.outbox_enabled {
+            let outbox_cfg = OutboxConfig {
+                path: config
+                    .outbox_path
+                    .clone()
+                    .unwrap_or_else(|| "/tmp/k8s-audit-bridge-outbox.db".to_string()),
+                max_pending: config.outbox_max_pending,
+                retry_base_ms: config.outbox_retry_base_ms,
+                retry_max_ms: config.outbox_retry_max_ms,
+            };
+            let outbox = Arc::new(
+                SqliteOutbox::open(outbox_cfg)
+                    .await
+                    .map_err(Error::Config)?,
+            );
+            let pending = outbox.pending_count().await.map_err(Error::Config)?;
+            metrics.set_outbox_pending(pending);
+            Some(outbox)
+        } else {
+            None
+        };
+
         Ok(Self {
             keypair,
             nats_client,
             js,
             config,
-            chain_state: Mutex::new(ChainState {
-                seq: 1,
-                prev_hash: None,
-            }),
+            chain_state: Mutex::new(ChainState::default()),
+            metrics,
+            outbox,
             spiffe_id,
         })
     }
 
     /// Run the bridge HTTP server.
-    ///
-    /// Starts an axum server that listens for K8s audit webhook POSTs.
     pub async fn run(self) -> Result<()> {
         let listen_addr = self.config.listen_addr.clone();
         let bridge = Arc::new(self);
 
+        let outbox_worker = bridge.outbox.as_ref().map(|outbox| {
+            spawn_outbox_worker(
+                "k8s-audit-bridge".to_string(),
+                outbox.clone(),
+                bridge.nats_client.clone(),
+                bridge.js.clone(),
+                bridge.metrics.clone(),
+                Duration::from_millis(bridge.config.outbox_flush_interval_ms),
+            )
+        });
+
         let app = Router::new()
             .route("/webhook", post(handle_webhook))
             .route("/healthz", get(handle_healthz))
-            .with_state(bridge);
+            .route("/readyz", get(handle_readyz))
+            .route("/metrics", get(handle_metrics))
+            .with_state(bridge.clone());
 
         info!(listen_addr = %listen_addr, "starting K8s audit webhook server");
 
@@ -194,21 +241,22 @@ impl Bridge {
             .await
             .map_err(|e| Error::Http(format!("failed to bind {listen_addr}: {e}")))?;
 
-        axum::serve(listener, app)
+        let result = axum::serve(listener, app)
             .await
-            .map_err(|e| Error::Http(format!("server error: {e}")))?;
+            .map_err(|e| Error::Http(format!("server error: {e}")));
 
-        Ok(())
+        if let Some(handle) = outbox_worker {
+            handle.abort();
+        }
+
+        result
     }
 
     /// Handle a single K8s audit event: filter, map, sign, publish.
     async fn handle_event(&self, event: &AuditEvent) -> Result<()> {
         // Verb filter: if configured, only forward matching verbs.
         if !self.config.verb_filter.is_empty() && !self.config.verb_filter.contains(&event.verb) {
-            debug!(
-                verb = event.verb.subject_suffix(),
-                "skipping filtered verb"
-            );
+            debug!(verb = event.verb.subject_suffix(), "skipping filtered verb");
             return Ok(());
         }
 
@@ -231,7 +279,10 @@ impl Bridge {
                 .iter()
                 .any(|ns| ns.eq_ignore_ascii_case(event_ns))
             {
-                debug!(namespace = event_ns, "skipping event outside namespace allowlist");
+                debug!(
+                    namespace = event_ns,
+                    "skipping event outside namespace allowlist"
+                );
                 return Ok(());
             }
         }
@@ -262,53 +313,22 @@ impl Bridge {
             fact["spiffe_id"] = serde_json::Value::String(spiffe_id.clone());
         }
 
-        // Build and sign the Spine envelope under a single lock, then drop the
-        // guard before the async NATS publish.
-        let (envelope, seq) = {
-            let mut state = self.chain_state.lock().unwrap_or_else(|poisoned| {
-                tracing::warn!("chain_state mutex was poisoned, recovering");
-                poisoned.into_inner()
-            });
-            let seq = state.seq;
-            let prev_hash = state.prev_hash.clone();
+        let subject = format!("{NATS_SUBJECT_PREFIX}.{}.v1", event.verb.subject_suffix());
 
-            let envelope = spine::build_signed_envelope(
-                &self.keypair,
-                seq,
-                prev_hash,
-                fact,
-                spine::now_rfc3339(),
-            )?;
-
-            // Update chain state atomically.
-            state.seq += 1;
-            if let Some(hash) = envelope.get("envelope_hash").and_then(|v| v.as_str()) {
-                state.prev_hash = Some(hash.to_string());
-            }
-            (envelope, seq)
+        let publish_context = PublishContext {
+            chain_state: &self.chain_state,
+            keypair: &self.keypair,
+            nats_client: &self.nats_client,
+            js: &self.js,
+            outbox: self.outbox.as_deref(),
+            metrics: &self.metrics,
         };
+        let publish_request = PublishRequest::new(subject.clone(), fact)
+            .with_forced_failure(self.config.force_publish_failures);
 
-        // Publish to NATS.
-        let subject = format!(
-            "{NATS_SUBJECT_PREFIX}.{}.v1",
-            event.verb.subject_suffix()
-        );
-
-        if subject.is_empty()
-            || !subject.is_ascii()
-            || subject.contains(' ')
-            || subject.contains('\n')
-        {
-            tracing::error!(subject = %subject, "invalid NATS subject, skipping publish");
-            return Err(Error::Config(format!("invalid NATS subject: {subject}")));
-        }
-
-        let payload = serde_json::to_vec(&envelope)?;
-
-        self.nats_client
-            .publish(subject.clone(), payload.into())
+        let seq = publish_fact(&publish_context, publish_request)
             .await
-            .map_err(|e| Error::Nats(format!("publish failed: {e}")))?;
+            .map_err(map_publish_error)?;
 
         debug!(
             subject,
@@ -332,11 +352,18 @@ impl Bridge {
     }
 }
 
+fn map_publish_error(err: PublishError) -> Error {
+    match err {
+        PublishError::Config(message) => Error::Config(message),
+        PublishError::Spine(err) => Error::Spine(err),
+        PublishError::Json(err) => Error::Json(err),
+        PublishError::Publish(message) => Error::Nats(message),
+        PublishError::Outbox(message) => Error::Config(message),
+    }
+}
+
 /// Axum handler for the webhook endpoint.
-async fn handle_webhook(
-    State(bridge): State<Arc<Bridge>>,
-    body: Bytes,
-) -> impl IntoResponse {
+async fn handle_webhook(State(bridge): State<Arc<Bridge>>, body: Bytes) -> impl IntoResponse {
     let events = match parse_webhook_payload(&body) {
         Ok(events) => events,
         Err(e) => {
@@ -358,15 +385,49 @@ async fn handle_webhook(
     }
 
     if errors > 0 {
-        warn!(errors, total = events.len(), "some events failed to process");
+        warn!(
+            errors,
+            total = events.len(),
+            "some events failed to process"
+        );
+        bridge.metrics.inc_webhook_5xx();
+        // With outbox enabled, publish failures are converted to enqueue success,
+        // so remaining failures still represent transient HTTP retry-worthy errors.
+        return StatusCode::SERVICE_UNAVAILABLE;
     }
 
-    // Always return 200 to the API server to avoid retry storms.
-    // Failures are logged and tracked internally.
     StatusCode::OK
 }
 
 /// Axum handler for health check.
 async fn handle_healthz() -> impl IntoResponse {
     StatusCode::OK
+}
+
+/// Axum handler for readiness check.
+async fn handle_readyz(State(bridge): State<Arc<Bridge>>) -> impl IntoResponse {
+    let readiness = bridge
+        .metrics
+        .readiness(bridge.config.readiness_outbox_degraded_threshold);
+    let code = if readiness.status == "ready" {
+        StatusCode::OK
+    } else {
+        StatusCode::SERVICE_UNAVAILABLE
+    };
+    (code, Json(readiness))
+}
+
+/// Axum handler for Prometheus metrics.
+async fn handle_metrics(State(bridge): State<Arc<Bridge>>) -> Response {
+    let body = bridge
+        .metrics
+        .render_prometheus(bridge.config.readiness_outbox_degraded_threshold);
+    (
+        [(
+            CONTENT_TYPE,
+            HeaderValue::from_static("text/plain; version=0.0.4"),
+        )],
+        body,
+    )
+        .into_response()
 }

@@ -243,6 +243,9 @@ jobs:
       - name: Bridge roundtrip tests
         run: cargo test -p sdr-integration-tests --test bridge_roundtrip_test
 
+      - name: K8s audit bridge reliability tests
+        run: cargo test -p sdr-integration-tests --test k8s_audit_bridge_reliability -- --nocapture
+
       - name: E2E pipeline tests
         run: cargo test -p sdr-integration-tests --test e2e_pipeline
 

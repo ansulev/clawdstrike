@@ -291,10 +291,24 @@ impl AuditEventGrouper {
         let serial = record.serial;
         let mut completed = self.flush_expired();
 
+        // A new serial indicates previously pending serial groups are complete.
+        let completed_serials: Vec<u64> = self
+            .pending
+            .keys()
+            .copied()
+            .filter(|pending_serial| *pending_serial != serial)
+            .collect();
+        for completed_serial in completed_serials {
+            if let Some(records) = self.pending.remove(&completed_serial) {
+                self.last_insert.remove(&completed_serial);
+                if let Some(event) = build_event(completed_serial, records) {
+                    completed.push(event);
+                }
+            }
+        }
+
         self.pending.entry(serial).or_default().push(record);
         self.last_insert.insert(serial, std::time::Instant::now());
-
-        completed.extend(self.flush_expired());
         completed
     }
 
@@ -521,7 +535,8 @@ mod tests {
 
     #[test]
     fn parse_execve_line() {
-        let line = r#"type=EXECVE msg=audit(1614556843.937:123456): argc=3 a0="ls" a1="-la" a2="/tmp""#;
+        let line =
+            r#"type=EXECVE msg=audit(1614556843.937:123456): argc=3 a0="ls" a1="-la" a2="/tmp""#;
 
         let record = parse_audit_line(line).unwrap_or_else(|e| panic!("parse failed: {e}"));
         assert_eq!(record.event_type, AuditEventType::Execve);
@@ -594,11 +609,38 @@ mod tests {
         let r1 = parse_audit_line(line1).unwrap_or_else(|e| panic!("{e}"));
         let r2 = parse_audit_line(line2).unwrap_or_else(|e| panic!("{e}"));
 
-        let _ = grouper.add_record(r1);
-        let _ = grouper.add_record(r2);
+        let events_after_first = grouper.add_record(r1);
+        assert_eq!(events_after_first.len(), 0);
+
+        let events_after_second = grouper.add_record(r2);
+        assert_eq!(events_after_second.len(), 1);
+        assert_eq!(events_after_second[0].serial, 100);
 
         let events = grouper.flush_all();
-        assert_eq!(events.len(), 2);
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].serial, 200);
+    }
+
+    #[test]
+    fn grouper_flushes_previous_serial_immediately() {
+        let mut grouper = AuditEventGrouper::new(60_000);
+
+        let line1 = r#"type=SYSCALL msg=audit(1614556843.937:100): syscall=59"#;
+        let line2 = r#"type=AVC msg=audit(1614556843.937:200): avc: denied"#;
+
+        let r1 = parse_audit_line(line1).unwrap_or_else(|e| panic!("{e}"));
+        let r2 = parse_audit_line(line2).unwrap_or_else(|e| panic!("{e}"));
+
+        let events_after_first = grouper.add_record(r1);
+        assert_eq!(events_after_first.len(), 0);
+
+        let events_after_second = grouper.add_record(r2);
+        assert_eq!(events_after_second.len(), 1);
+        assert_eq!(events_after_second[0].serial, 100);
+
+        let remaining = grouper.flush_all();
+        assert_eq!(remaining.len(), 1);
+        assert_eq!(remaining[0].serial, 200);
     }
 
     #[test]

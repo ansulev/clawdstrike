@@ -15,6 +15,7 @@ from clawdstrike.hunt.types import (
     Alert,
     EvidenceItem,
     HuntReport,
+    IocEntry,
     IocMatch,
     TimelineEvent,
 )
@@ -23,15 +24,55 @@ from clawdstrike.merkle import MerkleTree, hash_leaf
 
 def _evidence_to_dict(item: EvidenceItem) -> dict:
     """Serialize an evidence item to a plain dict for canonical JSON."""
-    ts_str = item.timestamp.isoformat()
+    ts_str = _to_iso8601_z(item.timestamp)
 
     return {
         "index": item.index,
-        "source_type": item.source_type,
+        "sourceType": item.source_type,
         "timestamp": ts_str,
         "summary": item.summary,
         "data": item.data,
     }
+
+
+def _to_iso8601_z(dt: datetime) -> str:
+    """Format datetimes like JS Date.toISOString() for cross-SDK parity."""
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    else:
+        dt = dt.astimezone(timezone.utc)
+    return dt.isoformat(timespec="milliseconds").replace("+00:00", "Z")
+
+
+def _event_to_data(event: TimelineEvent) -> dict:
+    """Serialize a timeline event to the TypeScript evidence data shape."""
+    return {
+        "timestamp": _to_iso8601_z(event.timestamp),
+        "source": event.source.value,
+        "kind": event.kind.value,
+        "verdict": event.verdict.value,
+        "severity": event.severity,
+        "summary": event.summary,
+        "process": event.process,
+        "namespace": event.namespace,
+        "pod": event.pod,
+        "actionType": event.action_type,
+        "signatureValid": event.signature_valid,
+        "raw": event.raw,
+    }
+
+
+def _ioc_entry_to_data(entry: IocEntry) -> dict:
+    """Serialize an IOC entry to the TypeScript match data shape."""
+    out = {
+        "indicator": entry.indicator,
+        "iocType": entry.ioc_type.value,
+    }
+    if entry.description is not None:
+        out["description"] = entry.description
+    if entry.source is not None:
+        out["source"] = entry.source
+    return out
 
 
 def build_report(title: str, items: list[EvidenceItem]) -> HuntReport:
@@ -176,9 +217,10 @@ def evidence_from_alert(alert: Alert, start_index: int = 0) -> list[EvidenceItem
         timestamp=alert.triggered_at,
         summary=f"[{alert.severity.value}] {alert.rule_name}: {alert.title}",
         data={
-            "rule_name": alert.rule_name,
+            "ruleName": alert.rule_name,
             "severity": alert.severity.value,
             "title": alert.title,
+            "triggeredAt": _to_iso8601_z(alert.triggered_at),
             "description": alert.description,
         },
     ))
@@ -189,12 +231,7 @@ def evidence_from_alert(alert: Alert, start_index: int = 0) -> list[EvidenceItem
             source_type="event",
             timestamp=event.timestamp,
             summary=f"[{event.source.value}] {event.summary}",
-            data={
-                "source": event.source.value,
-                "summary": event.summary,
-                "action_type": event.action_type,
-                "verdict": event.verdict.value,
-            },
+            data=_event_to_data(event),
         ))
 
     return items
@@ -210,12 +247,7 @@ def evidence_from_events(
             source_type="event",
             timestamp=event.timestamp,
             summary=f"[{event.source.value}] {event.summary}",
-            data={
-                "source": event.source.value,
-                "summary": event.summary,
-                "action_type": event.action_type,
-                "verdict": event.verdict.value,
-            },
+            data=_event_to_data(event),
         )
         for i, event in enumerate(events)
     ]
@@ -234,9 +266,9 @@ def evidence_from_ioc_matches(
             timestamp=m.event.timestamp,
             summary=f"IOC match in {m.match_field}: {', '.join(ioc_names)} ({m.event.summary})",
             data={
-                "match_field": m.match_field,
-                "matched_iocs": [e.indicator for e in m.matched_iocs],
-                "event_summary": m.event.summary,
+                "event": _event_to_data(m.event),
+                "matchedIocs": [_ioc_entry_to_data(e) for e in m.matched_iocs],
+                "matchField": m.match_field,
             },
         ))
     return items

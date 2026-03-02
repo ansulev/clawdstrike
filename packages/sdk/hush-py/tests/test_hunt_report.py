@@ -9,6 +9,7 @@ import pytest
 from clawdstrike.core import generate_keypair
 from clawdstrike.hunt.errors import ReportError
 from clawdstrike.hunt.report import (
+    _evidence_to_dict,
     build_report,
     collect_evidence,
     evidence_from_alert,
@@ -215,8 +216,12 @@ class TestEvidenceHelpers:
         assert items[0].source_type == "alert"
         assert items[0].index == 0
         assert "exfil_rule" in items[0].summary
+        assert items[0].data["ruleName"] == "exfil_rule"
+        assert items[0].data["triggeredAt"] == "2025-06-15T12:00:00.000Z"
         assert items[1].source_type == "event"
         assert items[1].index == 1
+        assert items[1].data["actionType"] == "file"
+        assert items[1].data["timestamp"] == "2025-06-15T12:00:00.000Z"
 
     def test_evidence_from_events(self) -> None:
         ts2 = datetime(2025, 6, 15, 12, 1, 0, tzinfo=timezone.utc)
@@ -226,6 +231,9 @@ class TestEvidenceHelpers:
         assert items[0].index == 5
         assert items[1].index == 6
         assert "event one" in items[0].summary
+        assert items[0].data["timestamp"] == "2025-06-15T12:00:00.000Z"
+        assert items[1].data["timestamp"] == "2025-06-15T12:01:00.000Z"
+        assert items[0].data["actionType"] == "file"
 
     def test_evidence_from_ioc_matches(self) -> None:
         event = TimelineEvent(
@@ -251,6 +259,24 @@ class TestEvidenceHelpers:
         assert items[0].index == 10
         assert items[0].source_type == "ioc_match"
         assert "evil.com" in items[0].summary
+        assert items[0].data["matchField"] == "summary"
+        assert items[0].data["matchedIocs"][0]["iocType"] == "domain"
+        assert items[0].data["event"]["source"] == "tetragon"
+
+    def test_evidence_to_dict_uses_cross_sdk_field_names(self) -> None:
+        item = EvidenceItem(
+            index=3,
+            source_type="event",
+            timestamp=_TS,
+            summary="sample",
+            data={"k": "v"},
+        )
+
+        serialized = _evidence_to_dict(item)
+        assert "sourceType" in serialized
+        assert "source_type" not in serialized
+        assert serialized["sourceType"] == "event"
+        assert serialized["timestamp"] == "2025-06-15T12:00:00.000Z"
 
     def test_full_pipeline(self) -> None:
         event = _make_event("read /etc/shadow")

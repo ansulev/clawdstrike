@@ -14,6 +14,7 @@
 //! All cryptographic operations delegate to [`hush_core`].
 
 pub mod attestation;
+pub mod chain;
 pub mod checkpoint;
 pub mod envelope;
 pub mod error;
@@ -29,6 +30,7 @@ pub use attestation::{
     ObservedConnection, ReticulumBinding, RuntimeProof, SystemAttestation, TransportBindings,
     WorkloadIdentity, NODE_ATTESTATION_SCHEMA, RUNTIME_PROOF_SCHEMA,
 };
+pub use chain::{chain_head_from_envelope, verify_chain_link, ChainLinkVerdict, IssuerChainHead};
 pub use checkpoint::{
     checkpoint_hash, checkpoint_statement, checkpoint_witness_message, sign_checkpoint_statement,
     verify_witness_signature, CHECKPOINT_STATEMENT_SCHEMA_V1,

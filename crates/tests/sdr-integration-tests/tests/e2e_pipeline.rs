@@ -413,6 +413,84 @@ async fn test_envelope_chain_integrity() {
     );
 }
 
+/// Test that verify_chain_link detects a tampered prev_envelope_hash.
+#[tokio::test]
+async fn test_chain_verification_detects_tampered_prev_hash() {
+    let kp = Keypair::generate();
+
+    let events: Vec<GetEventsResponse> = (0..3)
+        .map(|i| GetEventsResponse {
+            event: Some(Event::ProcessExec(tet::ProcessExec {
+                process: Some(make_process(&format!("/usr/bin/chain-{i}"), "default")),
+                parent: None,
+                ancestors: vec![],
+            })),
+            node_name: format!("chain-node-{i}"),
+            time: None,
+            aggregation_info: None,
+            cluster_name: String::new(),
+        })
+        .collect();
+
+    // Build a valid 3-envelope chain.
+    let mut envelopes = Vec::new();
+    let mut prev_hash: Option<String> = None;
+
+    for (seq, resp) in events.iter().enumerate() {
+        let fact = tetragon_bridge::mapper::map_event(resp).unwrap();
+        let envelope = spine::build_signed_envelope(
+            &kp,
+            (seq + 1) as u64,
+            prev_hash.clone(),
+            fact,
+            spine::now_rfc3339(),
+        )
+        .unwrap();
+        prev_hash = envelope
+            .get("envelope_hash")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+        envelopes.push(envelope);
+    }
+
+    // Verify the valid chain passes.
+    let mut head: Option<spine::IssuerChainHead> = None;
+    for env in &envelopes {
+        let verdict = spine::verify_chain_link(env, head.as_ref()).unwrap();
+        assert!(verdict.is_valid(), "valid chain should pass: {verdict:?}");
+        head = Some(spine::chain_head_from_envelope(env).unwrap());
+    }
+
+    // Now build a forked envelope: correct seq but wrong prev_envelope_hash.
+    let fork_fact = tetragon_bridge::mapper::map_event(&events[0]).unwrap();
+    let fork_envelope = spine::build_signed_envelope(
+        &kp,
+        4,
+        Some("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff".to_string()),
+        fork_fact,
+        spine::now_rfc3339(),
+    )
+    .unwrap();
+
+    // The forked envelope should be cryptographically valid...
+    assert!(spine::verify_envelope(&fork_envelope).unwrap());
+
+    // ...but chain verification should detect the hash mismatch.
+    let verdict = spine::verify_chain_link(&fork_envelope, head.as_ref()).unwrap();
+    assert!(
+        !verdict.is_valid(),
+        "forked envelope should fail chain verification"
+    );
+    assert!(
+        matches!(verdict, spine::ChainLinkVerdict::HashMismatch { .. }),
+        "expected HashMismatch, got: {verdict:?}"
+    );
+
+    // into_result should produce an error.
+    let issuer = spine::issuer_from_keypair(&kp);
+    assert!(verdict.into_result(&issuer).is_err());
+}
+
 /// Test mixed Tetragon + Hubble events flowing through the same checkpoint.
 #[tokio::test]
 async fn test_mixed_bridge_checkpoint() {

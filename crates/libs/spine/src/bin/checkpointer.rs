@@ -4,7 +4,7 @@
 //! signatures, appends to a JetStream log, builds RFC 6962 Merkle trees,
 //! and emits checkpoint envelopes on a timer with witness co-signatures.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::time::Duration;
 
@@ -19,7 +19,10 @@ use tracing_subscriber::{fmt, EnvFilter};
 
 use async_nats::jetstream::context::Publish;
 use hush_core::{sha256_hex, Hash, Keypair, MerkleTree, PublicKey, Signature};
-use spine::{checkpoint, nats_transport as nats, TrustBundle};
+use spine::{
+    chain_head_from_envelope, checkpoint, nats_transport as nats, verify_chain_link,
+    IssuerChainHead, TrustBundle,
+};
 
 #[derive(Parser, Debug)]
 #[command(name = "spine-checkpointer")]
@@ -88,6 +91,14 @@ struct Args {
     /// JetStream replication factor for log/index/checkpoints (dev default: 3)
     #[arg(long, default_value = "3")]
     replicas: usize,
+
+    /// KV bucket for per-issuer chain head state (restart recovery)
+    #[arg(long, default_value = "CLAWDSTRIKE_ISSUER_HEADS")]
+    issuer_heads_bucket: String,
+
+    /// Chain enforcement mode: `warn` (log violations, accept anyway) or `strict` (reject violations)
+    #[arg(long, default_value = "warn", value_parser = ["warn", "strict"])]
+    chain_enforcement: String,
 }
 
 fn verify_signed_envelope(envelope: &Value) -> Result<(String, Vec<u8>)> {
@@ -149,6 +160,28 @@ async fn load_latest_checkpoint(kv: &async_nats::jetstream::kv::Store) -> Result
         Some(bytes) => Ok(Some(serde_json::from_slice(&bytes)?)),
         None => Ok(None),
     }
+}
+
+/// Load all persisted issuer chain heads from KV.
+async fn load_issuer_heads(
+    kv: &async_nats::jetstream::kv::Store,
+) -> Result<HashMap<String, IssuerChainHead>> {
+    let mut heads = HashMap::new();
+    let keys = kv.keys().await?.try_collect::<Vec<String>>().await?;
+    for key in keys {
+        let Some(bytes) = kv.get(&key).await? else {
+            continue;
+        };
+        let head: IssuerChainHead = match serde_json::from_slice(&bytes) {
+            Ok(h) => h,
+            Err(err) => {
+                warn!(key = %key, "invalid issuer head JSON in KV: {err}");
+                continue;
+            }
+        };
+        heads.insert(head.issuer.clone(), head);
+    }
+    Ok(heads)
 }
 
 fn build_checkpoint_statement_from_fact(fact: &Value) -> Result<Value> {
@@ -883,6 +916,21 @@ async fn main() -> Result<()> {
     let checkpoint_kv = nats::ensure_kv(&js, &args.checkpoint_bucket, args.replicas).await?;
     let envelope_kv = nats::ensure_kv(&js, &args.envelope_bucket, args.replicas).await?;
     let fact_index_kv = nats::ensure_kv(&js, &args.fact_index_bucket, args.replicas).await?;
+    let issuer_heads_kv = nats::ensure_kv(&js, &args.issuer_heads_bucket, args.replicas).await?;
+
+    let mut issuer_heads: HashMap<String, IssuerChainHead> =
+        match load_issuer_heads(&issuer_heads_kv).await {
+            Ok(heads) => {
+                info!("loaded {} issuer chain heads from KV", heads.len());
+                heads
+            }
+            Err(err) => {
+                warn!("failed to load issuer heads: {err:#}, starting fresh");
+                HashMap::new()
+            }
+        };
+    let chain_strict = args.chain_enforcement == "strict";
+
     match backfill_checkpoint_hash_index(&checkpoint_kv).await {
         Ok((scanned, added)) => {
             info!(
@@ -977,6 +1025,67 @@ async fn main() -> Result<()> {
                         continue;
                     }
                 };
+
+                // --- Per-issuer chain verification ---
+                let envelope_issuer = envelope
+                    .get("issuer")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
+
+                // Check issuer allowlist from trust bundle.
+                if let Some(tb) = trust_bundle.as_ref() {
+                    if !tb.envelope_issuer_allowed(envelope_issuer) {
+                        warn!(
+                            issuer = %envelope_issuer,
+                            envelope_hash = %envelope_hash_hex,
+                            "rejected envelope from disallowed issuer"
+                        );
+                        continue;
+                    }
+                }
+
+                let known_head = issuer_heads.get(envelope_issuer);
+                let chain_verdict = match verify_chain_link(&envelope, known_head) {
+                    Ok(v) => v,
+                    Err(err) => {
+                        warn!(
+                            issuer = %envelope_issuer,
+                            envelope_hash = %envelope_hash_hex,
+                            "chain verification error: {err:#}"
+                        );
+                        continue;
+                    }
+                };
+
+                if !chain_verdict.is_valid() {
+                    warn!(
+                        issuer = %envelope_issuer,
+                        envelope_hash = %envelope_hash_hex,
+                        verdict = ?chain_verdict,
+                        enforcement = %args.chain_enforcement,
+                        "chain integrity violation detected"
+                    );
+                    if chain_strict {
+                        continue;
+                    }
+                    // warn mode: update head anyway (self-heal on first deploy)
+                }
+
+                // Update in-memory issuer head.
+                if let Ok(new_head) = chain_head_from_envelope(&envelope) {
+                    let issuer_key = new_head.issuer.clone();
+                    let head_bytes = serde_json::to_vec(&new_head).unwrap_or_default();
+                    issuer_heads.insert(issuer_key.clone(), new_head);
+
+                    // Fire-and-forget KV persist.
+                    let kv = issuer_heads_kv.clone();
+                    let key = issuer_key;
+                    tokio::spawn(async move {
+                        if let Err(e) = kv.put(&key, head_bytes.into()).await {
+                            tracing::warn!(issuer = %key, "failed to persist issuer head: {e}");
+                        }
+                    });
+                }
 
                 match envelope_kv.get(&envelope_hash_hex).await {
                     Ok(None) => {

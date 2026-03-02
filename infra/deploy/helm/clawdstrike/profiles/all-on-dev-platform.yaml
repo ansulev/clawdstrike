@@ -34,7 +34,7 @@ nats:
 
 bridges:
   tetragon:
-    enabled: false
+    enabled: true
     image:
       tag: "cb901cd22c52ae9465131df19dcac1553cf793af"
     grpcEndpoint: "http://localhost:54321"

@@ -1,44 +1,16 @@
+# Minimal workspace Cargo.toml for auditd-bridge Docker builds.
+# Only includes crates needed to build auditd-bridge.
+
 [workspace]
 resolver = "2"
 members = [
     "crates/libs/hush-core",
-    "crates/libs/hush-proxy",
-    "crates/libs/clawdstrike",
-    "crates/libs/hush-certification",
-    "crates/services/hush-cli",
-    "crates/services/hushd",
-    "crates/libs/hush-wasm",
-    "crates/libs/hush-multi-agent",
     "crates/libs/spine",
-    "crates/services/spine-cli",
-    "crates/bridges/tetragon-bridge",
-    "crates/bridges/hubble-bridge",
     "crates/bridges/auditd-bridge",
-    "crates/bridges/k8s-audit-bridge",
-    "crates/services/eas-anchor",
-    "crates/tests/sdr-integration-tests",
-    "crates/services/cloud-api",
-    "packages/sdk/hush-py/hush-native",
-    "crates/libs/hush-ffi",
-    "crates/libs/clawdstrike-guard-sdk",
-    "crates/libs/clawdstrike-guard-sdk-macros",
-    "crates/services/clawdstrike-registry",
-    "crates/libs/hunt-scan",
-    "crates/libs/hunt-query",
-    "crates/libs/hunt-correlate",
-]
-exclude = [
-    "fuzz",
-    "examples/rust/basic-verification",
-    "examples/autonomous-sandbox",
-    "examples/multi-agent-orchestration",
-    "examples/delegated-pipeline",
-    "apps/desktop/src-tauri",
-    "apps/agent/src-tauri",
 ]
 
 [workspace.package]
-version = "0.1.3"
+version = "0.1.0"
 edition = "2021"
 license = "Apache-2.0"
 repository = "https://github.com/backbay-labs/clawdstrike"
@@ -84,11 +56,9 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 # Time
 chrono = { version = "0.4", features = ["serde"] }
 chrono-tz = { version = "0.10", features = ["serde"] }
-crossterm = "0.28"
-time = "0.3"
 
 # UUID
-uuid = { version = "1.21", features = ["v4", "v7", "serde", "js"] }
+uuid = { version = "1.20", features = ["v4", "v7", "serde", "js"] }
 
 # CLI
 clap = { version = "4.5", features = ["derive", "env"] }
@@ -96,7 +66,7 @@ clap = { version = "4.5", features = ["derive", "env"] }
 # HTTP server
 axum = { version = "0.8", features = ["macros"] }
 tower = "0.5"
-tower-http = { version = "0.6", features = ["cors", "limit", "trace"] }
+tower-http = { version = "0.6", features = ["cors", "trace"] }
 rustls = "0.23"
 rustls-pki-types = "1.14"
 tokio-rustls = "0.26"
@@ -107,8 +77,6 @@ dashmap = "6.1"
 
 # Database
 rusqlite = { version = "0.38", features = ["bundled"] }
-sqlx-core = { version = "0.8", default-features = false, features = ["json", "chrono", "uuid", "migrate", "_rt-tokio"] }
-sqlx-postgres = { version = "0.8", default-features = false, features = ["chrono", "uuid", "json"] }
 
 # Async utilities
 tokio-stream = { version = "0.1", features = ["sync"] }
@@ -119,37 +87,23 @@ toml = "0.9"
 dirs = "6.0"
 
 # HTTP client
-reqwest = { version = "0.13", default-features = false, features = ["json", "rustls", "multipart"] }
+reqwest = { version = "0.13", default-features = false, features = ["json", "rustls"] }
 
 # Compression
 flate2 = "1.1"
-tar = "0.4"
-zstd = "0.13"
 
 # URL parsing
 url = "2.5"
 
-# Version solving
-semver = "1"
-pubgrub = "0.3"
-
-# Parsing
-shell-words = "1.1"
-json5 = "0.4"
-md-5 = "0.10"
-
 # JWT (OIDC)
-jsonwebtoken = { version = "10", default-features = false, features = ["aws_lc_rs", "use_pem"] }
+jsonwebtoken = "9"
 
 # Internal crates
 hush-core = { path = "crates/libs/hush-core", version = "0.1.0" }
 hush-proxy = { path = "crates/libs/hush-proxy", version = "0.1.0" }
-clawdstrike = { path = "crates/libs/clawdstrike", version = "0.1.1", default-features = false }
+clawdstrike = { path = "crates/libs/clawdstrike", version = "0.1.0" }
 hush-certification = { path = "crates/libs/hush-certification", version = "0.1.0" }
 spine = { package = "hush-spine", path = "crates/libs/spine", version = "0.1.0" }
-hunt-scan = { path = "crates/libs/hunt-scan", version = "0.1.3" }
-hunt-query = { path = "crates/libs/hunt-query", version = "0.1.3" }
-hunt-correlate = { path = "crates/libs/hunt-correlate", version = "0.1.3" }
 
 [profile.release]
 lto = true

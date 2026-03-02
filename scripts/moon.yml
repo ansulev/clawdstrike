@@ -1,0 +1,37 @@
+$schema: "https://moonrepo.dev/schemas/project.json"
+type: "tool"
+language: "bash"
+tags: ["guardrails", "ci"]
+
+tasks:
+  path-lint:
+    command: "bash path-lint.sh"
+    platform: "system"
+    inputs:
+      - "path-lint.sh"
+
+  move-validation:
+    command: "bash move-validation.sh"
+    platform: "system"
+    inputs:
+      - "move-validation.sh"
+
+  architecture-guardrails:
+    command: "bash architecture-guardrails.sh"
+    platform: "system"
+    inputs:
+      - "architecture-guardrails.sh"
+
+  slop-audit:
+    command: "bash slop-audit.sh"
+    platform: "system"
+    inputs:
+      - "slop-audit.sh"
+
+  all:
+    command: "noop"
+    deps:
+      - "~:path-lint"
+      - "~:move-validation"
+      - "~:architecture-guardrails"
+      - "~:slop-audit"

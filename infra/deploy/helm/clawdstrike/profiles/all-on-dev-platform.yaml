@@ -47,9 +47,22 @@ bridges:
     replicas: 1
     image:
       tag: "cb901cd22c52ae9465131df19dcac1553cf793af"
-    grpcEndpoint: "http://hubble-relay.kube-system.svc.cluster.local:4245"
+    grpcEndpoint: "http://hubble-relay.kube-system.svc.cluster.local:80"
     nodeSelector:
       kubernetes.io/arch: amd64
+
+spiffe:
+  enabled: true
+
+easAnchor:
+  enabled: true
+  image:
+    tag: "cb901cd22c52ae9465131df19dcac1553cf793af"
+  chain:
+    rpcUrl: "https://sepolia.base.org"
+    chainId: 84532
+  secrets:
+    existingSecret: "clawdstrike-helm-eas-anchor"
 
 ingress:
   enabled: true

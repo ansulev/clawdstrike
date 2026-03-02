@@ -200,7 +200,7 @@ bridges:
     image:
       repository: ghcr.io/backbay-labs/clawdstrike/hubble-bridge
       tag: ""
-    grpcEndpoint: "http://hubble-relay.kube-system.svc.cluster.local:4245"
+    grpcEndpoint: "http://hubble-relay.kube-system.svc.cluster.local:80"
     hostNetwork: false
     dnsPolicy: ClusterFirst
     env:
@@ -250,6 +250,52 @@ serviceMonitor:
     nats: true
     hushd: true
     proofsApi: false
+
+# ---------------------------------------------------------------------------
+# EAS Anchor (on-chain checkpoint anchoring to Base L2)
+# ---------------------------------------------------------------------------
+easAnchor:
+  enabled: false
+  image:
+    repository: ghcr.io/backbay-labs/clawdstrike/eas-anchor
+    tag: ""
+  chain:
+    # Base Sepolia testnet (change to https://mainnet.base.org / 8453 for prod)
+    rpcUrl: "https://sepolia.base.org"
+    chainId: 84532
+    easContract: "0xA1207F3BBa224E2c9c3c6D5aF63D816e6e1f8e4b"
+    schemaRegistry: "0xA7b39296258348C78294F95B872b282326A97BDF"
+  batching:
+    maxBatchSize: 50
+    batchIntervalSecs: 300
+    minBatchSize: 1
+  schemas:
+    # Populate after running: npx ts-node scripts/register-eas-schemas.ts
+    policyAttestationUid: ""
+    checkpointAnchorUid: ""
+    keyRotationUid: ""
+  nats:
+    subject: "clawdstrike.spine.envelope.log_checkpoint.v1"
+  secrets:
+    existingSecret: ""
+  env:
+    RUST_LOG: "info,eas_anchor=debug"
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
+
+# ---------------------------------------------------------------------------
+# SPIFFE / SPIRE identity binding
+# ---------------------------------------------------------------------------
+spiffe:
+  # -- Mount SPIFFE workload SVIDs into bridge pods via the SPIRE CSI driver
+  enabled: false
+  # -- Path inside the container where the SVID PEM is written
+  svidPath: "/var/run/spire/agent/svid.pem"
 
 # ---------------------------------------------------------------------------
 # Network Policy

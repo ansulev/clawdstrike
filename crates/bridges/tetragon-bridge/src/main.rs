@@ -66,6 +66,11 @@ struct Cli {
     /// Maximum startup wait for NATS connectivity before backing off and retrying.
     #[arg(long, default_value = "90", env = "NATS_STARTUP_TIMEOUT_SECS")]
     nats_startup_timeout_secs: u64,
+
+    /// Path to SPIFFE SVID PEM file. When set, the bridge reads the workload
+    /// SPIFFE ID and includes it in every published fact.
+    #[arg(long, env = "SVID_PATH")]
+    svid_path: Option<String>,
 }
 
 fn parse_event_types(types: &[String]) -> Vec<TetragonEventKind> {
@@ -149,6 +154,7 @@ async fn main() -> anyhow::Result<()> {
         stream_replicas: cli.stream_replicas,
         stream_max_bytes: cli.stream_max_bytes,
         stream_max_age_seconds: cli.stream_max_age_seconds,
+        svid_path: cli.svid_path,
         ..BridgeConfig::default()
     };
 

@@ -15,6 +15,7 @@ members = [
     "crates/bridges/hubble-bridge",
     "crates/bridges/auditd-bridge",
     "crates/bridges/k8s-audit-bridge",
+    "crates/bridges/darwin-telemetry-bridge",
     "crates/services/eas-anchor",
     "crates/tests/sdr-integration-tests",
     "crates/services/cloud-api",

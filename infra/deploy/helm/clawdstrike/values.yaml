@@ -71,7 +71,7 @@ spine:
   checkpointer:
     enabled: true
     replicas: 1
-    # -- Checkpointer mode (`run` for ingest/checkpoint loop, `repair` for rebuild mode)
+    # -- Checkpointer mode (`run` starts a Deployment; `repair` runs a one-shot Job)
     mode: run
     # -- Apply destructive writes in repair mode (`--repair-apply`)
     repairApply: false

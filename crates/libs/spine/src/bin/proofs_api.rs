@@ -874,6 +874,9 @@ async fn main() -> Result<()> {
         .init();
 
     let args = Args::parse();
+    if args.chain_violation_stats_scan_cap == 0 {
+        anyhow::bail!("--chain-violation-stats-scan-cap must be >= 1");
+    }
 
     let client = nats::connect(&args.nats_url).await?;
     let js = nats::jetstream(client);

@@ -75,9 +75,11 @@ export function secureToolSet<TTools extends Record<string, ExecuteOrCallToolLik
   source: SecuritySource,
   options: SecureToolSetOptions,
 ): TTools {
-  const interceptor = resolveInterceptor(source, {
-    translateToolCall: options.translateToolCall,
-  });
+  const resolverConfig =
+    options.translateToolCall !== undefined
+      ? ({ translateToolCall: options.translateToolCall } satisfies AdapterConfig)
+      : undefined;
+  const interceptor = resolveInterceptor(source, resolverConfig);
 
   const defaultContext =
     options.context ??
@@ -87,24 +89,34 @@ export function secureToolSet<TTools extends Record<string, ExecuteOrCallToolLik
 
   const secured = {} as TTools;
   for (const [toolName, tool] of Object.entries(tools)) {
-    const originalExecute = tool.execute ?? tool.call;
-    if (typeof originalExecute !== "function") {
+    const hasExecute = typeof tool.execute === "function";
+    const hasCall = typeof tool.call === "function";
+    if (!hasExecute && !hasCall) {
       (secured as Record<string, ExecuteOrCallToolLike>)[toolName] = tool;
       continue;
     }
 
-    const wrapped = wrapExecuteWithInterceptor(
-      toolName,
-      originalExecute.bind(tool),
-      interceptor,
-      defaultContext,
-      options.getContext,
-    );
-    (secured as Record<string, ExecuteOrCallToolLike>)[toolName] = {
-      ...(tool as object),
-      execute: wrapped,
-      call: wrapped,
-    } as ExecuteOrCallToolLike;
+    const wrappedTool = { ...(tool as object) } as ExecuteOrCallToolLike;
+    if (hasExecute) {
+      wrappedTool.execute = wrapExecuteWithInterceptor(
+        toolName,
+        tool.execute!.bind(tool),
+        interceptor,
+        defaultContext,
+        options.getContext,
+      );
+    }
+    if (hasCall) {
+      wrappedTool.call = wrapExecuteWithInterceptor(
+        toolName,
+        tool.call!.bind(tool),
+        interceptor,
+        defaultContext,
+        options.getContext,
+      );
+    }
+
+    (secured as Record<string, ExecuteOrCallToolLike>)[toolName] = wrappedTool;
   }
 
   return secured;

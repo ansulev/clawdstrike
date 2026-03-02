@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { createSecurityContext } from "./context.js";
 import type { ToolInterceptor } from "./interceptor.js";
-import { wrapExecuteWithInterceptor } from "./secure-tool-wrapper.js";
+import { secureToolSet, wrapExecuteWithInterceptor } from "./secure-tool-wrapper.js";
 
 function createInterceptor(overrides: Partial<ToolInterceptor> = {}): ToolInterceptor {
   return {
@@ -73,5 +73,41 @@ describe("wrapExecuteWithInterceptor", () => {
 
     expect(result).toBe("safe object");
     expect(execute).toHaveBeenCalledWith({ text: "safe object" });
+  });
+});
+
+describe("secureToolSet", () => {
+  it("wraps execute and call independently when both are present", async () => {
+    const interceptor = createInterceptor();
+    const tools = {
+      dual: {
+        execute: vi.fn(async (input: string) => `execute:${input}`),
+        call: vi.fn(async (input: string) => `call:${input}`),
+      },
+    };
+
+    const secured = secureToolSet(tools, interceptor, { framework: "test" });
+
+    await expect(secured.dual.execute!("x")).resolves.toBe("execute:x");
+    await expect(secured.dual.call!("y")).resolves.toBe("call:y");
+    expect(tools.dual.execute).toHaveBeenCalledWith("x");
+    expect(tools.dual.call).toHaveBeenCalledWith("y");
+  });
+
+  it("preserves missing execute/call members on wrapped tools", () => {
+    const interceptor = createInterceptor();
+    const tools = {
+      executeOnly: {
+        execute: async (_input: string) => "ok",
+      },
+      callOnly: {
+        call: async (_input: string) => "ok",
+      },
+    };
+
+    const secured = secureToolSet(tools, interceptor, { framework: "test" });
+
+    expect(Object.prototype.hasOwnProperty.call(secured.executeOnly, "call")).toBe(false);
+    expect(Object.prototype.hasOwnProperty.call(secured.callOnly, "execute")).toBe(false);
   });
 });

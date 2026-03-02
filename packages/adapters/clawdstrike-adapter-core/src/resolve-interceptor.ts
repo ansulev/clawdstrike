@@ -35,11 +35,18 @@ export function resolveInterceptor(
   source: SecuritySource,
   config?: AdapterConfig,
 ): ToolInterceptor {
+  if (isClawdstrikeLike(source) && config !== undefined) {
+    const interceptor = source.createInterceptor?.(config);
+    if (!interceptor) {
+      throw new Error("ClawdstrikeLike source must provide createInterceptor()");
+    }
+    return withDefaultOnError(interceptor);
+  }
   if (isToolInterceptor(source)) {
     return source;
   }
   if (isClawdstrikeLike(source)) {
-    const interceptor = source.createInterceptor?.(config);
+    const interceptor = source.createInterceptor?.();
     if (!interceptor) {
       throw new Error("ClawdstrikeLike source must provide createInterceptor()");
     }

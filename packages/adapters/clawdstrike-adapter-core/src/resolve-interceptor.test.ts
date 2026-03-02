@@ -42,6 +42,43 @@ describe("resolveInterceptor", () => {
     expect(createInterceptor).toHaveBeenCalledWith(config);
   });
 
+  it("prefers createInterceptor(config) when source is both ToolInterceptor and ClawdstrikeLike", () => {
+    const config: AdapterConfig = {
+      translateToolCall: vi.fn(() => null),
+    };
+
+    const fallbackInterceptor = {
+      beforeExecute: vi.fn(async () => ({
+        proceed: true,
+        decision: { status: "allow" as const },
+        duration: 0,
+      })),
+      afterExecute: vi.fn(async (_tool, _input, output) => ({ output, modified: false })),
+      onError: vi.fn(async () => undefined),
+    };
+    const created = {
+      beforeExecute: vi.fn(async () => ({
+        proceed: true,
+        decision: { status: "allow" as const },
+        duration: 0,
+      })),
+      afterExecute: vi.fn(async (_tool, _input, output) => ({ output, modified: false })),
+      onError: vi.fn(async () => undefined),
+    };
+    const createInterceptor = vi.fn(() => created);
+
+    const dualSource = {
+      ...fallbackInterceptor,
+      createInterceptor,
+    };
+
+    const resolved = resolveInterceptor(dualSource, config);
+    expect(createInterceptor).toHaveBeenCalledWith(config);
+    expect(resolved.beforeExecute).toBe(created.beforeExecute);
+    expect(resolved.afterExecute).toBe(created.afterExecute);
+    expect(resolved.onError).toBe(created.onError);
+  });
+
   it("adds a no-op onError for legacy createInterceptor outputs", async () => {
     const resolved = resolveInterceptor({
       createInterceptor: () => ({

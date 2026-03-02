@@ -29,7 +29,7 @@ thiserror.workspace = true
 anyhow.workspace = true
 async-nats = "0.39"
 
-# macOS-specific
+[target.'cfg(target_os = "macos")'.dependencies]
 libc = "0.2"
 fsevent-sys = "4"
 

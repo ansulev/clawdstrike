@@ -55,6 +55,22 @@ struct Args {
     #[arg(long, default_value = "CLAWDSTRIKE_FACT_INDEX")]
     fact_index_bucket: String,
 
+    /// KV bucket storing per-issuer chain heads
+    #[arg(long, default_value = "CLAWDSTRIKE_ISSUER_HEADS")]
+    issuer_heads_bucket: String,
+
+    /// JetStream stream containing strict-mode chain violation events
+    #[arg(long, default_value = "CLAWDSTRIKE_CHAIN_VIOLATIONS")]
+    chain_violation_stream: String,
+
+    /// Maximum number of chain-violation events to scan for stats endpoints
+    #[arg(
+        long,
+        env = "SPINE_CHAIN_VIOLATION_STATS_SCAN_CAP",
+        default_value = "10000"
+    )]
+    chain_violation_stats_scan_cap: usize,
+
     /// Bind address (host:port)
     #[arg(long, default_value = "0.0.0.0:8080")]
     listen: String,
@@ -84,6 +100,9 @@ struct AppState {
     checkpoint_kv: async_nats::jetstream::kv::Store,
     envelope_kv: async_nats::jetstream::kv::Store,
     fact_index_kv: async_nats::jetstream::kv::Store,
+    issuer_heads_kv: async_nats::jetstream::kv::Store,
+    chain_violation_stream: String,
+    chain_violation_stats_scan_cap: usize,
     max_keys_scan: usize,
     /// Cache only the most recently loaded tree leaves to avoid unbounded growth.
     leaves_cache: Arc<Mutex<Option<CachedLeaves>>>,
@@ -552,6 +571,172 @@ async fn v1_node_attestation_by_issuer(
     v1_envelope_by_hash(State(state), Path(envelope_hash)).await
 }
 
+async fn v1_issuer_chain_head(
+    State(state): State<Arc<AppState>>,
+    Path(issuer): Path<String>,
+) -> Result<Json<Value>, ApiError> {
+    let issuer_key = normalize_issuer_pubkey_hex(&issuer)?;
+    let bytes = state
+        .issuer_heads_kv
+        .get(&issuer_key)
+        .await
+        .map_err(|_| ApiError::internal("failed to read issuer heads KV"))?;
+    let bytes = bytes.ok_or_else(|| ApiError::not_found("issuer head not found"))?;
+    let head: Value = serde_json::from_slice(&bytes)
+        .map_err(|_| ApiError::internal("invalid issuer head JSON"))?;
+    Ok(Json(head))
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ChainViolationStatsQuery {
+    top_n: Option<usize>,
+    scan_cap: Option<usize>,
+}
+
+fn sort_top_counts(counts: std::collections::HashMap<String, u64>, top_n: usize) -> Vec<Value> {
+    let mut items: Vec<(String, u64)> = counts.into_iter().collect();
+    items.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
+    items
+        .into_iter()
+        .take(top_n)
+        .map(|(key, count)| json!({ "key": key, "count": count }))
+        .collect()
+}
+
+async fn v1_chain_violation_stats(
+    State(state): State<Arc<AppState>>,
+    Query(query): Query<ChainViolationStatsQuery>,
+) -> Result<Json<Value>, ApiError> {
+    let top_n = query.top_n.unwrap_or(20).clamp(1, 100);
+    let requested_cap = query
+        .scan_cap
+        .unwrap_or(state.chain_violation_stats_scan_cap);
+    let scan_cap = requested_cap.clamp(1, state.chain_violation_stats_scan_cap);
+    let scan_cap_u64 =
+        u64::try_from(scan_cap).map_err(|_| ApiError::internal("invalid scan_cap"))?;
+
+    let mut stream = match state.js.get_stream(&state.chain_violation_stream).await {
+        Ok(stream) => stream,
+        Err(_) => {
+            return Ok(Json(json!({
+                "schema": "clawdstrike.spine.query.chain_violation_stats.v1",
+                "total_events_scanned": 0,
+                "scan_cap": scan_cap,
+                "truncated": false,
+                "window_start_seq": 0,
+                "window_end_seq": 0,
+                "top_reasons": [],
+                "top_issuers": [],
+                "latest_violation_at": Value::Null
+            })));
+        }
+    };
+    let stream_info = stream
+        .info()
+        .await
+        .map_err(|_| ApiError::internal("failed to read chain violation stream info"))?;
+    let total_messages = stream_info.state.messages;
+    if total_messages == 0 {
+        return Ok(Json(json!({
+            "schema": "clawdstrike.spine.query.chain_violation_stats.v1",
+            "total_events_scanned": 0,
+            "scan_cap": scan_cap,
+            "truncated": false,
+            "window_start_seq": 0,
+            "window_end_seq": 0,
+            "top_reasons": [],
+            "top_issuers": [],
+            "latest_violation_at": Value::Null
+        })));
+    }
+
+    let truncated = total_messages > scan_cap_u64;
+    let start_seq = if truncated {
+        total_messages - scan_cap_u64 + 1
+    } else {
+        1
+    };
+    let end_seq = total_messages;
+    let expected = usize::try_from(end_seq - start_seq + 1)
+        .map_err(|_| ApiError::internal("scan range too large"))?;
+
+    let consumer = stream
+        .create_consumer(async_nats::jetstream::consumer::pull::Config {
+            deliver_policy: async_nats::jetstream::consumer::DeliverPolicy::ByStartSequence {
+                start_sequence: start_seq,
+            },
+            ack_policy: async_nats::jetstream::consumer::AckPolicy::None,
+            ..Default::default()
+        })
+        .await
+        .map_err(|_| ApiError::internal("failed to create chain-violation consumer"))?;
+
+    let mut scanned = 0usize;
+    let mut reasons: std::collections::HashMap<String, u64> = std::collections::HashMap::new();
+    let mut issuers: std::collections::HashMap<String, u64> = std::collections::HashMap::new();
+    let mut latest_violation_at: Option<String> = None;
+
+    while scanned < expected {
+        let remaining = expected - scanned;
+        let mut messages = consumer
+            .fetch()
+            .max_messages(next_leaf_batch_size(remaining))
+            .messages()
+            .await
+            .map_err(|_| ApiError::internal("failed to fetch chain-violation events"))?;
+        let mut pulled = 0usize;
+        while let Some(msg) = messages.next().await {
+            let msg =
+                msg.map_err(|_| ApiError::internal("failed to read chain-violation event"))?;
+            pulled += 1;
+            scanned += 1;
+
+            let event: Value = match serde_json::from_slice(&msg.payload) {
+                Ok(v) => v,
+                Err(_) => continue,
+            };
+            let reason = event
+                .get("reason")
+                .and_then(|v| v.as_str())
+                .unwrap_or("unknown")
+                .to_string();
+            let issuer = event
+                .get("issuer")
+                .and_then(|v| v.as_str())
+                .unwrap_or("unknown")
+                .to_string();
+            let detected_at = event
+                .get("detected_at")
+                .and_then(|v| v.as_str())
+                .map(str::to_string);
+
+            *reasons.entry(reason).or_insert(0) += 1;
+            *issuers.entry(issuer).or_insert(0) += 1;
+            if let Some(ts) = detected_at {
+                if latest_violation_at.as_ref().is_none_or(|cur| ts > *cur) {
+                    latest_violation_at = Some(ts);
+                }
+            }
+        }
+        if pulled == 0 {
+            break;
+        }
+    }
+
+    Ok(Json(json!({
+        "schema": "clawdstrike.spine.query.chain_violation_stats.v1",
+        "total_events_scanned": scanned,
+        "scan_cap": scan_cap,
+        "truncated": truncated,
+        "window_start_seq": start_seq,
+        "window_end_seq": end_seq,
+        "top_reasons": sort_top_counts(reasons, top_n),
+        "top_issuers": sort_top_counts(issuers, top_n),
+        "latest_violation_at": latest_violation_at
+    })))
+}
+
 async fn v1_envelope_by_hash(
     State(state): State<Arc<AppState>>,
     Path(envelope_hash): Path<String>,
@@ -698,6 +883,7 @@ async fn main() -> Result<()> {
     let checkpoint_kv = nats::ensure_kv(&js, &args.checkpoint_bucket, replicas).await?;
     let envelope_kv = nats::ensure_kv(&js, &args.envelope_bucket, replicas).await?;
     let fact_index_kv = nats::ensure_kv(&js, &args.fact_index_bucket, replicas).await?;
+    let issuer_heads_kv = nats::ensure_kv(&js, &args.issuer_heads_bucket, replicas).await?;
     js.get_stream(&args.log_stream)
         .await
         .context("failed to get spine log stream")?;
@@ -709,6 +895,9 @@ async fn main() -> Result<()> {
         checkpoint_kv,
         envelope_kv,
         fact_index_kv,
+        issuer_heads_kv,
+        chain_violation_stream: args.chain_violation_stream.clone(),
+        chain_violation_stats_scan_cap: args.chain_violation_stats_scan_cap,
         max_keys_scan: args.max_keys_scan,
         leaves_cache: Arc::new(Mutex::new(None)),
     });
@@ -735,6 +924,8 @@ async fn main() -> Result<()> {
             "/v1/node-attestations/by-issuer/{issuer_hex}",
             get(v1_node_attestation_by_issuer),
         )
+        .route("/v1/issuer_chain_head/{issuer}", get(v1_issuer_chain_head))
+        .route("/v1/chain_violation_stats", get(v1_chain_violation_stats))
         .route(
             "/v1/marketplace/attestation/{bundle_hash}",
             get(v1_marketplace_attestation_by_bundle_hash),
@@ -908,6 +1099,21 @@ mod tests {
             "0xaabbcc00aabbcc00aabbcc00aabbcc00aabbcc00aabbcc00aabbcc00aabbcc00"
         );
         assert_eq!(prefix, format!("receipt_verification.{target}."));
+    }
+
+    #[test]
+    fn sort_top_counts_orders_by_count_then_key() {
+        let mut counts = std::collections::HashMap::new();
+        counts.insert("issuer-b".to_string(), 2);
+        counts.insert("issuer-a".to_string(), 2);
+        counts.insert("issuer-c".to_string(), 1);
+
+        let top = sort_top_counts(counts, 2);
+        assert_eq!(top.len(), 2);
+        assert_eq!(top[0]["key"], "issuer-a");
+        assert_eq!(top[0]["count"], 2);
+        assert_eq!(top[1]["key"], "issuer-b");
+        assert_eq!(top[1]["count"], 2);
     }
 
     #[test]

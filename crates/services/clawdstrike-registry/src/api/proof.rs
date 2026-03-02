@@ -45,8 +45,8 @@ pub async fn get_proof(
     State(state): State<AppState>,
     Path((name, version)): Path<(String, String)>,
 ) -> Result<Json<InclusionProofResponse>, RegistryError> {
-    // Look up the version and its leaf_index.
-    let leaf_index = {
+    // Look up the version, leaf_index, and signing key id used at publish time.
+    let (leaf_index, key_id) = {
         let db = state
             .db
             .lock()
@@ -56,11 +56,12 @@ pub async fn get_proof(
             RegistryError::NotFound(format!("version {version} of {name} not found"))
         })?;
 
-        v.leaf_index.ok_or_else(|| {
+        let leaf_index = v.leaf_index.ok_or_else(|| {
             RegistryError::NotFound(format!(
                 "inclusion proof for {name}@{version} not yet available (legacy version)"
             ))
-        })?
+        })?;
+        (leaf_index, v.key_id)
     };
 
     // Generate the inclusion proof from the Merkle tree.
@@ -85,10 +86,18 @@ pub async fn get_proof(
             .key_manager
             .lock()
             .map_err(|e| RegistryError::Internal(format!("key_manager lock poisoned: {e}")))?;
-        let current_keypair = key_mgr.current_keypair();
+        let signing_keypair = if let Some(ref kid) = key_id {
+            key_mgr.keypair_for_key_id(kid).ok_or_else(|| {
+                RegistryError::Internal(format!(
+                    "missing signing key material for published key_id {kid}"
+                ))
+            })?
+        } else {
+            key_mgr.current_keypair()
+        };
         (
-            current_keypair.sign(checkpoint_message.as_bytes()).to_hex(),
-            current_keypair.public_key().to_hex(),
+            signing_keypair.sign(checkpoint_message.as_bytes()).to_hex(),
+            signing_keypair.public_key().to_hex(),
         )
     };
 

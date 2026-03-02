@@ -137,6 +137,14 @@ impl RegistryKeyManager {
             .expect("RegistryKeyManager must always have an active keypair")
     }
 
+    /// Get a signing keypair by key id, if private material is present.
+    pub fn keypair_for_key_id(&self, key_id: &str) -> Option<&Keypair> {
+        self.keys
+            .iter()
+            .find(|k| k.info.key_id == key_id)
+            .and_then(|k| k.keypair.as_ref())
+    }
+
     /// List all key infos (including deprecated/revoked).
     #[allow(dead_code)]
     pub fn all_keys(&self) -> Vec<&RegistryKeyInfo> {

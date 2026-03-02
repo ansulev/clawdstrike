@@ -402,6 +402,44 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn proof_uses_publish_time_registry_key_after_rotation() {
+        let (state, _tmp) = test_state();
+        let publisher = Keypair::from_seed(&[90u8; 32]);
+        let package = "proof-key-test";
+        let version = "1.0.0";
+
+        let (req, _archive) = publish_request(package, version, &publisher);
+        let _published = publish::publish(State(state.clone()), HeaderMap::new(), Json(req))
+            .await
+            .unwrap();
+
+        let att = attestation::get_attestation(
+            State(state.clone()),
+            Path((package.to_string(), version.to_string())),
+        )
+        .await
+        .unwrap();
+        let publish_time_key = att.0.registry_key.clone().unwrap();
+
+        let rotated = Keypair::from_seed(&[91u8; 32]);
+        let rotated_key = rotated.public_key().to_hex();
+        {
+            let mut key_mgr = state.key_manager.lock().unwrap();
+            key_mgr.rotate(rotated, 30).unwrap();
+        }
+
+        let proof = proof::get_proof(
+            State(state.clone()),
+            Path((package.to_string(), version.to_string())),
+        )
+        .await
+        .unwrap();
+
+        assert_ne!(publish_time_key, rotated_key);
+        assert_eq!(proof.0.checkpoint_key, publish_time_key);
+    }
+
+    #[tokio::test]
     async fn publish_rejects_manifest_mismatch_between_body_and_archive() {
         let (state, _tmp) = test_state();
         let publisher = Keypair::from_seed(&[31u8; 32]);

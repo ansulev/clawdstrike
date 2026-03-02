@@ -2,7 +2,7 @@
   "mcpServers": {
     "clawdstrike": {
       "command": "bun",
-      "args": ["run", "scripts/mcp-server.ts"]
+      "args": ["run", "${CLAUDE_PLUGIN_ROOT}/scripts/mcp-server.ts"]
     }
   }
 }

@@ -13,6 +13,18 @@ Runtime security enforcement for AI coding agents. This plugin integrates ClawdS
 
 ## Installation
 
+### From the marketplace (recommended)
+
+```shell
+# Add the ClawdStrike marketplace
+/plugin marketplace add backbay-labs/clawdstrike
+
+# Install the plugin
+/plugin install clawdstrike@clawdstrike
+```
+
+### From a local clone
+
 ```bash
 claude --plugin-dir ./clawdstrike-plugin
 ```

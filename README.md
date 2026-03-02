@@ -209,6 +209,14 @@ openclaw plugins enable clawdstrike-security
 
 Clawdstrike ships as a native [Claude Code](https://docs.anthropic.com/en/docs/claude-code) plugin. Every tool call Claude makes is checked against your security policy before execution, with a full audit trail of signed receipts.
 
+```shell
+# From inside Claude Code:
+/plugin marketplace add backbay-labs/clawdstrike
+/plugin install clawdstrike@clawdstrike
+```
+
+Or from a local clone:
+
 ```bash
 claude --plugin-dir ./clawdstrike-plugin
 ```

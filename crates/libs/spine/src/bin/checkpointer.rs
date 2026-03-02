@@ -1073,18 +1073,18 @@ async fn main() -> Result<()> {
 
                 // Update in-memory issuer head.
                 if let Ok(new_head) = chain_head_from_envelope(&envelope) {
-                    let issuer_key = new_head.issuer.clone();
+                    let issuer_str = new_head.issuer.clone();
                     let head_bytes = serde_json::to_vec(&new_head).unwrap_or_default();
-                    issuer_heads.insert(issuer_key.clone(), new_head);
+                    issuer_heads.insert(issuer_str.clone(), new_head);
 
-                    // Fire-and-forget KV persist.
-                    let kv = issuer_heads_kv.clone();
-                    let key = issuer_key;
-                    tokio::spawn(async move {
-                        if let Err(e) = kv.put(&key, head_bytes.into()).await {
-                            tracing::warn!(issuer = %key, "failed to persist issuer head: {e}");
-                        }
-                    });
+                    // Persist to KV using hex pubkey as key (issuer string
+                    // contains `:` which is invalid for JetStream KV keys).
+                    // Awaited inline to guarantee write ordering per issuer.
+                    let kv_key = spine::parse_issuer_pubkey_hex(&issuer_str)
+                        .unwrap_or_else(|_| issuer_str.replace(':', "_"));
+                    if let Err(e) = issuer_heads_kv.put(&kv_key, head_bytes.into()).await {
+                        warn!(issuer = %issuer_str, "failed to persist issuer head: {e}");
+                    }
                 }
 
                 match envelope_kv.get(&envelope_hash_hex).await {

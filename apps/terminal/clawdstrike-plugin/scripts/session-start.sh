@@ -40,9 +40,10 @@ if [ -n "${CLAWDSTRIKE_POLICY_BUNDLE:-}" ] && [ -f "$CLAWDSTRIKE_POLICY_BUNDLE" 
 fi
 
 # Get active policy info
+# `policy show` returns YAML by default; use `--json` for parseable output.
 POLICY_NAME="ai-agent"
 GUARD_COUNT="unknown"
-if POLICY_INFO=$("$CLI" policy show ai-agent 2>/dev/null); then
+if POLICY_INFO=$("$CLI" policy show ai-agent --json 2>/dev/null); then
   POLICY_NAME=$(echo "$POLICY_INFO" | jq -er '.name // "ai-agent"' 2>/dev/null) || POLICY_NAME="ai-agent"
   GUARD_COUNT=$(echo "$POLICY_INFO" | jq -er '.guards | length' 2>/dev/null) || GUARD_COUNT="unknown"
 fi
@@ -82,6 +83,10 @@ Available commands:
   /clawdstrike:tui     - Launch interactive TUI dashboard"
 
 # Output hookSpecificOutput JSON to stdout
-jq -cn --arg context "$CONTEXT" '{hookSpecificOutput:{additionalContext:$context}}'
+# Set CLAWDSTRIKE_SESSION_ID env var so subsequent hooks share the same session
+jq -cn \
+  --arg context "$CONTEXT" \
+  --arg session_id "$SESSION_ID" \
+  '{hookSpecificOutput:{additionalContext:$context,env:{CLAWDSTRIKE_SESSION_ID:$session_id}}}'
 
 exit 0

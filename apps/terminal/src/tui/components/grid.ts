@@ -20,7 +20,7 @@ const BLOCKS = [" ", "\u2591", "\u2592", "\u2593", "\u2588"]
 function valueToBlock(value: number, maxValue: number): string {
   if (maxValue <= 0 || value <= 0) return BLOCKS[0]
   const normalized = Math.min(value / maxValue, 1)
-  const idx = Math.min(Math.floor(normalized * (BLOCKS.length - 1)) + (value > 0 ? 1 : 0), BLOCKS.length - 1)
+  const idx = Math.min(Math.floor(normalized * (BLOCKS.length - 1)) + 1, BLOCKS.length - 1)
   return BLOCKS[idx]
 }
 

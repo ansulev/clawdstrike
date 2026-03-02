@@ -87,7 +87,9 @@ export namespace Orchestrator {
         config.toolchains.map(async (toolchain) => {
           onProgress?.(toolchain, "acquiring")
           try {
-            const wc = await Workcell.acquire(task.context.projectId, toolchain)
+            const wc = await Workcell.acquire(task.context.projectId, toolchain, {
+              cwd: task.context.cwd,
+            })
             workcellIds.push(wc.id)
             return { toolchain, workcell: wc, error: undefined }
           } catch (err) {

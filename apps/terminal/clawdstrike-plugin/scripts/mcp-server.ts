@@ -281,8 +281,8 @@ server.tool(
         isError: true,
       };
     }
-    const args = ["policy", "simulate", ref, events];
-    return toToolResult(await runCli(args, 60_000));
+    const args = ["policy", "simulate", ref, "-"];
+    return toToolResult(await runCliStdin(args, events, 60_000));
   },
 );
 

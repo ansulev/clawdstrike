@@ -35,6 +35,8 @@ interface CLIOptions {
   strategy?: string
   cwd?: string
   project?: string
+  limit?: number
+  offset?: number
 }
 
 // =============================================================================
@@ -55,6 +57,8 @@ function parseCliArgs(): { command: string; args: string[]; options: CLIOptions 
       strategy: { type: "string", short: "s" },
       cwd: { type: "string" },
       project: { type: "string", short: "p" },
+      limit: { type: "string", short: "n" },
+      offset: { type: "string" },
     },
     allowPositionals: true,
     strict: false,
@@ -81,6 +85,8 @@ function parseCliArgs(): { command: string; args: string[]; options: CLIOptions 
       strategy: values.strategy as string | undefined,
       cwd: values.cwd as string | undefined,
       project: values.project as string | undefined,
+      limit: values.limit ? parseInt(values.limit as string, 10) : undefined,
+      offset: values.offset ? parseInt(values.offset as string, 10) : undefined,
     },
   }
 }
@@ -214,6 +220,7 @@ async function cmdDispatch(args: string[], options: CLIOptions): Promise<void> {
         )
       } else {
         console.log(TUI.error(`Task failed: ${r.error ?? "Unknown error"}`))
+        process.exit(1)
       }
     }
   } catch (err) {
@@ -273,6 +280,7 @@ async function cmdSpeculate(args: string[], options: CLIOptions): Promise<void> 
         for (const res of r.allResults) {
           console.log(`  ✗ ${res.toolchain}: ${res.score}/100`)
         }
+        process.exit(1)
       }
     }
   } catch (err) {
@@ -332,6 +340,10 @@ async function cmdGate(args: string[], options: CLIOptions): Promise<void> {
       }
 
       console.log(TUI.info(r.summary))
+
+      if (!r.success) {
+        process.exit(1)
+      }
     }
   } catch (err) {
     console.error(TUI.error(`Gate check failed: ${err}`))
@@ -353,7 +365,8 @@ async function cmdBeads(args: string[], options: CLIOptions): Promise<void> {
   switch (subcommand) {
     case "list": {
       const issues = await Beads.query({
-        limit: options.timeout, // reusing timeout for limit
+        limit: options.limit,
+        offset: options.offset,
       })
 
       if (options.json) {

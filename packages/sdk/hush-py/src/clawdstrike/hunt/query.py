@@ -5,12 +5,20 @@ Port of ``hunt-query/src/query.rs``.
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 from clawdstrike.hunt.types import (
     EventSourceType,
     HuntQuery,
     NormalizedVerdict,
     TimelineEvent,
 )
+
+
+def _as_utc(dt: datetime) -> datetime:
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
 
 # ---------------------------------------------------------------------------
 # EventSource helpers
@@ -134,9 +142,9 @@ def matches_query(query: HuntQuery, event: TimelineEvent) -> bool:
             return False
 
     # Time range
-    if query.start is not None and event.timestamp < query.start:
+    if query.start is not None and _as_utc(event.timestamp) < _as_utc(query.start):
         return False
-    if query.end is not None and event.timestamp > query.end:
+    if query.end is not None and _as_utc(event.timestamp) > _as_utc(query.end):
         return False
 
     # Action type (case-insensitive exact)

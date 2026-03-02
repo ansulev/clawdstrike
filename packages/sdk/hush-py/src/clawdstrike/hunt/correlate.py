@@ -66,6 +66,8 @@ def _desugar_sequence(items: list[dict]) -> list[dict]:
 
     conditions: list[dict] = []
     for i, item in enumerate(items):
+        if not isinstance(item, dict):
+            raise CorrelationError(f"sequence item {i} must be a mapping")
         cond = dict(item)
         if "after" not in cond or cond["after"] is None:
             if i > 0:
@@ -116,7 +118,9 @@ def parse_rule(yaml_str: str) -> CorrelationRule:
         raise CorrelationError("conditions must be a list")
 
     conditions: list[RuleCondition] = []
-    for rc in raw_conditions:
+    for idx, rc in enumerate(raw_conditions):
+        if not isinstance(rc, dict):
+            raise CorrelationError(f"condition {idx} must be a mapping")
         within: timedelta | None = None
         if "within" in rc and rc["within"] is not None:
             within = parse_human_duration(str(rc["within"]))

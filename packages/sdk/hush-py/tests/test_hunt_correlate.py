@@ -314,6 +314,41 @@ output:
         with pytest.raises(CorrelationError, match="'within' must be a positive duration"):
             parse_rule(yaml_str)
 
+    def test_reject_non_mapping_condition_entry(self) -> None:
+        yaml_str = """\
+schema: clawdstrike.hunt.correlation.v1
+name: "Bad condition entry"
+severity: low
+description: "test"
+window: 10s
+conditions:
+  - "oops"
+output:
+  title: "test"
+  evidence: []
+"""
+        with pytest.raises(CorrelationError, match="condition 0 must be a mapping"):
+            parse_rule(yaml_str)
+
+    def test_reject_non_mapping_sequence_entry(self) -> None:
+        yaml_str = """\
+schema: clawdstrike.hunt.correlation.v1
+name: "Bad sequence entry"
+severity: low
+description: "test"
+window: 10s
+sequence:
+  - source: receipt
+    bind: first
+  - "oops"
+output:
+  title: "test"
+  evidence:
+    - first
+"""
+        with pytest.raises(CorrelationError, match="sequence item 1 must be a mapping"):
+            parse_rule(yaml_str)
+
 
 # ---------------------------------------------------------------------------
 # Load from files

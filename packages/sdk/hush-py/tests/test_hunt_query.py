@@ -243,6 +243,13 @@ class TestMatchesQuery:
         )
         assert matches_query(q, _make_event())
 
+    def test_time_range_naive_datetimes_are_normalized(self) -> None:
+        q = HuntQuery(
+            start=datetime(2025, 6, 15, 11, 0, 0),
+            end=datetime(2025, 6, 15, 13, 0, 0),
+        )
+        assert matches_query(q, _make_event())
+
     def test_action_type_case_insensitive(self) -> None:
         q = HuntQuery(action_type="PROCESS")
         assert matches_query(q, _make_event())

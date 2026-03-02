@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/backbay/clawdstrike-go/crypto"
+	"github.com/backbay-labs/clawdstrike-go/crypto"
 )
 
 // Reference implementation: recursive tree hash for verification

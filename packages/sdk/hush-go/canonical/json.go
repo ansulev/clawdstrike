@@ -13,7 +13,7 @@ import (
 	"strings"
 	"unicode/utf16"
 
-	"github.com/backbay/clawdstrike-go/crypto"
+	"github.com/backbay-labs/clawdstrike-go/crypto"
 )
 
 // Canonicalize serializes a value to canonical JSON per RFC 8785.
@@ -178,17 +178,18 @@ func canonicalizeFloat(v float64) (string, error) {
 
 	useExponential := abs < 1e-6 || abs >= 1e21
 
-	// Use strconv.FormatFloat with 'e' for scientific or 'f' for decimal,
-	// but we need shortest representation. Use 'g' as a base, then reformat.
-	// Actually, ECMAScript uses a specific algorithm. Let's use the ryu-like approach.
-
-	// Get the shortest decimal representation
-	digits, exp := shortestDecimal(abs)
-
 	if useExponential {
-		mantissa := digits
-		if len(mantissa) > 1 {
-			mantissa = mantissa[:1] + "." + mantissa[1:]
+		// Scientific notation comes from Go's shortest representation and is
+		// normalized to the exponent formatting expected by JCS.
+		sci := strconv.FormatFloat(abs, 'e', -1, 64)
+		parts := strings.SplitN(sci, "e", 2)
+		if len(parts) != 2 {
+			return "", fmt.Errorf("canonical: invalid scientific float %q", sci)
+		}
+		mantissa := trimTrailingDecimalZeros(parts[0])
+		exp, err := strconv.Atoi(parts[1])
+		if err != nil {
+			return "", fmt.Errorf("canonical: invalid scientific exponent %q", parts[1])
 		}
 		expSign := "+"
 		if exp < 0 {
@@ -197,6 +198,8 @@ func canonicalizeFloat(v float64) (string, error) {
 		return fmt.Sprintf("%s%se%s%d", sign, mantissa, expSign, exp), nil
 	}
 
+	// Get the shortest decimal representation
+	digits, exp := shortestDecimal(abs)
 	rendered := renderDecimal(digits, exp)
 	return sign + rendered, nil
 }

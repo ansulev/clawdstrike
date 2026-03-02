@@ -19,9 +19,9 @@ var supportedVersions = map[string]bool{
 type MergeStrategy string
 
 const (
-	MergeReplace  MergeStrategy = "replace"
-	MergeMerge    MergeStrategy = "merge"
-	MergeDeep     MergeStrategy = "deep_merge"
+	MergeReplace MergeStrategy = "replace"
+	MergeMerge   MergeStrategy = "merge"
+	MergeDeep    MergeStrategy = "deep_merge"
 )
 
 // GuardConfigs holds optional configuration for each guard.
@@ -51,6 +51,44 @@ type Policy struct {
 	MergeStrategy MergeStrategy  `yaml:"merge_strategy,omitempty"`
 	Guards        GuardConfigs   `yaml:"guards"`
 	Settings      PolicySettings `yaml:"settings"`
+	settingsSet   bool           `yaml:"-"`
+}
+
+type extendsField []string
+
+func (e *extendsField) UnmarshalYAML(node *yaml.Node) error {
+	switch node.Kind {
+	case yaml.ScalarNode:
+		value := strings.TrimSpace(node.Value)
+		if value == "" {
+			*e = nil
+			return nil
+		}
+		*e = []string{value}
+		return nil
+	case yaml.SequenceNode:
+		values := make([]string, 0, len(node.Content))
+		for _, item := range node.Content {
+			if item.Kind != yaml.ScalarNode {
+				return fmt.Errorf("policy: extends entries must be strings")
+			}
+			values = append(values, strings.TrimSpace(item.Value))
+		}
+		*e = values
+		return nil
+	default:
+		return fmt.Errorf("policy: extends must be a string or list of strings")
+	}
+}
+
+type decodedPolicy struct {
+	Version       string          `yaml:"version"`
+	Name          string          `yaml:"name"`
+	Description   string          `yaml:"description,omitempty"`
+	Extends       extendsField    `yaml:"extends,omitempty"`
+	MergeStrategy MergeStrategy   `yaml:"merge_strategy,omitempty"`
+	Guards        GuardConfigs    `yaml:"guards"`
+	Settings      *PolicySettings `yaml:"settings,omitempty"`
 }
 
 var placeholderRe = regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*)\}`)
@@ -76,12 +114,26 @@ func substitutePolicy(p *Policy) {
 // Environment variable substitution (${VAR}) is applied to string fields
 // after parsing, so it cannot alter YAML structure.
 func FromYAML(data []byte) (*Policy, error) {
-	var p Policy
+	var decoded decodedPolicy
 	dec := yaml.NewDecoder(strings.NewReader(string(data)))
 	dec.KnownFields(true)
-	if err := dec.Decode(&p); err != nil {
+	if err := dec.Decode(&decoded); err != nil {
 		return nil, fmt.Errorf("policy: parse YAML: %w", err)
 	}
+
+	p := Policy{
+		Version:       decoded.Version,
+		Name:          decoded.Name,
+		Description:   decoded.Description,
+		Extends:       append([]string(nil), decoded.Extends...),
+		MergeStrategy: decoded.MergeStrategy,
+		Guards:        decoded.Guards,
+	}
+	if decoded.Settings != nil {
+		p.Settings = *decoded.Settings
+		p.settingsSet = true
+	}
+
 	substitutePolicy(&p)
 	if err := p.Validate(); err != nil {
 		return nil, err

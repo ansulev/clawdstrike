@@ -30,6 +30,19 @@ func TestJCSNumberVector(t *testing.T) {
 	}
 }
 
+func TestJCSExponentialMantissaRegression(t *testing.T) {
+	input := `{"small":1.5e-7,"large":1.5e21}`
+	expected := `{"large":1.5e+21,"small":1.5e-7}`
+
+	result, err := CanonicalizeBytes([]byte(input))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result != expected {
+		t.Errorf("JCS mantissa regression:\ngot:  %s\nwant: %s", result, expected)
+	}
+}
+
 func TestJCSEscapeShortcuts(t *testing.T) {
 	input := map[string]interface{}{
 		"b":         "\b",

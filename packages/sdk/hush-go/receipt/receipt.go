@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/backbay/clawdstrike-go/canonical"
-	"github.com/backbay/clawdstrike-go/crypto"
+	"github.com/backbay-labs/clawdstrike-go/canonical"
+	"github.com/backbay-labs/clawdstrike-go/crypto"
 )
 
 // SchemaVersion is the current receipt schema version.

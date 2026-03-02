@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/backbay/clawdstrike-go/policy"
+	"github.com/backbay-labs/clawdstrike-go/policy"
 )
 
 // Default prompt injection thresholds.

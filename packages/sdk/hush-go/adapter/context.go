@@ -4,7 +4,7 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/backbay/clawdstrike-go/internal"
+	"github.com/backbay-labs/clawdstrike-go/internal"
 )
 
 // SecurityContext tracks security state for an adapter session.

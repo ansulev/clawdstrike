@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/backbay/clawdstrike-go/siem"
-	"github.com/backbay/clawdstrike-go/siem/transforms"
+	"github.com/backbay-labs/clawdstrike-go/siem"
+	"github.com/backbay-labs/clawdstrike-go/siem/transforms"
 )
 
 // mockExporter collects exported batches for assertions.

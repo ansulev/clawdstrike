@@ -8,7 +8,7 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/backbay/clawdstrike-go/siem"
+	"github.com/backbay-labs/clawdstrike-go/siem"
 )
 
 // DatadogExporter sends security events to Datadog Logs API.

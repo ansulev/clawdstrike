@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/backbay/clawdstrike-go/engine"
-	"github.com/backbay/clawdstrike-go/guards"
+	"github.com/backbay-labs/clawdstrike-go/engine"
+	"github.com/backbay-labs/clawdstrike-go/guards"
 )
 
 // BaseToolInterceptor is a default ToolInterceptor implementation that uses

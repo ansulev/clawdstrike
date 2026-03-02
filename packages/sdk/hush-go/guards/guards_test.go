@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/backbay/clawdstrike-go/policy"
+	"github.com/backbay-labs/clawdstrike-go/policy"
 )
 
 // --- ForbiddenPath ---

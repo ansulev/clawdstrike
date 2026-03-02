@@ -8,7 +8,7 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/backbay/clawdstrike-go/siem"
+	"github.com/backbay-labs/clawdstrike-go/siem"
 )
 
 // SplunkExporter sends security events to Splunk HTTP Event Collector (HEC).

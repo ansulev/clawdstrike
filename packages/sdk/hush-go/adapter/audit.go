@@ -6,8 +6,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/backbay/clawdstrike-go/guards"
-	"github.com/backbay/clawdstrike-go/internal"
+	"github.com/backbay-labs/clawdstrike-go/guards"
+	"github.com/backbay-labs/clawdstrike-go/internal"
 )
 
 // AuditEvent records a security-relevant event.

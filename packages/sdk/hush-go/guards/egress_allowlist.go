@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/backbay/clawdstrike-go/policy"
+	"github.com/backbay-labs/clawdstrike-go/policy"
 )
 
 // DefaultAllowedDomains are the default egress allowlist from the default ruleset.

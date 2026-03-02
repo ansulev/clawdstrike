@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/backbay/clawdstrike-go/guards"
+	"github.com/backbay-labs/clawdstrike-go/guards"
 )
 
 func TestFromPolicyBuildsEngine(t *testing.T) {

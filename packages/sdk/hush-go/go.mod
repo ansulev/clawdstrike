@@ -1,4 +1,4 @@
-module github.com/backbay/clawdstrike-go
+module github.com/backbay-labs/clawdstrike-go
 
 go 1.22
 

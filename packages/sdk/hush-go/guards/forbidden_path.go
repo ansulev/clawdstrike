@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"path/filepath"
 
-	"github.com/backbay/clawdstrike-go/internal"
-	"github.com/backbay/clawdstrike-go/policy"
+	"github.com/backbay-labs/clawdstrike-go/internal"
+	"github.com/backbay-labs/clawdstrike-go/policy"
 )
 
 // DefaultForbiddenPatterns are the default patterns from the default ruleset.

@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/backbay/clawdstrike-go/siem"
+	"github.com/backbay-labs/clawdstrike-go/siem"
 )
 
 type closeAwareExporter struct {

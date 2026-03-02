@@ -1,7 +1,7 @@
 package transforms
 
 import (
-	"github.com/backbay/clawdstrike-go/siem"
+	"github.com/backbay-labs/clawdstrike-go/siem"
 )
 
 // OCSF Activity IDs for Security Finding.

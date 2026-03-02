@@ -6,7 +6,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/backbay/clawdstrike-go/guards"
+	"github.com/backbay-labs/clawdstrike-go/guards"
 )
 
 // ToolInterceptor is the interface for intercepting tool calls in an

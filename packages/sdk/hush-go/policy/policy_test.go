@@ -152,6 +152,21 @@ name: FileTest
 	}
 }
 
+func TestFromYAMLAcceptsScalarExtends(t *testing.T) {
+	yamlData := []byte(`
+version: "1.1.0"
+name: ScalarExtends
+extends: strict
+`)
+	p, err := FromYAML(yamlData)
+	if err != nil {
+		t.Fatalf("FromYAML: %v", err)
+	}
+	if len(p.Extends) != 1 || p.Extends[0] != "strict" {
+		t.Fatalf("expected extends [strict], got %v", p.Extends)
+	}
+}
+
 func TestResolveBuiltin(t *testing.T) {
 	p, err := Resolve("default")
 	if err != nil {
@@ -200,6 +215,31 @@ guards:
 	// Parent's patch_integrity should carry through
 	if p.Guards.PatchIntegrity == nil {
 		t.Fatal("expected PatchIntegrity inherited from permissive")
+	}
+}
+
+func TestResolveWithNamespacedBuiltinExtends(t *testing.T) {
+	dir := t.TempDir()
+	childPath := filepath.Join(dir, "child.yaml")
+
+	childYAML := []byte(`
+version: "1.1.0"
+name: ChildPolicy
+extends: clawdstrike:permissive
+`)
+	if err := os.WriteFile(childPath, childYAML, 0o644); err != nil {
+		t.Fatalf("write child: %v", err)
+	}
+
+	p, err := Resolve(childPath)
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if p.Name != "ChildPolicy" {
+		t.Fatalf("expected child name override, got %q", p.Name)
+	}
+	if p.Guards.PatchIntegrity == nil {
+		t.Fatal("expected guard config inherited from namespaced builtin extends")
 	}
 }
 
@@ -442,5 +482,55 @@ func TestDeepMergeEnabledAndRequireBalanceOverride(t *testing.T) {
 	}
 	if result.Guards.PatchIntegrity.Enabled == nil || *result.Guards.PatchIntegrity.Enabled {
 		t.Error("expected patch_integrity enabled override to false")
+	}
+}
+
+func TestMergeInheritsBaseSettingsWhenChildOmitsSettings(t *testing.T) {
+	base := &Policy{
+		Version: "1.1.0",
+		Name:    "Base",
+		Settings: PolicySettings{
+			FailFast:           true,
+			VerboseLogging:     true,
+			SessionTimeoutSecs: 90,
+		},
+		settingsSet: true,
+	}
+	child := &Policy{
+		Version: "1.1.0",
+		Name:    "Child",
+	}
+
+	result := Merge(base, child)
+	if !result.Settings.FailFast || !result.Settings.VerboseLogging || result.Settings.SessionTimeoutSecs != 90 {
+		t.Fatalf("expected inherited settings, got %+v", result.Settings)
+	}
+}
+
+func TestMergeUsesChildSettingsWhenExplicitlySet(t *testing.T) {
+	base := &Policy{
+		Version: "1.1.0",
+		Name:    "Base",
+		Settings: PolicySettings{
+			FailFast:           true,
+			VerboseLogging:     true,
+			SessionTimeoutSecs: 90,
+		},
+		settingsSet: true,
+	}
+	child := &Policy{
+		Version: "1.1.0",
+		Name:    "Child",
+		Settings: PolicySettings{
+			FailFast:           false,
+			VerboseLogging:     false,
+			SessionTimeoutSecs: 0,
+		},
+		settingsSet: true,
+	}
+
+	result := Merge(base, child)
+	if result.Settings.FailFast || result.Settings.VerboseLogging || result.Settings.SessionTimeoutSecs != 0 {
+		t.Fatalf("expected explicit child settings to override base, got %+v", result.Settings)
 	}
 }

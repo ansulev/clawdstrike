@@ -8,10 +8,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/backbay/clawdstrike-go/crypto"
-	"github.com/backbay/clawdstrike-go/guards"
-	"github.com/backbay/clawdstrike-go/policy"
-	"github.com/backbay/clawdstrike-go/receipt"
+	"github.com/backbay-labs/clawdstrike-go/crypto"
+	"github.com/backbay-labs/clawdstrike-go/guards"
+	"github.com/backbay-labs/clawdstrike-go/policy"
+	"github.com/backbay-labs/clawdstrike-go/receipt"
 )
 
 // HushEngine orchestrates guards and signs receipts. Fail-closed: if a

@@ -6,10 +6,10 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/backbay/clawdstrike-go/engine"
-	"github.com/backbay/clawdstrike-go/guards"
-	"github.com/backbay/clawdstrike-go/policy"
-	"github.com/backbay/clawdstrike-go/session"
+	"github.com/backbay-labs/clawdstrike-go/engine"
+	"github.com/backbay-labs/clawdstrike-go/guards"
+	"github.com/backbay-labs/clawdstrike-go/policy"
+	"github.com/backbay-labs/clawdstrike-go/session"
 )
 
 // Re-export Decision types from guards package for top-level API convenience.

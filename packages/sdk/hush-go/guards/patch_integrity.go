@@ -5,7 +5,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/backbay/clawdstrike-go/policy"
+	"github.com/backbay-labs/clawdstrike-go/policy"
 )
 
 // Default patch integrity limits from the default ruleset.

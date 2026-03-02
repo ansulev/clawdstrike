@@ -390,6 +390,61 @@ if alerts:
     print(report.merkle_root)
 ```
 
+### Go
+
+```bash
+go get github.com/backbay-labs/clawdstrike-go
+```
+
+```go
+package main
+
+import (
+	"fmt"
+
+	clawdstrike "github.com/backbay-labs/clawdstrike-go"
+)
+
+func main() {
+	cs, err := clawdstrike.WithDefaults("strict")
+	if err != nil {
+		panic(err)
+	}
+
+	decision := cs.CheckFileAccess("/home/user/.ssh/id_rsa")
+	fmt.Println(decision.Status)  // deny
+	fmt.Println(decision.Message) // Access to forbidden path: ...
+}
+```
+
+#### Daemon-backed Enforcement
+
+```go
+package main
+
+import (
+	"fmt"
+	"time"
+
+	clawdstrike "github.com/backbay-labs/clawdstrike-go"
+)
+
+func main() {
+	cs, err := clawdstrike.FromDaemonWithConfig("http://127.0.0.1:9876", clawdstrike.DaemonConfig{
+		APIKey:        "dev-token",
+		Timeout:       5 * time.Second,
+		RetryAttempts: 3,
+		RetryBackoff:  200 * time.Millisecond,
+	})
+	if err != nil {
+		panic(err)
+	}
+
+	decision := cs.CheckEgress("api.openai.com", 443)
+	fmt.Println(decision.Status) // allow / warn / deny
+}
+```
+
 ### OpenClaw Plugin
 
 Clawdstrike ships as a first-class [OpenClaw](https://openclaw.com) plugin that enforces policy at the tool boundary — every tool call your agent makes is checked against your policy before execution.

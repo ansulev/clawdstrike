@@ -4,7 +4,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/backbay/clawdstrike-go/guards"
+	"github.com/backbay-labs/clawdstrike-go/guards"
 )
 
 // mockEngine is a test double that returns configurable results.

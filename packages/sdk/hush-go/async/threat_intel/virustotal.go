@@ -68,10 +68,7 @@ func (c *VirusTotalClient) doGet(ctx context.Context, url string) (*ThreatResult
 	var raw struct {
 		Data struct {
 			Attributes struct {
-				LastAnalysisStats struct {
-					Malicious int `json:"malicious"`
-					Harmless  int `json:"harmless"`
-				} `json:"last_analysis_stats"`
+				LastAnalysisStats map[string]int `json:"last_analysis_stats"`
 			} `json:"attributes"`
 		} `json:"data"`
 	}
@@ -81,18 +78,23 @@ func (c *VirusTotalClient) doGet(ctx context.Context, url string) (*ThreatResult
 	}
 
 	stats := raw.Data.Attributes.LastAnalysisStats
-	total := stats.Malicious + stats.Harmless
+	maliciousCount := stats["malicious"]
+	total := 0
+	for _, count := range stats {
+		if count > 0 {
+			total += count
+		}
+	}
 	score := 0.0
 	if total > 0 {
-		score = float64(stats.Malicious) / float64(total)
+		score = float64(maliciousCount) / float64(total)
 	}
 
 	return &ThreatResult{
-		Malicious: stats.Malicious > 0,
+		Malicious: maliciousCount > 0,
 		Score:     score,
 		Details: map[string]interface{}{
-			"malicious_count": stats.Malicious,
-			"harmless_count":  stats.Harmless,
+			"analysis_stats": stats,
 		},
 	}, nil
 }

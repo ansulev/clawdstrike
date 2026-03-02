@@ -5,8 +5,8 @@ import (
 	"path/filepath"
 	"regexp"
 
-	"github.com/backbay/clawdstrike-go/internal"
-	"github.com/backbay/clawdstrike-go/policy"
+	"github.com/backbay-labs/clawdstrike-go/internal"
+	"github.com/backbay-labs/clawdstrike-go/policy"
 )
 
 // DefaultSecretPatterns are the default secret detection patterns.

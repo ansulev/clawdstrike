@@ -3,7 +3,7 @@ package engine
 import (
 	"time"
 
-	"github.com/backbay/clawdstrike-go/guards"
+	"github.com/backbay-labs/clawdstrike-go/guards"
 )
 
 // GuardResultEntry records one guard's evaluation result with timing.

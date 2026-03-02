@@ -60,12 +60,21 @@ func (c *SnykClient) CheckPackage(ctx context.Context, ecosystem, pkg, version s
 
 	vulnCount := len(raw.Issues.Vulnerabilities)
 	score := 0.0
-	if vulnCount > 0 {
-		score = 1.0
-		for _, v := range raw.Issues.Vulnerabilities {
-			if v.Severity == "critical" || v.Severity == "high" {
-				score = 1.0
-				break
+	for _, v := range raw.Issues.Vulnerabilities {
+		switch v.Severity {
+		case "critical", "high":
+			score = 1.0
+		case "medium":
+			if score < 0.7 {
+				score = 0.7
+			}
+		case "low":
+			if score < 0.4 {
+				score = 0.4
+			}
+		default:
+			if score < 0.2 {
+				score = 0.2
 			}
 		}
 	}

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/backbay/clawdstrike-go/siem"
+	"github.com/backbay-labs/clawdstrike-go/siem"
 )
 
 // CEF severity mapping.

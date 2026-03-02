@@ -8,7 +8,7 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/backbay/clawdstrike-go/siem"
+	"github.com/backbay-labs/clawdstrike-go/siem"
 )
 
 // SumoLogicExporter sends security events to Sumo Logic HTTP Source.

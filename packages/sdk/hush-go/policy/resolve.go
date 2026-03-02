@@ -3,10 +3,13 @@ package policy
 import (
 	"fmt"
 	"path/filepath"
+	"strings"
 )
 
 // MaxExtendsDepth is the maximum recursion depth for policy resolution.
 const MaxExtendsDepth = 32
+
+const builtinNamespacePrefix = "clawdstrike:"
 
 // Resolve loads a policy spec (built-in name or file path) and resolves its extends chain.
 func Resolve(spec string) (*Policy, error) {
@@ -61,21 +64,24 @@ func resolveAt(spec string, depth int, resolving map[string]bool, memo map[strin
 	result := Merge(base, p)
 	// Clear extends so it doesn't re-resolve.
 	result.Extends = nil
+	// Resolved policies carry concrete settings and should behave as explicit
+	// values when merged again in later resolution steps.
+	result.settingsSet = true
 	memo[key] = result
 	return result, nil
 }
 
 // load tries built-in name first, then falls back to file path.
 func load(spec string) (*Policy, error) {
-	if IsBuiltin(spec) {
-		return ByName(spec)
+	if name, ok := normalizedBuiltinName(spec); ok {
+		return ByName(name)
 	}
 	return FromYAMLFile(spec)
 }
 
 func normalizeSpec(spec string) string {
-	if IsBuiltin(spec) {
-		return spec
+	if name, ok := normalizedBuiltinName(spec); ok {
+		return name
 	}
 	abs, err := filepath.Abs(spec)
 	if err != nil {
@@ -85,22 +91,50 @@ func normalizeSpec(spec string) string {
 }
 
 func resolveExtendsRef(currentSpec, ref string) string {
-	if IsBuiltin(ref) || filepath.IsAbs(ref) || IsBuiltin(currentSpec) {
+	if name, ok := normalizedBuiltinName(ref); ok {
+		return name
+	}
+	if filepath.IsAbs(ref) || isBuiltinSpec(currentSpec) {
 		return ref
 	}
 	return filepath.Join(filepath.Dir(currentSpec), ref)
 }
 
+func isBuiltinSpec(spec string) bool {
+	_, ok := normalizedBuiltinName(spec)
+	return ok
+}
+
+func normalizedBuiltinName(spec string) (string, bool) {
+	trimmed := strings.TrimSpace(spec)
+	if strings.HasPrefix(trimmed, builtinNamespacePrefix) {
+		trimmed = strings.TrimPrefix(trimmed, builtinNamespacePrefix)
+	}
+	if IsBuiltin(trimmed) {
+		return trimmed, true
+	}
+	return "", false
+}
+
 // Merge combines base and child policies. The child overrides fields present
 // in both, controlled by the child's MergeStrategy.
 func Merge(base, child *Policy) *Policy {
+	if base == nil {
+		cloned := *child
+		return &cloned
+	}
+
 	result := &Policy{
 		Version:       child.Version,
 		Name:          child.Name,
 		Description:   child.Description,
 		MergeStrategy: child.MergeStrategy,
-		Settings:      child.Settings,
+		Settings:      base.Settings,
 	}
+	if child.settingsSet {
+		result.Settings = child.Settings
+	}
+	result.settingsSet = true
 
 	if result.Version == "" {
 		result.Version = base.Version

@@ -8,7 +8,7 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/backbay/clawdstrike-go/siem"
+	"github.com/backbay-labs/clawdstrike-go/siem"
 )
 
 // WebhookExporter sends security events to an arbitrary HTTP endpoint.

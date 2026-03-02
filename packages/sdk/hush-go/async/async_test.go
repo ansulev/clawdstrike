@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/backbay/clawdstrike-go/async"
+	"github.com/backbay-labs/clawdstrike-go/async"
 )
 
 // slowGuard simulates a guard that takes time to execute.

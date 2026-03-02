@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/backbay/clawdstrike-go/guards"
+	"github.com/backbay-labs/clawdstrike-go/guards"
 )
 
 type daemonChecker struct {
@@ -182,7 +182,7 @@ func toDaemonRequest(action guards.GuardAction, ctx *guards.GuardContext) (daemo
 	switch action.Type {
 	case "file_access":
 		req.ActionType = "file_access"
-		req.Target = firstNonEmpty(action.Path, "")
+		req.Target = action.Path
 	case "file_write":
 		req.ActionType = "file_write"
 		req.Target = action.Path
@@ -244,13 +244,6 @@ func toDaemonArgs(v interface{}) (map[string]interface{}, error) {
 		return nil, fmt.Errorf("args must be a JSON object")
 	}
 	return decoded, nil
-}
-
-func firstNonEmpty(a, fallback string) string {
-	if a != "" {
-		return a
-	}
-	return fallback
 }
 
 func daemonRetryDelay(base time.Duration, attempt int) time.Duration {

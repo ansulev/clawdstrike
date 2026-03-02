@@ -3,7 +3,7 @@ package receipt
 import (
 	"testing"
 
-	"github.com/backbay/clawdstrike-go/crypto"
+	"github.com/backbay-labs/clawdstrike-go/crypto"
 )
 
 func makeTestReceipt() Receipt {

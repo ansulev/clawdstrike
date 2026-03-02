@@ -7,8 +7,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/backbay/clawdstrike-go/guards"
-	"github.com/backbay/clawdstrike-go/internal"
+	"github.com/backbay-labs/clawdstrike-go/guards"
+	"github.com/backbay-labs/clawdstrike-go/internal"
 )
 
 // Engine is the subset of engine.HushEngine that sessions require.

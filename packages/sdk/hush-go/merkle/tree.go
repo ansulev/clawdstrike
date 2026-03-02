@@ -10,7 +10,7 @@ import (
 	"crypto/sha256"
 	"errors"
 
-	"github.com/backbay/clawdstrike-go/crypto"
+	"github.com/backbay-labs/clawdstrike-go/crypto"
 )
 
 // LeafHash computes the RFC 6962 leaf hash: SHA256(0x00 || data).

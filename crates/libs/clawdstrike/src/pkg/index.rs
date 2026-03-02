@@ -77,7 +77,9 @@ impl RegistryIndex {
     /// Create an index client with a custom cache directory.
     pub fn with_cache_dir(base_url: &str, cache_dir: PathBuf) -> Result<Self> {
         fs::create_dir_all(&cache_dir)?;
-        let http_client = build_blocking_client()?;
+        // Construct the blocking client outside any active Tokio runtime to
+        // avoid reqwest's blocking-runtime panic.
+        let http_client = run_blocking_http(build_blocking_client)?;
         Ok(Self {
             base_url: base_url.trim_end_matches('/').to_string(),
             cache_dir,
@@ -416,5 +418,20 @@ mod tests {
         let json = serde_json::to_string_pretty(&entry).unwrap();
         let parsed: PackageIndexEntry = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed, entry);
+    }
+
+    #[test]
+    fn registry_index_construction_is_runtime_safe() {
+        let tmp = tempfile::tempdir().unwrap();
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+
+        let result = runtime.block_on(async {
+            RegistryIndex::with_cache_dir(DEFAULT_REGISTRY_URL, tmp.path().to_path_buf())
+        });
+
+        assert!(result.is_ok());
     }
 }

@@ -19,6 +19,24 @@ describe("resolveInterceptor", () => {
     expect(resolveInterceptor(interceptor)).toBe(interceptor);
   });
 
+  it("throws when translateToolCall is provided with a pre-built ToolInterceptor source", () => {
+    const interceptor = {
+      beforeExecute: vi.fn(async () => ({
+        proceed: true,
+        decision: { status: "allow" as const },
+        duration: 0,
+      })),
+      afterExecute: vi.fn(async (_tool, _input, output) => ({ output, modified: false })),
+      onError: vi.fn(async () => undefined),
+    };
+
+    expect(() =>
+      resolveInterceptor(interceptor, {
+        translateToolCall: vi.fn(() => null),
+      }),
+    ).toThrow("translateToolCall requires a ClawdstrikeLike source");
+  });
+
   it("passes AdapterConfig through to ClawdstrikeLike.createInterceptor", () => {
     const config: AdapterConfig = {
       translateToolCall: vi.fn(() => null),

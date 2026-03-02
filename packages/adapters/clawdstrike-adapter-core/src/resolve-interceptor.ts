@@ -35,6 +35,16 @@ export function resolveInterceptor(
   source: SecuritySource,
   config?: AdapterConfig,
 ): ToolInterceptor {
+  if (
+    config?.translateToolCall !== undefined &&
+    isToolInterceptor(source) &&
+    !isClawdstrikeLike(source)
+  ) {
+    throw new Error(
+      "translateToolCall requires a ClawdstrikeLike source with createInterceptor(config)",
+    );
+  }
+
   if (isClawdstrikeLike(source) && config !== undefined) {
     const interceptor = source.createInterceptor?.(config);
     if (!interceptor) {

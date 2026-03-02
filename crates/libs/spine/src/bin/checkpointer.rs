@@ -1029,10 +1029,11 @@ async fn main() -> Result<()> {
                 let envelope_issuer = envelope
                     .get("issuer")
                     .and_then(|v| v.as_str())
-                    .unwrap_or("");
+                    .unwrap_or("")
+                    .to_ascii_lowercase();
 
                 if let Some(tb) = trust_bundle.as_ref() {
-                    if !tb.envelope_issuer_allowed(envelope_issuer) {
+                    if !tb.envelope_issuer_allowed(&envelope_issuer) {
                         warn!(
                             issuer = %envelope_issuer,
                             envelope_hash = %envelope_hash_hex,
@@ -1042,7 +1043,7 @@ async fn main() -> Result<()> {
                     }
                 }
 
-                let known_head = issuer_heads.get(envelope_issuer);
+                let known_head = issuer_heads.get(&envelope_issuer);
                 let chain_verdict = match verify_chain_link(&envelope, known_head) {
                     Ok(v) => v,
                     Err(err) => {
@@ -1106,15 +1107,19 @@ async fn main() -> Result<()> {
                 }
 
                 if let Ok(new_head) = chain_head_from_envelope(&envelope) {
-                    let issuer_str = new_head.issuer.clone();
-                    let head_bytes = serde_json::to_vec(&new_head).unwrap_or_default();
-                    issuer_heads.insert(issuer_str.clone(), new_head);
+                    let dominated = issuer_heads
+                        .get(&envelope_issuer)
+                        .is_some_and(|cur| cur.seq >= new_head.seq);
+                    if chain_verdict.is_valid() || !dominated {
+                        let head_bytes = serde_json::to_vec(&new_head).unwrap_or_default();
+                        issuer_heads.insert(envelope_issuer.clone(), new_head);
 
-                    // Hex pubkey as key: `:` is invalid in JetStream KV keys.
-                    let kv_key = spine::parse_issuer_pubkey_hex(&issuer_str)
-                        .unwrap_or_else(|_| issuer_str.replace(':', "_"));
-                    if let Err(e) = issuer_heads_kv.put(&kv_key, head_bytes.into()).await {
-                        warn!(issuer = %issuer_str, "failed to persist issuer head: {e}");
+                        // Hex pubkey as key: `:` is invalid in JetStream KV keys.
+                        let kv_key = spine::parse_issuer_pubkey_hex(&envelope_issuer)
+                            .unwrap_or_else(|_| envelope_issuer.replace(':', "_"));
+                        if let Err(e) = issuer_heads_kv.put(&kv_key, head_bytes.into()).await {
+                            warn!(issuer = %envelope_issuer, "failed to persist issuer head: {e}");
+                        }
                     }
                 }
             }

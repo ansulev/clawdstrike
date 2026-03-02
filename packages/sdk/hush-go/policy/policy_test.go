@@ -7,6 +7,8 @@ import (
 	"testing"
 )
 
+func boolPtr(v bool) *bool { return &v }
+
 func TestLoadAllBuiltinRulesets(t *testing.T) {
 	names := BuiltinNames()
 	if len(names) != 5 {
@@ -263,6 +265,61 @@ func TestCycleDetection(t *testing.T) {
 	}
 }
 
+func TestResolveAllowsSharedAncestorDAG(t *testing.T) {
+	dir := t.TempDir()
+
+	commonPath := filepath.Join(dir, "common.yaml")
+	aPath := filepath.Join(dir, "a.yaml")
+	bPath := filepath.Join(dir, "b.yaml")
+	rootPath := filepath.Join(dir, "root.yaml")
+
+	if err := os.WriteFile(commonPath, []byte(`
+version: "1.1.0"
+name: Common
+guards:
+  forbidden_path:
+    patterns: ["**/.env"]
+`), 0o644); err != nil {
+		t.Fatalf("write common: %v", err)
+	}
+
+	if err := os.WriteFile(aPath, []byte(`
+version: "1.1.0"
+name: A
+extends:
+  - `+commonPath+`
+`), 0o644); err != nil {
+		t.Fatalf("write a: %v", err)
+	}
+
+	if err := os.WriteFile(bPath, []byte(`
+version: "1.1.0"
+name: B
+extends:
+  - `+commonPath+`
+`), 0o644); err != nil {
+		t.Fatalf("write b: %v", err)
+	}
+
+	if err := os.WriteFile(rootPath, []byte(`
+version: "1.1.0"
+name: Root
+extends:
+  - `+aPath+`
+  - `+bPath+`
+`), 0o644); err != nil {
+		t.Fatalf("write root: %v", err)
+	}
+
+	p, err := Resolve(rootPath)
+	if err != nil {
+		t.Fatalf("expected DAG extends resolution to succeed, got: %v", err)
+	}
+	if p.Name != "Root" {
+		t.Errorf("expected resolved policy name Root, got %q", p.Name)
+	}
+}
+
 func TestDeepMerge(t *testing.T) {
 	base := &Policy{
 		Version: "1.1.0",
@@ -335,5 +392,55 @@ func TestMergeReplace(t *testing.T) {
 	}
 	if len(result.Guards.ForbiddenPath.Patterns) != 1 || result.Guards.ForbiddenPath.Patterns[0] != "c" {
 		t.Errorf("expected child patterns only, got %v", result.Guards.ForbiddenPath.Patterns)
+	}
+}
+
+func TestDeepMergeEnabledAndRequireBalanceOverride(t *testing.T) {
+	base := &Policy{
+		Version: "1.1.0",
+		Name:    "Base",
+		Guards: GuardConfigs{
+			ForbiddenPath: &ForbiddenPathConfig{
+				Enabled:  boolPtr(true),
+				Patterns: []string{"**/.env"},
+			},
+			PatchIntegrity: &PatchIntegrityConfig{
+				Enabled:        boolPtr(true),
+				RequireBalance: boolPtr(true),
+				MaxAdditions:   100,
+			},
+		},
+	}
+	child := &Policy{
+		Version:       "1.1.0",
+		Name:          "Child",
+		MergeStrategy: MergeDeep,
+		Guards: GuardConfigs{
+			ForbiddenPath: &ForbiddenPathConfig{
+				Enabled: boolPtr(false),
+			},
+			PatchIntegrity: &PatchIntegrityConfig{
+				Enabled:        boolPtr(false),
+				RequireBalance: boolPtr(false),
+			},
+		},
+	}
+
+	result := Merge(base, child)
+	if result.Guards.ForbiddenPath == nil || result.Guards.ForbiddenPath.Enabled == nil {
+		t.Fatal("expected forbidden_path enabled to be present")
+	}
+	if *result.Guards.ForbiddenPath.Enabled {
+		t.Error("expected forbidden_path enabled override to false")
+	}
+
+	if result.Guards.PatchIntegrity == nil || result.Guards.PatchIntegrity.RequireBalance == nil {
+		t.Fatal("expected patch_integrity require_balance to be present")
+	}
+	if *result.Guards.PatchIntegrity.RequireBalance {
+		t.Error("expected require_balance override to false")
+	}
+	if result.Guards.PatchIntegrity.Enabled == nil || *result.Guards.PatchIntegrity.Enabled {
+		t.Error("expected patch_integrity enabled override to false")
 	}
 }

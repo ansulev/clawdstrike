@@ -20,6 +20,9 @@ var outcomeToOCSF = map[string]int{
 // severityToOCSF maps severity strings to OCSF severity IDs.
 var severityToOCSF = map[string]int{
 	"info":     1,
+	"warning":  3,
+	"warn":     3,
+	"error":    4,
 	"low":      2,
 	"medium":   3,
 	"high":     4,

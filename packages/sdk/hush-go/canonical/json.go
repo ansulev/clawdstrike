@@ -3,12 +3,15 @@
 package canonical
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"math"
 	"sort"
 	"strconv"
 	"strings"
+	"unicode/utf16"
 
 	"github.com/backbay/clawdstrike-go/crypto"
 )
@@ -23,12 +26,9 @@ func Canonicalize(v interface{}) (string, error) {
 		return "", fmt.Errorf("canonical: marshal: %w", err)
 	}
 
-	// Parse into raw representation
-	var raw interface{}
-	dec := json.NewDecoder(strings.NewReader(string(data)))
-	dec.UseNumber()
-	if err := dec.Decode(&raw); err != nil {
-		return "", fmt.Errorf("canonical: decode: %w", err)
+	raw, err := decodeSingleJSONValue(data)
+	if err != nil {
+		return "", err
 	}
 
 	var buf strings.Builder
@@ -40,11 +40,9 @@ func Canonicalize(v interface{}) (string, error) {
 
 // CanonicalizeBytes is like Canonicalize but accepts raw JSON bytes.
 func CanonicalizeBytes(data []byte) (string, error) {
-	var raw interface{}
-	dec := json.NewDecoder(strings.NewReader(string(data)))
-	dec.UseNumber()
-	if err := dec.Decode(&raw); err != nil {
-		return "", fmt.Errorf("canonical: decode: %w", err)
+	raw, err := decodeSingleJSONValue(data)
+	if err != nil {
+		return "", err
 	}
 
 	var buf strings.Builder
@@ -52,6 +50,23 @@ func CanonicalizeBytes(data []byte) (string, error) {
 		return "", err
 	}
 	return buf.String(), nil
+}
+
+func decodeSingleJSONValue(data []byte) (interface{}, error) {
+	var raw interface{}
+	dec := json.NewDecoder(bytes.NewReader(data))
+	dec.UseNumber()
+	if err := dec.Decode(&raw); err != nil {
+		return nil, fmt.Errorf("canonical: decode: %w", err)
+	}
+	var trailing interface{}
+	if err := dec.Decode(&trailing); err != io.EOF {
+		if err == nil {
+			return nil, fmt.Errorf("canonical: trailing data after JSON value")
+		}
+		return nil, fmt.Errorf("canonical: trailing data after JSON value: %w", err)
+	}
+	return raw, nil
 }
 
 // CanonicalHash computes SHA-256 of the canonical JSON form.
@@ -93,10 +108,9 @@ func canonicalWrite(buf *strings.Builder, v interface{}) error {
 		for k := range val {
 			keys = append(keys, k)
 		}
-		// Note: sorts by UTF-8 byte order, matching Rust's implementation.
-		// This is compatible with RFC 8785 for ASCII keys but differs for
-		// non-ASCII. Cross-language compatibility with the Rust SDK is maintained.
-		sort.Strings(keys)
+		sort.Slice(keys, func(i, j int) bool {
+			return utf16Less(keys[i], keys[j])
+		})
 
 		buf.WriteByte('{')
 		for i, k := range keys {
@@ -274,4 +288,23 @@ func canonicalWriteString(buf *strings.Builder, s string) {
 		}
 	}
 	buf.WriteByte('"')
+}
+
+// utf16Less compares strings by UTF-16 code unit order (RFC 8785 / JCS).
+func utf16Less(a, b string) bool {
+	ua := utf16.Encode([]rune(a))
+	ub := utf16.Encode([]rune(b))
+	n := len(ua)
+	if len(ub) < n {
+		n = len(ub)
+	}
+	for i := 0; i < n; i++ {
+		if ua[i] < ub[i] {
+			return true
+		}
+		if ua[i] > ub[i] {
+			return false
+		}
+	}
+	return len(ua) < len(ub)
 }

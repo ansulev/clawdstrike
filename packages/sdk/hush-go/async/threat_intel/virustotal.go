@@ -4,10 +4,12 @@ package threat_intel
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 )
 
 // ThreatResult holds the result of a threat intelligence lookup.
@@ -35,7 +37,8 @@ func NewVirusTotalClient(apiKey string) *VirusTotalClient {
 
 // CheckURL checks a URL against VirusTotal.
 func (c *VirusTotalClient) CheckURL(ctx context.Context, url string) (*ThreatResult, error) {
-	reqURL := fmt.Sprintf("%s/urls/%s", c.endpoint, url)
+	urlID := strings.TrimRight(base64.URLEncoding.EncodeToString([]byte(url)), "=")
+	reqURL := fmt.Sprintf("%s/urls/%s", c.endpoint, urlID)
 	return c.doGet(ctx, reqURL)
 }
 

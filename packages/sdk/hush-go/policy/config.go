@@ -35,7 +35,7 @@ type PatchIntegrityConfig struct {
 	Enabled           *bool    `yaml:"enabled,omitempty"`
 	MaxAdditions      int      `yaml:"max_additions"`
 	MaxDeletions      int      `yaml:"max_deletions"`
-	RequireBalance    bool     `yaml:"require_balance"`
+	RequireBalance    *bool    `yaml:"require_balance,omitempty"`
 	MaxImbalanceRatio float64  `yaml:"max_imbalance_ratio"`
 	ForbiddenPatterns []string `yaml:"forbidden_patterns"`
 }

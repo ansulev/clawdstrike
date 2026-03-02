@@ -3,8 +3,12 @@
 package clawdstrike
 
 import (
+	"net/http"
+	"time"
+
 	"github.com/backbay/clawdstrike-go/engine"
 	"github.com/backbay/clawdstrike-go/guards"
+	"github.com/backbay/clawdstrike-go/policy"
 	"github.com/backbay/clawdstrike-go/session"
 )
 
@@ -21,7 +25,39 @@ const (
 // Clawdstrike is the main entry point for the SDK. It wraps a HushEngine
 // and exposes convenience methods for common security checks.
 type Clawdstrike struct {
-	engine *engine.HushEngine
+	checker checker
+	engine  *engine.HushEngine
+}
+
+type checker interface {
+	CheckAction(action guards.GuardAction, ctx *guards.GuardContext) guards.GuardResult
+}
+
+// DaemonConfig configures daemon-backed policy evaluation.
+type DaemonConfig struct {
+	APIKey        string
+	HTTPClient    *http.Client
+	Timeout       time.Duration
+	RetryAttempts int
+	RetryBackoff  time.Duration
+}
+
+// DefaultDaemonConfig returns the default daemon configuration.
+func DefaultDaemonConfig() DaemonConfig {
+	return DaemonConfig{
+		Timeout:       10 * time.Second,
+		RetryAttempts: 1,
+		RetryBackoff:  0,
+	}
+}
+
+type denyChecker struct {
+	guard   string
+	message string
+}
+
+func (d denyChecker) CheckAction(_ guards.GuardAction, _ *guards.GuardContext) guards.GuardResult {
+	return guards.Block(d.guard, guards.Critical, d.message)
 }
 
 // WithDefaults creates a Clawdstrike instance from a named built-in ruleset.
@@ -31,54 +67,92 @@ func WithDefaults(ruleset string) (*Clawdstrike, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Clawdstrike{engine: eng}, nil
+	return &Clawdstrike{checker: eng, engine: eng}, nil
+}
+
+// FromPolicy creates a Clawdstrike instance from a policy spec.
+// The spec can be a built-in ruleset name (e.g. "strict") or a YAML file path.
+func FromPolicy(spec string) (*Clawdstrike, error) {
+	p, err := policy.Resolve(spec)
+	if err != nil {
+		return nil, err
+	}
+	eng, err := engine.BuildFromPolicy(p)
+	if err != nil {
+		return nil, err
+	}
+	return &Clawdstrike{checker: eng, engine: eng}, nil
+}
+
+// FromDaemon creates a Clawdstrike instance that evaluates checks via a daemon.
+// The optional apiKey is sent as a Bearer token.
+func FromDaemon(url string, apiKey ...string) (*Clawdstrike, error) {
+	cfg := DefaultDaemonConfig()
+	key := ""
+	if len(apiKey) > 0 {
+		key = apiKey[0]
+	}
+	cfg.APIKey = key
+	return FromDaemonWithConfig(url, cfg)
+}
+
+// FromDaemonWithConfig creates a daemon-backed Clawdstrike instance with explicit
+// HTTP client, timeout, and retry configuration.
+func FromDaemonWithConfig(url string, cfg DaemonConfig) (*Clawdstrike, error) {
+	dc, err := newDaemonChecker(url, cfg)
+	if err != nil {
+		return nil, err
+	}
+	return &Clawdstrike{checker: dc}, nil
 }
 
 // FromEngine wraps an existing HushEngine in a Clawdstrike facade.
 func FromEngine(eng *engine.HushEngine) *Clawdstrike {
-	return &Clawdstrike{engine: eng}
+	return &Clawdstrike{checker: eng, engine: eng}
 }
 
 func (c *Clawdstrike) Engine() *engine.HushEngine {
+	if c == nil {
+		return nil
+	}
 	return c.engine
 }
 
 func (c *Clawdstrike) Check(action guards.GuardAction) Decision {
-	result := c.engine.CheckAction(action, nil)
-	return guards.DecisionFromResult(result)
+	return c.CheckWithContext(action, nil)
 }
 
 func (c *Clawdstrike) CheckWithContext(action guards.GuardAction, ctx *guards.GuardContext) Decision {
-	result := c.engine.CheckAction(action, ctx)
+	result := c.effectiveChecker().CheckAction(action, ctx)
 	return guards.DecisionFromResult(result)
 }
 
 func (c *Clawdstrike) CheckFileAccess(path string) Decision {
-	return guards.DecisionFromResult(c.engine.CheckFileAccess(path))
+	return c.Check(guards.FileAccess(path))
 }
 
 func (c *Clawdstrike) CheckFileWrite(path string, content []byte) Decision {
-	return guards.DecisionFromResult(c.engine.CheckFileWrite(path, content))
+	return c.Check(guards.FileWrite(path, content))
 }
 
 func (c *Clawdstrike) CheckEgress(host string, port int) Decision {
-	return guards.DecisionFromResult(c.engine.CheckEgress(host, port))
+	return c.Check(guards.NetworkEgress(host, port))
 }
 
 func (c *Clawdstrike) CheckShell(cmd string) Decision {
-	return guards.DecisionFromResult(c.engine.CheckShell(cmd))
+	return c.Check(guards.ShellCommand(cmd))
 }
 
 func (c *Clawdstrike) CheckMcpTool(name string, args interface{}) Decision {
-	return guards.DecisionFromResult(c.engine.CheckMcpTool(name, args))
+	return c.Check(guards.McpTool(name, args))
 }
 
 func (c *Clawdstrike) CheckPatch(file, diff string) Decision {
-	return guards.DecisionFromResult(c.engine.CheckPatch(file, diff))
+	return c.Check(guards.Patch(file, diff))
 }
 
 func (c *Clawdstrike) CheckUntrustedText(text string) Decision {
-	return guards.DecisionFromResult(c.engine.CheckUntrustedText(text))
+	return c.Check(guards.Custom("untrusted_text", text))
 }
 
 // SessionOptions configures a new ClawdstrikeSession.
@@ -92,5 +166,15 @@ func (c *Clawdstrike) Session(opts SessionOptions) *session.ClawdstrikeSession {
 		ID:      opts.ID,
 		AgentID: opts.AgentID,
 	}
-	return session.NewSession(c.engine, sopts)
+	return session.NewSession(c.effectiveChecker(), sopts)
+}
+
+func (c *Clawdstrike) effectiveChecker() checker {
+	if c != nil && c.checker != nil {
+		return c.checker
+	}
+	return denyChecker{
+		guard:   "clawdstrike",
+		message: "clawdstrike checker is not initialized",
+	}
 }

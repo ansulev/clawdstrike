@@ -3,6 +3,7 @@ package siem
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -17,17 +18,44 @@ type EventExporter interface {
 	Close() error
 }
 
+// ExportError captures an exporter failure during a flush attempt.
+type ExportError struct {
+	Exporter string
+	Attempt  int
+	BatchLen int
+	Err      error
+}
+
+// ExportErrorHook is called whenever an exporter attempt fails.
+type ExportErrorHook func(ExportError)
+
+// ExporterMetrics captures runtime observability for one exporter.
+type ExporterMetrics struct {
+	Attempts    int64
+	Failures    int64
+	Retries     int64
+	LastError   string
+	LastErrorAt time.Time
+}
+
 // EventBus collects security events and flushes them in batches to registered exporters.
 type EventBus struct {
 	ch            chan SecurityEvent
+	flushReq      chan chan struct{}
 	exporters     []EventExporter
 	mu            sync.RWMutex
 	batchSize     int
 	flushInterval time.Duration
 	done          chan struct{}
 	stopped       chan struct{}
+	stopOnce      sync.Once
 	droppedCount  atomic.Int64
 	started       atomic.Bool
+	retryAttempts int
+	retryBackoff  time.Duration
+	errorHook     ExportErrorHook
+	metricsMu     sync.Mutex
+	metrics       map[string]ExporterMetrics
 }
 
 // EventBusOption configures an EventBus.
@@ -49,13 +77,37 @@ func WithFlushInterval(d time.Duration) EventBusOption {
 	}
 }
 
+// WithExportRetry configures retry attempts and exponential backoff base duration.
+// attempts includes the initial attempt; values less than 1 are ignored.
+func WithExportRetry(attempts int, backoff time.Duration) EventBusOption {
+	return func(b *EventBus) {
+		if attempts > 0 {
+			b.retryAttempts = attempts
+		}
+		if backoff >= 0 {
+			b.retryBackoff = backoff
+		}
+	}
+}
+
+// WithExportErrorHook installs a callback for per-attempt exporter failures.
+func WithExportErrorHook(hook ExportErrorHook) EventBusOption {
+	return func(b *EventBus) {
+		b.errorHook = hook
+	}
+}
+
 func NewEventBus(opts ...EventBusOption) *EventBus {
 	b := &EventBus{
 		ch:            make(chan SecurityEvent, 1024),
+		flushReq:      make(chan chan struct{}),
 		batchSize:     100,
 		flushInterval: 5 * time.Second,
 		done:          make(chan struct{}),
 		stopped:       make(chan struct{}),
+		retryAttempts: 1,
+		retryBackoff:  0,
+		metrics:       make(map[string]ExporterMetrics),
 	}
 	for _, opt := range opts {
 		opt(b)
@@ -110,6 +162,21 @@ func (b *EventBus) Start(ctx context.Context) error {
 				b.flush(ctx, batch)
 				batch = nil
 			}
+		case ack := <-b.flushReq:
+			for {
+				select {
+				case ev := <-b.ch:
+					batch = append(batch, ev)
+				default:
+					goto drained
+				}
+			}
+		drained:
+			if len(batch) > 0 {
+				b.flush(ctx, batch)
+				batch = nil
+			}
+			close(ack)
 		case <-b.done:
 			// Drain remaining events.
 			for {
@@ -137,8 +204,39 @@ func (b *EventBus) Stop() {
 	if !b.started.Load() {
 		return
 	}
-	close(b.done)
+	b.stopOnce.Do(func() {
+		close(b.done)
+	})
 	<-b.stopped
+}
+
+// Flush forces immediate export of all buffered in-memory events currently held by
+// the running batch loop. It is a no-op if the bus is not started.
+func (b *EventBus) Flush(ctx context.Context) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if !b.started.Load() {
+		return nil
+	}
+
+	ack := make(chan struct{})
+	select {
+	case b.flushReq <- ack:
+	case <-b.stopped:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+
+	select {
+	case <-ack:
+		return nil
+	case <-b.stopped:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 func (b *EventBus) flush(ctx context.Context, batch []SecurityEvent) {
@@ -147,11 +245,108 @@ func (b *EventBus) flush(ctx context.Context, batch []SecurityEvent) {
 	copy(exporters, b.exporters)
 	b.mu.RUnlock()
 
-	for _, exp := range exporters {
-		// Copy the batch so exporters don't share the backing array.
-		batchCopy := make([]SecurityEvent, len(batch))
-		copy(batchCopy, batch)
-		// Best-effort: ignore individual exporter errors to avoid blocking other exporters.
-		_ = exp.Export(ctx, batchCopy)
+	for idx, exp := range exporters {
+		label := exporterLabel(exp, idx)
+		for attempt := 1; attempt <= b.retryAttempts; attempt++ {
+			b.recordAttempt(label)
+
+			// Copy the batch so exporters don't share the backing array.
+			batchCopy := make([]SecurityEvent, len(batch))
+			copy(batchCopy, batch)
+
+			err := exp.Export(ctx, batchCopy)
+			if err == nil {
+				break
+			}
+
+			b.recordFailure(label, err)
+			if b.errorHook != nil {
+				b.errorHook(ExportError{
+					Exporter: label,
+					Attempt:  attempt,
+					BatchLen: len(batch),
+					Err:      err,
+				})
+			}
+
+			if attempt >= b.retryAttempts {
+				break
+			}
+			b.recordRetry(label)
+			wait := backoffDuration(b.retryBackoff, attempt)
+			if wait > 0 && !sleepWithContext(ctx, wait) {
+				return
+			}
+		}
+	}
+}
+
+// ExporterMetrics returns a point-in-time snapshot of per-exporter metrics.
+func (b *EventBus) ExporterMetrics() map[string]ExporterMetrics {
+	b.metricsMu.Lock()
+	defer b.metricsMu.Unlock()
+
+	out := make(map[string]ExporterMetrics, len(b.metrics))
+	for k, v := range b.metrics {
+		out[k] = v
+	}
+	return out
+}
+
+func exporterLabel(exp EventExporter, idx int) string {
+	if named, ok := exp.(interface{ Name() string }); ok {
+		if name := named.Name(); name != "" {
+			return name
+		}
+	}
+	return fmt.Sprintf("%T#%d", exp, idx)
+}
+
+func (b *EventBus) recordAttempt(exporter string) {
+	b.metricsMu.Lock()
+	defer b.metricsMu.Unlock()
+	m := b.metrics[exporter]
+	m.Attempts++
+	b.metrics[exporter] = m
+}
+
+func (b *EventBus) recordFailure(exporter string, err error) {
+	b.metricsMu.Lock()
+	defer b.metricsMu.Unlock()
+	m := b.metrics[exporter]
+	m.Failures++
+	m.LastError = err.Error()
+	m.LastErrorAt = time.Now()
+	b.metrics[exporter] = m
+}
+
+func (b *EventBus) recordRetry(exporter string) {
+	b.metricsMu.Lock()
+	defer b.metricsMu.Unlock()
+	m := b.metrics[exporter]
+	m.Retries++
+	b.metrics[exporter] = m
+}
+
+func backoffDuration(base time.Duration, attempt int) time.Duration {
+	if base <= 0 || attempt <= 0 {
+		return 0
+	}
+	multiplier := 1 << (attempt - 1)
+	return time.Duration(multiplier) * base
+}
+
+func sleepWithContext(ctx context.Context, d time.Duration) bool {
+	if d <= 0 {
+		return true
+	}
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+
+	select {
+	case <-timer.C:
+		return true
+	case <-ctx.Done():
+		return false
 	}
 }

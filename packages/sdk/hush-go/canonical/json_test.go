@@ -187,3 +187,23 @@ func TestLargePositiveIntegerAboveInt64(t *testing.T) {
 		t.Errorf("large int above int64:\ngot:  %s\nwant: %s", result, expected)
 	}
 }
+
+func TestRejectTrailingJSONData(t *testing.T) {
+	_, err := CanonicalizeBytes([]byte(`{"a":1}{"b":2}`))
+	if err == nil {
+		t.Fatal("expected error for trailing JSON data")
+	}
+}
+
+func TestUTF16KeyOrderingForNonASCII(t *testing.T) {
+	input := `{"":1,"𐐷":2}`
+	expected := `{"𐐷":2,"":1}`
+
+	result, err := CanonicalizeBytes([]byte(input))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result != expected {
+		t.Errorf("UTF-16 key ordering:\ngot:  %s\nwant: %s", result, expected)
+	}
+}

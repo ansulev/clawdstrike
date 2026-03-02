@@ -48,7 +48,10 @@ func NewSecretLeakGuard(cfg *policy.SecretLeakConfig) (*SecretLeakGuard, error) 
 		if err != nil {
 			return nil, fmt.Errorf("secret_leak: invalid pattern %q (%s): %w", rp.Name, rp.Pattern, err)
 		}
-		sev, _ := ParseSeverity(rp.Severity)
+		sev, err := ParseSeverity(rp.Severity)
+		if err != nil {
+			return nil, fmt.Errorf("secret_leak: invalid severity %q for pattern %q: %w", rp.Severity, rp.Name, err)
+		}
 		compiled = append(compiled, compiledPattern{
 			name:     rp.Name,
 			re:       re,

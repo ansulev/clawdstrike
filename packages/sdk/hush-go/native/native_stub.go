@@ -2,9 +2,9 @@
 
 // Package native provides CGo bindings to the Rust hush-go-native library.
 //
-// This file is the fallback when CGO is disabled. All functions return
-// ErrNativeUnavailable. The pure-Go implementations in the crypto, canonical,
-// and merkle packages should be used instead.
+// This file is the fallback when CGO is disabled. Most functions return
+// ErrNativeUnavailable. Some features (e.g. watermarking) are implemented
+// in pure Go under the same build tag.
 package native
 
 import "errors"
@@ -53,14 +53,3 @@ func DetectJailbreak(text, sessionID, configJSON string) (string, error) {
 
 // SanitizeOutput is not available without CGo.
 func SanitizeOutput(text, configJSON string) (string, error) { return "", ErrNativeUnavailable }
-
-// WatermarkPublicKey is not available without CGo.
-func WatermarkPublicKey(configJSON string) (string, error) { return "", ErrNativeUnavailable }
-
-// WatermarkPrompt is not available without CGo.
-func WatermarkPrompt(prompt, configJSON, appID, sessionID string) (string, error) {
-	return "", ErrNativeUnavailable
-}
-
-// ExtractWatermark is not available without CGo.
-func ExtractWatermark(text, configJSON string) (string, error) { return "", ErrNativeUnavailable }

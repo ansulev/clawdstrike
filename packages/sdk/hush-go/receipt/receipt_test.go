@@ -282,6 +282,27 @@ func TestSignedReceiptFromJSONRejectsUnknownFields(t *testing.T) {
 	}
 }
 
+func TestSignedReceiptFromJSONRejectsTrailingData(t *testing.T) {
+	receipt := makeTestReceipt()
+	kp, err := crypto.GenerateKeypair()
+	if err != nil {
+		t.Fatal(err)
+	}
+	signed, err := Sign(receipt, kp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	jsonStr, err := signed.ToJSON()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = SignedReceiptFromJSON(jsonStr + ` {"extra":true}`)
+	if err == nil {
+		t.Fatal("expected error for trailing JSON data")
+	}
+}
+
 func TestCosignerSigWithoutKeyFailsVerification(t *testing.T) {
 	receipt := makeTestReceipt()
 	signerKP, err := crypto.GenerateKeypair()

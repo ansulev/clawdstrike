@@ -30,8 +30,8 @@ type compiledForbidden struct {
 
 // PatchIntegrityGuard validates patch safety.
 type PatchIntegrityGuard struct {
-	maxAdditions      int     // 0 means "use default" per Go zero-value convention
-	maxDeletions      int     // 0 means "use default" per Go zero-value convention
+	maxAdditions      int // 0 means "use default" per Go zero-value convention
+	maxDeletions      int // 0 means "use default" per Go zero-value convention
 	requireBalance    bool
 	maxImbalanceRatio float64 // 0 means "use default" per Go zero-value convention
 	forbidden         []compiledForbidden
@@ -54,7 +54,9 @@ func NewPatchIntegrityGuard(cfg *policy.PatchIntegrityConfig) (*PatchIntegrityGu
 		if cfg.MaxDeletions > 0 {
 			g.maxDeletions = cfg.MaxDeletions
 		}
-		g.requireBalance = cfg.RequireBalance
+		if cfg.RequireBalance != nil {
+			g.requireBalance = *cfg.RequireBalance
+		}
 		if cfg.MaxImbalanceRatio > 0 {
 			g.maxImbalanceRatio = cfg.MaxImbalanceRatio
 		}

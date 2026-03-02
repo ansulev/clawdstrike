@@ -2,6 +2,7 @@ package siem_test
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"sync"
 	"testing"
@@ -36,6 +37,31 @@ func (m *mockExporter) totalEvents() int {
 		n += len(b)
 	}
 	return n
+}
+
+type flakyExporter struct {
+	mu        sync.Mutex
+	failUntil int
+	calls     int
+}
+
+func (f *flakyExporter) Export(_ context.Context, events []siem.SecurityEvent) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.calls++
+	if f.calls <= f.failUntil {
+		return errors.New("temporary exporter failure")
+	}
+	_ = events
+	return nil
+}
+
+func (f *flakyExporter) Close() error { return nil }
+
+func (f *flakyExporter) callCount() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.calls
 }
 
 func sampleEvent(id string) siem.SecurityEvent {
@@ -122,6 +148,19 @@ func TestEventBus_StopWithoutStart(t *testing.T) {
 	bus.Stop()
 }
 
+func TestEventBus_StopIdempotent(t *testing.T) {
+	bus := siem.NewEventBus(siem.WithFlushInterval(10 * time.Millisecond))
+	ctx, cancel := context.WithCancel(context.Background())
+	go bus.Start(ctx)
+
+	time.Sleep(20 * time.Millisecond)
+	cancel()
+	bus.Stop()
+
+	// Second stop must not panic.
+	bus.Stop()
+}
+
 func TestEventBus_DoubleStart(t *testing.T) {
 	bus := siem.NewEventBus(siem.WithFlushInterval(50 * time.Millisecond))
 
@@ -142,6 +181,81 @@ func TestEventBus_DoubleStart(t *testing.T) {
 	}
 
 	cancel()
+}
+
+func TestEventBus_ExporterRetryAndMetrics(t *testing.T) {
+	exp := &flakyExporter{failUntil: 2}
+	var hookCalls int
+	var hookMu sync.Mutex
+
+	bus := siem.NewEventBus(
+		siem.WithBatchSize(1),
+		siem.WithFlushInterval(5*time.Millisecond),
+		siem.WithExportRetry(3, 1*time.Millisecond),
+		siem.WithExportErrorHook(func(_ siem.ExportError) {
+			hookMu.Lock()
+			hookCalls++
+			hookMu.Unlock()
+		}),
+	)
+	bus.AddExporter(exp)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	go bus.Start(ctx)
+
+	bus.Emit(sampleEvent("retry-1"))
+	time.Sleep(60 * time.Millisecond)
+	cancel()
+	bus.Stop()
+
+	if exp.callCount() != 3 {
+		t.Fatalf("expected 3 export attempts, got %d", exp.callCount())
+	}
+
+	hookMu.Lock()
+	gotHookCalls := hookCalls
+	hookMu.Unlock()
+	if gotHookCalls != 2 {
+		t.Fatalf("expected 2 hook calls for failed attempts, got %d", gotHookCalls)
+	}
+
+	metrics := bus.ExporterMetrics()
+	if len(metrics) == 0 {
+		t.Fatal("expected exporter metrics to be populated")
+	}
+	for _, m := range metrics {
+		if m.Attempts != 3 {
+			t.Fatalf("expected 3 attempts, got %d", m.Attempts)
+		}
+		if m.Failures != 2 {
+			t.Fatalf("expected 2 failures, got %d", m.Failures)
+		}
+		if m.Retries != 2 {
+			t.Fatalf("expected 2 retries, got %d", m.Retries)
+		}
+	}
+}
+
+func TestEventBus_ExporterRetryExhausted(t *testing.T) {
+	exp := &flakyExporter{failUntil: 10}
+	bus := siem.NewEventBus(
+		siem.WithBatchSize(1),
+		siem.WithFlushInterval(5*time.Millisecond),
+		siem.WithExportRetry(2, 1*time.Millisecond),
+	)
+	bus.AddExporter(exp)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	go bus.Start(ctx)
+
+	bus.Emit(sampleEvent("retry-exhausted"))
+	time.Sleep(50 * time.Millisecond)
+	cancel()
+	bus.Stop()
+
+	if exp.callCount() != 2 {
+		t.Fatalf("expected retry attempts to stop at 2, got %d", exp.callCount())
+	}
 }
 
 func TestToECS(t *testing.T) {
@@ -209,5 +323,30 @@ func TestToCEF(t *testing.T) {
 	}
 	if !strings.Contains(cef, "filePath=/etc/shadow") {
 		t.Error("expected filePath in CEF extensions")
+	}
+}
+
+func TestSeverityMappingsIncludeSDKNativeValues(t *testing.T) {
+	ev := sampleEvent("severity-1")
+	ev.Decision = &siem.DecisionInfo{Guard: "x", Severity: "warning", Message: "warn message"}
+
+	ocsf := transforms.ToOCSF(ev)
+	if ocsf["severity_id"] != 3 {
+		t.Errorf("expected severity_id 3 for warning, got %v", ocsf["severity_id"])
+	}
+
+	cef := transforms.ToCEF(ev)
+	if !strings.Contains(cef, "|5|") {
+		t.Errorf("expected CEF severity 5 for warning, got %s", cef)
+	}
+
+	ev.Decision.Severity = "error"
+	ocsf = transforms.ToOCSF(ev)
+	if ocsf["severity_id"] != 4 {
+		t.Errorf("expected severity_id 4 for error, got %v", ocsf["severity_id"])
+	}
+	cef = transforms.ToCEF(ev)
+	if !strings.Contains(cef, "|8|") {
+		t.Errorf("expected CEF severity 8 for error, got %s", cef)
 	}
 }

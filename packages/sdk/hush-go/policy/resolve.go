@@ -2,6 +2,7 @@ package policy
 
 import (
 	"fmt"
+	"path/filepath"
 )
 
 // MaxExtendsDepth is the maximum recursion depth for policy resolution.
@@ -9,33 +10,43 @@ const MaxExtendsDepth = 32
 
 // Resolve loads a policy spec (built-in name or file path) and resolves its extends chain.
 func Resolve(spec string) (*Policy, error) {
-	visited := make(map[string]bool)
-	return resolveAt(spec, 0, visited)
+	resolving := make(map[string]bool)
+	memo := make(map[string]*Policy)
+	return resolveAt(spec, 0, resolving, memo)
 }
 
-func resolveAt(spec string, depth int, visited map[string]bool) (*Policy, error) {
+func resolveAt(spec string, depth int, resolving map[string]bool, memo map[string]*Policy) (*Policy, error) {
+	key := normalizeSpec(spec)
+
 	if depth > MaxExtendsDepth {
 		return nil, fmt.Errorf("policy: extends depth exceeds %d", MaxExtendsDepth)
 	}
 
-	if visited[spec] {
-		return nil, fmt.Errorf("policy: cycle detected in extends chain: %q", spec)
+	if resolved, ok := memo[key]; ok {
+		return resolved, nil
 	}
-	visited[spec] = true
 
-	p, err := load(spec)
+	if resolving[key] {
+		return nil, fmt.Errorf("policy: cycle detected in extends chain: %q", key)
+	}
+	resolving[key] = true
+	defer delete(resolving, key)
+
+	p, err := load(key)
 	if err != nil {
 		return nil, err
 	}
 
 	if len(p.Extends) == 0 {
+		memo[key] = p
 		return p, nil
 	}
 
 	// Resolve base policies left-to-right, then merge child on top.
 	var base *Policy
 	for _, ext := range p.Extends {
-		resolved, err := resolveAt(ext, depth+1, visited)
+		extSpec := resolveExtendsRef(key, ext)
+		resolved, err := resolveAt(extSpec, depth+1, resolving, memo)
 		if err != nil {
 			return nil, fmt.Errorf("policy: resolving extends %q: %w", ext, err)
 		}
@@ -50,6 +61,7 @@ func resolveAt(spec string, depth int, visited map[string]bool) (*Policy, error)
 	result := Merge(base, p)
 	// Clear extends so it doesn't re-resolve.
 	result.Extends = nil
+	memo[key] = result
 	return result, nil
 }
 
@@ -59,6 +71,24 @@ func load(spec string) (*Policy, error) {
 		return ByName(spec)
 	}
 	return FromYAMLFile(spec)
+}
+
+func normalizeSpec(spec string) string {
+	if IsBuiltin(spec) {
+		return spec
+	}
+	abs, err := filepath.Abs(spec)
+	if err != nil {
+		return spec
+	}
+	return abs
+}
+
+func resolveExtendsRef(currentSpec, ref string) string {
+	if IsBuiltin(ref) || filepath.IsAbs(ref) || IsBuiltin(currentSpec) {
+		return ref
+	}
+	return filepath.Join(filepath.Dir(currentSpec), ref)
 }
 
 // Merge combines base and child policies. The child overrides fields present
@@ -128,6 +158,9 @@ func deepMergeGuards(base, child GuardConfigs) GuardConfigs {
 	if child.ForbiddenPath != nil {
 		if base.ForbiddenPath != nil {
 			merged := *base.ForbiddenPath
+			if child.ForbiddenPath.Enabled != nil {
+				merged.Enabled = child.ForbiddenPath.Enabled
+			}
 			if len(child.ForbiddenPath.Patterns) > 0 {
 				merged.Patterns = child.ForbiddenPath.Patterns
 			}
@@ -143,6 +176,9 @@ func deepMergeGuards(base, child GuardConfigs) GuardConfigs {
 	if child.EgressAllowlist != nil {
 		if base.EgressAllowlist != nil {
 			merged := *base.EgressAllowlist
+			if child.EgressAllowlist.Enabled != nil {
+				merged.Enabled = child.EgressAllowlist.Enabled
+			}
 			if len(child.EgressAllowlist.Allow) > 0 {
 				merged.Allow = child.EgressAllowlist.Allow
 			}
@@ -161,6 +197,9 @@ func deepMergeGuards(base, child GuardConfigs) GuardConfigs {
 	if child.SecretLeak != nil {
 		if base.SecretLeak != nil {
 			merged := *base.SecretLeak
+			if child.SecretLeak.Enabled != nil {
+				merged.Enabled = child.SecretLeak.Enabled
+			}
 			if len(child.SecretLeak.Patterns) > 0 {
 				merged.Patterns = child.SecretLeak.Patterns
 			}
@@ -176,14 +215,17 @@ func deepMergeGuards(base, child GuardConfigs) GuardConfigs {
 	if child.PatchIntegrity != nil {
 		if base.PatchIntegrity != nil {
 			merged := *base.PatchIntegrity
+			if child.PatchIntegrity.Enabled != nil {
+				merged.Enabled = child.PatchIntegrity.Enabled
+			}
 			if child.PatchIntegrity.MaxAdditions > 0 {
 				merged.MaxAdditions = child.PatchIntegrity.MaxAdditions
 			}
 			if child.PatchIntegrity.MaxDeletions > 0 {
 				merged.MaxDeletions = child.PatchIntegrity.MaxDeletions
 			}
-			if child.PatchIntegrity.RequireBalance {
-				merged.RequireBalance = true
+			if child.PatchIntegrity.RequireBalance != nil {
+				merged.RequireBalance = child.PatchIntegrity.RequireBalance
 			}
 			if child.PatchIntegrity.MaxImbalanceRatio > 0 {
 				merged.MaxImbalanceRatio = child.PatchIntegrity.MaxImbalanceRatio
@@ -200,6 +242,9 @@ func deepMergeGuards(base, child GuardConfigs) GuardConfigs {
 	if child.McpTool != nil {
 		if base.McpTool != nil {
 			merged := *base.McpTool
+			if child.McpTool.Enabled != nil {
+				merged.Enabled = child.McpTool.Enabled
+			}
 			if len(child.McpTool.Allow) > 0 {
 				merged.Allow = child.McpTool.Allow
 			}
@@ -224,6 +269,9 @@ func deepMergeGuards(base, child GuardConfigs) GuardConfigs {
 	if child.PromptInjection != nil {
 		if base.PromptInjection != nil {
 			merged := *base.PromptInjection
+			if child.PromptInjection.Enabled != nil {
+				merged.Enabled = child.PromptInjection.Enabled
+			}
 			if child.PromptInjection.WarnThreshold > 0 {
 				merged.WarnThreshold = child.PromptInjection.WarnThreshold
 			}
@@ -240,7 +288,15 @@ func deepMergeGuards(base, child GuardConfigs) GuardConfigs {
 	}
 
 	if child.Jailbreak != nil {
-		result.Jailbreak = child.Jailbreak
+		if base.Jailbreak != nil {
+			merged := *base.Jailbreak
+			if child.Jailbreak.Enabled != nil {
+				merged.Enabled = child.Jailbreak.Enabled
+			}
+			result.Jailbreak = &merged
+		} else {
+			result.Jailbreak = child.Jailbreak
+		}
 	}
 
 	return result

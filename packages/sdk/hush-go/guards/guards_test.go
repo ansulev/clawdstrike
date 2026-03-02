@@ -267,6 +267,17 @@ func TestSecretLeakInvalidPattern(t *testing.T) {
 	}
 }
 
+func TestSecretLeakInvalidSeverity(t *testing.T) {
+	_, err := NewSecretLeakGuard(&policy.SecretLeakConfig{
+		Patterns: []policy.SecretLeakPatternConfig{
+			{Name: "bad", Pattern: "AKIA[0-9A-Z]{16}", Severity: "not-a-severity"},
+		},
+	})
+	if err == nil {
+		t.Error("expected error for invalid severity")
+	}
+}
+
 // --- PatchIntegrity ---
 
 func TestPatchIntegrityForbiddenPatterns(t *testing.T) {
@@ -335,10 +346,11 @@ func TestPatchIntegritySizeLimits(t *testing.T) {
 }
 
 func TestPatchIntegrityBalance(t *testing.T) {
+	requireBalance := true
 	g, err := NewPatchIntegrityGuard(&policy.PatchIntegrityConfig{
 		MaxAdditions:      1000,
 		MaxDeletions:      500,
-		RequireBalance:    true,
+		RequireBalance:    &requireBalance,
 		MaxImbalanceRatio: 2.0,
 	})
 	if err != nil {

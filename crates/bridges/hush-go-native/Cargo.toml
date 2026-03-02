@@ -15,6 +15,7 @@ libc = "0.2"
 serde_json = { workspace = true }
 hex = { workspace = true }
 tokio = { workspace = true }
+base64 = { workspace = true }
 
 [build-dependencies]
 cbindgen = "0.28"

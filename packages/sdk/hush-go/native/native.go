@@ -196,7 +196,7 @@ func SanitizeOutput(text, configJSON string) (string, error) {
 	return C.GoString(cResult), nil
 }
 
-// WatermarkPublicKey returns the watermark public key (stub).
+// WatermarkPublicKey returns the watermark public key.
 func WatermarkPublicKey(configJSON string) (string, error) {
 	var cConfig *C.char
 	if configJSON != "" {
@@ -212,7 +212,7 @@ func WatermarkPublicKey(configJSON string) (string, error) {
 	return C.GoString(cResult), nil
 }
 
-// WatermarkPrompt watermarks a prompt (stub).
+// WatermarkPrompt watermarks a prompt.
 func WatermarkPrompt(prompt, configJSON, appID, sessionID string) (string, error) {
 	cPrompt := C.CString(prompt)
 	defer C.free(unsafe.Pointer(cPrompt))
@@ -236,7 +236,7 @@ func WatermarkPrompt(prompt, configJSON, appID, sessionID string) (string, error
 	return C.GoString(cResult), nil
 }
 
-// ExtractWatermark extracts a watermark from text (stub).
+// ExtractWatermark extracts a watermark from text.
 func ExtractWatermark(text, configJSON string) (string, error) {
 	cText := C.CString(text)
 	defer C.free(unsafe.Pointer(cText))

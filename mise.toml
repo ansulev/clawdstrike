@@ -89,6 +89,10 @@ run = "cd packages/sdk/hush-go && CGO_ENABLED=0 go test ./..."
 description = "Go SDK build check"
 run = "cd packages/sdk/hush-go && CGO_ENABLED=0 go build ./..."
 
+[tasks."test:conformance"]
+description = "Run cross-SDK canonical/policy conformance vectors"
+run = "bash scripts/run-sdk-conformance.sh"
+
 [tasks.ci]
 description = "Run full CI checks locally"
 run = """

@@ -10,6 +10,9 @@ import (
 // CEF severity mapping.
 var severityToCEF = map[string]int{
 	"info":     1,
+	"warning":  5,
+	"warn":     5,
+	"error":    8,
 	"low":      3,
 	"medium":   5,
 	"high":     7,

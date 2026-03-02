@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"strconv"
 	"strings"
 	"time"
@@ -49,10 +50,10 @@ func isValidSemver(v string) bool {
 
 // Verdict is the result from quality gates or guards.
 type Verdict struct {
-	Passed  bool             `json:"passed"`
-	GateID  string           `json:"gate_id,omitempty"`
-	Scores  *json.RawMessage `json:"scores,omitempty"`
-	Threshold *float64       `json:"threshold,omitempty"`
+	Passed    bool             `json:"passed"`
+	GateID    string           `json:"gate_id,omitempty"`
+	Scores    *json.RawMessage `json:"scores,omitempty"`
+	Threshold *float64         `json:"threshold,omitempty"`
 }
 
 // Pass creates a passing verdict.
@@ -224,10 +225,10 @@ func (pks PublicKeySet) WithCosigner(cosigner crypto.PublicKey) PublicKeySet {
 
 // VerificationResult holds the outcome of receipt verification.
 type VerificationResult struct {
-	Valid          bool     `json:"valid"`
-	SignerValid    bool     `json:"signer_valid"`
+	Valid         bool     `json:"valid"`
+	SignerValid   bool     `json:"signer_valid"`
 	CosignerValid *bool    `json:"cosigner_valid,omitempty"`
-	Errors         []string `json:"errors,omitempty"`
+	Errors        []string `json:"errors,omitempty"`
 }
 
 // Verify checks all signatures on the receipt.
@@ -292,6 +293,13 @@ func SignedReceiptFromJSON(data string) (*SignedReceipt, error) {
 	var sr SignedReceipt
 	if err := dec.Decode(&sr); err != nil {
 		return nil, fmt.Errorf("invalid signed receipt JSON: %w", err)
+	}
+	var trailing interface{}
+	if err := dec.Decode(&trailing); err != io.EOF {
+		if err == nil {
+			return nil, fmt.Errorf("invalid signed receipt JSON: trailing data after top-level object")
+		}
+		return nil, fmt.Errorf("invalid signed receipt JSON: trailing data: %w", err)
 	}
 	return &sr, nil
 }

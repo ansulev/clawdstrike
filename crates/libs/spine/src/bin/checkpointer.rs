@@ -1026,13 +1026,11 @@ async fn main() -> Result<()> {
                     }
                 };
 
-                // --- Per-issuer chain verification ---
                 let envelope_issuer = envelope
                     .get("issuer")
                     .and_then(|v| v.as_str())
                     .unwrap_or("");
 
-                // Check issuer allowlist from trust bundle.
                 if let Some(tb) = trust_bundle.as_ref() {
                     if !tb.envelope_issuer_allowed(envelope_issuer) {
                         warn!(
@@ -1071,22 +1069,6 @@ async fn main() -> Result<()> {
                     // warn mode: update head anyway (self-heal on first deploy)
                 }
 
-                // Update in-memory issuer head.
-                if let Ok(new_head) = chain_head_from_envelope(&envelope) {
-                    let issuer_str = new_head.issuer.clone();
-                    let head_bytes = serde_json::to_vec(&new_head).unwrap_or_default();
-                    issuer_heads.insert(issuer_str.clone(), new_head);
-
-                    // Persist to KV using hex pubkey as key (issuer string
-                    // contains `:` which is invalid for JetStream KV keys).
-                    // Awaited inline to guarantee write ordering per issuer.
-                    let kv_key = spine::parse_issuer_pubkey_hex(&issuer_str)
-                        .unwrap_or_else(|_| issuer_str.replace(':', "_"));
-                    if let Err(e) = issuer_heads_kv.put(&kv_key, head_bytes.into()).await {
-                        warn!(issuer = %issuer_str, "failed to persist issuer head: {e}");
-                    }
-                }
-
                 match envelope_kv.get(&envelope_hash_hex).await {
                     Ok(None) => {
                         let _ = envelope_kv.put(&envelope_hash_hex, msg.payload.clone()).await;
@@ -1121,6 +1103,19 @@ async fn main() -> Result<()> {
 
                 if seq > 0 {
                     info!("appended leaf seq={} envelope_hash={}", seq, envelope_hash_hex);
+                }
+
+                if let Ok(new_head) = chain_head_from_envelope(&envelope) {
+                    let issuer_str = new_head.issuer.clone();
+                    let head_bytes = serde_json::to_vec(&new_head).unwrap_or_default();
+                    issuer_heads.insert(issuer_str.clone(), new_head);
+
+                    // Hex pubkey as key: `:` is invalid in JetStream KV keys.
+                    let kv_key = spine::parse_issuer_pubkey_hex(&issuer_str)
+                        .unwrap_or_else(|_| issuer_str.replace(':', "_"));
+                    if let Err(e) = issuer_heads_kv.put(&kv_key, head_bytes.into()).await {
+                        warn!(issuer = %issuer_str, "failed to persist issuer head: {e}");
+                    }
                 }
             }
         }

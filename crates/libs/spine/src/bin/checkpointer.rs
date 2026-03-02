@@ -155,6 +155,10 @@ fn is_safe_index_key_token(s: &str, max_len: usize) -> bool {
         .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-' || c == '.')
 }
 
+fn normalize_issuer_id(issuer: &str) -> String {
+    issuer.to_ascii_lowercase()
+}
+
 async fn load_latest_checkpoint(kv: &async_nats::jetstream::kv::Store) -> Result<Option<Value>> {
     match kv.get("latest").await? {
         Some(bytes) => Ok(Some(serde_json::from_slice(&bytes)?)),
@@ -179,7 +183,8 @@ async fn load_issuer_heads(
                 continue;
             }
         };
-        heads.insert(head.issuer.clone(), head);
+        let normalized_issuer = normalize_issuer_id(&head.issuer);
+        heads.insert(normalized_issuer, head);
     }
     Ok(heads)
 }
@@ -1029,8 +1034,7 @@ async fn main() -> Result<()> {
                 let envelope_issuer = envelope
                     .get("issuer")
                     .and_then(|v| v.as_str())
-                    .unwrap_or("")
-                    .to_ascii_lowercase();
+                    .map_or_else(String::new, normalize_issuer_id);
 
                 if let Some(tb) = trust_bundle.as_ref() {
                     if !tb.envelope_issuer_allowed(&envelope_issuer) {
@@ -1154,5 +1158,15 @@ mod tests {
     fn normalized_policy_index_entry_rejects_invalid_hash() {
         assert!(normalized_policy_index_entry("abc").is_none());
         assert!(normalized_policy_index_entry("0xzz").is_none());
+    }
+
+    #[test]
+    fn normalize_issuer_id_lowercases() {
+        let issuer =
+            "aegis:ed25519:AABBCCDDEEFF00112233445566778899AABBCCDDEEFF00112233445566778899";
+        assert_eq!(
+            normalize_issuer_id(issuer),
+            "aegis:ed25519:aabbccddeeff00112233445566778899aabbccddeeff00112233445566778899"
+        );
     }
 }

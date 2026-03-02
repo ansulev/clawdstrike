@@ -164,7 +164,10 @@ impl TrustBundle {
     /// Check if an envelope issuer is allowed.
     pub fn envelope_issuer_allowed(&self, issuer: &str) -> bool {
         self.allowed_envelope_issuers.is_empty()
-            || self.allowed_envelope_issuers.iter().any(|v| v == issuer)
+            || self
+                .allowed_envelope_issuers
+                .iter()
+                .any(|v| v.eq_ignore_ascii_case(issuer))
     }
 
     /// Check if a receipt enforcement tier is acceptable.
@@ -225,6 +228,15 @@ mod tests {
         };
         assert!(b.envelope_issuer_allowed("aegis:ed25519:aabb"));
         assert!(!b.envelope_issuer_allowed("aegis:ed25519:ccdd"));
+    }
+
+    #[test]
+    fn envelope_issuer_allowlist_is_case_insensitive() {
+        let b = TrustBundle {
+            allowed_envelope_issuers: vec!["aegis:ed25519:AABB".into()],
+            ..dev_bundle()
+        };
+        assert!(b.envelope_issuer_allowed("aegis:ed25519:aabb"));
     }
 
     #[test]

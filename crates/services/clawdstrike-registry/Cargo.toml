@@ -20,7 +20,7 @@ path = "src/bin/audit-monitor.rs"
 
 [dependencies]
 hush-core.workspace = true
-clawdstrike.workspace = true
+clawdstrike = { workspace = true, features = ["full"] }
 axum.workspace = true
 tokio.workspace = true
 tower.workspace = true

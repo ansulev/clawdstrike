@@ -86,8 +86,8 @@ func newDaemonChecker(rawURL string, cfg DaemonConfig) (*daemonChecker, error) {
 	}, nil
 }
 
-func (d *daemonChecker) CheckAction(action guards.GuardAction, ctx *guards.GuardContext) guards.GuardResult {
-	reqBody, err := toDaemonRequest(action, ctx)
+func (d *daemonChecker) CheckAction(action guards.GuardAction, guardCtx *guards.GuardContext) guards.GuardResult {
+	reqBody, err := toDaemonRequest(action, guardCtx)
 	if err != nil {
 		return daemonFailure(fmt.Sprintf("Invalid daemon request: %v", err))
 	}
@@ -97,9 +97,14 @@ func (d *daemonChecker) CheckAction(action guards.GuardAction, ctx *guards.Guard
 		return daemonFailure(fmt.Sprintf("Failed to encode daemon request: %v", err))
 	}
 
+	requestCtx := daemonRequestContext(guardCtx)
+
 	var lastFailure string
 	for attempt := 1; attempt <= d.retry.attempts; attempt++ {
-		result, retryable, failure := d.doRequest(body)
+		if err := requestCtx.Err(); err != nil {
+			return daemonFailure(fmt.Sprintf("Daemon check canceled: %v", err))
+		}
+		result, retryable, failure := d.doRequest(requestCtx, body)
 		if failure == "" {
 			return result
 		}
@@ -109,15 +114,20 @@ func (d *daemonChecker) CheckAction(action guards.GuardAction, ctx *guards.Guard
 		}
 		wait := daemonRetryDelay(d.retry.backoff, attempt)
 		if wait > 0 {
-			time.Sleep(wait)
+			if !sleepWithContext(requestCtx, wait) {
+				return daemonFailure(fmt.Sprintf("Daemon check canceled: %v", requestCtx.Err()))
+			}
 		}
 	}
 	return daemonFailure(lastFailure)
 }
 
-func (d *daemonChecker) doRequest(body []byte) (guards.GuardResult, bool, string) {
+func (d *daemonChecker) doRequest(requestCtx context.Context, body []byte) (guards.GuardResult, bool, string) {
+	if requestCtx == nil {
+		requestCtx = context.Background()
+	}
 	req, err := http.NewRequestWithContext(
-		context.Background(),
+		requestCtx,
 		http.MethodPost,
 		d.url+"/api/v1/check",
 		bytes.NewReader(body),
@@ -251,4 +261,22 @@ func daemonRetryDelay(base time.Duration, attempt int) time.Duration {
 		return 0
 	}
 	return time.Duration(1<<(attempt-1)) * base
+}
+
+func daemonRequestContext(ctx *guards.GuardContext) context.Context {
+	if ctx != nil && ctx.Context != nil {
+		return ctx.Context
+	}
+	return context.Background()
+}
+
+func sleepWithContext(ctx context.Context, delay time.Duration) bool {
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+	select {
+	case <-timer.C:
+		return true
+	case <-ctx.Done():
+		return false
+	}
 }

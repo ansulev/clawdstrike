@@ -2,6 +2,7 @@
 package guards
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -11,7 +12,7 @@ import (
 type Severity int
 
 const (
-	Info     Severity = iota
+	Info Severity = iota
 	Warning
 	Error
 	Critical
@@ -156,6 +157,7 @@ type GuardContext struct {
 	Cwd       string                 `json:"cwd,omitempty"`
 	SessionID string                 `json:"session_id,omitempty"`
 	AgentID   string                 `json:"agent_id,omitempty"`
+	Context   context.Context        `json:"-"`
 	Metadata  map[string]interface{} `json:"metadata,omitempty"`
 }
 
@@ -177,6 +179,11 @@ func (c *GuardContext) WithSessionID(id string) *GuardContext {
 
 func (c *GuardContext) WithAgentID(id string) *GuardContext {
 	c.AgentID = id
+	return c
+}
+
+func (c *GuardContext) WithContext(ctx context.Context) *GuardContext {
+	c.Context = ctx
 	return c
 }
 

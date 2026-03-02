@@ -88,10 +88,10 @@ func (r *AsyncGuardRuntime) CheckAll(ctx context.Context, action, guardCtx inter
 
 			// Panic recovery for guard goroutines.
 			defer func() {
-				if r := recover(); r != nil {
+				if recovered := recover(); recovered != nil {
 					results[idx] = GuardResult{
 						Guard: guard.Name(),
-						Err:   fmt.Errorf("guard %q panicked: %v", guard.Name(), r),
+						Err:   fmt.Errorf("guard %q panicked: %v", guard.Name(), recovered),
 					}
 				}
 			}()

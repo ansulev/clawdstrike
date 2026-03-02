@@ -1,6 +1,7 @@
 package clawdstrike
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -157,9 +158,11 @@ func TestFromDaemonRejectsInvalidURL(t *testing.T) {
 }
 
 type staticRoundTripper struct {
-	response *http.Response
-	err      error
-	calls    atomic.Int64
+	statusCode int
+	header     http.Header
+	body       string
+	err        error
+	calls      atomic.Int64
 }
 
 func (s *staticRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
@@ -167,9 +170,34 @@ func (s *staticRoundTripper) RoundTrip(req *http.Request) (*http.Response, error
 	if s.err != nil {
 		return nil, s.err
 	}
-	resp := *s.response
-	resp.Request = req
-	return &resp, nil
+	statusCode := s.statusCode
+	if statusCode == 0 {
+		statusCode = http.StatusOK
+	}
+
+	header := make(http.Header, len(s.header))
+	for key, values := range s.header {
+		clone := make([]string, len(values))
+		copy(clone, values)
+		header[key] = clone
+	}
+
+	return &http.Response{
+		StatusCode: statusCode,
+		Header:     header,
+		Body:       io.NopCloser(strings.NewReader(s.body)),
+		Request:    req,
+	}, nil
+}
+
+type cancelAwareRoundTripper struct {
+	calls atomic.Int64
+}
+
+func (c *cancelAwareRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	c.calls.Add(1)
+	<-req.Context().Done()
+	return nil, req.Context().Err()
 }
 
 func TestFromDaemonWithConfigRetryPolicy(t *testing.T) {
@@ -209,13 +237,9 @@ func TestFromDaemonWithConfigRetryPolicy(t *testing.T) {
 
 func TestFromDaemonWithConfigHTTPClientOverride(t *testing.T) {
 	rt := &staticRoundTripper{
-		response: &http.Response{
-			StatusCode: http.StatusOK,
-			Header:     make(http.Header),
-			Body: io.NopCloser(strings.NewReader(
-				`{"allowed":true,"guard":"daemon","severity":"info","message":"ok"}`,
-			)),
-		},
+		statusCode: http.StatusOK,
+		header:     make(http.Header),
+		body:       `{"allowed":true,"guard":"daemon","severity":"info","message":"ok"}`,
 	}
 
 	client := &http.Client{Transport: rt, Timeout: 50 * time.Millisecond}
@@ -232,5 +256,71 @@ func TestFromDaemonWithConfigHTTPClientOverride(t *testing.T) {
 	}
 	if rt.calls.Load() != 1 {
 		t.Fatalf("expected custom roundtripper to be called once, got %d", rt.calls.Load())
+	}
+}
+
+func TestFromDaemonWithConfigHTTPClientOverrideResponseBodyReusable(t *testing.T) {
+	rt := &staticRoundTripper{
+		statusCode: http.StatusOK,
+		header:     make(http.Header),
+		body:       `{"allowed":true,"guard":"daemon","severity":"info","message":"ok"}`,
+	}
+
+	client := &http.Client{Transport: rt, Timeout: 50 * time.Millisecond}
+	cs, err := FromDaemonWithConfig("http://daemon.example.com", DaemonConfig{
+		HTTPClient: client,
+	})
+	if err != nil {
+		t.Fatalf("FromDaemonWithConfig: %v", err)
+	}
+
+	first := cs.CheckFileAccess("/tmp/one")
+	if first.Status != StatusAllow {
+		t.Fatalf("expected first check to allow, got %s", first.Status)
+	}
+	second := cs.CheckFileAccess("/tmp/two")
+	if second.Status != StatusAllow {
+		t.Fatalf("expected second check to allow, got %s", second.Status)
+	}
+	if rt.calls.Load() != 2 {
+		t.Fatalf("expected custom roundtripper to be called twice, got %d", rt.calls.Load())
+	}
+}
+
+func TestFromDaemonWithConfigRequestContextCancellation(t *testing.T) {
+	rt := &cancelAwareRoundTripper{}
+	client := &http.Client{
+		Transport: rt,
+		Timeout:   5 * time.Second,
+	}
+
+	cs, err := FromDaemonWithConfig("http://daemon.example.com", DaemonConfig{
+		HTTPClient:    client,
+		RetryAttempts: 5,
+		RetryBackoff:  10 * time.Millisecond,
+	})
+	if err != nil {
+		t.Fatalf("FromDaemonWithConfig: %v", err)
+	}
+
+	reqCtx, cancel := context.WithTimeout(context.Background(), 25*time.Millisecond)
+	defer cancel()
+
+	start := time.Now()
+	decision := cs.CheckWithContext(
+		guards.FileAccess("/tmp/cancel"),
+		guards.NewContext().WithContext(reqCtx),
+	)
+	if decision.Status != StatusDeny {
+		t.Fatalf("expected deny, got %s", decision.Status)
+	}
+	if !strings.Contains(decision.Message, "Daemon check canceled") {
+		t.Fatalf("expected cancellation message, got %q", decision.Message)
+	}
+	if elapsed := time.Since(start); elapsed > 200*time.Millisecond {
+		t.Fatalf("expected cancellation to return quickly, took %s", elapsed)
+	}
+	if got := rt.calls.Load(); got < 1 {
+		t.Fatalf("expected at least one daemon request, got %d", got)
 	}
 }

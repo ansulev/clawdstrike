@@ -461,6 +461,47 @@ class TestWindowEviction:
         alerts = engine.flush()
         assert len(alerts) == 0
 
+    def test_process_event_uses_event_time_for_capped_eviction(self) -> None:
+        yaml_str = """\
+schema: clawdstrike.hunt.correlation.v1
+name: "Capped eviction"
+severity: low
+description: "test"
+window: 5m
+conditions:
+  - source: receipt
+    action_type: file
+    bind: first
+  - source: receipt
+    action_type: egress
+    after: first
+    within: 5m
+    bind: second
+output:
+  title: "Capped eviction match"
+  evidence:
+    - first
+    - second
+"""
+        rule = parse_rule(yaml_str)
+        engine = CorrelationEngine([rule])
+
+        ts1 = datetime(2025, 6, 15, 12, 0, 0, tzinfo=timezone.utc)
+        ts2 = datetime(2025, 6, 15, 12, 0, 45, tzinfo=timezone.utc)
+
+        first = _make_event(
+            EventSourceType.RECEIPT, "file", NormalizedVerdict.ALLOW,
+            "read /tmp/data", ts1,
+        )
+        second = _make_event(
+            EventSourceType.RECEIPT, "egress", NormalizedVerdict.ALLOW,
+            "egress TCP 10.0.0.1:8080 -> 93.184.216.34:443", ts2,
+        )
+
+        assert len(engine.process_event(first, timedelta(seconds=30))) == 0
+        # Event-time capped eviction should drop the first window before second arrives.
+        assert len(engine.process_event(second, timedelta(seconds=30))) == 0
+
 
 # ---------------------------------------------------------------------------
 # Dependent ordering

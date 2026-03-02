@@ -168,6 +168,9 @@ export function parseRule(yamlStr: string): CorrelationRule {
   if (!raw.output || typeof raw.output !== "object") {
     throw new ParseError("missing or invalid 'output' field");
   }
+  if (typeof raw.output.title !== "string") {
+    throw new ParseError("output.title must be a string");
+  }
   if (
     !Array.isArray(raw.output.evidence) ||
     !raw.output.evidence.every((e: unknown) => typeof e === "string")

@@ -343,9 +343,16 @@ class CorrelationEngine:
     def rules(self) -> tuple[CorrelationRule, ...]:
         return self._rules
 
-    def process_event(self, event: TimelineEvent) -> list[Alert]:
+    def process_event(
+        self,
+        event: TimelineEvent,
+        max_window: timedelta | None = None,
+    ) -> list[Alert]:
         """Process a single event. Returns alerts generated."""
-        self._evict_expired_at(event.timestamp)
+        if max_window is not None:
+            self._evict_expired_at_capped(event.timestamp, max_window)
+        else:
+            self._evict_expired_at(event.timestamp)
 
         alerts: list[Alert] = []
         for ri in range(len(self._rules)):
@@ -377,9 +384,8 @@ class CorrelationEngine:
         """Evict expired windows using wall-clock time."""
         self._evict_expired_at(datetime.now(tz=timezone.utc))
 
-    def _evict_expired_capped(self, max_window: timedelta) -> None:
-        """Evict windows using the shorter of rule window and *max_window*."""
-        now = datetime.now(tz=timezone.utc)
+    def _evict_expired_at_capped(self, now: datetime, max_window: timedelta) -> None:
+        """Evict using the shorter of each rule window and *max_window* at a specific time."""
         to_remove: list[int] = []
         for ri, windows in self._windows.items():
             rule_dur = self._rules[ri].window
@@ -392,6 +398,10 @@ class CorrelationEngine:
                 to_remove.append(ri)
         for ri in to_remove:
             del self._windows[ri]
+
+    def _evict_expired_capped(self, max_window: timedelta) -> None:
+        """Evict windows using the shorter of rule window and *max_window*."""
+        self._evict_expired_at_capped(datetime.now(tz=timezone.utc), max_window)
 
     def flush(self, as_of: datetime | None = None) -> list[Alert]:
         """Flush all windows, returning alerts for fully-matched ones.

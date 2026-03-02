@@ -220,6 +220,23 @@ output:
     expect(() => parseRule(yaml)).toThrow("unknown bind 'missing_bind'");
   });
 
+  it("rejects missing output title", () => {
+    const yaml = `
+schema: clawdstrike.hunt.correlation.v1
+name: "Missing title"
+severity: low
+description: "test"
+window: 10s
+conditions:
+  - source: receipt
+    bind: evt
+output:
+  evidence:
+    - evt
+`;
+    expect(() => parseRule(yaml)).toThrow("output.title must be a string");
+  });
+
   it("rejects within exceeding window", () => {
     const yaml = `
 schema: clawdstrike.hunt.correlation.v1

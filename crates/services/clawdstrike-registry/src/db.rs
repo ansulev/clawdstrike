@@ -756,7 +756,7 @@ impl RegistryDb {
                 return Ok(Vec::new());
             };
             let mut stmt = self.conn.prepare(
-                "SELECT p.name, p.description, (SELECT v.version FROM versions v WHERE v.name = p.name ORDER BY v.published_at DESC LIMIT 1) FROM search_index si JOIN packages p ON p.name = si.name WHERE search_index MATCH ?1 ORDER BY rank LIMIT ?2 OFFSET ?3",
+                "SELECT p.name, p.description, (SELECT v.version FROM versions v WHERE v.name = p.name ORDER BY v.published_at DESC LIMIT 1) FROM search_index JOIN packages p ON p.name = search_index.name WHERE search_index MATCH ?1 ORDER BY rank LIMIT ?2 OFFSET ?3",
             )?;
             let rows = stmt
                 .query_map(params![safe_query, limit, offset], |row| {
@@ -785,7 +785,7 @@ impl RegistryDb {
             return Ok(0);
         };
         let count: i64 = self.conn.query_row(
-            "SELECT COUNT(*) FROM search_index si JOIN packages p ON p.name = si.name WHERE search_index MATCH ?1",
+            "SELECT COUNT(*) FROM search_index JOIN packages p ON p.name = search_index.name WHERE search_index MATCH ?1",
             params![safe_query],
             |row| row.get(0),
         )?;

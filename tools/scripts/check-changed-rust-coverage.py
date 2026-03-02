@@ -157,7 +157,7 @@ FN_SIGNATURE_RE = re.compile(r"^(?:pub(?:\([^)]*\))?\s+)?(?:async\s+)?fn\b")
 def has_executable_rust_lines(path: str) -> bool:
     source_path = Path(path)
     if not source_path.exists():
-        return True
+        return False
 
     in_block_comment = False
     in_use_group = False

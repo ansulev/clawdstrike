@@ -16,7 +16,6 @@ on:
     paths:
       - "policies/**"
       - "rulesets/**"
-      - "*.yaml"
       - "clawdstrike-pkg.toml"
 
 jobs:

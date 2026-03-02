@@ -20,6 +20,10 @@ const CALLER_TS_HEADER: &str = "X-Clawdstrike-Caller-Ts";
 const MAX_CALLER_CLOCK_SKEW_SECS: i64 = 300;
 
 pub(crate) fn extract_bearer_token_value(header: &str) -> Option<&str> {
+    if header != header.trim() {
+        return None;
+    }
+
     let mut parts = header.split_ascii_whitespace();
     let scheme = parts.next()?;
     let token = parts.next()?;
@@ -307,9 +311,15 @@ mod tests {
     }
 
     #[test]
-    fn extract_accepts_trailing_spacing_after_token() {
+    fn extract_rejects_trailing_spacing_after_token() {
         let req = make_request(Some("Bearer my-key    "));
-        assert_eq!(extract_bearer_token(&req).as_deref(), Some("my-key"));
+        assert!(extract_bearer_token(&req).is_none());
+    }
+
+    #[test]
+    fn extract_rejects_leading_spacing_before_scheme() {
+        let req = make_request(Some("  Bearer my-key"));
+        assert!(extract_bearer_token(&req).is_none());
     }
 
     #[test]

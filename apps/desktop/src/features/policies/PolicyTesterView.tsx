@@ -225,7 +225,13 @@ function ActionTypeButton({
 
 function ResultDisplay({ result }: { result: PolicyEvalResponse }) {
   const decision = result.decision;
-  const verdict = decision.denied ? "DENY" : decision.warn ? "WARN" : "ALLOW";
+  const verdict = decision.denied
+    ? "DENY"
+    : decision.warn
+      ? "WARN"
+      : decision.allowed
+        ? "ALLOW"
+        : "UNKNOWN";
 
   return (
     <div className="space-y-4">

@@ -2,6 +2,7 @@
 
 import pytest
 from clawdstrike import (
+    __version__,
     Policy,
     PolicyEngine,
     PublicKeySet,
@@ -108,15 +109,13 @@ class TestVersionInfo:
         from importlib.metadata import PackageNotFoundError, version
         import re
 
-        import clawdstrike
-
         mode = os.getenv("CLAWDSTRIKE_PY_PACKAGE_MODE", "auto").strip().lower()
         if mode not in {"auto", "source", "installed"}:
             raise AssertionError(
                 "CLAWDSTRIKE_PY_PACKAGE_MODE must be one of: auto, source, installed"
             )
 
-        assert re.fullmatch(r"\d+\.\d+\.\d+", clawdstrike.__version__) is not None
+        assert re.fullmatch(r"\d+\.\d+\.\d+", __version__) is not None
 
         if mode == "source":
             return
@@ -131,8 +130,8 @@ class TestVersionInfo:
             return
 
         # In source mode the checkout may not match an installed wheel version.
-        if mode == "auto" and clawdstrike.__version__ != installed_version:
+        if mode == "auto" and __version__ != installed_version:
             pytest.skip("Source checkout version differs from installed package metadata")
 
         # Keep the public module version aligned with installed package metadata.
-        assert clawdstrike.__version__ == installed_version
+        assert __version__ == installed_version

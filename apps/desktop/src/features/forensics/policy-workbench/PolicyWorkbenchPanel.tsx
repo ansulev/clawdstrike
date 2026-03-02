@@ -148,16 +148,6 @@ export function PolicyWorkbenchPanel({
     void readPolicy({ forceApply: true });
   }, [dirty, readPolicy]);
 
-  const handleReload = React.useCallback(() => {
-    if (
-      dirty &&
-      !window.confirm("Discard unsaved policy edits and reload from daemon?")
-    ) {
-      return;
-    }
-    void readPolicy({ forceApply: true });
-  }, [dirty, readPolicy]);
-
   const validateYaml = React.useCallback(
     async (yaml: string) => {
       if (!connected) return;
@@ -207,16 +197,21 @@ export function PolicyWorkbenchPanel({
       return;
     }
 
+    if (saveValidationSeq === validationSeq.current) {
+      dispatch({
+        type: "validate_success",
+        valid: validation.valid,
+        errors: validation.errors as ValidationIssue[],
+        warnings: validation.warnings as ValidationIssue[],
+      });
+    }
+    const normalizedVersion = validation.normalized_version ?? state.loadedVersion;
+
     if (!validation.valid) {
       dispatch({
         type: "save_error",
         message: "Policy is invalid. Fix validation errors before saving.",
       });
-      return;
-    }
-
-    if (!validation.valid) {
-      dispatch({ type: "save_error", message: "Policy is invalid. Fix validation errors before saving." });
       return;
     }
 
@@ -472,72 +467,6 @@ export function PolicyWorkbenchPanel({
                   variant === "shelf" ? "border-b border-white/10" : undefined,
                 )}
               >
-                <GlowButton
-                  data-testid="policy-editor-reload"
-                  variant="secondary"
-                  onClick={handleReload}
-                >
-                  {POLICY_TEST_EVENT_TYPES.map((eventType) => (
-                    <option key={eventType} value={eventType}>
-                      {eventType}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="mb-1 block text-[11px] uppercase tracking-wide text-white/55">Target / Resource</label>
-                <GlowInput
-                  data-testid="policy-test-target"
-                  value={testForm.target}
-                  onChange={(event) => setTestForm((prev) => ({ ...prev, target: event.target.value }))}
-                  placeholder={targetPlaceholder(testForm.eventType)}
-                  className="w-full font-mono text-xs"
-                />
-              </div>
-
-              {(testForm.eventType === "file_write" || testForm.eventType === "patch_apply") && (
-                <div>
-                  <label className="mb-1 block text-[11px] uppercase tracking-wide text-white/55">Content</label>
-                  <textarea
-                    value={testForm.content}
-                    onChange={(event) => setTestForm((prev) => ({ ...prev, content: event.target.value }))}
-                    className="h-20 w-full resize-none rounded border border-white/20 bg-black/35 px-2 py-1 font-mono text-xs"
-                    placeholder={testForm.eventType === "patch_apply" ? "--- patch diff ---" : "file content"}
-                  />
-                </div>
-              )}
-
-              {(testForm.eventType === "tool_call" || testForm.eventType === "secret_access") && (
-                <div>
-                  <label className="mb-1 block text-[11px] uppercase tracking-wide text-white/55">
-                    {testForm.eventType === "tool_call" ? "Tool Parameters JSON" : "Secret Scope"}
-                  </label>
-                  <textarea
-                    value={testForm.extra}
-                    onChange={(event) => setTestForm((prev) => ({ ...prev, extra: event.target.value }))}
-                    className="h-16 w-full resize-none rounded border border-white/20 bg-black/35 px-2 py-1 font-mono text-xs"
-                    placeholder={testForm.eventType === "tool_call" ? "{\"path\":\"/tmp\"}" : "runtime"}
-                  />
-                </div>
-              )}
-
-              <div className="grid grid-cols-2 gap-2">
-                <GlowInput
-                  value={testForm.sessionId}
-                  onChange={(event) => setTestForm((prev) => ({ ...prev, sessionId: event.target.value }))}
-                  placeholder="sessionId (optional)"
-                  className="font-mono text-xs"
-                />
-                <GlowInput
-                  value={testForm.agentId}
-                  onChange={(event) => setTestForm((prev) => ({ ...prev, agentId: event.target.value }))}
-                  placeholder="agentId (optional)"
-                  className="font-mono text-xs"
-                />
-              </div>
-
-              <div className="flex items-center gap-2">
                 <GlowButton
                   data-testid="policy-editor-reload"
                   variant="secondary"

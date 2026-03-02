@@ -292,11 +292,6 @@ pub async fn update_policy_bundle(
         .map(|h| h.to_hex())
         .map_err(|e| V1Error::internal("INTERNAL_ERROR", e.to_string()))?;
     *engine = new_engine;
-    let active_policy_hash = engine
-        .policy_hash()
-        .map(|h| h.to_hex())
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-    *engine = new_engine;
     state.policy_engine_cache.clear();
     drop(engine);
 

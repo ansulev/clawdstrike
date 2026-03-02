@@ -33,6 +33,7 @@ uuid = { workspace = true, features = ["v4"] }
 unicode-normalization = "0.1"
 base64.workspace = true
 reqwest = { workspace = true, features = ["blocking"] }
+sha2.workspace = true
 hex.workspace = true
 semver.workspace = true
 pubgrub.workspace = true

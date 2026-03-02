@@ -1,10 +1,11 @@
 //! `.cpkg` archive format — zstd-compressed tar with content-hash integrity.
 
 use std::fs;
-use std::io::{Read as IoRead, Write as IoWrite};
+use std::io::{Error as IoError, Read as IoRead, Write as IoWrite};
 use std::path::{Path, PathBuf};
 
 use hush_core::Hash;
+use sha2::{Digest as Sha2Digest, Sha256};
 
 use crate::error::{Error, Result};
 
@@ -13,6 +14,61 @@ const MAX_UNCOMPRESSED_SIZE: u64 = 100 * 1024 * 1024;
 
 /// Compression level for zstd.
 const ZSTD_LEVEL: i32 = 3;
+
+struct SizeLimitedWriter<W: IoWrite> {
+    inner: W,
+    max_bytes: u64,
+    written: u64,
+}
+
+impl<W: IoWrite> SizeLimitedWriter<W> {
+    fn new(inner: W, max_bytes: u64) -> Self {
+        Self {
+            inner,
+            max_bytes,
+            written: 0,
+        }
+    }
+
+    fn into_inner(self) -> W {
+        self.inner
+    }
+}
+
+impl<W: IoWrite> IoWrite for SizeLimitedWriter<W> {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        if self.written.saturating_add(buf.len() as u64) > self.max_bytes {
+            return Err(IoError::other(format!(
+                "uncompressed archive size exceeds limit ({} bytes)",
+                self.max_bytes
+            )));
+        }
+        let written = self.inner.write(buf)?;
+        self.written = self.written.saturating_add(written as u64);
+        Ok(written)
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        self.inner.flush()
+    }
+}
+
+fn sha256_file(path: &Path) -> Result<Hash> {
+    let mut file = fs::File::open(path)?;
+    let mut hasher = Sha256::new();
+    let mut buf = [0u8; 8192];
+    loop {
+        let n = file.read(&mut buf)?;
+        if n == 0 {
+            break;
+        }
+        hasher.update(&buf[..n]);
+    }
+    let digest = hasher.finalize();
+    let mut out = [0u8; 32];
+    out.copy_from_slice(&digest);
+    Ok(Hash::from_bytes(out))
+}
 
 /// Pack a directory into a `.cpkg` archive (tar + zstd).
 ///
@@ -25,33 +81,30 @@ pub fn pack(source_dir: &Path, output_path: &Path) -> Result<Hash> {
         )));
     }
 
-    // Build tar in memory, measuring uncompressed size.
-    let mut tar_bytes: Vec<u8> = Vec::new();
-    {
-        let mut builder = tar::Builder::new(&mut tar_bytes);
-        builder.append_dir_all(".", source_dir)?;
-        builder.finish()?;
+    let pack_result = (|| -> Result<()> {
+        let out_file = fs::File::create(output_path)?;
+        let out_buf = std::io::BufWriter::new(out_file);
+        let encoder = zstd::stream::write::Encoder::new(out_buf, ZSTD_LEVEL)?;
+        let mut limited = SizeLimitedWriter::new(encoder, MAX_UNCOMPRESSED_SIZE);
+
+        {
+            let mut builder = tar::Builder::new(&mut limited);
+            builder.append_dir_all(".", source_dir)?;
+            builder.finish()?;
+        }
+
+        let encoder = limited.into_inner();
+        let mut out_buf = encoder.finish()?;
+        out_buf.flush()?;
+        Ok(())
+    })();
+
+    if let Err(err) = pack_result {
+        let _ = fs::remove_file(output_path);
+        return Err(err);
     }
 
-    if tar_bytes.len() as u64 > MAX_UNCOMPRESSED_SIZE {
-        return Err(Error::PkgError(format!(
-            "uncompressed archive size ({} bytes) exceeds limit ({} bytes)",
-            tar_bytes.len(),
-            MAX_UNCOMPRESSED_SIZE
-        )));
-    }
-
-    // Compress with zstd.
-    let mut compressed: Vec<u8> = Vec::new();
-    {
-        let mut encoder = zstd::stream::write::Encoder::new(&mut compressed, ZSTD_LEVEL)?;
-        encoder.write_all(&tar_bytes)?;
-        encoder.finish()?;
-    }
-
-    fs::write(output_path, &compressed)?;
-
-    Ok(hush_core::sha256(&compressed))
+    sha256_file(output_path)
 }
 
 /// Unpack a `.cpkg` archive into a target directory.
@@ -221,6 +274,14 @@ mod tests {
         let archive = tmp.path().join("out.cpkg");
         let err = pack(&file, &archive).unwrap_err();
         assert!(err.to_string().contains("not a directory"));
+    }
+
+    #[test]
+    fn size_limited_writer_rejects_oversized_write() {
+        let mut writer = SizeLimitedWriter::new(Vec::<u8>::new(), 4);
+        writer.write_all(b"abcd").unwrap();
+        let err = writer.write_all(b"ef").unwrap_err();
+        assert!(err.to_string().contains("exceeds limit"));
     }
 
     #[test]

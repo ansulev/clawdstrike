@@ -79,12 +79,14 @@ pub fn cmd_mirror(
         } => {
             let cfg = RegistryConfig::load(None);
             cmd_mirror_sync(
-                &name,
-                version.as_deref(),
-                &from,
-                to.as_deref(),
-                output_dir,
-                cfg.registry_public_key.as_deref(),
+                MirrorSyncRequest {
+                    name: &name,
+                    version: version.as_deref(),
+                    from: &from,
+                    to: to.as_deref(),
+                    output_dir,
+                    expected_registry_key: cfg.registry_public_key.as_deref(),
+                },
                 stdout,
                 stderr,
             )
@@ -397,16 +399,29 @@ fn select_latest_non_yanked_version(info: &serde_json::Value) -> Option<String> 
 // mirror sync
 // ---------------------------------------------------------------------------
 
-fn cmd_mirror_sync(
-    name: &str,
-    version: Option<&str>,
-    from: &str,
-    to: Option<&str>,
+struct MirrorSyncRequest<'a> {
+    name: &'a str,
+    version: Option<&'a str>,
+    from: &'a str,
+    to: Option<&'a str>,
     output_dir: Option<PathBuf>,
-    expected_registry_key: Option<&str>,
+    expected_registry_key: Option<&'a str>,
+}
+
+fn cmd_mirror_sync(
+    request: MirrorSyncRequest<'_>,
     stdout: &mut dyn Write,
     stderr: &mut dyn Write,
 ) -> ExitCode {
+    let MirrorSyncRequest {
+        name,
+        version,
+        from,
+        to,
+        output_dir,
+        expected_registry_key,
+    } = request;
+
     let client = match build_client() {
         Ok(c) => c,
         Err(e) => {
@@ -924,12 +939,14 @@ fn cmd_mirror_bulk_sync(
 
     for pkg in filtered {
         let result = cmd_mirror_sync(
-            &pkg.name,
-            Some(&pkg.version),
-            from,
-            None,
-            Some(output_dir.to_path_buf()),
-            expected_registry_key,
+            MirrorSyncRequest {
+                name: &pkg.name,
+                version: Some(&pkg.version),
+                from,
+                to: None,
+                output_dir: Some(output_dir.to_path_buf()),
+                expected_registry_key,
+            },
             stdout,
             stderr,
         );

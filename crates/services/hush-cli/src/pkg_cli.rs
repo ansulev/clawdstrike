@@ -1,7 +1,7 @@
 #![allow(clippy::needless_pass_by_value)]
 //! `hush pkg` subcommands — package management for `.cpkg` archives.
 
-use std::io::Write;
+use std::io::{Read as IoRead, Write};
 use std::path::{Path, PathBuf};
 
 use clap::Subcommand;
@@ -17,6 +17,7 @@ use crate::registry_config::{is_file_source, load_or_generate_publisher_keypair,
 use crate::ExitCode;
 
 const PLUGIN_MANIFEST_FILENAME: &str = "clawdstrike.plugin.toml";
+const MAX_REGISTRY_DOWNLOAD_BYTES: u64 = 100 * 1024 * 1024;
 
 // ---------------------------------------------------------------------------
 // Clap types
@@ -1307,6 +1308,31 @@ fn recompute_installed_content_fingerprint(package_dir: &Path) -> Result<hush_co
         .map_err(|e| format!("failed to recompute installed package fingerprint: {e}"))
 }
 
+fn read_response_bytes_limited(
+    mut response: reqwest::blocking::Response,
+    max_bytes: u64,
+) -> Result<Vec<u8>, String> {
+    if response.content_length().is_some_and(|len| len > max_bytes) {
+        return Err(format!(
+            "download exceeds max allowed size ({} bytes)",
+            max_bytes
+        ));
+    }
+
+    let mut bytes = Vec::new();
+    let mut limited = response.by_ref().take(max_bytes + 1);
+    limited
+        .read_to_end(&mut bytes)
+        .map_err(|e| format!("failed to read response: {e}"))?;
+    if bytes.len() as u64 > max_bytes {
+        return Err(format!(
+            "download exceeds max allowed size ({} bytes)",
+            max_bytes
+        ));
+    }
+    Ok(bytes)
+}
+
 fn cmd_pkg_install_registry(
     name: &str,
     version: Option<&str>,
@@ -1408,10 +1434,10 @@ fn cmd_pkg_install_registry(
         return ExitCode::RuntimeError;
     }
 
-    let bytes = match resp.bytes() {
+    let bytes = match read_response_bytes_limited(resp, MAX_REGISTRY_DOWNLOAD_BYTES) {
         Ok(b) => b,
         Err(e) => {
-            let _ = writeln!(stderr, "Error: failed to read response: {e}");
+            let _ = writeln!(stderr, "Error: {e}");
             return ExitCode::RuntimeError;
         }
     };

@@ -7,6 +7,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/backbay-labs/clawdstrike-go/internal"
 )
 
 // ErrAlreadyStarted is returned when Start is called on an already-running EventBus.
@@ -274,7 +276,7 @@ func (b *EventBus) flush(ctx context.Context, batch []SecurityEvent) {
 			}
 			b.recordRetry(label)
 			wait := backoffDuration(b.retryBackoff, attempt)
-			if wait > 0 && !sleepWithContext(ctx, wait) {
+			if wait > 0 && !internal.SleepWithContext(ctx, wait) {
 				return
 			}
 		}
@@ -334,19 +336,4 @@ func backoffDuration(base time.Duration, attempt int) time.Duration {
 	}
 	multiplier := 1 << (attempt - 1)
 	return time.Duration(multiplier) * base
-}
-
-func sleepWithContext(ctx context.Context, d time.Duration) bool {
-	if d <= 0 {
-		return true
-	}
-	timer := time.NewTimer(d)
-	defer timer.Stop()
-
-	select {
-	case <-timer.C:
-		return true
-	case <-ctx.Done():
-		return false
-	}
 }

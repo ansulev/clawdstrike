@@ -15,7 +15,6 @@ type SecurityContext struct {
 	ViolationCount atomic.Int64
 
 	mu           sync.Mutex
-	auditEvents  []AuditEvent
 	blockedTools []string
 }
 
@@ -35,20 +34,6 @@ func (sc *SecurityContext) RecordViolation(toolName string) {
 	sc.mu.Lock()
 	sc.blockedTools = append(sc.blockedTools, toolName)
 	sc.mu.Unlock()
-}
-
-func (sc *SecurityContext) AddAuditEvent(event AuditEvent) {
-	sc.mu.Lock()
-	sc.auditEvents = append(sc.auditEvents, event)
-	sc.mu.Unlock()
-}
-
-func (sc *SecurityContext) GetAuditEvents() []AuditEvent {
-	sc.mu.Lock()
-	defer sc.mu.Unlock()
-	result := make([]AuditEvent, len(sc.auditEvents))
-	copy(result, sc.auditEvents)
-	return result
 }
 
 func (sc *SecurityContext) GetBlockedTools() []string {

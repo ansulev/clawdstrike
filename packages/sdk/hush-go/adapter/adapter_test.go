@@ -60,6 +60,32 @@ func TestBaseToolInterceptorDenyOnConfigError(t *testing.T) {
 	}
 }
 
+func TestBaseToolInterceptorNilEngineFailsClosed(t *testing.T) {
+	logger := NewInMemoryAuditLogger()
+	secCtx := NewSecurityContext("test-session")
+	interceptor := NewBaseToolInterceptor(nil, logger, secCtx)
+
+	result, err := interceptor.BeforeExecute(context.Background(), "write_file", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result == nil {
+		t.Fatal("expected non-nil intercept result")
+	}
+	if result.Proceed {
+		t.Error("expected Proceed=false when engine is nil")
+	}
+	if result.Decision == nil || result.Decision.Status != guards.StatusDeny {
+		t.Fatalf("expected deny decision, got %#v", result.Decision)
+	}
+	if secCtx.CheckCount.Load() != 1 {
+		t.Errorf("expected CheckCount=1, got %d", secCtx.CheckCount.Load())
+	}
+	if secCtx.ViolationCount.Load() != 1 {
+		t.Errorf("expected ViolationCount=1, got %d", secCtx.ViolationCount.Load())
+	}
+}
+
 func TestBaseToolInterceptorAfterExecute(t *testing.T) {
 	eng, err := engine.NewBuilder().Build()
 	if err != nil {

@@ -139,6 +139,23 @@ func TestAsyncRuntime_NoGuards(t *testing.T) {
 	}
 }
 
+func TestAsyncRuntime_ZeroConfigDefaultsTimeout(t *testing.T) {
+	runtime := async.NewAsyncGuardRuntime(async.AsyncGuardConfig{})
+	g := &slowGuard{name: "guard-1", duration: 10 * time.Millisecond, result: "ok"}
+	runtime.AddGuard(g)
+
+	results, err := runtime.CheckAll(context.Background(), nil, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(results))
+	}
+	if results[0].Err != nil {
+		t.Fatalf("expected no timeout with defaulted config, got %v", results[0].Err)
+	}
+}
+
 func TestAsyncRuntime_MaxConcurrencyZeroDefaults(t *testing.T) {
 	config := async.DefaultAsyncGuardConfig()
 	config.MaxConcurrency = 0

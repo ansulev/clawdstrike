@@ -12,9 +12,9 @@ import (
 // BaseToolInterceptor is a default ToolInterceptor implementation that uses
 // a HushEngine for security evaluation. Fail-closed: errors produce deny.
 type BaseToolInterceptor struct {
-	engine  *engine.HushEngine
-	logger  AuditLogger
-	secCtx  *SecurityContext
+	engine *engine.HushEngine
+	logger AuditLogger
+	secCtx *SecurityContext
 }
 
 // NewBaseToolInterceptor creates a new interceptor backed by a HushEngine.
@@ -34,6 +34,32 @@ func (b *BaseToolInterceptor) BeforeExecute(ctx context.Context, toolName string
 	}
 
 	start := time.Now()
+	if b.engine == nil {
+		decision := &guards.Decision{
+			Status:   guards.StatusDeny,
+			Guard:    "clawdstrike",
+			Severity: "critical",
+			Message:  "security engine is not initialized",
+		}
+		if b.secCtx != nil {
+			b.secCtx.RecordCheck()
+			b.secCtx.RecordViolation(toolName)
+		}
+		if b.logger != nil {
+			event := NewAuditEvent("before_execute", toolName, decision)
+			if b.secCtx != nil {
+				event.ContextID = b.secCtx.ID
+				event.SessionID = b.secCtx.SessionID
+			}
+			_ = b.logger.Log(event)
+		}
+		return &InterceptResult{
+			Proceed:            false,
+			ModifiedParameters: params,
+			Decision:           decision,
+			Duration:           time.Since(start),
+		}, nil
+	}
 
 	action := guards.McpTool(toolName, toArgsMap(params))
 	result := b.engine.CheckAction(action, nil)

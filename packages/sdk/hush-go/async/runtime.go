@@ -31,6 +31,10 @@ type AsyncGuardRuntime struct {
 }
 
 func NewAsyncGuardRuntime(config AsyncGuardConfig) *AsyncGuardRuntime {
+	if config.Timeout <= 0 {
+		config.Timeout = DefaultAsyncGuardConfig().Timeout
+	}
+
 	r := &AsyncGuardRuntime{
 		config:   config,
 		breakers: make(map[string]*circuitBreaker),

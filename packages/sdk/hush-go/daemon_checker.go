@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/backbay-labs/clawdstrike-go/guards"
+	"github.com/backbay-labs/clawdstrike-go/internal"
 )
 
 type daemonChecker struct {
@@ -114,7 +115,7 @@ func (d *daemonChecker) CheckAction(action guards.GuardAction, guardCtx *guards.
 		}
 		wait := daemonRetryDelay(d.retry.backoff, attempt)
 		if wait > 0 {
-			if !sleepWithContext(requestCtx, wait) {
+			if !internal.SleepWithContext(requestCtx, wait) {
 				return daemonFailure(fmt.Sprintf("Daemon check canceled: %v", requestCtx.Err()))
 			}
 		}
@@ -268,15 +269,4 @@ func daemonRequestContext(ctx *guards.GuardContext) context.Context {
 		return ctx.Context
 	}
 	return context.Background()
-}
-
-func sleepWithContext(ctx context.Context, delay time.Duration) bool {
-	timer := time.NewTimer(delay)
-	defer timer.Stop()
-	select {
-	case <-timer.C:
-		return true
-	case <-ctx.Done():
-		return false
-	}
 }

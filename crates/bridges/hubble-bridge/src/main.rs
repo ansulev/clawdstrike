@@ -59,6 +59,11 @@ struct Cli {
     /// Maximum age retained for the Hubble JetStream stream in seconds (0 = unlimited).
     #[arg(long, default_value = "86400", env = "STREAM_MAX_AGE_SECONDS")]
     stream_max_age_seconds: u64,
+
+    /// Path to SPIFFE SVID PEM file. When set, the bridge reads the workload
+    /// SPIFFE ID and includes it in every published fact.
+    #[arg(long, env = "SVID_PATH")]
+    svid_path: Option<String>,
 }
 
 fn parse_verdicts(verdicts: &[String]) -> Vec<FlowVerdict> {
@@ -98,6 +103,7 @@ async fn main() -> anyhow::Result<()> {
         stream_replicas: cli.stream_replicas,
         stream_max_bytes: cli.stream_max_bytes,
         stream_max_age_seconds: cli.stream_max_age_seconds,
+        svid_path: cli.svid_path,
         ..BridgeConfig::default()
     };
 

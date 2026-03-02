@@ -41,6 +41,16 @@ spec:
               value: {{ .Values.bridges.hubble.env.STREAM_MAX_BYTES | int64 | quote }}
             - name: STREAM_MAX_AGE_SECONDS
               value: {{ .Values.bridges.hubble.env.STREAM_MAX_AGE_SECONDS | int64 | quote }}
+            {{- if .Values.spiffe.enabled }}
+            - name: SVID_PATH
+              value: {{ .Values.spiffe.svidPath | quote }}
+            {{- end }}
+          {{- if .Values.spiffe.enabled }}
+          volumeMounts:
+            - name: spiffe-workload
+              mountPath: /var/run/spire/agent
+              readOnly: true
+          {{- end }}
           livenessProbe:
             exec:
               command: ["test", "-f", "/proc/1/status"]
@@ -50,6 +60,13 @@ spec:
             {{- toYaml .Values.securityContext | nindent 12 }}
           resources:
             {{- toYaml .Values.bridges.hubble.resources | nindent 12 }}
+      {{- if .Values.spiffe.enabled }}
+      volumes:
+        - name: spiffe-workload
+          csi:
+            driver: "csi.spiffe.io"
+            readOnly: true
+      {{- end }}
       {{- with .Values.bridges.hubble.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

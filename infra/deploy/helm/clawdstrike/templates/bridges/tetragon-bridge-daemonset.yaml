@@ -42,6 +42,16 @@ spec:
               value: {{ .Values.bridges.tetragon.env.STREAM_MAX_AGE_SECONDS | int64 | quote }}
             - name: NATS_STARTUP_TIMEOUT_SECS
               value: {{ .Values.bridges.tetragon.env.NATS_STARTUP_TIMEOUT_SECS | int64 | quote }}
+            {{- if .Values.spiffe.enabled }}
+            - name: SVID_PATH
+              value: {{ .Values.spiffe.svidPath | quote }}
+            {{- end }}
+          {{- if .Values.spiffe.enabled }}
+          volumeMounts:
+            - name: spiffe-workload
+              mountPath: /var/run/spire/agent
+              readOnly: true
+          {{- end }}
           livenessProbe:
             exec:
               command: ["test", "-f", "/proc/1/status"]
@@ -51,6 +61,13 @@ spec:
             {{- toYaml .Values.securityContext | nindent 12 }}
           resources:
             {{- toYaml .Values.bridges.tetragon.resources | nindent 12 }}
+      {{- if .Values.spiffe.enabled }}
+      volumes:
+        - name: spiffe-workload
+          csi:
+            driver: "csi.spiffe.io"
+            readOnly: true
+      {{- end }}
       {{- with .Values.bridges.tetragon.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

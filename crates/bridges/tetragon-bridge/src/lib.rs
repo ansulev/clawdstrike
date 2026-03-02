@@ -63,6 +63,9 @@ pub struct BridgeConfig {
     pub stream_max_age_seconds: u64,
     /// Maximum consecutive handle_event errors before run() returns an error.
     pub max_consecutive_errors: u64,
+    /// Path to SPIFFE SVID PEM file. When set, the bridge reads the workload
+    /// SPIFFE ID and includes it in every published fact.
+    pub svid_path: Option<String>,
 }
 
 impl Default for BridgeConfig {
@@ -81,6 +84,7 @@ impl Default for BridgeConfig {
             stream_max_bytes: 1_073_741_824,
             stream_max_age_seconds: 86_400,
             max_consecutive_errors: 50,
+            svid_path: None,
         }
     }
 }
@@ -100,6 +104,8 @@ pub struct Bridge {
     js: async_nats::jetstream::Context,
     config: BridgeConfig,
     chain_state: Mutex<ChainState>,
+    /// SPIFFE ID read from the workload SVID, if configured.
+    spiffe_id: Option<String>,
 }
 
 impl Bridge {
@@ -136,6 +142,21 @@ impl Bridge {
         )
         .await?;
 
+        // Read SPIFFE ID from SVID if configured.
+        let spiffe_id = match &config.svid_path {
+            Some(path) => match spine::spiffe::read_spiffe_id(path) {
+                Ok(id) => {
+                    info!(spiffe_id = %id, "loaded workload SPIFFE identity");
+                    Some(id)
+                }
+                Err(e) => {
+                    warn!(error = %e, path, "failed to read SPIFFE SVID, continuing without identity binding");
+                    None
+                }
+            },
+            None => None,
+        };
+
         Ok(Self {
             keypair,
             nats_client,
@@ -145,6 +166,7 @@ impl Bridge {
                 seq: 1,
                 prev_hash: None,
             }),
+            spiffe_id,
         })
     }
 
@@ -229,13 +251,18 @@ impl Bridge {
         }
 
         // Map to fact JSON.
-        let fact = match map_event(resp) {
+        let mut fact = match map_event(resp) {
             Some(f) => f,
             None => {
                 debug!("mapper returned None, skipping");
                 return Ok(());
             }
         };
+
+        // Inject SPIFFE workload identity into the fact if available.
+        if let Some(ref spiffe_id) = self.spiffe_id {
+            fact["spiffe_id"] = serde_json::Value::String(spiffe_id.clone());
+        }
 
         // Build and sign the Spine envelope under a single lock, then drop the
         // guard before the async NATS publish.

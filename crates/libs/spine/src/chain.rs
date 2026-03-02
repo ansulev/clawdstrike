@@ -43,6 +43,12 @@ pub enum ChainLinkVerdict {
     InvalidChainHead { reason: String },
 }
 
+fn normalize_issuer_for_compare(issuer: &str) -> String {
+    crate::parse_issuer_pubkey_hex(issuer)
+        .map(|hex| hex.to_ascii_lowercase())
+        .unwrap_or_else(|_| issuer.to_ascii_lowercase())
+}
+
 impl ChainLinkVerdict {
     /// Returns `true` if the verdict indicates a valid chain link.
     pub fn is_valid(&self) -> bool {
@@ -84,10 +90,16 @@ impl ChainLinkVerdict {
 ///   `prev_envelope_hash` must be `null`.
 /// - If `known_head` is `Some`, the envelope must have `seq = head.seq + 1`
 ///   and `prev_envelope_hash` must equal `head.envelope_hash`.
+/// - If `known_head` is `Some`, `envelope.issuer` must match `head.issuer`.
 pub fn verify_chain_link(
     envelope: &Value,
     known_head: Option<&IssuerChainHead>,
 ) -> Result<ChainLinkVerdict> {
+    let envelope_issuer = envelope
+        .get("issuer")
+        .and_then(|v| v.as_str())
+        .ok_or(Error::MissingField("issuer"))?;
+
     let seq = envelope
         .get("seq")
         .and_then(|v| v.as_u64())
@@ -109,7 +121,6 @@ pub fn verify_chain_link(
 
     match known_head {
         None => {
-            // First envelope from this issuer.
             if seq != 1 {
                 return Ok(ChainLinkVerdict::InvalidChainHead {
                     reason: format!("first envelope must have seq=1, got seq={seq}"),
@@ -123,7 +134,22 @@ pub fn verify_chain_link(
             Ok(ChainLinkVerdict::NewChain)
         }
         Some(head) => {
-            let expected_seq = head.seq + 1;
+            let envelope_issuer_norm = normalize_issuer_for_compare(envelope_issuer);
+            let head_issuer_norm = normalize_issuer_for_compare(&head.issuer);
+            if envelope_issuer_norm != head_issuer_norm {
+                return Ok(ChainLinkVerdict::InvalidChainHead {
+                    reason: format!(
+                        "issuer mismatch: envelope issuer {envelope_issuer} does not match head issuer {}",
+                        head.issuer
+                    ),
+                });
+            }
+
+            let Some(expected_seq) = head.seq.checked_add(1) else {
+                return Ok(ChainLinkVerdict::InvalidChainHead {
+                    reason: format!("known head sequence overflow for issuer {}", head.issuer),
+                });
+            };
             if seq != expected_seq {
                 return Ok(ChainLinkVerdict::SequenceMismatch {
                     expected_seq,
@@ -301,6 +327,37 @@ mod tests {
         let a2 = make_envelope(&kp_a, 2, Some(head_a.envelope_hash.clone()));
         let verdict_a2 = verify_chain_link(&a2, Some(&head_a)).unwrap();
         assert_eq!(verdict_a2, ChainLinkVerdict::ValidContinuation);
+    }
+
+    #[test]
+    fn issuer_mismatch_rejected_even_when_seq_and_prev_match() {
+        let kp_a = Keypair::generate();
+        let kp_b = Keypair::generate();
+
+        let b1 = make_envelope(&kp_b, 1, None);
+        let head_b = chain_head_from_envelope(&b1).unwrap();
+
+        let a2 = make_envelope(&kp_a, 2, Some(head_b.envelope_hash.clone()));
+        let verdict = verify_chain_link(&a2, Some(&head_b)).unwrap();
+        assert!(matches!(verdict, ChainLinkVerdict::InvalidChainHead { .. }));
+        assert!(!verdict.is_valid());
+    }
+
+    #[test]
+    fn max_sequence_head_rejected_without_overflow() {
+        let kp = Keypair::generate();
+        let issuer = crate::issuer_from_keypair(&kp);
+        let head = IssuerChainHead {
+            issuer,
+            seq: u64::MAX,
+            envelope_hash: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                .to_string(),
+        };
+
+        let env = make_envelope(&kp, u64::MAX, Some(head.envelope_hash.clone()));
+        let verdict = verify_chain_link(&env, Some(&head)).unwrap();
+        assert!(matches!(verdict, ChainLinkVerdict::InvalidChainHead { .. }));
+        assert!(!verdict.is_valid());
     }
 
     #[test]

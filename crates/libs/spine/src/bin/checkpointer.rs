@@ -1398,19 +1398,30 @@ async fn main() -> Result<()> {
         log_id, args.nats_url
     );
 
-    let mut issuer_heads: HashMap<String, IssuerChainHead> =
-        match load_issuer_heads(&issuer_heads_kv).await {
-            Ok(heads) => {
-                info!("loaded {} issuer chain heads from KV", heads.len());
-                heads
-            }
-            Err(err) => {
-                warn!("failed to load issuer heads: {err:#}, starting fresh");
-                HashMap::new()
-            }
-        };
     let chain_strict = args.chain_enforcement == "strict";
     let retry_policy = RetryPolicy::default();
+    let mut issuer_heads: HashMap<String, IssuerChainHead> = match run_with_retries(
+        &retry_policy,
+        "load_issuer_heads",
+        "startup",
+        || async { load_issuer_heads(&issuer_heads_kv).await },
+    )
+    .await
+    {
+        Ok(heads) => {
+            info!("loaded {} issuer chain heads from KV", heads.len());
+            heads
+        }
+        Err(err) => {
+            if chain_strict {
+                return Err(err).context(
+                        "failed to load issuer heads in strict mode; refusing to start with empty chain state",
+                    );
+            }
+            warn!("failed to load issuer heads: {err:#}, starting fresh");
+            HashMap::new()
+        }
+    };
 
     match backfill_checkpoint_hash_index(&checkpoint_kv).await {
         Ok((scanned, added)) => {

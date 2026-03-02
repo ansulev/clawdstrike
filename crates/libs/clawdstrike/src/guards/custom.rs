@@ -294,20 +294,20 @@ mod tests {
 
     /// Compile a minimal WASM guard that always denies.
     fn deny_guard_wasm() -> Vec<u8> {
-        // {"allowed":false,"severity":"high","message":"Denied by wasm"} = 62 bytes
+        // {"allowed":false,"severity":"error","message":"Denied by wasm"} = 63 bytes
         wat::parse_str(
             r#"(module
                 (import "clawdstrike_host" "set_output" (func $set_output (param i32 i32) (result i32)))
                 (import "clawdstrike_host" "request_capability" (func $cap (param i32) (result i32)))
                 (memory (export "memory") 1)
-                (data (i32.const 64) "{\"allowed\":false,\"severity\":\"high\",\"message\":\"Denied by wasm\"}")
+                (data (i32.const 64) "{\"allowed\":false,\"severity\":\"error\",\"message\":\"Denied by wasm\"}")
                 (func (export "clawdstrike_guard_init") (result i32)
                   i32.const 1)
                 (func (export "clawdstrike_guard_handles") (param i32 i32) (result i32)
                   i32.const 1)
                 (func (export "clawdstrike_guard_check") (param i32 i32) (result i32)
                   i32.const 64
-                  i32.const 62
+                  i32.const 63
                   call $set_output
                   drop
                   i32.const 0)

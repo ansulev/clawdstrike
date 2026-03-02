@@ -3,7 +3,9 @@ package adapter
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/backbay-labs/clawdstrike-go/engine"
 	"github.com/backbay-labs/clawdstrike-go/guards"
@@ -171,6 +173,75 @@ func TestBeforeExecuteContextCancellation(t *testing.T) {
 	}
 	if result != nil {
 		t.Error("expected nil result on context cancellation")
+	}
+}
+
+type contextAwareGuard struct {
+	started chan struct{}
+}
+
+func (g *contextAwareGuard) Name() string { return "context_aware" }
+
+func (g *contextAwareGuard) Handles(_ guards.GuardAction) bool { return true }
+
+func (g *contextAwareGuard) Check(_ guards.GuardAction, ctx *guards.GuardContext) guards.GuardResult {
+	if ctx == nil || ctx.Context == nil {
+		return guards.Block(g.Name(), guards.Critical, "missing guard context")
+	}
+	select {
+	case <-g.started:
+	default:
+		close(g.started)
+	}
+	<-ctx.Context.Done()
+	return guards.Block(g.Name(), guards.Critical, ctx.Context.Err().Error())
+}
+
+func TestBeforeExecutePropagatesContextToGuards(t *testing.T) {
+	guard := &contextAwareGuard{started: make(chan struct{})}
+	eng, err := engine.NewBuilder().WithGuard(guard).Build()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	interceptor := NewBaseToolInterceptor(eng, nil, nil)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	type outcome struct {
+		result *InterceptResult
+		err    error
+	}
+	done := make(chan outcome, 1)
+	go func() {
+		result, err := interceptor.BeforeExecute(ctx, "read_file", nil)
+		done <- outcome{result: result, err: err}
+	}()
+
+	select {
+	case <-guard.started:
+	case <-time.After(250 * time.Millisecond):
+		t.Fatal("guard did not start")
+	}
+
+	cancel()
+
+	select {
+	case out := <-done:
+		if out.err != nil {
+			t.Fatalf("BeforeExecute returned error: %v", out.err)
+		}
+		if out.result == nil {
+			t.Fatal("expected non-nil intercept result")
+		}
+		if out.result.Proceed {
+			t.Fatal("expected proceed=false after context cancellation")
+		}
+		if out.result.Decision == nil || !strings.Contains(out.result.Decision.Message, "canceled") {
+			t.Fatalf("expected cancellation message, got %#v", out.result.Decision)
+		}
+	case <-time.After(250 * time.Millisecond):
+		t.Fatal("BeforeExecute did not finish after context cancellation")
 	}
 }
 

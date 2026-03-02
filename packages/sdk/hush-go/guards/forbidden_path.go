@@ -66,32 +66,41 @@ func (g *ForbiddenPathGuard) Check(action GuardAction, ctx *GuardContext) GuardR
 	cleaned := filepath.Clean(path)
 	resolved := normalizePath(path)
 
-	// Collect all paths to check (cleaned + resolved, deduplicated)
-	pathsToCheck := []string{cleaned}
-	if resolved != cleaned {
-		pathsToCheck = append(pathsToCheck, resolved)
+	// Evaluate the resolved path before the lexical path so symlink exceptions
+	// cannot bypass forbidden resolved targets.
+	if result, matched := g.evaluatePath(action.Path, resolved); matched {
+		return result
 	}
-
-	// Check exceptions first — if any path matches an exception, allow
-	for _, exc := range g.exceptions {
-		for _, p := range pathsToCheck {
-			if internal.DoubleStarMatch(exc, p) {
-				return Allow(g.Name())
-			}
-		}
-	}
-
-	// Check forbidden patterns — if any path matches, block
-	for _, pat := range g.patterns {
-		for _, p := range pathsToCheck {
-			if internal.DoubleStarMatch(pat, p) {
-				return Block(g.Name(), Critical,
-					fmt.Sprintf("access to %q blocked by pattern %q", action.Path, pat))
-			}
+	if cleaned != resolved {
+		if result, matched := g.evaluatePath(action.Path, cleaned); matched {
+			return result
 		}
 	}
 
 	return Allow(g.Name())
+}
+
+func (g *ForbiddenPathGuard) evaluatePath(originalPath, candidate string) (GuardResult, bool) {
+	for _, pat := range g.patterns {
+		if !internal.DoubleStarMatch(pat, candidate) {
+			continue
+		}
+		if matchesAnyPathPattern(g.exceptions, candidate) {
+			return Allow(g.Name()), true
+		}
+		return Block(g.Name(), Critical,
+			fmt.Sprintf("access to %q blocked by pattern %q", originalPath, pat)), true
+	}
+	return GuardResult{}, false
+}
+
+func matchesAnyPathPattern(patterns []string, value string) bool {
+	for _, pat := range patterns {
+		if internal.DoubleStarMatch(pat, value) {
+			return true
+		}
+	}
+	return false
 }
 
 // normalizePath cleans a path and attempts to resolve full symlink chains (best effort).

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	neturl "net/url"
 )
 
 // SnykClient queries the Snyk API for vulnerability information.
@@ -26,9 +27,15 @@ func NewSnykClient(apiKey string) *SnykClient {
 
 // CheckPackage checks a package for known vulnerabilities.
 func (c *SnykClient) CheckPackage(ctx context.Context, ecosystem, pkg, version string) (*ThreatResult, error) {
-	url := fmt.Sprintf("%s/test/%s/%s/%s", c.endpoint, ecosystem, pkg, version)
+	requestURL := fmt.Sprintf(
+		"%s/test/%s/%s/%s",
+		c.endpoint,
+		neturl.PathEscape(ecosystem),
+		neturl.PathEscape(pkg),
+		neturl.PathEscape(version),
+	)
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, requestURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("snyk: create request: %w", err)
 	}

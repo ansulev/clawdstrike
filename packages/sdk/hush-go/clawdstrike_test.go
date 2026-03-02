@@ -133,7 +133,7 @@ func TestFromDaemonSessionForwardsContext(t *testing.T) {
 	}
 }
 
-func TestFromDaemonNetworkEgressUsesCanonicalActionType(t *testing.T) {
+func TestFromDaemonNetworkEgressUsesDaemonActionType(t *testing.T) {
 	var gotActionType string
 	var gotTarget string
 
@@ -167,8 +167,8 @@ func TestFromDaemonNetworkEgressUsesCanonicalActionType(t *testing.T) {
 	if decision.Status != StatusAllow {
 		t.Fatalf("expected allow decision, got %s", decision.Status)
 	}
-	if gotActionType != "network_egress" {
-		t.Fatalf("expected action_type network_egress, got %q", gotActionType)
+	if gotActionType != "egress" {
+		t.Fatalf("expected action_type egress, got %q", gotActionType)
 	}
 	if gotTarget != "api.example.com:443" {
 		t.Fatalf("expected target api.example.com:443, got %q", gotTarget)

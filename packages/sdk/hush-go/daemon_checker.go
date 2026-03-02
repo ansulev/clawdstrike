@@ -199,7 +199,7 @@ func toDaemonRequest(action guards.GuardAction, ctx *guards.GuardContext) (daemo
 		req.Target = action.Path
 		req.Content = string(action.Content)
 	case "network_egress":
-		req.ActionType = "network_egress"
+		req.ActionType = "egress"
 		if action.Host != "" {
 			if action.Port > 0 {
 				req.Target = action.Host + ":" + strconv.Itoa(action.Port)

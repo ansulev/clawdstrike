@@ -17,8 +17,9 @@ import (
 )
 
 const (
-	metaPrefix = "<!--hushclaw.watermark:v1:"
-	metaSuffix = "-->"
+	metaPrefix                     = "<!--hushclaw.watermark:v1:"
+	metaSuffix                     = "-->"
+	pureWatermarkerCacheMaxEntries = 256
 )
 
 type watermarkConfig struct {
@@ -42,8 +43,9 @@ type pureWatermarker struct {
 }
 
 var (
-	watermarkerMu    sync.Mutex
-	watermarkerCache = map[string]*pureWatermarker{}
+	watermarkerMu       sync.Mutex
+	watermarkerCache    = map[string]*pureWatermarker{}
+	watermarkerCacheSeq []string
 )
 
 // WatermarkPublicKey returns the watermark public key.
@@ -287,8 +289,27 @@ func getOrCreatePureWatermarker(configJSON string) (*pureWatermarker, error) {
 		cfg:     cfg,
 		keypair: kp,
 	}
+	if len(watermarkerCacheSeq) >= pureWatermarkerCacheMaxEntries {
+		evictedKey := watermarkerCacheSeq[0]
+		watermarkerCacheSeq = watermarkerCacheSeq[1:]
+		delete(watermarkerCache, evictedKey)
+	}
 	watermarkerCache[key] = wm
+	watermarkerCacheSeq = append(watermarkerCacheSeq, key)
 	return wm, nil
+}
+
+func resetPureWatermarkerCacheForTest() {
+	watermarkerMu.Lock()
+	defer watermarkerMu.Unlock()
+	watermarkerCache = map[string]*pureWatermarker{}
+	watermarkerCacheSeq = nil
+}
+
+func pureWatermarkerCacheSizeForTest() int {
+	watermarkerMu.Lock()
+	defer watermarkerMu.Unlock()
+	return len(watermarkerCache)
 }
 
 func buildKeypair(cfg watermarkConfig) (*crypto.Keypair, error) {

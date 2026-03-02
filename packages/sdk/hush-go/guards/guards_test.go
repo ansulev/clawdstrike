@@ -783,6 +783,38 @@ func TestForbiddenPathSymlinks(t *testing.T) {
 	}
 }
 
+func TestForbiddenPathExceptionDoesNotBypassResolvedTarget(t *testing.T) {
+	tmpDir := t.TempDir()
+	secretsDir := filepath.Join(tmpDir, "secrets")
+	if err := os.MkdirAll(secretsDir, 0o755); err != nil {
+		t.Fatalf("mkdir secrets: %v", err)
+	}
+	allowedDir := filepath.Join(tmpDir, "allowed")
+	if err := os.MkdirAll(allowedDir, 0o755); err != nil {
+		t.Fatalf("mkdir allowed: %v", err)
+	}
+
+	secretFile := filepath.Join(secretsDir, "token.txt")
+	if err := os.WriteFile(secretFile, []byte("secret"), 0o600); err != nil {
+		t.Fatalf("write secret file: %v", err)
+	}
+
+	linkPath := filepath.Join(allowedDir, "token-link.txt")
+	if err := os.Symlink(secretFile, linkPath); err != nil {
+		t.Skipf("cannot create symlink (permissions): %v", err)
+	}
+
+	g := NewForbiddenPathGuard(&policy.ForbiddenPathConfig{
+		Patterns:   []string{"**/secrets/**"},
+		Exceptions: []string{"**/allowed/**"},
+	})
+
+	result := g.Check(FileAccess(linkPath), NewContext())
+	if result.Allowed {
+		t.Fatal("expected symlink into forbidden target to be blocked even when lexical path matches exception")
+	}
+}
+
 func TestForbiddenPathPatch(t *testing.T) {
 	g := NewForbiddenPathGuard(nil)
 	ctx := NewContext()

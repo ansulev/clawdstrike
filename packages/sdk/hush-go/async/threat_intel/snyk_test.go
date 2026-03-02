@@ -67,3 +67,27 @@ func TestCheckPackageSeverityScore(t *testing.T) {
 		})
 	}
 }
+
+func TestCheckPackageEscapesPathSegments(t *testing.T) {
+	var gotEscapedPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotEscapedPath = r.URL.EscapedPath()
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"ok":true,"issues":{"vulnerabilities":[]}}`)
+	}))
+	defer srv.Close()
+
+	client := NewSnykClient("test-key")
+	client.endpoint = srv.URL
+	client.client = srv.Client()
+
+	_, err := client.CheckPackage(context.Background(), "npm", "@scope/pkg", "1.0.0-beta/1")
+	if err != nil {
+		t.Fatalf("CheckPackage failed: %v", err)
+	}
+
+	const expectedEscapedPath = "/test/npm/@scope%2Fpkg/1.0.0-beta%2F1"
+	if gotEscapedPath != expectedEscapedPath {
+		t.Fatalf("unexpected escaped path: got %q want %q", gotEscapedPath, expectedEscapedPath)
+	}
+}

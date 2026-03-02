@@ -4,11 +4,13 @@ package native
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 )
 
 func TestPureGoWatermarkRoundtrip(t *testing.T) {
+	resetPureWatermarkerCacheForTest()
 	config := `{"generate_keypair":true}`
 
 	pub, err := WatermarkPublicKey(config)
@@ -50,6 +52,7 @@ func TestPureGoWatermarkRoundtrip(t *testing.T) {
 }
 
 func TestPureGoWatermarkDeterministicPublicKeyFromPrivateKey(t *testing.T) {
+	resetPureWatermarkerCacheForTest()
 	config := `{"privateKeyHex":"0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20"}`
 	pub1, err := WatermarkPublicKey(config)
 	if err != nil {
@@ -61,5 +64,20 @@ func TestPureGoWatermarkDeterministicPublicKeyFromPrivateKey(t *testing.T) {
 	}
 	if pub1 != pub2 {
 		t.Fatalf("expected deterministic public key, got %q vs %q", pub1, pub2)
+	}
+}
+
+func TestPureGoWatermarkCacheIsBounded(t *testing.T) {
+	resetPureWatermarkerCacheForTest()
+
+	for i := 0; i < pureWatermarkerCacheMaxEntries+32; i++ {
+		config := fmt.Sprintf(`{"generate_keypair":true,"custom_metadata":{"id":"%d"}}`, i)
+		if _, err := WatermarkPublicKey(config); err != nil {
+			t.Fatalf("WatermarkPublicKey(%d): %v", i, err)
+		}
+	}
+
+	if got := pureWatermarkerCacheSizeForTest(); got != pureWatermarkerCacheMaxEntries {
+		t.Fatalf("expected cache size %d, got %d", pureWatermarkerCacheMaxEntries, got)
 	}
 }

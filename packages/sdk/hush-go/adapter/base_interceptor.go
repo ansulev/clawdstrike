@@ -62,7 +62,11 @@ func (b *BaseToolInterceptor) BeforeExecute(ctx context.Context, toolName string
 	}
 
 	action := guards.McpTool(toolName, toArgsMap(params))
-	result := b.engine.CheckAction(action, nil)
+	guardCtx := guards.NewContext().WithContext(ctx)
+	if b.secCtx != nil && b.secCtx.SessionID != "" {
+		guardCtx = guardCtx.WithSessionID(b.secCtx.SessionID)
+	}
+	result := b.engine.CheckAction(action, guardCtx)
 
 	d := guards.DecisionFromResult(result)
 	decision := &d

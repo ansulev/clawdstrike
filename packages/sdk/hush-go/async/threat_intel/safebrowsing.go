@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	neturl "net/url"
 )
 
 // SafeBrowsingClient queries the Google Safe Browsing API.
@@ -26,7 +27,7 @@ func NewSafeBrowsingClient(apiKey string) *SafeBrowsingClient {
 }
 
 // CheckURL checks a URL against Google Safe Browsing.
-func (c *SafeBrowsingClient) CheckURL(ctx context.Context, url string) (*ThreatResult, error) {
+func (c *SafeBrowsingClient) CheckURL(ctx context.Context, targetURL string) (*ThreatResult, error) {
 	body := map[string]interface{}{
 		"client": map[string]string{
 			"clientId":      "clawdstrike",
@@ -36,7 +37,7 @@ func (c *SafeBrowsingClient) CheckURL(ctx context.Context, url string) (*ThreatR
 			"threatTypes":      []string{"MALWARE", "SOCIAL_ENGINEERING", "UNWANTED_SOFTWARE"},
 			"platformTypes":    []string{"ANY_PLATFORM"},
 			"threatEntryTypes": []string{"URL"},
-			"threatEntries":    []map[string]string{{"url": url}},
+			"threatEntries":    []map[string]string{{"url": targetURL}},
 		},
 	}
 
@@ -45,8 +46,15 @@ func (c *SafeBrowsingClient) CheckURL(ctx context.Context, url string) (*ThreatR
 		return nil, fmt.Errorf("safebrowsing: marshal request: %w", err)
 	}
 
-	reqURL := fmt.Sprintf("%s?key=%s", c.endpoint, c.apiKey)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, reqURL, bytes.NewReader(payload))
+	endpointURL, err := neturl.Parse(c.endpoint)
+	if err != nil {
+		return nil, fmt.Errorf("safebrowsing: invalid endpoint: %w", err)
+	}
+	query := endpointURL.Query()
+	query.Set("key", c.apiKey)
+	endpointURL.RawQuery = query.Encode()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpointURL.String(), bytes.NewReader(payload))
 	if err != nil {
 		return nil, fmt.Errorf("safebrowsing: create request: %w", err)
 	}

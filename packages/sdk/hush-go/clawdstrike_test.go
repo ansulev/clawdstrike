@@ -133,6 +133,48 @@ func TestFromDaemonSessionForwardsContext(t *testing.T) {
 	}
 }
 
+func TestFromDaemonNetworkEgressUsesCanonicalActionType(t *testing.T) {
+	var gotActionType string
+	var gotTarget string
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req map[string]interface{}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		if actionType, ok := req["action_type"].(string); ok {
+			gotActionType = actionType
+		}
+		if target, ok := req["target"].(string); ok {
+			gotTarget = target
+		}
+
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"allowed":  true,
+			"guard":    "egress_allowlist",
+			"severity": "info",
+			"message":  "ok",
+		})
+	}))
+	defer srv.Close()
+
+	cs, err := FromDaemon(srv.URL)
+	if err != nil {
+		t.Fatalf("FromDaemon: %v", err)
+	}
+
+	decision := cs.CheckEgress("api.example.com", 443)
+	if decision.Status != StatusAllow {
+		t.Fatalf("expected allow decision, got %s", decision.Status)
+	}
+	if gotActionType != "network_egress" {
+		t.Fatalf("expected action_type network_egress, got %q", gotActionType)
+	}
+	if gotTarget != "api.example.com:443" {
+		t.Fatalf("expected target api.example.com:443, got %q", gotTarget)
+	}
+}
+
 func TestFromDaemonFailsClosedOnTransportError(t *testing.T) {
 	cs, err := FromDaemon("http://127.0.0.1:65530")
 	if err != nil {

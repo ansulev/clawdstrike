@@ -1,0 +1,7 @@
+{
+  "name": "clawdstrike",
+  "version": "0.1.0",
+  "description": "Runtime security enforcement for AI coding agents — policy hooks, audit receipts, threat hunting, and security tools.",
+  "author": "Backbay Labs",
+  "license": "MIT"
+}

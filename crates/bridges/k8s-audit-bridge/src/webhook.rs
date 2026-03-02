@@ -106,7 +106,7 @@ pub struct ResponseStatus {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AuditEvent {
-    #[serde(default)]
+    #[serde(default, alias = "auditID")]
     pub audit_id: String,
     pub verb: AuditVerb,
     #[serde(default)]
@@ -119,9 +119,9 @@ pub struct AuditEvent {
     pub object_ref: Option<ObjectRef>,
     #[serde(default)]
     pub response_status: Option<ResponseStatus>,
-    #[serde(default)]
+    #[serde(default, alias = "requestURI")]
     pub request_uri: String,
-    #[serde(default)]
+    #[serde(default, alias = "sourceIPs")]
     pub source_ips: Vec<String>,
     #[serde(default)]
     pub user_agent: String,
@@ -188,6 +188,10 @@ mod tests {
         assert_eq!(events[0].verb, AuditVerb::Create);
         assert_eq!(events[0].user.username, "admin");
         assert_eq!(events[0].object_ref.as_ref().map(|r| r.resource.as_str()), Some("pods"));
+        // Verify K8s wire-format fields (auditID, requestURI, sourceIPs) are deserialized
+        assert_eq!(events[0].audit_id, "abc-123");
+        assert_eq!(events[0].request_uri, "/api/v1/namespaces/default/pods");
+        assert_eq!(events[0].source_ips, vec!["10.0.0.1"]);
     }
 
     #[test]

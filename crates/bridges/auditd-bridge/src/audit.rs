@@ -441,19 +441,21 @@ impl AuditLogTailer {
             };
 
             if rotated {
+                let first_open = last_inode.is_none();
                 tracing::info!(
                     path = %self.path,
                     inode = current_inode,
+                    first_open,
                     "opening audit log (rotation detected or first open)"
                 );
-                last_inode = Some(current_inode);
                 // On first open, start from end to avoid replaying old events.
                 // On rotation, start from beginning of new file.
-                offset = if last_inode.is_none() { file_len } else { 0 };
+                offset = if first_open { file_len } else { 0 };
+                last_inode = Some(current_inode);
             }
 
-            // Open and seek to offset
-            let file = match tokio::fs::File::open(&self.path).await {
+            // Open and seek directly to offset
+            let mut file = match tokio::fs::File::open(&self.path).await {
                 Ok(f) => f,
                 Err(e) => {
                     tracing::warn!(error = %e, "failed to open audit log");
@@ -462,22 +464,22 @@ impl AuditLogTailer {
                 }
             };
 
+            if offset > 0 {
+                use tokio::io::AsyncSeekExt;
+                if let Err(e) = file.seek(std::io::SeekFrom::Start(offset)).await {
+                    tracing::warn!(error = %e, offset, "failed to seek audit log");
+                    tokio::time::sleep(self.poll_interval).await;
+                    continue;
+                }
+            }
+
             let reader = tokio::io::BufReader::new(file);
             let mut lines = reader.lines();
-
-            // Skip to offset by reading bytes
-            let mut bytes_read: u64 = 0;
-            let mut started = false;
 
             loop {
                 match lines.next_line().await {
                     Ok(Some(line)) => {
-                        bytes_read += line.len() as u64 + 1; // +1 for newline
-                        if !started && bytes_read <= offset {
-                            continue;
-                        }
-                        started = true;
-                        offset = bytes_read;
+                        offset += line.len() as u64 + 1; // +1 for newline
 
                         if tx.send(line).await.is_err() {
                             tracing::warn!("line receiver dropped, stopping tailer");

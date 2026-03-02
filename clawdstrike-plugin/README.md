@@ -14,7 +14,7 @@ Runtime security enforcement for AI coding agents. This plugin integrates ClawdS
 ## Installation
 
 ```bash
-claude --plugin-dir ./apps/terminal/clawdstrike-plugin
+claude --plugin-dir ./clawdstrike-plugin
 ```
 
 ## Quick Reference
@@ -106,7 +106,7 @@ claude code
 |----------|-------------|---------|
 | `CLAWDSTRIKE_ENDPOINT` | ClawdStrike API endpoint (CLI path or HTTP URL) | `clawdstrike` (PATH lookup) |
 | `CLAWDSTRIKE_SESSION_ID` | Session identifier for audit trail continuity | Auto-generated UUID |
-| `CLAWDSTRIKE_HOOK_FAIL_OPEN` | If `true`, allow actions when ClawdStrike is unavailable | `false` (fail-closed) |
+| `CLAWDSTRIKE_HOOK_FAIL_OPEN` | Allow actions when ClawdStrike is unavailable. Accepts `true`, `1`, or `yes` | `false` (fail-closed) |
 
 ### Fail-Closed by Default
 

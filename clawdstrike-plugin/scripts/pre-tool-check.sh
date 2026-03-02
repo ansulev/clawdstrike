@@ -13,10 +13,12 @@ CLAWDSTRIKE_HOOK_FAIL_OPEN="${CLAWDSTRIKE_HOOK_FAIL_OPEN:-0}"
 fail() {
   local reason="$1"
   echo "Clawdstrike hook error: ${reason}" >&2
-  if [ "$CLAWDSTRIKE_HOOK_FAIL_OPEN" = "1" ]; then
-    echo "CLAWDSTRIKE_HOOK_FAIL_OPEN=1 is set; allowing action despite hook failure." >&2
-    exit 0
-  fi
+  case "$CLAWDSTRIKE_HOOK_FAIL_OPEN" in
+    1|true|True|TRUE|yes|Yes|YES)
+      echo "CLAWDSTRIKE_HOOK_FAIL_OPEN is set; allowing action despite hook failure." >&2
+      exit 0
+      ;;
+  esac
   exit 1
 }
 

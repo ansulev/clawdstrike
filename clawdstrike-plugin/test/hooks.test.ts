@@ -86,7 +86,7 @@ describe("pre-tool-check.sh", () => {
     });
 
     expect(result.exitCode).toBe(0);
-    expect(result.stderr).toContain("CLAWDSTRIKE_HOOK_FAIL_OPEN=1");
+    expect(result.stderr).toContain("CLAWDSTRIKE_HOOK_FAIL_OPEN is set");
   });
 
   it("exits 1 when payload is missing tool_name and fail-open is off", async () => {

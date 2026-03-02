@@ -17,7 +17,7 @@ Launch the interactive ClawdStrike terminal dashboard.
 
 2. Run the TUI using the Bash tool from the detected plugin root:
    ```
-   bun run --cwd "$PLUGIN_ROOT/apps/terminal" cli
+   bun run --cwd "$PLUGIN_ROOT/../apps/terminal" cli
    ```
 
 3. The TUI provides an interactive dashboard with:

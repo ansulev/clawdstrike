@@ -205,6 +205,16 @@ openclaw plugins enable clawdstrike-security
 
 [Configure the plugin](docs/src/guides/openclaw-integration.md#configuration) in your project's `openclaw.json`.
 
+### Claude Code Plugin
+
+Clawdstrike ships as a native [Claude Code](https://docs.anthropic.com/en/docs/claude-code) plugin. Every tool call Claude makes is checked against your security policy before execution, with a full audit trail of signed receipts.
+
+```bash
+claude --plugin-dir ./clawdstrike-plugin
+```
+
+The plugin adds 6 hooks (pre-tool, post-tool, session lifecycle, prompt injection screening), 15 MCP tools, 3 auto-triggering skills, 6 slash commands, and a specialist security reviewer agent. See [`clawdstrike-plugin/README.md`](clawdstrike-plugin/README.md) for the full reference.
+
 ### Additional SDKs & Bindings
 
 Framework adapters: [OpenAI](packages/adapters/clawdstrike-openai/README.md) · [Claude](packages/adapters/clawdstrike-claude/README.md) · [Vercel AI](docs/src/guides/vercel-ai-integration.md) · [LangChain](docs/src/guides/langchain-integration.md)

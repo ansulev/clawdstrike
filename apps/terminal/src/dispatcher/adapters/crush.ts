@@ -10,6 +10,7 @@ import { join } from "path"
 import { mkdir, writeFile } from "fs/promises"
 import type { Adapter, AdapterResult } from "../index"
 import type { WorkcellInfo, TaskInput } from "../../types"
+import { callAnthropicApi, callOpenAiApi } from "./llm-api"
 
 /**
  * Crush configuration
@@ -315,47 +316,14 @@ async function executeAnthropicApi(
     return { success: false, output: "", error: "ANTHROPIC_API_KEY not set" }
   }
 
-  const response = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
-    },
-    body: JSON.stringify({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 8192,
-      system: `Working in: ${workcell.directory}`,
-      messages: [{ role: "user", content: task.prompt }],
-    }),
+  return callAnthropicApi({
+    apiKey,
+    model: "claude-sonnet-4-20250514",
+    systemPrompt: `Working in: ${workcell.directory}`,
+    userContent: task.prompt,
     signal,
+    startTime,
   })
-
-  if (!response.ok) {
-    return {
-      success: false,
-      output: "",
-      error: `Anthropic API error: ${response.status}`,
-    }
-  }
-
-  const data = (await response.json()) as {
-    content?: { text?: string }[]
-    model?: string
-    usage?: { input_tokens?: number; output_tokens?: number }
-  }
-  return {
-    success: true,
-    output: data.content?.[0]?.text || "",
-    telemetry: {
-      model: data.model,
-      tokens: data.usage
-        ? { input: data.usage.input_tokens || 0, output: data.usage.output_tokens || 0 }
-        : undefined,
-      startedAt: startTime,
-      completedAt: Date.now(),
-    },
-  }
 }
 
 /**
@@ -372,48 +340,14 @@ async function executeOpenAiApi(
     return { success: false, output: "", error: "OPENAI_API_KEY not set" }
   }
 
-  const response = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: "gpt-4o",
-      messages: [
-        { role: "system", content: `Working in: ${workcell.directory}` },
-        { role: "user", content: task.prompt },
-      ],
-      max_tokens: 8192,
-    }),
+  return callOpenAiApi({
+    apiKey,
+    model: "gpt-4o",
+    systemPrompt: `Working in: ${workcell.directory}`,
+    userContent: task.prompt,
     signal,
+    startTime,
   })
-
-  if (!response.ok) {
-    return {
-      success: false,
-      output: "",
-      error: `OpenAI API error: ${response.status}`,
-    }
-  }
-
-  const data = (await response.json()) as {
-    choices?: { message?: { content?: string } }[]
-    model?: string
-    usage?: { prompt_tokens?: number; completion_tokens?: number }
-  }
-  return {
-    success: true,
-    output: data.choices?.[0]?.message?.content || "",
-    telemetry: {
-      model: data.model,
-      tokens: data.usage
-        ? { input: data.usage.prompt_tokens || 0, output: data.usage.completion_tokens || 0 }
-        : undefined,
-      startedAt: startTime,
-      completedAt: Date.now(),
-    },
-  }
 }
 
 /**

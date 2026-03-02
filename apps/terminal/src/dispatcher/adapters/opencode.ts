@@ -10,6 +10,7 @@ import { join } from "path"
 import { mkdir, writeFile } from "fs/promises"
 import type { Adapter, AdapterResult } from "../index"
 import type { WorkcellInfo, TaskInput } from "../../types"
+import { callAnthropicApi, callOpenAiApi } from "./llm-api"
 
 /**
  * OpenCode configuration
@@ -260,6 +261,14 @@ async function executeViaApi(
 /**
  * Execute via Anthropic API
  */
+function buildSystemPrompt(workcell: WorkcellInfo, task: TaskInput): string {
+  return `You are an AI coding assistant working in directory: ${workcell.directory}
+Project: ${task.context.projectId}
+Branch: ${workcell.branch}
+
+Execute the following task and provide your response.`
+}
+
 async function executeAnthropicApi(
   workcell: WorkcellInfo,
   task: TaskInput,
@@ -268,69 +277,18 @@ async function executeAnthropicApi(
 ): Promise<AdapterResult> {
   const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey) {
-    return {
-      success: false,
-      output: "",
-      error: "ANTHROPIC_API_KEY not set",
-    }
+    return { success: false, output: "", error: "ANTHROPIC_API_KEY not set" }
   }
 
-  const model = config.model || "claude-sonnet-4-20250514"
-
-  // Create system prompt with context
-  const systemPrompt = `You are an AI coding assistant working in directory: ${workcell.directory}
-Project: ${task.context.projectId}
-Branch: ${workcell.branch}
-
-Execute the following task and provide your response.`
-
-  const response = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
-    },
-    body: JSON.stringify({
-      model,
-      max_tokens: 8192,
-      system: systemPrompt,
-      messages: [{ role: "user", content: task.prompt }],
-    }),
+  return callAnthropicApi({
+    apiKey,
+    model: config.model || "claude-sonnet-4-20250514",
+    systemPrompt: buildSystemPrompt(workcell, task),
+    userContent: task.prompt,
     signal,
+    startTime,
+    includeErrorBody: true,
   })
-
-  if (!response.ok) {
-    const error = await response.text()
-    return {
-      success: false,
-      output: "",
-      error: `Anthropic API error: ${response.status} - ${error}`,
-    }
-  }
-
-  const data = (await response.json()) as {
-    content?: { text?: string }[]
-    model?: string
-    usage?: { input_tokens?: number; output_tokens?: number }
-  }
-  const output = data.content?.[0]?.text || ""
-
-  return {
-    success: true,
-    output,
-    telemetry: {
-      model: data.model,
-      tokens: data.usage
-        ? {
-            input: data.usage.input_tokens || 0,
-            output: data.usage.output_tokens || 0,
-          }
-        : undefined,
-      startedAt: startTime,
-      completedAt: Date.now(),
-    },
-  }
 }
 
 /**
@@ -344,69 +302,18 @@ async function executeOpenAiApi(
 ): Promise<AdapterResult> {
   const apiKey = process.env.OPENAI_API_KEY
   if (!apiKey) {
-    return {
-      success: false,
-      output: "",
-      error: "OPENAI_API_KEY not set",
-    }
+    return { success: false, output: "", error: "OPENAI_API_KEY not set" }
   }
 
-  const model = config.model || "gpt-4o"
-
-  const systemPrompt = `You are an AI coding assistant working in directory: ${workcell.directory}
-Project: ${task.context.projectId}
-Branch: ${workcell.branch}
-
-Execute the following task and provide your response.`
-
-  const response = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model,
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: task.prompt },
-      ],
-      max_tokens: 8192,
-    }),
+  return callOpenAiApi({
+    apiKey,
+    model: config.model || "gpt-4o",
+    systemPrompt: buildSystemPrompt(workcell, task),
+    userContent: task.prompt,
     signal,
+    startTime,
+    includeErrorBody: true,
   })
-
-  if (!response.ok) {
-    const error = await response.text()
-    return {
-      success: false,
-      output: "",
-      error: `OpenAI API error: ${response.status} - ${error}`,
-    }
-  }
-
-  const data = (await response.json()) as {
-    choices?: { message?: { content?: string } }[]
-    model?: string
-    usage?: { prompt_tokens?: number; completion_tokens?: number }
-  }
-  const output = data.choices?.[0]?.message?.content || ""
-
-  return {
-    success: true,
-    output,
-    telemetry: {
-      model: data.model,
-      tokens: data.usage
-        ? {
-            input: data.usage.prompt_tokens || 0,
-            output: data.usage.completion_tokens || 0,
-          }
-        : undefined,
-      startedAt: startTime,
-      completedAt: Date.now(),
-    },
-  }
 }
 
 export default OpenCodeAdapter

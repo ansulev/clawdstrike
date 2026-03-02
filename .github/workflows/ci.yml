@@ -433,6 +433,7 @@ jobs:
           # Rust sources that do not emit stable LCOV entries in this job.
           grep -v '^apps/agent/src-tauri/' changed_rust_files.txt \
             | grep -v '^apps/desktop/src-tauri/' \
+            | grep -v '^crates/bridges/hush-go-native/' \
             | grep -v '^packages/sdk/hush-py/hush-native/' \
             | grep -Ev '(^|/)tests/|_test\.rs$|_tests\.rs$|integration_tests\.rs$' \
             | grep -Ev '^crates/libs/hunt-(correlate|query|scan)/src/(lib|error)\.rs$' \

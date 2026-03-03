@@ -84,7 +84,8 @@ pub enum SecondaryEvent {
 #[must_use]
 pub fn security_event_to_ocsf(input: &SecurityEventInput<'_>) -> OcsfEventSet {
     let severity_id = map_severity(input.severity);
-    let action_id = if input.allowed {
+    // Warn outcomes are non-blocking and should always be modeled as Allowed + Logged.
+    let action_id = if input.is_warn || input.allowed {
         ActionId::Allowed
     } else {
         ActionId::Denied
@@ -445,5 +446,17 @@ mod tests {
         assert_eq!(json["action_id"], 1); // Allowed (non-blocking)
         assert_eq!(json["disposition_id"], 17); // Logged
         assert_eq!(json["status_id"], 1); // Success
+    }
+
+    #[test]
+    fn warn_event_forces_allowed_action_even_if_allowed_is_false() {
+        let mut input = sample_input();
+        input.allowed = false;
+        input.outcome = "success";
+        input.severity = "medium";
+        input.is_warn = true;
+        let json = to_ocsf_json(&input);
+        assert_eq!(json["action_id"], 1); // Allowed (non-blocking warn)
+        assert_eq!(json["disposition_id"], 17); // Logged
     }
 }

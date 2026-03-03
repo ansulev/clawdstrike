@@ -2,6 +2,14 @@ import type { SecurityEvent } from "../types";
 
 const OCSF_VERSION = "1.4.0";
 
+function toEpochMillis(timestamp: string): number {
+  const epochMillis = Date.parse(timestamp);
+  if (Number.isNaN(epochMillis)) {
+    throw new TypeError(`Invalid SecurityEvent timestamp: ${timestamp}`);
+  }
+  return epochMillis;
+}
+
 function ocsfSeverityId(sev: SecurityEvent["decision"]["severity"]): number {
   switch (sev) {
     case "info":
@@ -64,7 +72,7 @@ export function toOcsf(event: SecurityEvent): Record<string, unknown> {
     type_uid: classUid * 100 + activityId,
     activity_id: activityId,
     activity_name: "Create",
-    time: new Date(event.timestamp).getTime(),
+    time: toEpochMillis(event.timestamp),
     severity_id: severityId,
     severity: severityLabel,
     status_id: statusId,

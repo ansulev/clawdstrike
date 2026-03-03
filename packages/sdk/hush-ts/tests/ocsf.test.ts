@@ -117,6 +117,11 @@ describe("siem.transforms.ocsf", () => {
     expect(ocsf.time).toBe(new Date("2024-03-02T12:00:00.000Z").getTime());
   });
 
+  it("throws on invalid timestamp", () => {
+    const event = sampleEvent({ timestamp: "not-a-date" });
+    expect(() => toOcsf(event)).toThrow("Invalid SecurityEvent timestamp");
+  });
+
   it("matches golden fixture schema fields for deny", () => {
     const fixture = loadFixture("detection_finding_deny.json");
     const event = sampleEvent({

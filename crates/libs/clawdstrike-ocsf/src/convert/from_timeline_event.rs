@@ -76,12 +76,23 @@ fn receipt_to_detection_finding(
         .unwrap_or("info");
 
     let decision_lower = decision.to_lowercase();
-    let is_warn = matches!(decision_lower.as_str(), "warn" | "warning");
-    let allowed = is_warn
-        || matches!(
-            decision_lower.as_str(),
-            "allow" | "allowed" | "pass" | "passed"
-        );
+    let decision_kind = match decision_lower.as_str() {
+        "allow" | "allowed" | "pass" | "passed" => ReceiptDecisionKind::Allow,
+        "deny" | "denied" | "block" | "blocked" => ReceiptDecisionKind::Deny,
+        "warn" | "warning" | "warned" => ReceiptDecisionKind::Warn,
+        // Unknown decision strings should not be coerced into denies.
+        _ => ReceiptDecisionKind::Unknown,
+    };
+
+    if matches!(decision_kind, ReceiptDecisionKind::Unknown) {
+        return None;
+    }
+
+    let is_warn = matches!(decision_kind, ReceiptDecisionKind::Warn);
+    let allowed = matches!(
+        decision_kind,
+        ReceiptDecisionKind::Allow | ReceiptDecisionKind::Warn
+    );
 
     use crate::convert::from_guard_result::{guard_result_to_detection_finding, GuardResultInput};
 
@@ -110,6 +121,13 @@ fn receipt_to_detection_finding(
     }
 
     Some(finding)
+}
+
+enum ReceiptDecisionKind {
+    Allow,
+    Deny,
+    Warn,
+    Unknown,
 }
 
 #[cfg(test)]
@@ -277,6 +295,35 @@ mod tests {
     }
 
     #[test]
+    fn receipt_warned_decision_is_logged() {
+        let raw = json!({
+            "fact": {
+                "decision": "warned",
+                "guard": "ShellCommandGuard",
+                "action_type": "shell",
+                "severity": "medium"
+            }
+        });
+
+        let input = TimelineEventInput {
+            kind: "guard_decision",
+            source: "receipt",
+            time_ms: 1_709_366_400_000,
+            raw: &raw,
+            product_version: "0.1.3",
+        };
+
+        let event = timeline_event_to_ocsf(&input).unwrap();
+        if let TimelineOcsfEvent::Detection(df) = event {
+            assert_eq!(df.action_id, 1); // Allowed (non-blocking)
+            assert_eq!(df.disposition_id, 17); // Logged
+            assert_eq!(df.status_id, 1); // Success
+        } else {
+            panic!("expected Detection");
+        }
+    }
+
+    #[test]
     fn receipt_missing_target_still_valid() {
         let raw = json!({
             "fact": {
@@ -313,6 +360,26 @@ mod tests {
             raw: &raw,
             product_version: "0.1.3",
         };
+        assert!(timeline_event_to_ocsf(&input).is_none());
+    }
+
+    #[test]
+    fn receipt_unknown_decision_returns_none() {
+        let raw = json!({
+            "fact": {
+                "decision": "observe",
+                "guard": "SomeGuard"
+            }
+        });
+
+        let input = TimelineEventInput {
+            kind: "guard_decision",
+            source: "receipt",
+            time_ms: 1_709_366_400_000,
+            raw: &raw,
+            product_version: "0.1.3",
+        };
+
         assert!(timeline_event_to_ocsf(&input).is_none());
     }
 }

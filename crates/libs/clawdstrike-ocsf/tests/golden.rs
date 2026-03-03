@@ -20,6 +20,13 @@ fn load_fixture(name: &str) -> serde_json::Value {
     serde_json::from_str(&content).unwrap_or_else(|e| panic!("failed to parse fixture {path}: {e}"))
 }
 
+fn serialize_or_panic<T: serde::Serialize>(value: &T, label: &str) -> serde_json::Value {
+    match serde_json::to_value(value) {
+        Ok(v) => v,
+        Err(e) => panic!("failed to serialize {label}: {e}"),
+    }
+}
+
 /// Check that schema-level fields match between actual and expected.
 fn assert_schema_fields_match(actual: &serde_json::Value, expected: &serde_json::Value) {
     let fields = [
@@ -85,7 +92,7 @@ fn golden_detection_finding_allow() {
     };
 
     let result = security_event_to_ocsf(&input);
-    let actual = serde_json::to_value(&result.detection_finding).unwrap();
+    let actual = serialize_or_panic(&result.detection_finding, "allow detection finding");
 
     // Validate OCSF compliance
     let errors = validate_ocsf_json(&actual);
@@ -124,7 +131,7 @@ fn golden_detection_finding_deny() {
     };
 
     let result = security_event_to_ocsf(&input);
-    let actual = serde_json::to_value(&result.detection_finding).unwrap();
+    let actual = serialize_or_panic(&result.detection_finding, "deny detection finding");
 
     // Validate OCSF compliance
     let errors = validate_ocsf_json(&actual);
@@ -196,7 +203,7 @@ fn all_guard_names_produce_valid_ocsf() {
         };
 
         let finding = guard_result_to_detection_finding(&input);
-        let json = serde_json::to_value(&finding).unwrap();
+        let json = serialize_or_panic(&finding, "guard detection finding");
         let errors = validate_ocsf_json(&json);
         assert!(
             errors.is_empty(),

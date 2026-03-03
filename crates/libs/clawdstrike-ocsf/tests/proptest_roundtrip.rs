@@ -102,19 +102,33 @@ proptest! {
         };
 
         let finding = guard_result_to_detection_finding(&input);
-        let json = serde_json::to_value(&finding).unwrap();
+        let json = match serde_json::to_value(&finding) {
+            Ok(v) => v,
+            Err(err) => {
+                prop_assert!(false, "serialization failed: {}", err);
+                return Ok(());
+            }
+        };
         let errors = validate_ocsf_json(&json);
         prop_assert!(errors.is_empty(), "validation errors: {:?}", errors);
 
         // type_uid invariant
-        let class_uid = json["class_uid"].as_u64().unwrap();
-        let activity_id = json["activity_id"].as_u64().unwrap();
-        let type_uid = json["type_uid"].as_u64().unwrap();
+        let class_uid_opt = json["class_uid"].as_u64();
+        let activity_id_opt = json["activity_id"].as_u64();
+        let type_uid_opt = json["type_uid"].as_u64();
+        prop_assert!(class_uid_opt.is_some(), "class_uid missing or not u64");
+        prop_assert!(activity_id_opt.is_some(), "activity_id missing or not u64");
+        prop_assert!(type_uid_opt.is_some(), "type_uid missing or not u64");
+        let class_uid = class_uid_opt.unwrap_or_default();
+        let activity_id = activity_id_opt.unwrap_or_default();
+        let type_uid = type_uid_opt.unwrap_or_default();
         prop_assert_eq!(type_uid, class_uid * 100 + activity_id);
 
         // Critical must map to 5
         if severity == "critical" {
-            prop_assert_eq!(json["severity_id"].as_u64().unwrap(), 5);
+            let severity_opt = json["severity_id"].as_u64();
+            prop_assert!(severity_opt.is_some(), "severity_id missing or not u64");
+            prop_assert_eq!(severity_opt.unwrap_or_default(), 5);
         }
     }
 }

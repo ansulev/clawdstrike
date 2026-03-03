@@ -23,6 +23,7 @@ pub(crate) fn decision_object_is_warn(
     if matches!(
         decision_obj
             .get("verdict")
+            .or_else(|| decision_obj.get("decision"))
             .and_then(|v| v.as_str())
             .map(|s| s.to_lowercase()),
         Some(v) if matches!(v.as_str(), "warn" | "warning" | "warned" | "logged")
@@ -50,5 +51,23 @@ pub(crate) fn severity_from_value(value: &serde_json::Value) -> Option<String> {
             .and_then(|v| v.as_str())
             .map(|s| s.to_string()),
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn decision_field_warn_string_is_treated_as_warn() {
+        let decision_obj = json!({
+            "decision": "warn"
+        })
+        .as_object()
+        .cloned()
+        .expect("object");
+
+        assert!(decision_object_is_warn(&decision_obj));
     }
 }

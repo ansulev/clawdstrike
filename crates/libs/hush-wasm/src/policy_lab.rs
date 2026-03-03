@@ -1,4 +1,8 @@
 //! WASM bindings for PolicyLab operations.
+//!
+//! Note: `simulate` is not available in WASM because it requires tokio
+//! (which depends on mio, incompatible with wasm32-unknown-unknown).
+//! Use `synth`, `to_ocsf`, and `to_timeline` instead.
 
 use wasm_bindgen::prelude::*;
 
@@ -6,30 +10,25 @@ use clawdstrike_policy_event::facade::PolicyLabHandle;
 
 use crate::detect::serialize_camel_case;
 
-/// WASM wrapper around `PolicyLabHandle` for policy simulation.
+/// WASM wrapper around `PolicyLabHandle` for policy validation.
+///
+/// Simulation is not available in WASM. Use the native FFI or PyO3
+/// bindings for simulate support.
 #[wasm_bindgen]
 pub struct WasmPolicyLab {
+    #[allow(dead_code)]
     inner: PolicyLabHandle,
 }
 
 #[wasm_bindgen]
 impl WasmPolicyLab {
     /// Create a new PolicyLab handle from a policy YAML string.
+    ///
+    /// Validates that the YAML is a well-formed policy.
     #[wasm_bindgen(constructor)]
     pub fn new(policy_yaml: &str) -> Result<WasmPolicyLab, JsError> {
         let inner = PolicyLabHandle::new(policy_yaml).map_err(|e| JsError::new(&e.to_string()))?;
         Ok(Self { inner })
-    }
-
-    /// Simulate events (JSONL) against the loaded policy.
-    ///
-    /// Returns a camelCase JSON string with summary and per-event results.
-    pub fn simulate(&self, events_jsonl: &str) -> Result<String, JsError> {
-        let result = self
-            .inner
-            .simulate(events_jsonl)
-            .map_err(|e| JsError::new(&e.to_string()))?;
-        serialize_camel_case(&result)
     }
 }
 

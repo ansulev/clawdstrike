@@ -15,9 +15,12 @@ pub mod bridge;
 pub mod event;
 pub mod facade;
 pub mod ocsf;
+#[cfg(feature = "simulate")]
 pub mod simulate;
 pub mod stream;
 pub mod synth;
 
 pub use event::*;
-pub use facade::{PolicyLabHandle, SimulateResult, SynthResult};
+#[cfg(feature = "simulate")]
+pub use facade::SimulateResult;
+pub use facade::{PolicyLabHandle, SynthResult};

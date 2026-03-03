@@ -3,7 +3,6 @@
 use serde::Serialize;
 
 use crate::ocsf::policy_events_to_ocsf_jsonl;
-use crate::simulate::SimulationResult;
 use crate::stream::read_events_from_str;
 use crate::synth::{build_candidate_policy, collect_stats};
 
@@ -15,13 +14,15 @@ pub struct SynthResult {
 }
 
 /// Re-export SimulationResult as the facade's simulate return type.
-pub type SimulateResult = SimulationResult;
+#[cfg(feature = "simulate")]
+pub type SimulateResult = crate::simulate::SimulationResult;
 
 /// JSON-in/JSON-out handle for policy lab operations.
 ///
 /// Holds a policy YAML string. Provides methods that accept JSONL event
 /// strings and return JSON/YAML output, suitable for FFI/WASM/PyO3 bindings.
 pub struct PolicyLabHandle {
+    #[cfg_attr(not(feature = "simulate"), allow(dead_code))]
     policy_yaml: String,
 }
 
@@ -67,6 +68,9 @@ impl PolicyLabHandle {
     /// Simulate events against this handle's policy.
     ///
     /// Creates a new async runtime per call — suitable for FFI/WASM contexts.
+    ///
+    /// Requires the `simulate` feature (enabled by default).
+    #[cfg(feature = "simulate")]
     pub fn simulate(&self, events_jsonl: &str) -> anyhow::Result<SimulateResult> {
         let events = read_events_from_str(events_jsonl)?;
 

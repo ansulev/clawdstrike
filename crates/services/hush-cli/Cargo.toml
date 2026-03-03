@@ -50,7 +50,7 @@ indicatif.workspace = true
 dialoguer.workspace = true
 console.workspace = true
 unicode-width = "0.2"
-clawdstrike-policy-event.workspace = true
+clawdstrike-policy-event = { workspace = true, features = ["simulate"] }
 
 [features]
 default = ["rego-runtime", "wasm-plugin-runtime"]

@@ -48,10 +48,19 @@ export class PolicyLab {
     this.inner = new wasm.WasmPolicyLab(policyYaml);
   }
 
-  /** Simulate events against the loaded policy. */
-  simulate(eventsJsonl: string): SimulateResult {
-    const json: string = this.inner.simulate(eventsJsonl);
-    return JSON.parse(json) as SimulateResult;
+  /**
+   * Simulate events against the loaded policy.
+   *
+   * Note: Simulation requires a native runtime (tokio) and is not available
+   * in the WASM build. Use the Python or Go SDK for simulate support.
+   *
+   * @throws Error always — simulation is not supported in the WASM/TS SDK.
+   */
+  simulate(_eventsJsonl: string): SimulateResult {
+    throw new Error(
+      "PolicyLab.simulate() is not available in the WASM build. " +
+        "Use the Python SDK, Go SDK, or Rust CLI for simulation.",
+    );
   }
 
   /** Synthesize a candidate policy from observed events. */

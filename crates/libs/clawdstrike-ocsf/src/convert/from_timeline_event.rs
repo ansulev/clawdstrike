@@ -10,6 +10,7 @@ use crate::classes::network_activity::NetworkActivity;
 use crate::classes::process_activity::ProcessActivity;
 use crate::convert::from_hubble_fact::hubble_fact_to_network_activity;
 use crate::convert::from_tetragon_fact::tetragon_fact_to_process_activity;
+use crate::decision::{decision_object_allowed, decision_object_is_warn};
 
 /// An OCSF event produced from a timeline event.
 pub enum TimelineOcsfEvent {
@@ -151,67 +152,6 @@ fn parse_receipt_decision(decision: &str) -> ReceiptDecisionKind {
     }
 }
 
-fn decision_object_allowed(decision_obj: &serde_json::Map<String, Value>) -> Option<bool> {
-    decision_obj
-        .get("allowed")
-        .and_then(|v| v.as_bool())
-        .or_else(|| decision_obj.get("passed").and_then(|v| v.as_bool()))
-        .or_else(|| {
-            decision_obj
-                .get("denied")
-                .and_then(|v| v.as_bool())
-                .map(|v| !v)
-        })
-        .or_else(|| {
-            decision_obj
-                .get("blocked")
-                .and_then(|v| v.as_bool())
-                .map(|v| !v)
-        })
-}
-
-fn decision_object_is_warn(decision_obj: &serde_json::Map<String, Value>) -> bool {
-    if decision_obj
-        .get("warn")
-        .or_else(|| decision_obj.get("warning"))
-        .and_then(|v| v.as_bool())
-        .unwrap_or(false)
-    {
-        return true;
-    }
-
-    if matches!(
-        decision_obj
-            .get("verdict")
-            .or_else(|| decision_obj.get("decision"))
-            .and_then(|v| v.as_str())
-            .map(parse_receipt_decision),
-        Some(ReceiptDecisionKind::Warn)
-    ) {
-        return true;
-    }
-
-    matches!(
-        decision_obj
-            .get("severity")
-            .and_then(severity_from_value)
-            .map(|s| s.to_ascii_lowercase()),
-        Some(v) if matches!(v.as_str(), "warn" | "warning")
-    )
-}
-
-fn severity_from_value(value: &Value) -> Option<String> {
-    match value {
-        Value::String(s) => Some(s.to_string()),
-        Value::Object(obj) => obj
-            .get("level")
-            .or_else(|| obj.get("name"))
-            .or_else(|| obj.get("value"))
-            .and_then(|v| v.as_str())
-            .map(|s| s.to_string()),
-        _ => None,
-    }
-}
 fn extract_receipt_guard_name(fact: &Value) -> Option<&str> {
     fact.get("guard").and_then(|v| v.as_str()).or_else(|| {
         decision_object_from_fact(fact)?

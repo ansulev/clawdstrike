@@ -19,6 +19,7 @@
 pub mod base;
 pub mod classes;
 pub mod convert;
+pub mod decision;
 pub mod objects;
 pub mod severity;
 pub mod validate;

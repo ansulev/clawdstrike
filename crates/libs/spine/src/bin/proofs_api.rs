@@ -232,16 +232,16 @@ fn chain_violation_scan_window(
     }
 
     let truncated = message_count > scan_cap;
-    let desired_span = if truncated { scan_cap } else { message_count };
-    let start_seq = last_sequence
-        .saturating_sub(desired_span.saturating_sub(1))
-        .max(first_sequence);
+    let desired_messages = if truncated { scan_cap } else { message_count };
+    let start_seq = if truncated {
+        last_sequence
+            .saturating_sub(desired_messages.saturating_sub(1))
+            .max(first_sequence)
+    } else {
+        first_sequence
+    };
     let end_seq = last_sequence;
-    let expected_u64 = end_seq
-        .checked_sub(start_seq)
-        .and_then(|v| v.checked_add(1))
-        .ok_or_else(|| ApiError::internal("invalid chain violation sequence window"))?;
-    let expected = usize::try_from(expected_u64)
+    let expected = usize::try_from(desired_messages)
         .map_err(|_| ApiError::internal("chain violation scan window too large"))?;
     Ok(Some((truncated, start_seq, end_seq, expected)))
 }
@@ -1219,7 +1219,18 @@ mod tests {
         assert!(truncated);
         assert_eq!(start, 995);
         assert_eq!(end, 1000);
-        assert_eq!(expected, 6);
+        assert_eq!(expected, 20);
+    }
+
+    #[test]
+    fn chain_violation_scan_window_non_truncated_starts_at_first_sequence() {
+        let window = chain_violation_scan_window(3, 5, 10, 20).unwrap();
+        assert!(window.is_some());
+        let (truncated, start, end, expected) = window.unwrap_or((true, 0, 0, 0));
+        assert!(!truncated);
+        assert_eq!(start, 5);
+        assert_eq!(end, 10);
+        assert_eq!(expected, 3);
     }
 
     #[test]

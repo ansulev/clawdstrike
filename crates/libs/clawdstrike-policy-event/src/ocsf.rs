@@ -110,26 +110,20 @@ fn parse_decision_metadata(metadata: Option<&serde_json::Value>) -> DecisionMeta
             }
         },
         Some(serde_json::Value::Object(decision_obj)) => {
-            if decision_obj
-                .get("warn")
-                .and_then(|v| v.as_bool())
-                .unwrap_or(false)
-            {
-                out.allowed = true;
-                out.is_warn = true;
-            } else if let Some(allowed) = decision_obj.get("allowed").and_then(|v| v.as_bool()) {
-                out.allowed = allowed;
+            let allowed = decision_obj.get("allowed").and_then(|v| v.as_bool());
+            if allowed == Some(false) {
+                out.allowed = false;
                 out.is_warn = false;
+            } else {
+                out.allowed = allowed.unwrap_or(true);
+                out.is_warn = decision_object_is_warn(decision_obj);
             }
 
             out.guard = decision_obj
                 .get("guard")
                 .and_then(|v| v.as_str())
                 .map(|s| s.to_string());
-            out.severity = decision_obj
-                .get("severity")
-                .and_then(|v| v.as_str())
-                .map(|s| s.to_string());
+            out.severity = decision_obj.get("severity").and_then(severity_from_value);
             out.message = decision_obj
                 .get("message")
                 .or_else(|| decision_obj.get("reason"))
@@ -140,10 +134,7 @@ fn parse_decision_metadata(metadata: Option<&serde_json::Value>) -> DecisionMeta
     }
 
     if out.severity.is_none() {
-        out.severity = obj
-            .get("severity")
-            .and_then(|v| v.as_str())
-            .map(|s| s.to_string());
+        out.severity = obj.get("severity").and_then(severity_from_value);
     }
     if out.guard.is_none() {
         out.guard = obj
@@ -160,6 +151,48 @@ fn parse_decision_metadata(metadata: Option<&serde_json::Value>) -> DecisionMeta
     }
 
     out
+}
+
+fn decision_object_is_warn(decision_obj: &serde_json::Map<String, serde_json::Value>) -> bool {
+    if decision_obj
+        .get("warn")
+        .or_else(|| decision_obj.get("warning"))
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false)
+    {
+        return true;
+    }
+
+    if matches!(
+        decision_obj
+            .get("verdict")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_lowercase()),
+        Some(v) if matches!(v.as_str(), "warn" | "warning" | "warned" | "logged")
+    ) {
+        return true;
+    }
+
+    matches!(
+        decision_obj
+            .get("severity")
+            .and_then(severity_from_value)
+            .map(|s| s.to_lowercase()),
+        Some(v) if matches!(v.as_str(), "warn" | "warning")
+    )
+}
+
+fn severity_from_value(value: &serde_json::Value) -> Option<String> {
+    match value {
+        serde_json::Value::String(s) => Some(s.to_string()),
+        serde_json::Value::Object(obj) => obj
+            .get("level")
+            .or_else(|| obj.get("name"))
+            .or_else(|| obj.get("value"))
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string()),
+        _ => None,
+    }
 }
 
 /// Convert a MappedGuardAction + report into an OCSF JSON value.
@@ -581,6 +614,41 @@ mod tests {
             "ShellCommandGuard"
         );
         assert_eq!(json["finding_info"]["desc"], "Logged command");
+    }
+
+    #[test]
+    fn object_form_decision_warning_severity_maps_logged_without_warn_flag() {
+        let event = PolicyEvent {
+            event_id: "evt-obj-warn-severity".to_string(),
+            event_type: PolicyEventType::FileRead,
+            timestamp: Utc::now(),
+            session_id: None,
+            data: PolicyEventData::File(FileEventData {
+                path: "/var/log/syslog".to_string(),
+                operation: None,
+                content_base64: None,
+                content: None,
+                content_hash: None,
+            }),
+            metadata: Some(serde_json::json!({
+                "decision": {
+                    "allowed": true,
+                    "guard": "ShellCommandGuard",
+                    "severity": "warning",
+                    "message": "Logged command by severity"
+                }
+            })),
+            context: None,
+        };
+
+        let json = policy_event_to_ocsf(&event).unwrap();
+        assert_eq!(json["action_id"], 1); // Allowed
+        assert_eq!(json["disposition_id"], 17); // Logged
+        assert_eq!(json["severity_id"], 3); // Medium
+        assert_eq!(
+            json["finding_info"]["analytic"]["name"],
+            "ShellCommandGuard"
+        );
     }
 
     #[test]

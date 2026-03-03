@@ -92,13 +92,9 @@ fn verdict_from_metadata(metadata: Option<&serde_json::Value>) -> NormalizedVerd
             "warn" | "warning" | "warned" => NormalizedVerdict::Warn,
             _ => NormalizedVerdict::None,
         },
-        // Object form: {"allowed": false, "guard": "..."} — decode the boolean
+        // Object form: {"allowed": false, "guard": "..."} — decode the decision details.
         Some(serde_json::Value::Object(decision_obj)) => {
-            if decision_obj
-                .get("warn")
-                .and_then(|v| v.as_bool())
-                .unwrap_or(false)
-            {
+            if decision_object_is_warn(decision_obj) {
                 return NormalizedVerdict::Warn;
             }
             match decision_obj.get("allowed").and_then(|v| v.as_bool()) {
@@ -118,16 +114,56 @@ fn extract_severity(metadata: Option<&serde_json::Value>) -> Option<String> {
     };
 
     obj.get("severity")
-        .and_then(|v| v.as_str())
-        .map(|s| s.to_string())
+        .and_then(severity_from_value)
         .or_else(|| {
             obj.get("decision")
                 .or_else(|| obj.get("verdict"))
                 .and_then(|v| v.as_object())
                 .and_then(|d| d.get("severity"))
-                .and_then(|v| v.as_str())
-                .map(|s| s.to_string())
+                .and_then(severity_from_value)
         })
+}
+
+fn decision_object_is_warn(decision_obj: &serde_json::Map<String, serde_json::Value>) -> bool {
+    if decision_obj
+        .get("warn")
+        .or_else(|| decision_obj.get("warning"))
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false)
+    {
+        return true;
+    }
+
+    if matches!(
+        decision_obj
+            .get("verdict")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_lowercase()),
+        Some(v) if matches!(v.as_str(), "warn" | "warning" | "warned" | "logged")
+    ) {
+        return true;
+    }
+
+    matches!(
+        decision_obj
+            .get("severity")
+            .and_then(severity_from_value)
+            .map(|s| s.to_lowercase()),
+        Some(v) if matches!(v.as_str(), "warn" | "warning")
+    )
+}
+
+fn severity_from_value(value: &serde_json::Value) -> Option<String> {
+    match value {
+        serde_json::Value::String(s) => Some(s.to_string()),
+        serde_json::Value::Object(obj) => obj
+            .get("level")
+            .or_else(|| obj.get("name"))
+            .or_else(|| obj.get("value"))
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string()),
+        _ => None,
+    }
 }
 
 #[cfg(test)]
@@ -301,6 +337,14 @@ mod tests {
     }
 
     #[test]
+    fn verdict_from_metadata_object_warning_severity_is_warn() {
+        let v = verdict_from_metadata(Some(&serde_json::json!({
+            "decision": { "allowed": true, "severity": "warning" }
+        })));
+        assert_eq!(v, NormalizedVerdict::Warn);
+    }
+
+    #[test]
     fn verdict_from_metadata_object_missing_allowed_field() {
         let v = verdict_from_metadata(Some(&serde_json::json!({
             "decision": { "guard": "SomeGuard" }
@@ -314,5 +358,13 @@ mod tests {
             "decision": { "severity": "high" }
         })));
         assert_eq!(s.as_deref(), Some("high"));
+    }
+
+    #[test]
+    fn extract_severity_from_nested_severity_object() {
+        let s = extract_severity(Some(&serde_json::json!({
+            "decision": { "severity": { "level": "warning" } }
+        })));
+        assert_eq!(s.as_deref(), Some("warning"));
     }
 }

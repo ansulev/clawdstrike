@@ -10,6 +10,10 @@ use clawdstrike_policy_event::facade::PolicyLabHandle;
 
 use crate::detect::serialize_camel_case;
 
+fn throw_js_error(message: impl std::fmt::Display) -> ! {
+    wasm_bindgen::throw_str(&message.to_string())
+}
+
 /// WASM wrapper around `PolicyLabHandle` for policy validation.
 ///
 /// Simulation is not available in WASM. Use the native FFI or PyO3
@@ -36,21 +40,21 @@ impl WasmPolicyLab {
 ///
 /// Returns a camelCase JSON string with `policyYaml` and `risks`.
 #[wasm_bindgen]
-pub fn policy_lab_synth(events_jsonl: &str) -> Result<String, JsError> {
-    let result = PolicyLabHandle::synth(events_jsonl).map_err(|e| JsError::new(&e.to_string()))?;
-    serialize_camel_case(&result)
+pub fn policy_lab_synth(events_jsonl: &str) -> String {
+    let result = PolicyLabHandle::synth(events_jsonl).unwrap_or_else(|e| throw_js_error(e));
+    serialize_camel_case(&result).unwrap_or_else(|e| throw_js_error(format!("{e:?}")))
 }
 
 /// Convert events JSONL to OCSF JSONL.
 #[wasm_bindgen]
-pub fn policy_lab_to_ocsf(events_jsonl: &str) -> Result<String, JsError> {
-    PolicyLabHandle::to_ocsf(events_jsonl).map_err(|e| JsError::new(&e.to_string()))
+pub fn policy_lab_to_ocsf(events_jsonl: &str) -> String {
+    PolicyLabHandle::to_ocsf(events_jsonl).unwrap_or_else(|e| throw_js_error(e))
 }
 
 /// Convert events JSONL to timeline JSONL.
 #[wasm_bindgen]
-pub fn policy_lab_to_timeline(events_jsonl: &str) -> Result<String, JsError> {
-    PolicyLabHandle::to_timeline(events_jsonl).map_err(|e| JsError::new(&e.to_string()))
+pub fn policy_lab_to_timeline(events_jsonl: &str) -> String {
+    PolicyLabHandle::to_timeline(events_jsonl).unwrap_or_else(|e| throw_js_error(e))
 }
 
 #[cfg(test)]
@@ -73,7 +77,7 @@ mod tests {
     #[test]
     fn synth_returns_camel_case_json() {
         let jsonl = sample_event_jsonl();
-        let result = policy_lab_synth(&jsonl).unwrap();
+        let result = policy_lab_synth(&jsonl);
         let v: serde_json::Value = serde_json::from_str(&result).unwrap();
         assert!(v.get("policyYaml").is_some());
         assert!(v.get("risks").is_some());
@@ -82,7 +86,7 @@ mod tests {
     #[test]
     fn to_ocsf_returns_json() {
         let jsonl = sample_event_jsonl();
-        let result = policy_lab_to_ocsf(&jsonl).unwrap();
+        let result = policy_lab_to_ocsf(&jsonl);
         assert!(!result.is_empty());
         let _parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
     }
@@ -90,7 +94,7 @@ mod tests {
     #[test]
     fn to_timeline_returns_json() {
         let jsonl = sample_event_jsonl();
-        let result = policy_lab_to_timeline(&jsonl).unwrap();
+        let result = policy_lab_to_timeline(&jsonl);
         assert!(!result.is_empty());
         let _parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
     }

@@ -99,16 +99,16 @@ fn receipt_to_detection_finding(
 
 fn extract_receipt_decision(fact: &Value) -> Option<(ReceiptDecisionKind, String)> {
     let direct_decision = fact
-        .get("decision")
+        .get("verdict")
         .and_then(|v| v.as_str())
-        .or_else(|| fact.get("verdict").and_then(|v| v.as_str()))
+        .or_else(|| fact.get("decision").and_then(|v| v.as_str()))
         .or_else(|| {
             fact.get("metadata")
                 .and_then(|v| v.as_object())
                 .and_then(|obj| {
-                    obj.get("decision")
+                    obj.get("verdict")
                         .and_then(|v| v.as_str())
-                        .or_else(|| obj.get("verdict").and_then(|v| v.as_str()))
+                        .or_else(|| obj.get("decision").and_then(|v| v.as_str()))
                 })
         });
 
@@ -257,16 +257,16 @@ fn extract_receipt_uid(
 }
 
 fn decision_object_from_fact(fact: &Value) -> Option<&serde_json::Map<String, Value>> {
-    fact.get("decision")
+    fact.get("verdict")
         .and_then(|v| v.as_object())
-        .or_else(|| fact.get("verdict").and_then(|v| v.as_object()))
+        .or_else(|| fact.get("decision").and_then(|v| v.as_object()))
         .or_else(|| {
             fact.get("metadata")
                 .and_then(|v| v.as_object())
                 .and_then(|obj| {
-                    obj.get("decision")
+                    obj.get("verdict")
                         .and_then(|v| v.as_object())
-                        .or_else(|| obj.get("verdict").and_then(|v| v.as_object()))
+                        .or_else(|| obj.get("decision").and_then(|v| v.as_object()))
                 })
         })
 }
@@ -606,6 +606,72 @@ mod tests {
         assert_eq!(uid1, "receipt-evt-bridge-uid-1");
         assert_eq!(uid2, "receipt-evt-bridge-uid-2");
         assert_ne!(uid1, uid2);
+    }
+
+    #[test]
+    fn receipt_verdict_string_takes_precedence_over_decision() {
+        let raw = json!({
+            "fact": {
+                "decision": "allow",
+                "verdict": "deny",
+                "guard": "ForbiddenPathGuard",
+                "action_type": "file"
+            }
+        });
+
+        let input = TimelineEventInput {
+            kind: "guard_decision",
+            source: "receipt",
+            time_ms: 1_709_366_400_000,
+            raw: &raw,
+            product_version: "0.1.3",
+        };
+
+        let event = timeline_event_to_ocsf(&input).unwrap();
+        if let TimelineOcsfEvent::Detection(df) = event {
+            assert_eq!(df.action_id, 2); // Denied
+            assert_eq!(df.finding_info.analytic.name, "ForbiddenPathGuard");
+            assert_eq!(
+                df.finding_info.desc.as_deref(),
+                Some("ForbiddenPathGuard decision=deny")
+            );
+        } else {
+            panic!("expected Detection");
+        }
+    }
+
+    #[test]
+    fn receipt_verdict_object_takes_precedence_over_decision() {
+        let raw = json!({
+            "fact": {
+                "decision": {
+                    "allowed": true,
+                    "guard": "AllowGuard"
+                },
+                "verdict": {
+                    "allowed": false,
+                    "guard": "DenyGuard"
+                },
+                "action_type": "file"
+            }
+        });
+
+        let input = TimelineEventInput {
+            kind: "guard_decision",
+            source: "receipt",
+            time_ms: 1_709_366_400_000,
+            raw: &raw,
+            product_version: "0.1.3",
+        };
+
+        let event = timeline_event_to_ocsf(&input).unwrap();
+        if let TimelineOcsfEvent::Detection(df) = event {
+            assert_eq!(df.action_id, 2); // Denied
+            assert_eq!(df.finding_info.analytic.name, "DenyGuard");
+            assert_eq!(df.finding_info.desc.as_deref(), Some("DenyGuard decision=deny"));
+        } else {
+            panic!("expected Detection");
+        }
     }
 
     #[test]

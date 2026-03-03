@@ -53,11 +53,7 @@
 </p>
 
 <p align="center">
-  <a href="#enforcement-stack">Enforcement Stack</a>
-  <span style="opacity:0.55;">&nbsp;&nbsp;&middot;&nbsp;&nbsp;</span>
-  <a href="https://backbay.io/attack-range">Attack Range</a>
-  <span style="opacity:0.55;">&nbsp;&nbsp;&middot;&nbsp;&nbsp;</span>
-  <a href="#off-grid-enforcement-plane-a-r">Off-Grid</a>
+  <a href="#core-capabilities">Capabilities</a>
   <span style="opacity:0.55;">&nbsp;&nbsp;&middot;&nbsp;&nbsp;</span>
   <a href="#guard-stack">Guards</a>
   <span style="opacity:0.55;">&nbsp;&nbsp;&middot;&nbsp;&nbsp;</span>
@@ -607,12 +603,13 @@ Framework adapters: [OpenAI](packages/adapters/clawdstrike-openai/README.md) · 
 
 <p align="center">
   <a href="#guard-stack"><kbd>Guard Stack</kbd></a>&nbsp;&nbsp;
+  <a href="#policy-system"><kbd>Policy System</kbd></a>&nbsp;&nbsp;
+  <a href="#computer-use-gateway"><kbd>Computer Use Gateway</kbd></a>&nbsp;&nbsp;
   <a href="#jailbreak-detection"><kbd>Jailbreak Detection</kbd></a>&nbsp;&nbsp;
   <a href="#cryptographic-receipts"><kbd>Receipts</kbd></a>&nbsp;&nbsp;
   <a href="#multi-agent-security-primitives"><kbd>Multi-Agent</kbd></a>&nbsp;&nbsp;
   <a href="#irm--output-sanitization--watermarking--threat-intel"><kbd>IRM · Sanitization · Watermarking · Threat Intel</kbd></a>&nbsp;&nbsp;
   <a href="#spider-sense"><kbd>Spider-Sense</kbd></a>&nbsp;&nbsp;
-  <a href="#off-grid-enforcement-plane-a-r"><kbd>Off-Grid Enforcement</kbd></a>&nbsp;&nbsp;
   <a href="#deployment-modes"><kbd>Deployment Modes</kbd></a>&nbsp;&nbsp;
   <a href="#enterprise-architecture"><kbd>Enterprise</kbd></a>
 </p>
@@ -633,6 +630,61 @@ Composable, policy-driven security checks at the tool boundary. Each guard handl
 | **ComputerUseGuard**                   | Controls CUA actions: remote sessions, clipboard, input injection, file transfer                                                                                                           |
 | **ShellCommandGuard**                  | Blocks dangerous shell commands before execution                                                                                                                                           |
 | **SpiderSenseGuard**&nbsp;<sup>β</sup> | Hierarchical threat screening adapted from [Yu et al. 2026](https://arxiv.org/abs/2602.05386): fast vector similarity resolves known patterns, optional LLM escalation for ambiguous cases |
+
+---
+
+### Policy System
+
+Clawdstrike policies are versioned, deterministic policy-as-code artifacts designed for secure composition and operational hardening.
+
+| Capability | What You Get |
+| ---------- | ------------ |
+| **Versioned schema** | Explicit `1.1.0` / `1.2.0` policy versions with strict validation and unknown-field rejection |
+| **Composable inheritance** | `extends` from built-ins, local files, and remote refs to build layered policy stacks |
+| **Secure remote composition** | Remote `extends` is disabled by default, host-allowlisted, and integrity-pinned via `#sha256=<64-hex>` |
+| **Controlled merges** | `replace`, `merge`, and `deep_merge` strategies for predictable override behavior |
+| **Posture state machine** | `1.2.0+` posture states, budgets, and transitions for runtime containment/escalation flows |
+| **Fail-closed runtime semantics** | Load or evaluation ambiguity resolves to deny rather than implicit allow |
+
+Built-in rulesets: `permissive` | `default` | `strict` | `ai-agent` | `ai-agent-posture` | `cicd` | `remote-desktop` | `remote-desktop-permissive` | `remote-desktop-strict`
+
+Operational policy loop:
+
+```bash
+# Generate least-privilege candidate from observed events
+clawdstrike policy synth run.events.jsonl --extends clawdstrike:default --out candidate.yaml
+
+# Validate schema + guard semantics
+clawdstrike policy validate candidate.yaml
+
+# Replay events against candidate policy
+clawdstrike policy simulate candidate.yaml run.events.jsonl --fail-on-deny
+
+# Compare candidate vs baseline
+clawdstrike policy diff clawdstrike:default candidate.yaml
+```
+
+See [Policy Schema](docs/src/reference/policy-schema.md), [Posture Schema](docs/src/reference/posture-schema.md), and [Observe -> Synth -> Tighten](docs/src/guides/observe-synth.md).
+
+---
+
+### Computer Use Gateway
+
+Clawdstrike's CUA Gateway is a dedicated policy plane for agents operating remote desktop surfaces. Provider payloads are normalized into canonical `remote.*` and `input.*` actions, evaluated before execution, and emitted as signed receipts for replayable forensic timelines.
+
+It composes three guards into a deterministic enforcement pipeline:
+
+| Layer | Role |
+| ----- | ---- |
+| **ComputerUseGuard** | Top-level action allowlist and enforcement mode selection (`observe`, `guardrail`, `fail_closed`) |
+| **RemoteDesktopSideChannelGuard** | Side-channel governance for clipboard, file transfer, audio, drive mapping, printing, session sharing, and transfer-size limits |
+| **InputInjectionCapabilityGuard** | Input capability constraints plus optional postcondition probe requirements |
+
+- Deterministic decision metadata (`reason_code`, severity) for machine-enforced runbooks and SIEM workflows
+- Mode-aware hardening path from `remote-desktop-permissive` to `remote-desktop` to `remote-desktop-strict`
+- Strict posture denies unknown/disallowed actions by default, with no silent bypass window
+
+See the full setup guide: [Computer Use Gateway](docs/src/guides/computer-use-gateway.md).
 
 ---
 
@@ -728,79 +780,6 @@ Prompt watermarking embeds signed provenance markers for attribution and forensi
 </td>
 </tr>
 </table>
-
----
-
-<a id="off-grid-enforcement-plane-a-r"></a>
-
-### Off-Grid Enforcement (Plane A-R)
-
-Agents are becoming infrastructure—and infrastructure needs defense-grade enforcement. Clawdstrike is built to support U.S. cyber defenders as agent systems become the next attack surface. It keeps policy, revocations, and cryptographic proof moving even in contested networks, airgaps, and degraded links.
-
-This is for environments where the internet is not an assumption—sometimes it's the threat model.
-
-Clawdstrike's **Spine** protocol carries the same **Ed25519-signed envelopes** over **Reticulum** transports: LoRa radios, packet radio, serial lines, Wi-Fi, TCP/UDP—anything that can move a few bits per second through a few hundred bytes. The transport changes. The proof doesn't.
-
-#### What moves, even when the network doesn't
-
-| Environment                        | What propagates                           | How                                                 |
-| ---------------------------------- | ----------------------------------------- | --------------------------------------------------- |
-| SCIF / air-gapped facility         | Policy deltas, revocations, checkpoints   | USB transfer with offline Merkle-proof verification |
-| Disaster response / degraded infra | Emergency revocations, incident facts     | Ad-hoc LoRa mesh, store-and-forward via LXMF        |
-| Hostile network / denied spectrum  | Signed revocations (priority 1)           | Multi-hop Reticulum over any available carrier      |
-| Remote IoT / edge                  | Policy enforcement + attestation receipts | LoRa at ~1,200 bps, multi-km line-of-sight          |
-
-#### Bandwidth discipline, by design
-
-Spine is **bandwidth-aware** and **priority-scheduled**:
-
-* **Seven priority tiers.** Revocations always transmit first.
-* **Graceful degradation.** When the link is tight, heartbeats yield; policy and incident-critical envelopes still move.
-* **Fail-closed posture at the edge.** If the node can't receive new guidance, it doesn't silently drift into "best effort" permissiveness.
-* **Key compromise response.** A compromised signing key can be revoked and propagated across the mesh quickly enough to matter in the early minutes of an incident.
-
-#### Reference gateway
-
-**[$98 reference gateway.](integrations/transports/reticulum/pi-gateway/)** Raspberry Pi 4 + RNode LoRa USB radio.
-
-* Bridges the off-grid mesh to your **NATS** backbone.
-* **Disclosure policy** controls what is allowed to cross the boundary (mesh ↔ backbone).
-* **Hash-chained audit log** records every envelope forwarded or dropped.
-* Runs in the field on ~**5W**.
-
-Off-grid doesn't mean off-control. Plane A-R is how Clawdstrike keeps enforcement real when the network is not.
-
----
-
-## Framework Adapters
-
-Drop Clawdstrike into your existing agent stack. Every adapter normalizes framework-specific tool calls into canonical action events and routes them through the guard stack.
-
-| Framework              | Package                  | Install                                                        |
-| ---------------------- | ------------------------ | -------------------------------------------------------------- |
-| **OpenAI Agents SDK**  | `@clawdstrike/openai`    | `npm install @clawdstrike/openai @clawdstrike/engine-local`    |
-| **Claude / Agent SDK** | `@clawdstrike/claude`    | `npm install @clawdstrike/claude @clawdstrike/engine-local`    |
-| **Vercel AI SDK**      | `@clawdstrike/vercel-ai` | `npm install @clawdstrike/vercel-ai @clawdstrike/engine-local` |
-| **LangChain**          | `@clawdstrike/langchain` | `npm install @clawdstrike/langchain @clawdstrike/engine-local` |
-| **OpenClaw**           | `@clawdstrike/openclaw`  | `openclaw plugins install @clawdstrike/openclaw`               |
-
-```typescript
-// 3 lines to secure any OpenAI agent
-import { createStrikeCell } from "@clawdstrike/engine-local";
-import {
-  OpenAIToolBoundary,
-  wrapOpenAIToolDispatcher,
-} from "@clawdstrike/openai";
-
-const secure = wrapOpenAIToolDispatcher(
-  new OpenAIToolBoundary({ engine: createStrikeCell({ policyRef: "strict" }) }),
-  yourToolDispatcher,
-);
-```
-
-Additional language bindings (C, Go, C#) available via FFI. See [Multi-Language Support](docs/src/concepts/multi-language.md).
-
----
 
 ## Deployment Modes
 
@@ -1006,67 +985,6 @@ Clawdstrike generates signed receipts and structured audit facts that teams can 
 No formal Clawdstrike certification program is generally available today. The tier model and framework template packs are design specs and roadmap material.
 
 See draft specs: [Certification & Compliance Specs](docs/plans/certification/README.md) · [Program Overview (Draft)](docs/plans/certification/overview.md) · [HIPAA Mapping Draft](docs/plans/certification/hipaa-template.md) · [PCI-DSS Mapping Draft](docs/plans/certification/pci-dss-template.md) · [SOC2 Mapping Draft](docs/plans/certification/soc2-template.md)
-
----
-
-## Policy System
-
-Declarative YAML policies with inheritance, composable guards, and built-in rulesets.
-
-```yaml
-# policy.yaml - inherit strict defaults, override what you need
-version: "1.1.0"
-extends: strict
-
-guards:
-  egress_allowlist:
-    allow:
-      - "api.openai.com"
-      - "api.anthropic.com"
-      - "api.github.com"
-    default_action: block
-
-  jailbreak:
-    enabled: true
-    detector:
-      block_threshold: 40 # aggressive - catch even suspicious prompts
-      session_aggregation: true # track risk across the conversation
-
-settings:
-  fail_fast: true
-```
-
-**Built-in rulesets:** `permissive` | `default` | `strict` | `ai-agent` | `ai-agent-posture` | `cicd` | `remote-desktop` | `remote-desktop-permissive` | `remote-desktop-strict`
-
-Policies support inheritance via `extends`: local files, remote URLs, and git refs.
-
----
-
-## Computer Use Gateway
-
-Full CUA policy enforcement for agents operating remote desktop surfaces:
-
-- **Canonical action translation** across OpenAI, Claude, and OpenClaw CUA providers
-- **Side-channel controls** for clipboard, audio, drive mapping, printing, session sharing, file transfer bounds
-- **Deterministic decision metadata** with stable `reason_code` + severity for machine-checkable analytics
-- **Three enforcement modes:** Observe (log only), Guardrail (warn on unknown), Fail-Closed (deny on unknown)
-
----
-
-## Enforcement Stack
-
-Six layers. Kernel to chain. Every layer signs its work.
-
-| Layer                | What                              | How                                                                                                                                                   |
-| -------------------- | --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **L0 — Identity**    | Workload identity binding         | [SPIRE/SPIFFE](docs/specs/06-spire-identity-binding.md) X.509 SVIDs, automated rotation, bound to Spine Ed25519 issuers                               |
-| **L1 — Kernel**      | Syscall-level runtime visibility  | [Tetragon](crates/bridges/tetragon-bridge/) eBPF kprobes + LSM hooks — process ancestry, file integrity (IMA), capability enforcement                 |
-| **L2 — Network**     | Identity-based L7 segmentation    | [Cilium/Hubble](crates/bridges/hubble-bridge/) CNI with WireGuard encryption, FQDN egress control, flow-level audit                                   |
-| **L3 — Agent**       | Tool-boundary policy enforcement  | Guard stack + cryptographic receipts + delegation tokens with capability ceilings                                                                     |
-| **L4 — Attestation** | Tamper-evident proof chain        | [AegisNet](docs/specs/13-eas-onchain-anchoring.md) Merkle tree (RFC 6962), witness co-signatures, on-chain anchoring via EAS on Base L2               |
-| **L5 — Transport**   | Multi-plane envelope distribution | NATS JetStream (datacenter) · libp2p gossipsub (P2P) · [Reticulum mesh](integrations/transports/reticulum/) (off-grid) · WireGuard overlay (enclaves) |
-
-Every layer produces signed facts that feed into the same append-only Spine protocol. An attestation for a file write carries the process ancestry from Tetragon, the SPIFFE ID from SPIRE, the network policy from Cilium, the guard verdict from Clawdstrike, and a Merkle inclusion proof from AegisNet — in one envelope, verified with one signature check.
 
 ---
 

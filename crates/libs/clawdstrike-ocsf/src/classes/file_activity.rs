@@ -4,7 +4,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::base::compute_type_uid;
+use crate::base::{category_for_class, compute_type_uid, ClassUid};
 use crate::objects::actor::Actor;
 use crate::objects::file::OcsfFile;
 use crate::objects::metadata::Metadata;
@@ -91,11 +91,12 @@ impl FileActivity {
         metadata: Metadata,
         file: OcsfFile,
     ) -> Self {
+        let class_uid = ClassUid::FileActivity;
         let activity_id = activity.as_u8();
         Self {
-            class_uid: 1001,
-            category_uid: 1,
-            type_uid: compute_type_uid(1001, activity_id),
+            class_uid: class_uid.as_u16(),
+            category_uid: category_for_class(class_uid).as_u8(),
+            type_uid: compute_type_uid(class_uid.as_u16(), activity_id),
             activity_id,
             activity_name: Some(file_activity_name(activity).to_string()),
             time,

@@ -313,12 +313,14 @@ fn map_audit_event(event: AuditEventLine) -> Option<PolicyEvent> {
     let timestamp = DateTime::parse_from_rfc3339(&event.timestamp)
         .map(|dt| dt.with_timezone(&Utc))
         .unwrap_or_else(|_| Utc::now());
+    let (allowed, is_warn) = normalize_audit_decision(&event.decision);
 
     let mut metadata = serde_json::Map::new();
     metadata.insert(
         "decision".to_string(),
         serde_json::json!({
-            "allowed": event.decision.eq_ignore_ascii_case("allowed"),
+            "allowed": allowed,
+            "warn": is_warn,
             "guard": event.guard,
             "severity": event.severity,
             "message": event.message,
@@ -403,6 +405,14 @@ fn map_audit_event(event: AuditEventLine) -> Option<PolicyEvent> {
         metadata: Some(serde_json::Value::Object(metadata)),
         context: None,
     })
+}
+
+fn normalize_audit_decision(decision: &str) -> (bool, bool) {
+    match decision.trim().to_ascii_lowercase().as_str() {
+        "allow" | "allowed" | "pass" | "passed" => (true, false),
+        "warn" | "warning" | "warned" | "logged" => (true, true),
+        _ => (false, false),
+    }
 }
 
 fn parse_host_port(target: &str) -> (String, u16) {
@@ -506,5 +516,56 @@ mod tests {
             decision.get("allowed").and_then(|v| v.as_bool()),
             Some(false)
         );
+        assert_eq!(decision.get("warn").and_then(|v| v.as_bool()), Some(false));
+    }
+
+    #[test]
+    fn map_audit_event_warn_maps_to_allowed_warn_metadata() {
+        let event = AuditEventLine {
+            id: "evt-3".to_string(),
+            timestamp: "2026-02-06T10:00:02Z".to_string(),
+            action_type: "shell".to_string(),
+            target: Some("rm -rf /tmp/demo".to_string()),
+            decision: "warn".to_string(),
+            guard: Some("ShellCommandGuard".to_string()),
+            severity: Some("warning".to_string()),
+            message: Some("logged".to_string()),
+            session_id: Some("sess-3".to_string()),
+            metadata: None,
+        };
+
+        let mapped = map_audit_event(event).expect("event should map");
+        let metadata = mapped.metadata.expect("metadata should exist");
+        let decision = metadata
+            .get("decision")
+            .and_then(|v| v.as_object())
+            .expect("decision metadata should exist");
+        assert_eq!(
+            decision.get("allowed").and_then(|v| v.as_bool()),
+            Some(true)
+        );
+        assert_eq!(decision.get("warn").and_then(|v| v.as_bool()), Some(true));
+    }
+
+    #[test]
+    fn map_audit_event_warn_produces_logged_ocsf_outcome() {
+        let event = AuditEventLine {
+            id: "evt-4".to_string(),
+            timestamp: "2026-02-06T10:00:03Z".to_string(),
+            action_type: "shell".to_string(),
+            target: Some("cat /etc/passwd".to_string()),
+            decision: "warn".to_string(),
+            guard: Some("ShellCommandGuard".to_string()),
+            severity: Some("warning".to_string()),
+            message: Some("command logged".to_string()),
+            session_id: Some("sess-4".to_string()),
+            metadata: None,
+        };
+
+        let mapped = map_audit_event(event).expect("event should map");
+        let json = clawdstrike_policy_event::ocsf::policy_event_to_ocsf(&mapped)
+            .expect("warn event should map to OCSF");
+        assert_eq!(json["action_id"], 1);
+        assert_eq!(json["disposition_id"], 17);
     }
 }

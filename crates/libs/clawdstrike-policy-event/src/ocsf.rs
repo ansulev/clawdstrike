@@ -168,8 +168,17 @@ pub fn guard_decision_to_ocsf(
     is_warn: bool,
 ) -> Option<serde_json::Value> {
     let time_ms = event.timestamp.timestamp_millis();
+    let event_classification = classify_event(event);
+    let action_classification = classify_action(action);
     let (action_str, resource_type, resource_name, resource_path, resource_host, resource_port) =
-        classify_action(action);
+        if event_classification.0 == "custom" && event_classification.2 == event.event_type.as_str()
+        {
+            // Fall back to mapped action classification only when the raw event
+            // path collapses to a generic custom marker.
+            action_classification
+        } else {
+            event_classification
+        };
 
     let agent_id =
         crate::event::extract_metadata_string(event.metadata.as_ref(), &["agentId", "agent_id"])
@@ -409,7 +418,7 @@ mod tests {
     #![allow(clippy::expect_used, clippy::unwrap_used)]
 
     use super::*;
-    use crate::event::{FileEventData, NetworkEventData};
+    use crate::event::{FileEventData, NetworkEventData, SecretEventData, ToolEventData};
     use chrono::Utc;
 
     #[test]
@@ -713,5 +722,83 @@ mod tests {
         assert_eq!(json["class_uid"], 2004);
         assert_eq!(json["action_id"], 2); // Denied
         assert_eq!(json["disposition_id"], 2); // Blocked
+    }
+
+    #[test]
+    fn guard_decision_uses_policy_event_data_for_secret_access_custom_action() {
+        let event = PolicyEvent {
+            event_id: "evt-secret".to_string(),
+            event_type: PolicyEventType::SecretAccess,
+            timestamp: Utc::now(),
+            session_id: None,
+            data: PolicyEventData::Secret(SecretEventData {
+                secret_name: "OPENAI_API_KEY".to_string(),
+                scope: "env".to_string(),
+            }),
+            metadata: None,
+            context: None,
+        };
+
+        let action = MappedGuardAction::Custom {
+            custom_type: "secret_access".to_string(),
+            data: serde_json::json!({
+                "type": "secret",
+                "secretName": "OPENAI_API_KEY",
+                "scope": "env"
+            }),
+        };
+
+        let json = guard_decision_to_ocsf(
+            &event,
+            &action,
+            false,
+            "SecretGuard",
+            "high",
+            "blocked",
+            false,
+        )
+        .unwrap();
+
+        assert_eq!(json["resources"][0]["type"], "configuration");
+        assert_eq!(json["resources"][0]["name"], "OPENAI_API_KEY");
+    }
+
+    #[test]
+    fn guard_decision_uses_policy_event_data_for_non_mcp_tool_custom_action() {
+        let event = PolicyEvent {
+            event_id: "evt-tool".to_string(),
+            event_type: PolicyEventType::ToolCall,
+            timestamp: Utc::now(),
+            session_id: None,
+            data: PolicyEventData::Tool(ToolEventData {
+                tool_name: "read_file".to_string(),
+                parameters: serde_json::json!({"path":"/tmp/demo.txt"}),
+            }),
+            metadata: Some(serde_json::json!({"toolKind":"native"})),
+            context: None,
+        };
+
+        let action = MappedGuardAction::Custom {
+            custom_type: "tool_call".to_string(),
+            data: serde_json::json!({
+                "type": "tool",
+                "toolName": "read_file",
+                "parameters": {"path":"/tmp/demo.txt"}
+            }),
+        };
+
+        let json = guard_decision_to_ocsf(
+            &event,
+            &action,
+            false,
+            "ToolGuard",
+            "high",
+            "blocked",
+            false,
+        )
+        .unwrap();
+
+        assert_eq!(json["resources"][0]["type"], "tool");
+        assert_eq!(json["resources"][0]["name"], "read_file");
     }
 }

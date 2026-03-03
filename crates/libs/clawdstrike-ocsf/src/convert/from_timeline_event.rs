@@ -3,8 +3,7 @@
 //! Dispatches based on the event kind/source to produce the correct OCSF class.
 
 use serde_json::Value;
-use std::collections::hash_map::DefaultHasher;
-use std::hash::{Hash, Hasher};
+use sha2::{Digest, Sha256};
 
 use crate::classes::detection_finding::DetectionFinding;
 use crate::classes::network_activity::NetworkActivity;
@@ -250,9 +249,10 @@ fn extract_receipt_uid(
         return format!("receipt-{event_id}");
     }
 
-    let mut hasher = DefaultHasher::new();
-    fact.to_string().hash(&mut hasher);
-    let fingerprint = hasher.finish();
+    let digest = Sha256::digest(fact.to_string().as_bytes());
+    let mut fp_bytes = [0_u8; 8];
+    fp_bytes.copy_from_slice(&digest[..8]);
+    let fingerprint = u64::from_be_bytes(fp_bytes);
     format!("receipt-{time_ms}-{guard_name}-{decision_label}-{fingerprint:016x}")
 }
 
@@ -609,6 +609,27 @@ mod tests {
     }
 
     #[test]
+    fn receipt_uid_fallback_is_deterministic() {
+        let fact = json!({
+            "decision": {
+                "allowed": false,
+                "guard": "ForbiddenPathGuard",
+                "severity": "high"
+            },
+            "eventType": "file_read",
+            "data": { "path": "/tmp/demo.txt" }
+        });
+
+        let uid1 = extract_receipt_uid(&fact, 1_709_366_400_000, "ForbiddenPathGuard", "deny");
+        let uid2 = extract_receipt_uid(&fact, 1_709_366_400_000, "ForbiddenPathGuard", "deny");
+        assert_eq!(uid1, uid2);
+        assert_eq!(
+            uid1,
+            "receipt-1709366400000-ForbiddenPathGuard-deny-aec44689e55c1079"
+        );
+    }
+
+    #[test]
     fn receipt_verdict_string_takes_precedence_over_decision() {
         let raw = json!({
             "fact": {
@@ -668,7 +689,10 @@ mod tests {
         if let TimelineOcsfEvent::Detection(df) = event {
             assert_eq!(df.action_id, 2); // Denied
             assert_eq!(df.finding_info.analytic.name, "DenyGuard");
-            assert_eq!(df.finding_info.desc.as_deref(), Some("DenyGuard decision=deny"));
+            assert_eq!(
+                df.finding_info.desc.as_deref(),
+                Some("DenyGuard decision=deny")
+            );
         } else {
             panic!("expected Detection");
         }

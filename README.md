@@ -135,7 +135,8 @@ flowchart LR
   <a href="#go"><kbd>Go</kbd></a>&nbsp;&nbsp;
   <a href="#cursor-plugin"><kbd>Cursor</kbd></a>&nbsp;&nbsp;
   <a href="#openclaw-plugin"><kbd>OpenClaw</kbd></a>&nbsp;&nbsp;
-  <a href="#claude-code-plugin"><kbd>Claude Code</kbd></a>
+  <a href="#claude-code-plugin"><kbd>Claude Code</kbd></a>&nbsp;&nbsp;
+  <a href="#observe-synth-tighten"><kbd>Observe -> Synth -> Tighten</kbd></a>
 </p>
 
 #### Install
@@ -482,6 +483,8 @@ cd clawdstrike
 ```
 
 The Cursor plugin includes 6 additional hooks beyond Claude Code (`beforeShellExecution`, `afterShellExecution`, `beforeMCPExecution`, `afterMCPExecution`, `beforeReadFile`, `afterFileEdit`) for granular security enforcement. See [`cursor-plugin/README.md`](cursor-plugin/README.md) for the full reference.
+
+<a id="observe-synth-tighten"></a>
 
 ### Observe -> Synth -> Tighten
 

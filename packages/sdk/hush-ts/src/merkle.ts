@@ -1,9 +1,10 @@
-import { getWasmModule } from "./crypto/backend";
+import { ensureWasmSync, getWasmModule } from "./crypto/backend";
 import { sha256, toHex, fromHex } from "./crypto/hash";
 
 function requireWasm() {
+  ensureWasmSync();
   const wasm = getWasmModule();
-  if (!wasm) throw new Error("WASM not initialized. Call initWasm() before using Merkle operations.");
+  if (!wasm) throw new Error("WASM backend unavailable for Merkle operations.");
   return wasm;
 }
 

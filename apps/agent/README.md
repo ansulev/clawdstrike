@@ -187,7 +187,7 @@ Release workflow secret:
 ## Operations Runbook
 
 - Full runbook: `docs/src/guides/agent-openclaw-operations.md`
-- Desktop scenario reference: `apps/desktop/docs/openclaw-gateway-testing.md`
+- Verification and smoke checks: `#verification` section in this README
 
 ## Troubleshooting
 

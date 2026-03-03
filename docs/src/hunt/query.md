@@ -2,6 +2,8 @@
 
 Query historical events from NATS JetStream (or local exported files in offline mode) with structured filters and optional natural-language hints.
 
+Prerequisite: live NATS/source data, or local exported envelopes with `--offline --local-dir`.
+
 ## Usage
 
 ```bash

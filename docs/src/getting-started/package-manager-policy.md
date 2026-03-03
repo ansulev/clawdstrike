@@ -4,9 +4,10 @@ This repository uses a deliberate split policy for JavaScript package managers.
 
 ## Default Policy
 
-1. `npm` is the default package manager for all packages under `packages/**` and for `apps/control-console`.
-2. `bun` is allowed for `apps/desktop` frontend workflows where Bun is already part of the toolchain.
-3. Rust and Python workflows remain managed by Cargo and pip/venv, not by npm or Bun wrappers.
+1. `npm` is the default package manager for workspace JavaScript packages under `packages/**` and `apps/control-console`.
+2. `bun` is used in Bun-managed app/plugin projects that already carry `bun.lockb` (`apps/terminal`, `clawdstrike-plugin`, `cursor-plugin`).
+3. `apps/agent` is Cargo-managed (Tauri Rust app); it does not use npm or Bun for primary build/test workflows.
+4. Rust and Python workflows remain managed by Cargo and pip/venv, not by npm or Bun wrappers.
 
 ## Lockfile Rules
 
@@ -28,4 +29,7 @@ This repository uses a deliberate split policy for JavaScript package managers.
 | `packages/adapters/**` | npm |
 | `packages/policy/**` | npm |
 | `apps/control-console` | npm |
-| `apps/desktop` | Bun for frontend scripts; Cargo for Tauri Rust crates |
+| `apps/terminal` | Bun |
+| `clawdstrike-plugin` | Bun |
+| `cursor-plugin` | Bun |
+| `apps/agent` | Cargo (Tauri Rust app) |

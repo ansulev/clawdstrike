@@ -93,83 +93,49 @@ clawdstrike policy validate candidate.yaml
 clawdstrike policy simulate candidate.yaml run.events.jsonl --fail-on-deny
 ```
 
-TypeScript automation (same loop via CLI):
+`PolicyLab` examples below require package versions that expose PolicyLab bindings.
+
+TypeScript SDK automation (real SDK calls, no subprocess wrapper):
 
 ```typescript
-import { execFileSync } from "node:child_process";
+import { readFileSync, writeFileSync } from "node:fs";
+import { PolicyLab } from "@clawdstrike/sdk";
 
-execFileSync(
-  "clawdstrike",
-  ["policy", "observe", "--out", "run.events.jsonl", "--", "/bin/sh", "-lc", "echo hello"],
-  { stdio: "inherit" },
-);
+const eventsJsonl = readFileSync("run.events.jsonl", "utf8");
 
-execFileSync(
-  "clawdstrike",
-  [
-    "policy",
-    "synth",
-    "run.events.jsonl",
-    "--extends",
-    "clawdstrike:default",
-    "--out",
-    "candidate.yaml",
-    "--risk-out",
-    "candidate.risks.md",
-  ],
-  { stdio: "inherit" },
-);
+const synth = await PolicyLab.synth(eventsJsonl);
+writeFileSync("candidate.yaml", synth.policyYaml);
+writeFileSync("candidate.risks.md", synth.risks.map((risk) => `- ${risk}`).join("\n") + "\n");
+writeFileSync("run.ocsf.jsonl", await PolicyLab.toOcsf(eventsJsonl));
 
-execFileSync("clawdstrike", ["policy", "validate", "candidate.yaml"], { stdio: "inherit" });
-execFileSync(
-  "clawdstrike",
-  ["policy", "simulate", "candidate.yaml", "run.events.jsonl", "--fail-on-deny"],
-  { stdio: "inherit" },
-);
+await PolicyLab.create(synth.policyYaml);
+console.log("candidate.yaml validated");
 ```
 
-Python automation (same loop via CLI):
+`PolicyLab.simulate()` is not available in TypeScript WASM. Use Python, Go, Rust, or CLI for replay simulation.
+
+Python SDK automation (real SDK calls, no subprocess wrapper):
 
 ```python
-import subprocess
+from pathlib import Path
+from clawdstrike import PolicyLab
 
-subprocess.run(
-    [
-        "clawdstrike",
-        "policy",
-        "observe",
-        "--out",
-        "run.events.jsonl",
-        "--ocsf-out",
-        "run.ocsf.jsonl",
-        "--",
-        "/bin/sh",
-        "-lc",
-        "echo hello",
-    ],
-    check=True,
-)
+events_jsonl = Path("run.events.jsonl").read_text(encoding="utf-8")
 
-subprocess.run(
-    [
-        "clawdstrike",
-        "policy",
-        "synth",
-        "run.events.jsonl",
-        "--extends",
-        "clawdstrike:default",
-        "--out",
-        "candidate.yaml",
-        "--risk-out",
-        "candidate.risks.md",
-    ],
-    check=True,
+synth = PolicyLab.synth(events_jsonl)
+policy_yaml = synth["policy_yaml"]
+Path("candidate.yaml").write_text(policy_yaml, encoding="utf-8")
+Path("candidate.risks.md").write_text(
+    "".join(f"- {risk}\n" for risk in synth["risks"]),
+    encoding="utf-8",
 )
-subprocess.run(["clawdstrike", "policy", "validate", "candidate.yaml"], check=True)
-subprocess.run(
-    ["clawdstrike", "policy", "simulate", "candidate.yaml", "run.events.jsonl", "--fail-on-deny"],
-    check=True,
-)
+Path("run.ocsf.jsonl").write_text(PolicyLab.to_ocsf(events_jsonl), encoding="utf-8")
+
+lab = PolicyLab(policy_yaml)  # validates policy structure
+simulation = lab.simulate(events_jsonl)
+blocked = simulation["summary"]["blocked"]
+if blocked > 0:
+    raise SystemExit(f"tightening needed: blocked={blocked}")
 ```
 
 For the full end-to-end flow (including hunt analysis and OCSF export), see [Observe -> Synth -> Tighten](../guides/observe-synth.md).

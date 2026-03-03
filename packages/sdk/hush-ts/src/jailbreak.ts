@@ -1,4 +1,4 @@
-import { getWasmModule } from "./crypto/backend.js";
+import { ensureWasmSync, getWasmModule } from "./crypto/backend.js";
 import { toSnakeCaseKeys } from "./case-convert.js";
 
 export type JailbreakSeverity = "safe" | "suspicious" | "likely" | "confirmed";
@@ -91,17 +91,18 @@ export interface JailbreakLinearModelConfig {
 
 /**
  * Jailbreak detector backed by Rust compiled to WASM.
- * Requires `initWasm()` before construction.
+ * WASM is loaded lazily on construction.
  */
 export class JailbreakDetector {
   // biome-ignore lint/suspicious/noExplicitAny: WasmJailbreakDetector is untyped
   private readonly inner: any;
 
   constructor(config?: JailbreakDetectorConfig) {
+    ensureWasmSync();
     const wasm = getWasmModule();
     if (!wasm?.WasmJailbreakDetector) {
       throw new Error(
-        "WASM not initialized. Call initWasm() before using JailbreakDetector.",
+        "WASM backend does not expose JailbreakDetector APIs.",
       );
     }
     // Only pass Rust-known config fields; strip JS-only and guard-level options.

@@ -31,7 +31,7 @@ You can also use a project-level policy by placing a `.hush/policy.yaml` file in
 
 ```bash
 # Build and run from source
-cd apps/desktop
+cd apps/agent
 cargo tauri dev
 
 # Or launch the installed application

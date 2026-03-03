@@ -4,6 +4,12 @@ This repository contains an OpenClaw plugin under `packages/adapters/clawdstrike
 
 For desktop + local agent runtime operations, see [Agent OpenClaw Operations](agent-openclaw-operations.md).
 
+## Prerequisites
+
+- OpenClaw CLI/runtime installed and working (`openclaw --help`).
+- A local project with `openclaw.json` plugin configuration access.
+- `clawdstrike` CLI available for policy validation checks.
+
 ## Enforcement boundaries (read this)
 
 The OpenClaw plugin enforces policy at the **tool boundary**. For the full integration contract (and what requires an OS sandbox/broker), see [Enforcement Tiers & Integration Contract](../concepts/enforcement-tiers.md).

@@ -2,7 +2,7 @@
  * WASM crypto backend.
  *
  * Wraps @clawdstrike/wasm (hush-core compiled to WebAssembly) into CryptoBackend.
- * Only loaded via dynamic import() in initWasm() — tree-shaken away otherwise.
+ * Loaded by the backend lazy-loader when WASM becomes available.
  */
 
 import type { CryptoBackend } from "./backend";

@@ -173,6 +173,8 @@ clawdstrike run --policy clawdstrike:strict -- python my_agent.py
 
 #### Hunt
 
+Requires hunt data sources. For cluster telemetry (`tetragon`, `hubble`) you need those pipelines running and indexed. For local-only workflows, use `--offline --local-dir <export-dir>`.
+
 ```bash
 # Scan local MCP configs/tooling for risky exposure
 clawdstrike hunt scan --target cursor --include-builtin
@@ -206,7 +208,6 @@ cargo tauri dev
 
 Prefer a packaged build? Download the latest release:
 [github.com/backbay-labs/clawdstrike/releases/latest](https://github.com/backbay-labs/clawdstrike/releases/latest)
-(current: `v0.1.3`).
 
 When running, the agent manages these local services:
 
@@ -441,6 +442,8 @@ func main() {
 
 Clawdstrike ships as a first-class [OpenClaw](https://openclaw.com) plugin that enforces policy at the tool boundary — every tool call your agent makes is checked against your policy before execution.
 
+Prerequisite: OpenClaw CLI/runtime installed and configured locally.
+
 ```bash
 openclaw plugins install @clawdstrike/openclaw
 openclaw plugins enable clawdstrike-security
@@ -503,90 +506,57 @@ clawdstrike policy simulate candidate.yaml run.events.jsonl --fail-on-deny
 clawdstrike hunt query --source receipt --verdict warn --start 24h --offline --local-dir .
 ```
 
-TypeScript automation (runs the same CLI loop from code):
+`PolicyLab` examples below require package builds that include PolicyLab bindings (`@clawdstrike/sdk` + `@clawdstrike/wasm` with PolicyLab exports, and Python `clawdstrike` native wheel support). If those versions are not yet on your registry mirror, install from a local checkout of this repository.
+
+TypeScript SDK automation (real SDK calls, no subprocess wrapper):
 
 ```typescript
-import { execFileSync } from "node:child_process";
+import { readFileSync, writeFileSync } from "node:fs";
+import { PolicyLab } from "@clawdstrike/sdk";
 
 // 1) Observe
-execFileSync(
-  "clawdstrike",
-  ["policy", "observe", "--out", "run.events.jsonl", "--", "/bin/sh", "-lc", "echo hello"],
-  { stdio: "inherit" },
-);
+// Create run.events.jsonl with `clawdstrike policy observe ...` (or hushd export).
+const eventsJsonl = readFileSync("run.events.jsonl", "utf8");
 
-// 2) Synthesize
-execFileSync(
-  "clawdstrike",
-  [
-    "policy",
-    "synth",
-    "run.events.jsonl",
-    "--extends",
-    "clawdstrike:default",
-    "--out",
-    "candidate.yaml",
-    "--risk-out",
-    "candidate.risks.md",
-  ],
-  { stdio: "inherit" },
-);
+// 2) Synthesize (+ optional OCSF export)
+const synth = await PolicyLab.synth(eventsJsonl);
+writeFileSync("candidate.yaml", synth.policyYaml);
+writeFileSync("candidate.risks.md", synth.risks.map((risk) => `- ${risk}`).join("\n") + "\n");
+writeFileSync("run.ocsf.jsonl", await PolicyLab.toOcsf(eventsJsonl));
 
-// 3) Tighten (validate + replay)
-execFileSync("clawdstrike", ["policy", "validate", "candidate.yaml"], { stdio: "inherit" });
-execFileSync(
-  "clawdstrike",
-  ["policy", "simulate", "candidate.yaml", "run.events.jsonl", "--fail-on-deny"],
-  { stdio: "inherit" },
-);
+// 3) Tighten (validate + then replay with Python/Go/Rust/CLI)
+await PolicyLab.create(synth.policyYaml);
+console.log("candidate.yaml validated");
 ```
 
-Python automation (runs the same CLI loop from code):
+`PolicyLab.simulate()` is not available in the TypeScript WASM build. For replay simulation, use Python, Go, Rust, or the CLI.
+
+Python SDK automation (real SDK calls, no subprocess wrapper):
 
 ```python
-import subprocess
+from pathlib import Path
+from clawdstrike import PolicyLab
 
 # 1) Observe
-subprocess.run(
-    [
-        "clawdstrike",
-        "policy",
-        "observe",
-        "--out",
-        "run.events.jsonl",
-        "--ocsf-out",
-        "run.ocsf.jsonl",
-        "--",
-        "/bin/sh",
-        "-lc",
-        "echo hello",
-    ],
-    check=True,
-)
+# Create run.events.jsonl with `clawdstrike policy observe ...` (or hushd export).
+events_jsonl = Path("run.events.jsonl").read_text(encoding="utf-8")
 
-# 2) Synthesize
-subprocess.run(
-    [
-        "clawdstrike",
-        "policy",
-        "synth",
-        "run.events.jsonl",
-        "--extends",
-        "clawdstrike:default",
-        "--out",
-        "candidate.yaml",
-        "--risk-out",
-        "candidate.risks.md",
-    ],
-    check=True,
+# 2) Synthesize (+ optional OCSF export)
+synth = PolicyLab.synth(events_jsonl)
+policy_yaml = synth["policy_yaml"]
+Path("candidate.yaml").write_text(policy_yaml, encoding="utf-8")
+Path("candidate.risks.md").write_text(
+    "".join(f"- {risk}\n" for risk in synth["risks"]),
+    encoding="utf-8",
 )
+Path("run.ocsf.jsonl").write_text(PolicyLab.to_ocsf(events_jsonl), encoding="utf-8")
 
 # 3) Tighten (validate + replay)
-subprocess.run(["clawdstrike", "policy", "validate", "candidate.yaml"], check=True)
-subprocess.run(
-    ["clawdstrike", "policy", "simulate", "candidate.yaml", "run.events.jsonl", "--fail-on-deny"],
-    check=True,
-)
+lab = PolicyLab(policy_yaml)  # validates policy structure
+simulation = lab.simulate(events_jsonl)
+blocked = simulation["summary"]["blocked"]
+if blocked > 0:
+    raise SystemExit(f"tightening needed: blocked={blocked}")
 ```
 
 See the full workflow in [`docs/src/guides/observe-synth.md`](docs/src/guides/observe-synth.md).
@@ -1011,7 +981,7 @@ See draft specs: [Certification & Compliance Specs](docs/plans/certification/REA
 | **Framework Guides** | [OpenAI](packages/adapters/clawdstrike-openai/README.md) &middot; [Claude](packages/adapters/clawdstrike-claude/README.md) &middot; [Vercel AI](docs/src/guides/vercel-ai-integration.md) &middot; [LangChain](docs/src/guides/langchain-integration.md) &middot; [OpenClaw](docs/src/guides/openclaw-integration.md) |
 | **Reference**        | [Guards](docs/src/reference/guards/README.md) &middot; [Policy Schema](docs/src/reference/policy-schema.md) &middot; [Repo Map](docs/REPO_MAP.md)                                                                                                                                                                     |
 | **Enterprise**       | [Enrollment Guide](docs/src/guides/enterprise-enrollment.md) &middot; [Adaptive Deployment](docs/src/guides/adaptive-deployment.md) &middot; [Adaptive Architecture](docs/src/concepts/adaptive-architecture.md)                                                                                                      |
-| **Operations**       | [OpenClaw Runbook](docs/src/guides/agent-openclaw-operations.md) &middot; [CUA Gateway Testing](apps/desktop/docs/openclaw-gateway-testing.md) &middot; [CUA Roadmap](docs/roadmaps/cua/INDEX.md)                                                                                                                     |
+| **Operations**       | [OpenClaw Runbook](docs/src/guides/agent-openclaw-operations.md) &middot; [Agent Verification](apps/agent/README.md#verification) &middot; [CUA Roadmap](docs/roadmaps/cua/INDEX.md)                                                                                                                               |
 
 ## Security
 

@@ -1,4 +1,4 @@
-import { getWasmModule } from "../crypto/backend.js";
+import { ensureWasmSync, getWasmModule } from "../crypto/backend.js";
 import { Guard, GuardAction, GuardContext, GuardResult, Severity } from "./types";
 
 export type PromptInjectionLevel = "safe" | "suspicious" | "high" | "critical";
@@ -60,10 +60,11 @@ export class PromptInjectionGuard implements Guard {
         ? Number(config.max_scan_bytes)
         : 200_000;
 
+    ensureWasmSync();
     const wasm = getWasmModule();
     if (!wasm?.detect_prompt_injection) {
       throw new Error(
-        "WASM not initialized. Call initWasm() before using PromptInjectionGuard.",
+        "WASM backend does not expose prompt-injection APIs.",
       );
     }
   }

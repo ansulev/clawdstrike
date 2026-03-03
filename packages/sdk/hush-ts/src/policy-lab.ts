@@ -1,4 +1,4 @@
-import { getWasmModule } from "./crypto/backend.js";
+import { ensureWasm, getWasmModule } from "./crypto/backend.js";
 
 export interface SynthResult {
   policyYaml: string;
@@ -32,20 +32,41 @@ export interface SimulateResult {
 /**
  * PolicyLab: unified observe -> hunt -> OCSF -> synth pipeline.
  * Backed by Rust compiled to WASM.
- * Requires `initWasm()` before construction.
+ * WASM is initialized lazily on first use.
  */
 export class PolicyLab {
   // biome-ignore lint/suspicious/noExplicitAny: WasmPolicyLab is untyped
   private readonly inner: any;
 
-  constructor(policyYaml: string) {
+  // biome-ignore lint/suspicious/noExplicitAny: WasmPolicyLab is untyped
+  private constructor(inner: any) {
+    this.inner = inner;
+  }
+
+  // biome-ignore lint/suspicious/noExplicitAny: WASM module shape is dynamic
+  private static async getWasmModule(): Promise<any> {
+    await ensureWasm();
     const wasm = getWasmModule();
-    if (!wasm?.WasmPolicyLab) {
+    if (
+      !wasm?.WasmPolicyLab ||
+      !wasm?.policy_lab_synth ||
+      !wasm?.policy_lab_to_ocsf ||
+      !wasm?.policy_lab_to_timeline
+    ) {
       throw new Error(
-        "WASM not initialized. Call initWasm() before using PolicyLab.",
+        "Installed @clawdstrike/wasm does not expose PolicyLab APIs. " +
+          "Upgrade @clawdstrike/wasm to a version with PolicyLab support.",
       );
     }
-    this.inner = new wasm.WasmPolicyLab(policyYaml);
+    return wasm;
+  }
+
+  /**
+   * Create a PolicyLab handle from policy YAML.
+   */
+  static async create(policyYaml: string): Promise<PolicyLab> {
+    const wasm = await PolicyLab.getWasmModule();
+    return new PolicyLab(new wasm.WasmPolicyLab(policyYaml));
   }
 
   /**
@@ -66,36 +87,21 @@ export class PolicyLab {
   }
 
   /** Synthesize a candidate policy from observed events. */
-  static synth(eventsJsonl: string): SynthResult {
-    const wasm = getWasmModule();
-    if (!wasm?.policy_lab_synth) {
-      throw new Error(
-        "WASM not initialized. Call initWasm() before using PolicyLab.",
-      );
-    }
+  static async synth(eventsJsonl: string): Promise<SynthResult> {
+    const wasm = await PolicyLab.getWasmModule();
     const json: string = wasm.policy_lab_synth(eventsJsonl);
     return JSON.parse(json) as SynthResult;
   }
 
   /** Convert PolicyEvent JSONL to OCSF JSONL. */
-  static toOcsf(eventsJsonl: string): string {
-    const wasm = getWasmModule();
-    if (!wasm?.policy_lab_to_ocsf) {
-      throw new Error(
-        "WASM not initialized. Call initWasm() before using PolicyLab.",
-      );
-    }
+  static async toOcsf(eventsJsonl: string): Promise<string> {
+    const wasm = await PolicyLab.getWasmModule();
     return wasm.policy_lab_to_ocsf(eventsJsonl);
   }
 
   /** Convert PolicyEvent JSONL to TimelineEvent JSONL. */
-  static toTimeline(eventsJsonl: string): string {
-    const wasm = getWasmModule();
-    if (!wasm?.policy_lab_to_timeline) {
-      throw new Error(
-        "WASM not initialized. Call initWasm() before using PolicyLab.",
-      );
-    }
+  static async toTimeline(eventsJsonl: string): Promise<string> {
+    const wasm = await PolicyLab.getWasmModule();
     return wasm.policy_lab_to_timeline(eventsJsonl);
   }
 }

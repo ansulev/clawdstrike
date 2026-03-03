@@ -4,6 +4,12 @@ Build least-privilege agent policies from real activity — not guesswork.
 
 This guide walks through the full loop: capture what your agent actually does, query and analyze it with the unified PolicyEvent pipeline, export to OCSF for SIEM integration, synthesize a candidate policy, simulate it, and tighten it down to exactly what's needed.
 
+## Prerequisites
+
+- `clawdstrike` CLI installed from this branch or a compatible release.
+- For `clawdstrike hunt` cross-source examples (`tetragon`, `hubble`): those sources must be available and indexed.
+- For `--hushd-url` observation mode: a running hushd daemon and valid session ID.
+
 ## 1. Observe activity
 
 Run your agent under observation to capture every action it takes.
@@ -31,14 +37,16 @@ Run your agent through its real workload. The more representative the observatio
 
 PolicyEvents bridge directly to hunt-query `TimelineEvent`s, so you can query, correlate, and understand what happened using the same timeline tools that work with Tetragon and Hubble sources.
 
+If you do not have live telemetry sources available, run hunt commands with `--offline --local-dir <dir>` against local exports.
+
 ### Timeline view
 
 See everything chronologically — process activity from Tetragon, network flows from Hubble, and guard decisions from receipts, merged into one timeline:
 
 ```bash
-hush hunt timeline \
+clawdstrike hunt timeline \
   --source receipt,tetragon,hubble \
-  --since 1h \
+  --start 1h \
   --entity my-agent-pod
 ```
 
@@ -48,13 +56,13 @@ Filter to specific patterns:
 
 ```bash
 # All denied guard decisions in the last hour
-hush hunt query --verdict deny --since 1h
+clawdstrike hunt query --verdict deny --start 1h
 
 # Network egress from a specific pod
-hush hunt query --source hubble --action-type egress --pod my-agent
+clawdstrike hunt query --source hubble --action-type egress --pod my-agent
 
 # Shell commands that were blocked
-hush hunt query --source receipt --action-type shell --verdict deny
+clawdstrike hunt query --source receipt --action-type shell --verdict deny
 ```
 
 The PolicyEvent-to-TimelineEvent bridge maps each event type to the correct `action_type`:
@@ -133,11 +141,16 @@ If `--fail-on-deny` exits non-zero, your synthesized policy is too tight for the
 
 ## 6. SDK usage
 
-You can automate this workflow from code in every supported language. Rust exposes a native `PolicyLabHandle`, and TypeScript/Python can orchestrate the CLI loop directly.
+You can automate this workflow from code in every supported language via `PolicyLab`.
+
+`PolicyLab` requires package builds that include PolicyLab bindings:
+- TypeScript: `@clawdstrike/sdk` with compatible `@clawdstrike/wasm` exports.
+- Python: `clawdstrike` wheel with bundled native extension support.
+If your package registry has not published those versions yet, install from a local checkout of this repository.
 
 ### Rust
 
-```rust
+```rust,ignore
 use clawdstrike_policy_event::facade::PolicyLabHandle;
 
 // Synthesize a policy from observed events
@@ -159,87 +172,51 @@ let timeline_jsonl = PolicyLabHandle::to_timeline(events_jsonl)?;
 ### TypeScript
 
 ```typescript
-import { execFileSync } from "node:child_process";
+import { readFileSync, writeFileSync } from "node:fs";
+import { PolicyLab } from "@clawdstrike/sdk";
 
 // Observe
-execFileSync(
-  "clawdstrike",
-  ["policy", "observe", "--out", "run.events.jsonl", "--", "/bin/sh", "-lc", "echo hello"],
-  { stdio: "inherit" },
-);
+// Create run.events.jsonl with `clawdstrike policy observe ...` (or hushd export).
+const eventsJsonl = readFileSync("run.events.jsonl", "utf8");
 
-// Synthesize
-execFileSync(
-  "clawdstrike",
-  [
-    "policy",
-    "synth",
-    "run.events.jsonl",
-    "--extends",
-    "clawdstrike:default",
-    "--out",
-    "candidate.yaml",
-    "--risk-out",
-    "candidate.risks.md",
-  ],
-  { stdio: "inherit" },
-);
+// Synthesize + optional OCSF export
+const synth = await PolicyLab.synth(eventsJsonl);
+writeFileSync("candidate.yaml", synth.policyYaml);
+writeFileSync("candidate.risks.md", synth.risks.map((risk) => `- ${risk}`).join("\n") + "\n");
+writeFileSync("run.ocsf.jsonl", await PolicyLab.toOcsf(eventsJsonl));
 
-// Tighten (validate + replay)
-execFileSync("clawdstrike", ["policy", "validate", "candidate.yaml"], { stdio: "inherit" });
-execFileSync(
-  "clawdstrike",
-  ["policy", "simulate", "candidate.yaml", "run.events.jsonl", "--fail-on-deny"],
-  { stdio: "inherit" },
-);
+// Tighten (policy parse validation)
+await PolicyLab.create(synth.policyYaml);
 ```
+
+`PolicyLab.simulate()` is not available in the TypeScript WASM build. Use Python, Go, Rust, or CLI for replay simulation.
 
 ### Python
 
 ```python
-import subprocess
+from pathlib import Path
+from clawdstrike import PolicyLab
 
 # Observe
-subprocess.run(
-    [
-        "clawdstrike",
-        "policy",
-        "observe",
-        "--out",
-        "run.events.jsonl",
-        "--ocsf-out",
-        "run.ocsf.jsonl",
-        "--",
-        "/bin/sh",
-        "-lc",
-        "echo hello",
-    ],
-    check=True,
-)
+# Create run.events.jsonl with `clawdstrike policy observe ...` (or hushd export).
+events_jsonl = Path("run.events.jsonl").read_text(encoding="utf-8")
 
-# Synthesize
-subprocess.run(
-    [
-        "clawdstrike",
-        "policy",
-        "synth",
-        "run.events.jsonl",
-        "--extends",
-        "clawdstrike:default",
-        "--out",
-        "candidate.yaml",
-        "--risk-out",
-        "candidate.risks.md",
-    ],
-    check=True,
+# Synthesize + optional OCSF export
+synth = PolicyLab.synth(events_jsonl)
+policy_yaml = synth["policy_yaml"]
+Path("candidate.yaml").write_text(policy_yaml, encoding="utf-8")
+Path("candidate.risks.md").write_text(
+    "".join(f"- {risk}\n" for risk in synth["risks"]),
+    encoding="utf-8",
 )
+Path("run.ocsf.jsonl").write_text(PolicyLab.to_ocsf(events_jsonl), encoding="utf-8")
 
 # Tighten (validate + replay)
-subprocess.run(["clawdstrike", "policy", "validate", "candidate.yaml"], check=True)
-subprocess.run(
-    ["clawdstrike", "policy", "simulate", "candidate.yaml", "run.events.jsonl", "--fail-on-deny"],
-    check=True,
-)
+lab = PolicyLab(policy_yaml)  # validates policy structure
+simulation = lab.simulate(events_jsonl)
+blocked = simulation["summary"]["blocked"]
+if blocked > 0:
+    raise SystemExit(f"tightening needed: blocked={blocked}")
 ```
 
 ## 7. Tighten
@@ -258,13 +235,13 @@ Use hunt queries to inform each decision:
 
 ```bash
 # What files did the agent actually touch?
-hush hunt query --source receipt --action-type file --verdict allow --since 24h
+clawdstrike hunt query --source receipt --action-type file --verdict allow --start 24h
 
 # What egress destinations were used?
-hush hunt query --source hubble --action-type egress --verdict forwarded --since 24h
+clawdstrike hunt query --source hubble --action-type egress --verdict forwarded --start 24h
 
 # Were there any warns that should become denies?
-hush hunt query --verdict warn --since 24h
+clawdstrike hunt query --verdict warn --start 24h
 ```
 
 Warnings are particularly useful — they represent actions that were allowed but flagged. Review each one: if the action is expected, leave it allowed. If it's not, tighten the policy to deny it.
@@ -278,7 +255,7 @@ The full loop for a new agent:
 clawdstrike policy observe --out run.events.jsonl -- my-agent --task "process invoices"
 
 # 2. Look at what happened
-hush hunt timeline --offline --local-dir . --source receipt
+clawdstrike hunt timeline --offline --local-dir . --source receipt
 
 # 3. Synthesize
 clawdstrike policy synth run.events.jsonl \

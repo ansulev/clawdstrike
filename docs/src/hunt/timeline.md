@@ -4,6 +4,8 @@ Render query results as a merged chronological timeline.
 
 `hunt timeline` uses the same query/filter pipeline as `hunt query`, then sorts and prints events in timeline format.
 
+Prerequisite: live NATS/source data, or local exported envelopes with `--offline --local-dir`.
+
 ## Usage
 
 ```bash

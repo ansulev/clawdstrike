@@ -1,6 +1,6 @@
 # Implementation Roadmap
 
-**Last updated:** 2026-02-27
+**Last updated:** 2026-03-03
 **Status:** Living document
 
 ---
@@ -14,7 +14,7 @@ Clawdstrike is a fail-closed policy engine and cryptographic attestation runtime
 | Component | Crate | Status |
 |-----------|-------|--------|
 | Cryptographic primitives (Ed25519, SHA-256, Keccak-256, Merkle trees, RFC 8785 canonical JSON) | `hush-core` | Stable |
-| Policy engine, guard pipeline, receipt signing | `clawdstrike` | Stable (v0.1.3) |
+| Policy engine, guard pipeline, receipt signing | `clawdstrike` | Stable |
 | Signed envelopes, checkpoints, NATS transport, Merkle proofs | `spine` | Stable |
 | CLI binary (`clawdstrike`, `hush` commands) | `hush-cli` | Stable |
 | Spine protocol CLI tools | `spine-cli` | Stable |
@@ -62,7 +62,7 @@ Clawdstrike is a fail-closed policy engine and cryptographic attestation runtime
 | Platform | Package | Status |
 |----------|---------|--------|
 | TypeScript SDK | `@clawdstrike/sdk` (200+ exports) | Stable |
-| Python SDK | `clawdstrike` (v0.2.0 with native backend) | Stable |
+| Python SDK | `clawdstrike` (native backend on supported platforms) | Stable |
 | Canonical policy engine (TS) | `@clawdstrike/policy` | Stable |
 | Adapter core interface | `@clawdstrike/adapter-core` | Stable |
 | OpenAI Agents SDK adapter | `@clawdstrike/openai` | Stable |
@@ -498,7 +498,7 @@ Centralized enforcement server for environments where embedding the engine in ev
 
 **Status:** Experimental
 **Crate:** `crates/services/eas-anchor`
-**Spec:** [docs/specs/13-eas-onchain-anchoring.md](../specs/13-eas-onchain-anchoring.md)
+**Spec:** [docs/specs/13-eas-onchain-anchoring.md](https://github.com/backbay-labs/clawdstrike/blob/main/docs/specs/13-eas-onchain-anchoring.md)
 
 Anchor Spine Merkle roots to Ethereum Attestation Service on Base L2, creating an immutable public timeline of attestation checkpoints.
 
@@ -538,7 +538,7 @@ Hierarchical threat screening adapted as a tool-boundary guard. Fast-path cosine
 ### Adaptive Security Decision Runtime (SDR)
 
 **Status:** Shipped
-**Spec:** [docs/specs/15-adaptive-sdr-architecture.md](../specs/15-adaptive-sdr-architecture.md)
+**Spec:** [docs/specs/15-adaptive-sdr-architecture.md](https://github.com/backbay-labs/clawdstrike/blob/main/docs/specs/15-adaptive-sdr-architecture.md)
 
 Automatic mode transition between standalone, connected, and degraded enforcement modes. Agents are never unprotected regardless of network conditions.
 
@@ -629,7 +629,7 @@ The roadmap is open. If you want to work on any of these initiatives:
 1. Check the [GitHub issues](https://github.com/backbay-labs/clawdstrike/issues) for existing tracking issues tagged with `roadmap`
 2. Comment on the relevant issue to signal interest
 3. For new guard contributions, start with the [Custom Guards guide](guides/custom-guards.md)
-4. For policy pack contributions, see the [Certification Program overview](../plans/certification/overview.md)
+4. For policy pack contributions, see the [Certification Program overview](https://github.com/backbay-labs/clawdstrike/blob/main/docs/plans/certification/overview.md)
 5. Join the [Discord](https://discord.gg/clawdstrike) `#contributors` channel
 
 **Every contribution that touches the guard pipeline must include:**

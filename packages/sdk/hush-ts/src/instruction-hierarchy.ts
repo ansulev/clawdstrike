@@ -4,7 +4,7 @@
  * Delegates to the WASM module for all detection and enforcement logic.
  */
 
-import { getWasmModule } from "./crypto/backend.js";
+import { ensureWasmSync, getWasmModule } from "./crypto/backend.js";
 import { toSnakeCaseKeys } from "./case-convert.js";
 
 export enum InstructionLevel {
@@ -118,10 +118,11 @@ export class InstructionHierarchyEnforcer {
   private inner: any;
 
   constructor(config?: HierarchyEnforcerConfig) {
+    ensureWasmSync();
     const wasm = getWasmModule();
     if (!wasm?.WasmInstructionHierarchyEnforcer) {
       throw new Error(
-        "WASM not initialized. Call initWasm() before using InstructionHierarchyEnforcer.",
+        "WASM backend does not expose InstructionHierarchyEnforcer APIs.",
       );
     }
     this.inner = new wasm.WasmInstructionHierarchyEnforcer(

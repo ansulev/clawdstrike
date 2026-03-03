@@ -1,128 +1,90 @@
 # Marketplace Feed (Signed, IPFS-hostable)
 
-The desktop Marketplace consumes a **signed JSON feed** that lists **signed policy bundles**.
-Transport is untrusted: the feed and bundles can be hosted on HTTPS, mirrored anywhere, or served via IPFS gateways.
-Clients **verify signatures** before displaying/installing anything.
+Clawdstrike defines signed feed and bundle formats for policy distribution over untrusted transport.
+Feeds and bundles can be hosted on HTTPS, mirrored, or published over IPFS. Consumers must verify signatures before accepting content.
+
+## Prerequisites
+
+- `clawdstrike` CLI available locally (`clawdstrike --help`) or runnable from this repo.
+- `openssl` for curator key generation.
+- Optional: `ipfs` CLI daemon/access for IPFS publishing examples.
+- A consuming client/service with a trusted curator public-key allowlist.
 
 ## Files and signatures
 
-- **Feed:** `SignedMarketplaceFeed` JSON (signed by a curator key)
-- **Bundle:** `SignedPolicyBundle` JSON (signed by the bundle publisher; embedded `public_key` is required for verification)
+- **Feed:** `SignedMarketplaceFeed` JSON signed by a curator key.
+- **Bundle:** `SignedPolicyBundle` JSON signed by the bundle publisher (`public_key` embedded for verification).
 
-The desktop app only accepts feeds signed by **trusted curator public keys** compiled into the app.
-To add a new curator, update `apps/desktop/src-tauri/src/commands/marketplace.rs`.
+Recommended verification order for consumers:
 
-## Generate bundles
+1. Verify feed signature against a trusted curator key.
+2. Verify each referenced bundle signature.
+3. Apply local policy on provenance/revocations before install.
 
-Create a signing key (32-byte hex seed) and build signed bundle JSON files:
+## Generate signed bundles
+
+Create a working directory and build signed bundles:
 
 ```bash
+mkdir -p ./marketplace/bundles
 openssl rand -hex 32 > curator.key
 
-# Example: bundle a ruleset/policy into a SignedPolicyBundle JSON.
 clawdstrike policy bundle build rulesets/default.yaml \
   --resolve \
   --key curator.key \
-  --output apps/desktop/src-tauri/resources/marketplace/bundles/default.signed_bundle.json \
+  --output ./marketplace/bundles/default.signed_bundle.json \
   --embed-pubkey
 ```
 
-Repeat for other policies/rulesets (each output must end with `.signed_bundle.json` for the generator script).
+Repeat for additional policies/rulesets. Bundle files should end with `.signed_bundle.json`.
 
-## Publish bundles on IPFS (optional)
+## Generate and sign a feed
 
-If you want bundle URIs to be `ipfs://…`, publish the bundles directory and capture the directory CID:
-
-```bash
-ipfs add -r apps/desktop/src-tauri/resources/marketplace/bundles
-```
-
-Use the final CID printed for the directory (e.g. `ipfs://<BUNDLES_CID>/default.signed_bundle.json`).
-
-## Generate + sign the feed
-
-The feed generator expects the signing key via `MARKETPLACE_FEED_SIGNING_KEY` (hex seed):
+Set the feed signing key and run the helper script:
 
 ```bash
 export MARKETPLACE_FEED_SIGNING_KEY="$(cat curator.key)"
 
-# Builtin URIs:
-tools/scripts/build-marketplace-feed --seq 1
-
-# OR: IPFS bundle URIs (directory CID):
-tools/scripts/build-marketplace-feed --seq 1 --bundle-uri-prefix "ipfs://<BUNDLES_CID>/"
+tools/scripts/build-marketplace-feed \
+  --bundles-dir ./marketplace/bundles \
+  --output ./marketplace/feed.signed.json \
+  --seq 1
 ```
 
-This writes `apps/desktop/src-tauri/resources/marketplace/feed.signed.json` by default.
-
-## Publish the feed on IPFS
+To emit IPFS bundle URIs:
 
 ```bash
-ipfs add apps/desktop/src-tauri/resources/marketplace/feed.signed.json
+tools/scripts/build-marketplace-feed \
+  --bundles-dir ./marketplace/bundles \
+  --output ./marketplace/feed.signed.json \
+  --seq 1 \
+  --bundle-uri-prefix "ipfs://<BUNDLES_CID>/"
 ```
 
-In the desktop app, go to **Settings → Marketplace** and add the resulting CID as a source:
+## Publish on IPFS (optional)
 
-- `ipfs://<FEED_CID>`
+```bash
+ipfs add -r ./marketplace/bundles
+ipfs add ./marketplace/feed.signed.json
+```
 
-You can also add HTTPS mirrors (one per line). The client will try sources in order and only accept a feed that
-verifies against a trusted curator key.
-
-## P2P discovery (optional)
-
-The desktop app can optionally run a low-trust P2P discovery loop to learn about new feed URIs from nearby peers.
-Peers gossip messages like `ipfs://<CID>` over libp2p gossipsub.
-
-- Enable it in **Settings → Marketplace Discovery (P2P)**.
-- By default it uses **mDNS** to find peers on the local network.
-- You can also configure **bootstrap peers** (multiaddrs) for discovery beyond the LAN.
-
-Discovery is only a transport hint. The Marketplace still:
-
-1. downloads the feed from the announced URI
-2. verifies the feed signature against trusted curator keys
-3. verifies each bundle signature before display/install
-
-If you want to test announcements manually, use the **“Announce feed URI”** field in Settings.
+Use the resulting feed URI (`ipfs://<FEED_CID>`) in your consuming service or client.
 
 ## Provenance / attestations (optional)
 
-You can attach provenance pointers to feed entries (for example, an EAS attestation UID) and let the desktop app
-verify them through a notary service.
-
-### Feed entry fields
-
-Marketplace entries may include:
+Feed entries may include provenance pointers (for example an EAS attestation UID):
 
 ```json
 {
   "provenance": {
-    "attestation_uid": "0x…",
+    "attestation_uid": "0x...",
     "notary_url": "https://notary.example.com"
   }
 }
 ```
 
-The `provenance` object is covered by the **feed signature**, so clients will only trust what a curator publishes.
-
-### Notary verification
-
-The desktop app calls the notary over HTTPS (localhost HTTP is allowed in debug builds) using:
+The provenance object is covered by the feed signature. Consumers can optionally call a notary endpoint:
 
 - `GET {notary_url}/verify/{attestation_uid}`
 
-and expects a JSON response that includes at least:
-
-```json
-{ "valid": true }
-```
-
-Additional fields like `attester` and `attestedAt` are displayed when present.
-
-### UI behavior
-
-- Configure a default notary + trusted attesters in **Settings → Marketplace Provenance (Notary)**.
-- In Marketplace, enable **“Verified only”** to filter to policies with a valid attestation (and, if configured, a
-  trusted `attester`).
-
-This is a reputation/provenance layer only; installation security still depends on bundle signatures.
+and enforce local trust policy on `valid`, `attester`, and timestamp fields.

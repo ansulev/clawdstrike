@@ -49,9 +49,9 @@ cs = Clawdstrike.from_policy("policy.yaml")
 
 # From YAML string
 cs = Clawdstrike.from_policy('''
-version: "1.1.0"
+version: "1.2.0"
 name: my-policy
-extends: strict
+extends: clawdstrike:strict
 guards:
   egress_allowlist:
     allow:

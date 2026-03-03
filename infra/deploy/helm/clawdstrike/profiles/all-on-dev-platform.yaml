@@ -13,7 +13,7 @@ namespace:
 
 spine:
   image:
-    tag: "spine-checkpointer-e90e1b9962cc0f01f6f20336828f62e12526c00e"
+    tag: "spine-checkpointer-4ee92efb5cd11b854b4143bb6e50b0853733ffe1"
   checkpointer:
     logSeedHex: "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"
     streamReplicas: 1
@@ -22,7 +22,7 @@ spine:
 
 hushd:
   image:
-    tag: "e90e1b9962cc0f01f6f20336828f62e12526c00e"
+    tag: "cb901cd22c52ae9465131df19dcac1553cf793af"
   auth:
     enabled: false
   persistence:

@@ -54,8 +54,9 @@ pub fn timeline_event_to_ocsf(input: &TimelineEventInput<'_>) -> Option<Timeline
         }
         "receipt" => {
             // Guard receipts become Detection Findings.
-            let fact = input.raw.get("fact").unwrap_or(input.raw);
-            receipt_to_detection_finding(fact, input.time_ms, input.product_version)
+            let envelope = input.raw;
+            let fact = envelope.get("fact").unwrap_or(envelope);
+            receipt_to_detection_finding(envelope, fact, input.time_ms, input.product_version)
                 .map(TimelineOcsfEvent::Detection)
         }
         _ => None,
@@ -63,21 +64,22 @@ pub fn timeline_event_to_ocsf(input: &TimelineEventInput<'_>) -> Option<Timeline
 }
 
 fn receipt_to_detection_finding(
+    envelope: &Value,
     fact: &Value,
     time_ms: i64,
     product_version: &str,
 ) -> Option<DetectionFinding> {
-    let (decision_kind, decision_label) = extract_receipt_decision(fact)?;
+    let (decision_kind, decision_label) = extract_receipt_decision(envelope, fact)?;
     let is_warn = matches!(decision_kind, ReceiptDecisionKind::Warn);
     let allowed = matches!(
         decision_kind,
         ReceiptDecisionKind::Allow | ReceiptDecisionKind::Warn
     );
-    let guard_name = extract_receipt_guard_name(fact).unwrap_or("unknown");
+    let guard_name = extract_receipt_guard_name(envelope, fact).unwrap_or("unknown");
     let severity_str = extract_receipt_severity(fact).unwrap_or_else(|| "info".to_string());
     let action_type = extract_receipt_action_type(fact).unwrap_or("unknown");
     let resource_name = extract_receipt_target(fact);
-    let event_uid = extract_receipt_uid(fact, time_ms, guard_name, &decision_label);
+    let event_uid = extract_receipt_uid(envelope, fact, time_ms, guard_name, &decision_label);
 
     use crate::convert::from_guard_result::{guard_result_to_detection_finding, GuardResultInput};
 
@@ -97,11 +99,20 @@ fn receipt_to_detection_finding(
     Some(guard_result_to_detection_finding(&input))
 }
 
-fn extract_receipt_decision(fact: &Value) -> Option<(ReceiptDecisionKind, String)> {
+fn extract_receipt_decision(
+    envelope: &Value,
+    fact: &Value,
+) -> Option<(ReceiptDecisionKind, String)> {
     if let Some(parsed) = parse_receipt_decision_string(fact.get("verdict")) {
         return Some(parsed);
     }
     if let Some(parsed) = parse_receipt_decision_string(fact.get("decision")) {
+        return Some(parsed);
+    }
+    if let Some(parsed) = parse_receipt_decision_string(envelope.get("verdict")) {
+        return Some(parsed);
+    }
+    if let Some(parsed) = parse_receipt_decision_string(envelope.get("decision")) {
         return Some(parsed);
     }
     if let Some(metadata) = fact.get("metadata").and_then(|v| v.as_object()) {
@@ -112,8 +123,17 @@ fn extract_receipt_decision(fact: &Value) -> Option<(ReceiptDecisionKind, String
             return Some(parsed);
         }
     }
+    if let Some(metadata) = envelope.get("metadata").and_then(|v| v.as_object()) {
+        if let Some(parsed) = parse_receipt_decision_string(metadata.get("verdict")) {
+            return Some(parsed);
+        }
+        if let Some(parsed) = parse_receipt_decision_string(metadata.get("decision")) {
+            return Some(parsed);
+        }
+    }
 
-    let decision_obj = decision_object_from_fact(fact)?;
+    let decision_obj =
+        decision_object_from_fact(fact).or_else(|| decision_object_from_fact(envelope))?;
     let allowed = decision_object_allowed(decision_obj);
     if allowed == Some(false) {
         return Some((ReceiptDecisionKind::Deny, "deny".to_string()));
@@ -155,12 +175,20 @@ fn parse_receipt_decision(decision: &str) -> ReceiptDecisionKind {
     }
 }
 
-fn extract_receipt_guard_name(fact: &Value) -> Option<&str> {
-    fact.get("guard").and_then(|v| v.as_str()).or_else(|| {
-        decision_object_from_fact(fact)?
-            .get("guard")
-            .and_then(|v| v.as_str())
-    })
+fn extract_receipt_guard_name<'a>(envelope: &'a Value, fact: &'a Value) -> Option<&'a str> {
+    fact.get("guard")
+        .and_then(|v| v.as_str())
+        .or_else(|| envelope.get("guard").and_then(|v| v.as_str()))
+        .or_else(|| {
+            decision_object_from_fact(fact)?
+                .get("guard")
+                .and_then(|v| v.as_str())
+        })
+        .or_else(|| {
+            decision_object_from_fact(envelope)?
+                .get("guard")
+                .and_then(|v| v.as_str())
+        })
 }
 
 fn extract_receipt_severity(fact: &Value) -> Option<String> {
@@ -238,6 +266,7 @@ fn extract_receipt_target(fact: &Value) -> Option<&str> {
 }
 
 fn extract_receipt_uid(
+    envelope: &Value,
     fact: &Value,
     time_ms: i64,
     guard_name: &str,
@@ -251,6 +280,12 @@ fn extract_receipt_uid(
         .or_else(|| fact.get("event_id").and_then(|v| v.as_str()))
         .or_else(|| fact.get("id").and_then(|v| v.as_str()))
         .or_else(|| fact.get("uid").and_then(|v| v.as_str()))
+        .or_else(|| envelope.get("receipt_id").and_then(|v| v.as_str()))
+        .or_else(|| envelope.get("receiptId").and_then(|v| v.as_str()))
+        .or_else(|| envelope.get("eventId").and_then(|v| v.as_str()))
+        .or_else(|| envelope.get("event_id").and_then(|v| v.as_str()))
+        .or_else(|| envelope.get("id").and_then(|v| v.as_str()))
+        .or_else(|| envelope.get("uid").and_then(|v| v.as_str()))
     {
         return format!("receipt-{event_id}");
     }
@@ -672,8 +707,20 @@ mod tests {
             "data": { "path": "/tmp/demo.txt" }
         });
 
-        let uid1 = extract_receipt_uid(&fact, 1_709_366_400_000, "ForbiddenPathGuard", "deny");
-        let uid2 = extract_receipt_uid(&fact, 1_709_366_400_000, "ForbiddenPathGuard", "deny");
+        let uid1 = extract_receipt_uid(
+            &fact,
+            &fact,
+            1_709_366_400_000,
+            "ForbiddenPathGuard",
+            "deny",
+        );
+        let uid2 = extract_receipt_uid(
+            &fact,
+            &fact,
+            1_709_366_400_000,
+            "ForbiddenPathGuard",
+            "deny",
+        );
         assert_eq!(uid1, uid2);
         assert_eq!(
             uid1,
@@ -692,9 +739,89 @@ mod tests {
         )
         .unwrap();
 
-        let uid_a = extract_receipt_uid(&fact_a, 1_709_366_400_000, "ForbiddenPathGuard", "deny");
-        let uid_b = extract_receipt_uid(&fact_b, 1_709_366_400_000, "ForbiddenPathGuard", "deny");
+        let uid_a = extract_receipt_uid(
+            &fact_a,
+            &fact_a,
+            1_709_366_400_000,
+            "ForbiddenPathGuard",
+            "deny",
+        );
+        let uid_b = extract_receipt_uid(
+            &fact_b,
+            &fact_b,
+            1_709_366_400_000,
+            "ForbiddenPathGuard",
+            "deny",
+        );
         assert_eq!(uid_a, uid_b);
+    }
+
+    #[test]
+    fn receipt_wrapped_fact_uses_envelope_event_id_and_guard() {
+        let raw = json!({
+            "eventId": "evt-wrapped-1",
+            "guard": "EnvelopeGuard",
+            "fact": {
+                "decision": "deny",
+                "action_type": "file",
+                "target": "/etc/hosts"
+            }
+        });
+
+        let input = TimelineEventInput {
+            kind: "guard_decision",
+            source: "receipt",
+            time_ms: 1_709_366_400_000,
+            raw: &raw,
+            product_version: "0.1.3",
+        };
+
+        let event = timeline_event_to_ocsf(&input).unwrap();
+        if let TimelineOcsfEvent::Detection(df) = event {
+            assert_eq!(df.finding_info.uid, "receipt-evt-wrapped-1");
+            assert_eq!(df.finding_info.analytic.name, "EnvelopeGuard");
+            assert_eq!(
+                df.finding_info.desc.as_deref(),
+                Some("EnvelopeGuard decision=deny")
+            );
+        } else {
+            panic!("expected Detection");
+        }
+    }
+
+    #[test]
+    fn receipt_wrapped_fact_uses_envelope_level_decision_object() {
+        let raw = json!({
+            "eventId": "evt-envelope-decision-1",
+            "fact": {
+                "action_type": "file",
+                "target": "/etc/shadow"
+            },
+            "metadata": {
+                "decision": {
+                    "allowed": false,
+                    "guard": "MetadataGuard",
+                    "severity": "critical"
+                }
+            }
+        });
+
+        let input = TimelineEventInput {
+            kind: "guard_decision",
+            source: "receipt",
+            time_ms: 1_709_366_400_000,
+            raw: &raw,
+            product_version: "0.1.3",
+        };
+
+        let event = timeline_event_to_ocsf(&input).unwrap();
+        if let TimelineOcsfEvent::Detection(df) = event {
+            assert_eq!(df.action_id, 2); // Denied
+            assert_eq!(df.finding_info.uid, "receipt-evt-envelope-decision-1");
+            assert_eq!(df.finding_info.analytic.name, "MetadataGuard");
+        } else {
+            panic!("expected Detection");
+        }
     }
 
     #[test]
@@ -982,7 +1109,7 @@ mod tests {
             }
         });
 
-        let uid = extract_receipt_uid(&fact, 1_709_366_499_999, "unknown", "allow");
+        let uid = extract_receipt_uid(&fact, &fact, 1_709_366_499_999, "unknown", "allow");
         assert_eq!(uid, "receipt-snap-posture-allow");
     }
 

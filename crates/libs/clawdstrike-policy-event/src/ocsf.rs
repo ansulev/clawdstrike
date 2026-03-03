@@ -27,15 +27,20 @@ pub fn policy_event_to_ocsf(event: &PolicyEvent) -> Option<serde_json::Value> {
     .unwrap_or_else(|| "agent".to_string());
 
     // Check metadata for a verdict/decision field; default to allowed for observations.
+    // Supports both string form ("deny") and object form ({"allowed": false, "guard": "..."}).
     let verdict_str = crate::event::extract_metadata_string(
         event.metadata.as_ref(),
         &["verdict", "decision"],
     );
-    let verdict_lower = verdict_str.map(|s| s.to_lowercase());
-    let (allowed, is_warn) = match verdict_lower.as_deref() {
-        Some("deny" | "denied" | "block" | "blocked") => (false, false),
-        Some("warn" | "warning" | "warned" | "logged") => (true, true),
-        _ => (true, false),
+    let (allowed, is_warn) = if let Some(ref s) = verdict_str {
+        match s.to_lowercase().as_str() {
+            "deny" | "denied" | "block" | "blocked" => (false, false),
+            "warn" | "warning" | "warned" | "logged" => (true, true),
+            _ => (true, false),
+        }
+    } else {
+        // Fallback: decode object-form decision (e.g. {"allowed": false, "guard": "..."})
+        decode_object_decision(event.metadata.as_ref())
     };
     let outcome = if allowed { "success" } else { "failure" };
     let severity = if !allowed {
@@ -299,6 +304,32 @@ fn classify_action(
     classify_event(&stub)
 }
 
+/// Decode an object-form decision from metadata.
+///
+/// When `metadata.decision` (or `metadata.verdict`) is an object like
+/// `{"allowed": false, "guard": "ForbiddenPathGuard"}`, extract the boolean
+/// `allowed` field. Returns `(true, false)` (allowed, not warn) as the
+/// default when the field is absent or not an object.
+fn decode_object_decision(metadata: Option<&serde_json::Value>) -> (bool, bool) {
+    let obj = match metadata {
+        Some(serde_json::Value::Object(o)) => o,
+        _ => return (true, false),
+    };
+
+    let decision_val = obj.get("verdict").or_else(|| obj.get("decision"));
+
+    match decision_val {
+        Some(serde_json::Value::Object(decision_obj)) => {
+            match decision_obj.get("allowed").and_then(|v| v.as_bool()) {
+                Some(true) => (true, false),
+                Some(false) => (false, false),
+                None => (true, false),
+            }
+        }
+        _ => (true, false),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     #![allow(clippy::expect_used, clippy::unwrap_used)]
@@ -373,6 +404,60 @@ mod tests {
         assert!(!jsonl.is_empty());
         let parsed: serde_json::Value = serde_json::from_str(&jsonl).unwrap();
         assert_eq!(parsed["class_uid"], 2004);
+    }
+
+    #[test]
+    fn object_form_decision_denied() {
+        let event = PolicyEvent {
+            event_id: "evt-obj".to_string(),
+            event_type: PolicyEventType::FileRead,
+            timestamp: Utc::now(),
+            session_id: None,
+            data: PolicyEventData::File(FileEventData {
+                path: "/etc/shadow".to_string(),
+                operation: None,
+                content_base64: None,
+                content: None,
+                content_hash: None,
+            }),
+            metadata: Some(serde_json::json!({
+                "decision": { "allowed": false, "guard": "ForbiddenPathGuard" }
+            })),
+            context: None,
+        };
+
+        let json = policy_event_to_ocsf(&event).unwrap();
+        assert_eq!(json["class_uid"], 2004);
+        // Object-form {allowed: false} → action_id 2 (Denied)
+        assert_eq!(json["action_id"], 2);
+        assert_eq!(json["disposition_id"], 2); // Blocked
+    }
+
+    #[test]
+    fn object_form_decision_allowed() {
+        let event = PolicyEvent {
+            event_id: "evt-obj-allow".to_string(),
+            event_type: PolicyEventType::FileRead,
+            timestamp: Utc::now(),
+            session_id: None,
+            data: PolicyEventData::File(FileEventData {
+                path: "/tmp/test".to_string(),
+                operation: None,
+                content_base64: None,
+                content: None,
+                content_hash: None,
+            }),
+            metadata: Some(serde_json::json!({
+                "decision": { "allowed": true }
+            })),
+            context: None,
+        };
+
+        let json = policy_event_to_ocsf(&event).unwrap();
+        assert_eq!(json["class_uid"], 2004);
+        // Object-form {allowed: true} → action_id 1 (Allowed)
+        assert_eq!(json["action_id"], 1);
+        assert_eq!(json["disposition_id"], 1); // Allowed
     }
 
     #[test]

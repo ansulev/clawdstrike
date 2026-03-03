@@ -82,19 +82,25 @@ fn verdict_from_metadata(metadata: Option<&serde_json::Value>) -> NormalizedVerd
         _ => return NormalizedVerdict::None,
     };
 
-    let verdict_str = obj
-        .get("verdict")
-        .or_else(|| obj.get("decision"))
-        .and_then(|v| v.as_str());
+    let decision_val = obj.get("verdict").or_else(|| obj.get("decision"));
 
-    match verdict_str {
-        Some(s) => match s.to_lowercase().as_str() {
+    match decision_val {
+        // String form: "deny", "allowed", etc.
+        Some(serde_json::Value::String(s)) => match s.to_lowercase().as_str() {
             "allow" | "allowed" | "pass" | "passed" => NormalizedVerdict::Allow,
             "deny" | "denied" | "block" | "blocked" => NormalizedVerdict::Deny,
             "warn" | "warning" | "warned" => NormalizedVerdict::Warn,
             _ => NormalizedVerdict::None,
         },
-        None => NormalizedVerdict::None,
+        // Object form: {"allowed": false, "guard": "..."} — decode the boolean
+        Some(serde_json::Value::Object(decision_obj)) => {
+            match decision_obj.get("allowed").and_then(|v| v.as_bool()) {
+                Some(true) => NormalizedVerdict::Allow,
+                Some(false) => NormalizedVerdict::Deny,
+                None => NormalizedVerdict::None,
+            }
+        }
+        _ => NormalizedVerdict::None,
     }
 }
 
@@ -252,6 +258,30 @@ mod tests {
     #[test]
     fn verdict_from_metadata_none() {
         let v = verdict_from_metadata(None);
+        assert_eq!(v, NormalizedVerdict::None);
+    }
+
+    #[test]
+    fn verdict_from_metadata_object_denied() {
+        let v = verdict_from_metadata(Some(&serde_json::json!({
+            "decision": { "allowed": false, "guard": "ForbiddenPathGuard" }
+        })));
+        assert_eq!(v, NormalizedVerdict::Deny);
+    }
+
+    #[test]
+    fn verdict_from_metadata_object_allowed() {
+        let v = verdict_from_metadata(Some(&serde_json::json!({
+            "decision": { "allowed": true }
+        })));
+        assert_eq!(v, NormalizedVerdict::Allow);
+    }
+
+    #[test]
+    fn verdict_from_metadata_object_missing_allowed_field() {
+        let v = verdict_from_metadata(Some(&serde_json::json!({
+            "decision": { "guard": "SomeGuard" }
+        })));
         assert_eq!(v, NormalizedVerdict::None);
     }
 }

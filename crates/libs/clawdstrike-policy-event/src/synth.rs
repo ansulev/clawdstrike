@@ -192,7 +192,8 @@ fn maybe_insert_budget(budgets: &mut HashMap<String, i64>, key: &str, observed: 
 
     let margin = std::cmp::max(5, ((observed as f64) * 0.2).ceil() as u64);
     let value = observed.saturating_add(margin);
-    budgets.insert(key.to_string(), value as i64);
+    let clamped = i64::try_from(value).unwrap_or(i64::MAX);
+    budgets.insert(key.to_string(), clamped);
 }
 
 fn ordered_capabilities(capabilities: &BTreeSet<String>) -> Vec<String> {

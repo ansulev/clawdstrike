@@ -3,7 +3,7 @@
 use serde::Serialize;
 
 use crate::ocsf::policy_events_to_ocsf_jsonl;
-use crate::simulate::{self, SimulationResult, SimulationSummary};
+use crate::simulate::SimulationResult;
 use crate::stream::read_events_from_str;
 use crate::synth::{build_candidate_policy, collect_stats};
 
@@ -14,12 +14,8 @@ pub struct SynthResult {
     pub risks: Vec<String>,
 }
 
-/// Simulation result summary for the facade.
-#[derive(Clone, Debug, Serialize)]
-pub struct SimulateResult {
-    pub summary: SimulationSummary,
-    pub results: Vec<simulate::SimulationResultEntry>,
-}
+/// Re-export SimulationResult as the facade's simulate return type.
+pub type SimulateResult = SimulationResult;
 
 /// JSON-in/JSON-out handle for policy lab operations.
 ///
@@ -69,17 +65,17 @@ impl PolicyLabHandle {
     }
 
     /// Simulate events against this handle's policy.
+    ///
+    /// Creates a new async runtime per call — suitable for FFI/WASM contexts.
     pub fn simulate(&self, events_jsonl: &str) -> anyhow::Result<SimulateResult> {
         let events = read_events_from_str(events_jsonl)?;
 
         let rt = tokio::runtime::Runtime::new()?;
-        let result: SimulationResult =
-            rt.block_on(simulate::replay_events(&self.policy_yaml, &events, false))?;
-
-        Ok(SimulateResult {
-            summary: result.summary,
-            results: result.results,
-        })
+        rt.block_on(crate::simulate::replay_events(
+            &self.policy_yaml,
+            &events,
+            false,
+        ))
     }
 
     /// Convert events JSONL to OCSF JSONL.

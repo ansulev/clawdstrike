@@ -78,7 +78,7 @@ PolicyEvents can be converted directly to OCSF v1.4.0 compliant Detection Findin
 **CLI export:**
 
 ```bash
-clawdstrike policy observe --out run.events.jsonl --format ocsf -- your-agent-command
+clawdstrike policy observe --out run.events.jsonl --ocsf-out run.ocsf.jsonl -- your-agent-command
 ```
 
 **Key OCSF fields carried through:**
@@ -181,12 +181,12 @@ from clawdstrike.policy_lab import PolicyLab
 
 # Synthesize
 synth = PolicyLab.synth(events_jsonl)
-print(synth.policy_yaml)
+print(synth["policy_yaml"])
 
 # Simulate
 lab = PolicyLab(policy_yaml)
 result = lab.simulate(events_jsonl)
-print(f"allowed: {result.summary.allowed}, blocked: {result.summary.blocked}")
+print(f"allowed: {result['summary']['allowed']}, blocked: {result['summary']['blocked']}")
 
 # OCSF export
 ocsf = PolicyLab.to_ocsf(events_jsonl)

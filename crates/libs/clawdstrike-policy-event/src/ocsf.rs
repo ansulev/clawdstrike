@@ -26,12 +26,31 @@ pub fn policy_event_to_ocsf(event: &PolicyEvent) -> Option<serde_json::Value> {
     )
     .unwrap_or_else(|| "agent".to_string());
 
+    // Check metadata for a verdict/decision field; default to allowed for observations.
+    let verdict_str = crate::event::extract_metadata_string(
+        event.metadata.as_ref(),
+        &["verdict", "decision"],
+    );
+    let (allowed, is_warn) = match verdict_str.as_deref() {
+        Some("deny" | "denied" | "block" | "blocked") => (false, false),
+        Some("warn" | "warned" | "logged") => (true, true),
+        _ => (true, false),
+    };
+    let outcome = if allowed { "success" } else { "failure" };
+    let severity = if !allowed {
+        "high"
+    } else if is_warn {
+        "medium"
+    } else {
+        "info"
+    };
+
     let input = SecurityEventInput {
         event_id: &event.event_id,
         time_ms,
-        allowed: true,
-        outcome: "success",
-        severity: "info",
+        allowed,
+        outcome,
+        severity,
         guard: "PolicyEvent",
         reason: &format!("{} observation", event.event_type),
         product_version: env!("CARGO_PKG_VERSION"),
@@ -44,7 +63,7 @@ pub fn policy_event_to_ocsf(event: &PolicyEvent) -> Option<serde_json::Value> {
         agent_id: &agent_id,
         agent_name: &agent_name,
         session_id: event.session_id.as_deref(),
-        is_warn: false,
+        is_warn,
     };
 
     let event_set = security_event_to_ocsf(&input);
@@ -187,6 +206,10 @@ fn classify_event(
     }
 }
 
+/// Classify a MappedGuardAction into OCSF resource fields.
+///
+/// Delegates to `classify_event` by converting the action back to the
+/// corresponding event type/data — avoids duplicating the mapping logic.
 fn classify_action(
     action: &MappedGuardAction,
 ) -> (
@@ -197,54 +220,82 @@ fn classify_action(
     Option<String>,
     Option<u16>,
 ) {
-    match action {
+    use crate::event::{
+        CommandEventData, CustomEventData, FileEventData, NetworkEventData, PatchEventData,
+        ToolEventData,
+    };
+
+    let (event_type, data) = match action {
         MappedGuardAction::FileAccess { path } => (
-            "file_access",
-            "file",
-            path.clone(),
-            Some(path.clone()),
-            None,
-            None,
+            PolicyEventType::FileRead,
+            PolicyEventData::File(FileEventData {
+                path: path.clone(),
+                operation: None,
+                content_base64: None,
+                content: None,
+                content_hash: None,
+            }),
         ),
         MappedGuardAction::FileWrite { path, .. } => (
-            "file_write",
-            "file",
-            path.clone(),
-            Some(path.clone()),
-            None,
-            None,
+            PolicyEventType::FileWrite,
+            PolicyEventData::File(FileEventData {
+                path: path.clone(),
+                operation: None,
+                content_base64: None,
+                content: None,
+                content_hash: None,
+            }),
         ),
         MappedGuardAction::NetworkEgress { host, port } => (
-            "egress",
-            "network",
-            host.clone(),
-            None,
-            Some(host.clone()),
-            Some(*port),
+            PolicyEventType::NetworkEgress,
+            PolicyEventData::Network(NetworkEventData {
+                host: host.clone(),
+                port: *port,
+                protocol: None,
+                url: None,
+            }),
         ),
-        MappedGuardAction::ShellCommand { commandline } => {
-            ("shell", "process", commandline.clone(), None, None, None)
-        }
+        MappedGuardAction::ShellCommand { commandline } => (
+            PolicyEventType::CommandExec,
+            PolicyEventData::Command(CommandEventData {
+                command: commandline.clone(),
+                args: vec![],
+            }),
+        ),
         MappedGuardAction::Patch { file_path, .. } => (
-            "patch",
-            "file",
-            file_path.clone(),
-            Some(file_path.clone()),
-            None,
-            None,
+            PolicyEventType::PatchApply,
+            PolicyEventData::Patch(PatchEventData {
+                file_path: file_path.clone(),
+                patch_content: String::new(),
+                patch_hash: None,
+            }),
         ),
-        MappedGuardAction::McpTool { tool_name, .. } => {
-            ("mcp_tool", "tool", tool_name.clone(), None, None, None)
-        }
+        MappedGuardAction::McpTool { tool_name, .. } => (
+            PolicyEventType::ToolCall,
+            PolicyEventData::Tool(ToolEventData {
+                tool_name: tool_name.clone(),
+                parameters: serde_json::Value::Null,
+            }),
+        ),
         MappedGuardAction::Custom { custom_type, .. } => (
-            "custom",
-            "configuration",
-            custom_type.clone(),
-            None,
-            None,
-            None,
+            PolicyEventType::Custom,
+            PolicyEventData::Custom(CustomEventData {
+                custom_type: custom_type.clone(),
+                extra: serde_json::Map::new(),
+            }),
         ),
-    }
+    };
+
+    let stub = PolicyEvent {
+        event_id: String::new(),
+        event_type,
+        timestamp: chrono::Utc::now(),
+        session_id: None,
+        data,
+        metadata: None,
+        context: None,
+    };
+    classify_event(&stub)
 }
 
 #[cfg(test)]

@@ -16,6 +16,7 @@ use serde::{Deserialize, Serialize};
 // PolicyEventType
 // ---------------------------------------------------------------------------
 
+#[derive(Clone)]
 pub enum PolicyEventType {
     FileRead,
     FileWrite,
@@ -88,31 +89,7 @@ impl PartialEq for PolicyEventType {
 
 impl Eq for PolicyEventType {}
 
-impl Clone for PolicyEventType {
-    fn clone(&self) -> Self {
-        match self {
-            Self::FileRead => Self::FileRead,
-            Self::FileWrite => Self::FileWrite,
-            Self::NetworkEgress => Self::NetworkEgress,
-            Self::CommandExec => Self::CommandExec,
-            Self::PatchApply => Self::PatchApply,
-            Self::ToolCall => Self::ToolCall,
-            Self::SecretAccess => Self::SecretAccess,
-            Self::Custom => Self::Custom,
-            Self::RemoteSessionConnect => Self::RemoteSessionConnect,
-            Self::RemoteSessionDisconnect => Self::RemoteSessionDisconnect,
-            Self::RemoteSessionReconnect => Self::RemoteSessionReconnect,
-            Self::InputInject => Self::InputInject,
-            Self::ClipboardTransfer => Self::ClipboardTransfer,
-            Self::FileTransfer => Self::FileTransfer,
-            Self::RemoteAudio => Self::RemoteAudio,
-            Self::RemoteDriveMapping => Self::RemoteDriveMapping,
-            Self::RemotePrinting => Self::RemotePrinting,
-            Self::SessionShare => Self::SessionShare,
-            Self::Other(s) => Self::Other(s.clone()),
-        }
-    }
-}
+// Clone is derived — all variants are either unit or contain a Clone type (String).
 
 impl<'de> Deserialize<'de> for PolicyEventType {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
@@ -903,26 +880,38 @@ fn merge_metadata(
     Some(out)
 }
 
+/// Maximum recursion depth for JSON merging to prevent stack overflow from
+/// crafted deeply-nested metadata/context.
+const MERGE_JSON_MAX_DEPTH: u32 = 32;
+
 fn merge_json(target: &mut serde_json::Value, source: serde_json::Value) {
+    merge_json_inner(target, source, 0);
+}
+
+fn merge_json_inner(target: &mut serde_json::Value, source: serde_json::Value, depth: u32) {
+    if depth >= MERGE_JSON_MAX_DEPTH {
+        // Beyond depth limit: overwrite instead of merging deeper.
+        *target = source;
+        return;
+    }
+
     let serde_json::Value::Object(source_obj) = source else {
         *target = source;
         return;
     };
 
-    let serde_json::Value::Object(target_obj) = target else {
+    if !target.is_object() {
         *target = serde_json::Value::Object(serde_json::Map::new());
-        merge_json(target, serde_json::Value::Object(source_obj));
+    }
+
+    let Some(target_obj) = target.as_object_mut() else {
         return;
     };
 
     for (k, v) in source_obj {
         match (target_obj.get_mut(&k), v) {
-            (Some(existing), serde_json::Value::Object(v_obj)) => {
-                if existing.is_object() {
-                    merge_json(existing, serde_json::Value::Object(v_obj));
-                } else {
-                    *existing = serde_json::Value::Object(v_obj);
-                }
+            (Some(existing), serde_json::Value::Object(v_obj)) if existing.is_object() => {
+                merge_json_inner(existing, serde_json::Value::Object(v_obj), depth + 1);
             }
             (_, v) => {
                 target_obj.insert(k, v);

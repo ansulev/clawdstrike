@@ -49,8 +49,9 @@ function ocsfSeverityLabel(sev: SecurityEvent["decision"]["severity"]): string {
 export function toOcsf(event: SecurityEvent): Record<string, unknown> {
   const severityId = ocsfSeverityId(event.decision.severity);
   const severityLabel = ocsfSeverityLabel(event.decision.severity);
+  const isWarn = event.event_type === "guard_warn";
   const actionId = event.decision.allowed ? 1 : 2; // 1=Allowed, 2=Denied
-  const dispositionId = event.decision.allowed ? 1 : 2; // 1=Allowed, 2=Blocked
+  const dispositionId = isWarn ? 17 : event.decision.allowed ? 1 : 2; // 17=Logged, 1=Allowed, 2=Blocked
   const statusId =
     event.outcome === "success" ? 1 : event.outcome === "failure" ? 2 : 0;
 

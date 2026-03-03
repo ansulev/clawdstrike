@@ -135,6 +135,17 @@ describe("siem.transforms.ocsf", () => {
     expect(ocsf.disposition_id).toBe(fixture.disposition_id);
   });
 
+  it("maps warn disposition to Logged (17)", () => {
+    const event = sampleEvent({
+      event_type: "guard_warn",
+      outcome: "success",
+      decision: { allowed: true, guard: "ShellCommandGuard", severity: "medium", reason: "risky command" },
+    });
+    const ocsf = toOcsf(event);
+    expect(ocsf.action_id).toBe(1); // Allowed (non-blocking)
+    expect(ocsf.disposition_id).toBe(17); // Logged
+  });
+
   it("does not use deprecated class 2001", () => {
     const ocsf = toOcsf(sampleEvent());
     expect(ocsf.class_uid).not.toBe(2001);

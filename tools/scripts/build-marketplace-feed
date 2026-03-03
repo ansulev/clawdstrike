@@ -13,13 +13,13 @@ def main(argv: list[str]) -> int:
     )
     parser.add_argument(
         "--bundles-dir",
-        default="apps/desktop/src-tauri/resources/marketplace/bundles",
+        default="marketplace/bundles",
         help="Directory containing *.signed_bundle.json files",
     )
     parser.add_argument(
         "--output",
         "-o",
-        default="apps/desktop/src-tauri/resources/marketplace/feed.signed.json",
+        default="marketplace/feed.signed.json",
         help="Output path for feed.signed.json",
     )
     parser.add_argument(
@@ -72,4 +72,3 @@ def main(argv: list[str]) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main(sys.argv[1:]))
-

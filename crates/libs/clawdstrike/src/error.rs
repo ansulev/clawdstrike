@@ -106,6 +106,7 @@ pub enum Error {
     PkgError(String),
 }
 
+#[cfg(feature = "spine")]
 impl From<spine::Error> for Error {
     fn from(e: spine::Error) -> Self {
         Error::SpineError(e.to_string())

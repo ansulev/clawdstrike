@@ -1,0 +1,50 @@
+{
+  "class_uid": 2004,
+  "category_uid": 2,
+  "type_uid": 200401,
+  "activity_id": 1,
+  "activity_name": "Create",
+  "time": 1709366400000,
+  "severity_id": 1,
+  "severity": "Informational",
+  "status_id": 1,
+  "action_id": 1,
+  "disposition_id": 1,
+  "message": "Allowed",
+  "metadata": {
+    "version": "1.4.0",
+    "product": {
+      "name": "ClawdStrike",
+      "uid": "clawdstrike",
+      "vendor_name": "Backbay Labs",
+      "version": "0.1.3"
+    },
+    "original_uid": "evt-allow-001"
+  },
+  "finding_info": {
+    "uid": "evt-allow-001",
+    "title": "EgressAllowlistGuard decision",
+    "analytic": {
+      "name": "EgressAllowlistGuard",
+      "type_id": 1,
+      "type": "Rule"
+    },
+    "desc": "Allowed"
+  },
+  "actor": {
+    "user": {
+      "name": "test-agent",
+      "uid": "agent-1"
+    },
+    "app_name": "clawdstrike",
+    "session": {
+      "uid": "sess-1"
+    }
+  },
+  "resources": [
+    {
+      "name": "api.example.com",
+      "type": "network"
+    }
+  ]
+}

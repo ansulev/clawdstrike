@@ -1,85 +1,51 @@
-use crate::siem::types::{Outcome, ResourceType, SecurityEvent, SecuritySeverity};
+use crate::siem::types::{Outcome, ResourceType, SecurityEvent, SecurityEventType};
+use clawdstrike_ocsf::convert::from_security_event::{to_ocsf_json, SecurityEventInput};
 
-/// Convert a `SecurityEvent` to a lightweight OCSF-like JSON payload.
+/// Convert a `SecurityEvent` to an OCSF Detection Finding JSON payload.
 ///
-/// Note: This is not a complete OCSF class mapping. It provides a stable, self-describing
-/// structure that can be evolved toward full OCSF compliance.
+/// Delegates to the canonical `clawdstrike-ocsf` crate for OCSF v1.4.0 compliance.
 pub fn to_ocsf(event: &SecurityEvent) -> serde_json::Value {
-    let (severity_id, severity) = ocsf_severity(&event.decision.severity);
-    let status = match event.outcome {
+    let event_id = event.event_id.to_string();
+    let severity = match event.decision.severity {
+        crate::siem::types::SecuritySeverity::Info => "info",
+        crate::siem::types::SecuritySeverity::Low => "low",
+        crate::siem::types::SecuritySeverity::Medium => "medium",
+        crate::siem::types::SecuritySeverity::High => "high",
+        crate::siem::types::SecuritySeverity::Critical => "critical",
+    };
+    let outcome = match event.outcome {
         Outcome::Success => "success",
         Outcome::Failure => "failure",
         Outcome::Unknown => "unknown",
     };
+    let resource_type = match event.resource.resource_type {
+        ResourceType::File => "file",
+        ResourceType::Network => "network",
+        ResourceType::Process => "process",
+        ResourceType::Tool => "tool",
+        ResourceType::Configuration => "configuration",
+    };
 
-    let mut out = serde_json::json!({
-        "time": event.timestamp_rfc3339_nanos(),
-        "severity_id": severity_id,
-        "severity": severity,
-        "status": status,
-        "activity_name": format!("{:?}", event.event_type),
-        "category_name": format!("{:?}", event.event_category),
-        "message": event.decision.reason,
-        "metadata": {
-            "version": event.schema_version,
-            "product": {
-                "name": "clawdstrike",
-                "version": event.agent.version,
-            }
-        },
-        "actor": {
-            "id": event.agent.id,
-            "name": event.agent.name,
-            "type": event.agent.agent_type,
-        },
-        "session": {
-            "id": event.session.id,
-            "tenant_id": event.session.tenant_id,
-            "environment": event.session.environment,
-        },
-        "decision": {
-            "allowed": event.decision.allowed,
-            "guard": event.decision.guard,
-            "severity": format!("{:?}", event.decision.severity),
-        },
-    });
+    let input = SecurityEventInput {
+        event_id: &event_id,
+        time_ms: event.timestamp.timestamp_millis(),
+        allowed: event.decision.allowed,
+        outcome,
+        severity,
+        guard: &event.decision.guard,
+        reason: &event.decision.reason,
+        product_version: &event.agent.version,
+        action: &event.action,
+        resource_type,
+        resource_name: &event.resource.name,
+        resource_path: event.resource.path.as_deref(),
+        resource_host: event.resource.host.as_deref(),
+        resource_port: event.resource.port,
+        agent_id: &event.agent.id,
+        agent_name: &event.agent.name,
+        session_id: Some(&*event.session.id),
+        is_warn: matches!(event.event_type, SecurityEventType::GuardWarn),
+    };
 
-    match event.resource.resource_type {
-        ResourceType::File => {
-            out["file"] = serde_json::json!({
-                "path": event.resource.path,
-                "name": event.resource.name,
-            });
-        }
-        ResourceType::Network => {
-            out["network"] = serde_json::json!({
-                "host": event.resource.host,
-                "port": event.resource.port,
-            });
-        }
-        ResourceType::Process => {
-            out["process"] = serde_json::json!({
-                "command_line": event.resource.name,
-            });
-        }
-        ResourceType::Tool => {
-            out["tool"] = serde_json::json!({
-                "name": event.resource.name,
-            });
-        }
-        ResourceType::Configuration => {}
-    }
-
-    out
-}
-
-fn ocsf_severity(sev: &SecuritySeverity) -> (u8, &'static str) {
-    // OCSF severity_id is typically 1-6 (Informational..Critical). Keep a stable mapping.
-    match sev {
-        SecuritySeverity::Info => (1, "informational"),
-        SecuritySeverity::Low => (2, "low"),
-        SecuritySeverity::Medium => (3, "medium"),
-        SecuritySeverity::High => (4, "high"),
-        SecuritySeverity::Critical => (6, "critical"),
-    }
+    to_ocsf_json(&input)
 }

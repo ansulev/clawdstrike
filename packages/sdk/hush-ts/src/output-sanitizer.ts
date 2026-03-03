@@ -1,4 +1,4 @@
-import { getWasmModule } from "./crypto/backend.js";
+import { ensureWasmSync, getWasmModule } from "./crypto/backend.js";
 import { camelToSnake, toSnakeCaseKeys } from "./case-convert.js";
 
 export type SensitiveCategory = "secret" | "pii" | "internal" | "custom";
@@ -117,10 +117,11 @@ export class OutputSanitizer {
   private readonly inner: any;
 
   constructor(config?: OutputSanitizerConfig) {
+    ensureWasmSync();
     const wasm = getWasmModule();
     if (!wasm?.WasmOutputSanitizer) {
       throw new Error(
-        "WASM not initialized. Call initWasm() before using OutputSanitizer.",
+        "WASM backend does not expose OutputSanitizer APIs.",
       );
     }
     this.inner = new wasm.WasmOutputSanitizer(

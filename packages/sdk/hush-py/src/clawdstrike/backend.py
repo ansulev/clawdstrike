@@ -1,7 +1,7 @@
 """Backend dispatch layer for Clawdstrike policy evaluation.
 
 Provides an EngineBackend protocol with two implementations:
-- NativeEngineBackend: Delegates to Rust HushEngine via hush_native
+- NativeEngineBackend: Delegates to Rust HushEngine via clawdstrike._native
 - PurePythonBackend: Uses pure Python policy engine and guards (fallback)
 """
 
@@ -36,12 +36,12 @@ class EngineBackend(Protocol):
 
 
 class NativeEngineBackend:
-    """Backend that delegates to the Rust HushEngine via hush_native."""
+    """Backend that delegates to the Rust HushEngine via clawdstrike._native."""
 
     name = "native"
 
     def __init__(self, engine: Any) -> None:
-        self._engine = engine  # hush_native.NativeEngine instance
+        self._engine = engine  # clawdstrike._native.NativeEngine instance
 
     def check_file_access(self, path: str, ctx: dict[str, Any]) -> dict:
         return self._engine.check_file_access(path, ctx)

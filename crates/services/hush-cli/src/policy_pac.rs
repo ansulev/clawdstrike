@@ -22,6 +22,7 @@ pub struct PolicySimulateOptions<'a> {
     pub fail_on_deny: bool,
     pub benchmark: bool,
     pub track_posture: bool,
+    pub ocsf_out: Option<String>,
 }
 
 #[derive(Clone, Debug, serde::Serialize)]
@@ -475,6 +476,28 @@ pub async fn cmd_policy_simulate(
         }
     };
 
+    let mut ocsf_writer: Option<std::io::BufWriter<std::fs::File>> = match opts.ocsf_out.as_deref()
+    {
+        Some(path) => {
+            if let Some(parent) = std::path::Path::new(path).parent() {
+                if !parent.as_os_str().is_empty() {
+                    if let Err(e) = std::fs::create_dir_all(parent) {
+                        let _ = writeln!(stderr, "Error: failed to create OCSF output dir: {}", e);
+                        return ExitCode::RuntimeError;
+                    }
+                }
+            }
+            match std::fs::File::create(path) {
+                Ok(f) => Some(std::io::BufWriter::new(f)),
+                Err(e) => {
+                    let _ = writeln!(stderr, "Error: failed to create OCSF output file: {}", e);
+                    return ExitCode::RuntimeError;
+                }
+            }
+        }
+        None => None,
+    };
+
     let started = Instant::now();
     let mut results = Vec::new();
     let mut summary = SimulationSummary {
@@ -615,6 +638,25 @@ pub async fn cmd_policy_simulate(
             _ => {}
         }
 
+        if let Some(ref mut w) = ocsf_writer {
+            let guard_name = decision.guard.as_deref().unwrap_or("PolicyEvent");
+            let severity_str = decision.severity.as_deref().unwrap_or("info");
+            let message_str = decision.message.as_deref().unwrap_or("");
+            if let Some(ocsf_val) = clawdstrike_policy_event::ocsf::guard_decision_to_ocsf(
+                &event,
+                &mapped.action,
+                decision.allowed,
+                guard_name,
+                severity_str,
+                message_str,
+                decision.warn,
+            ) {
+                if let Ok(line) = serde_json::to_string(&ocsf_val) {
+                    let _ = writeln!(w, "{line}");
+                }
+            }
+        }
+
         if opts.jsonl || (opts.json && !opts.summary) {
             let entry = SimulationResultEntry {
                 event_id: event.event_id.clone(),
@@ -633,6 +675,13 @@ pub async fn cmd_policy_simulate(
             } else {
                 results.push(entry);
             }
+        }
+    }
+
+    if let Some(ref mut w) = ocsf_writer {
+        let _ = w.flush();
+        if let Some(path) = opts.ocsf_out.as_deref() {
+            let _ = writeln!(stderr, "OCSF output: {}", path);
         }
     }
 

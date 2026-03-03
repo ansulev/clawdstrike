@@ -54,6 +54,8 @@ To keep the Ed25519 seed off disk, you can seal it into TPM2 (best-effort, requi
 clawdstrike keygen --tpm-seal --out hush.keyblob
 ```
 
+The same decision/receipt stream can also be exported as OCSF v1.4.0 Detection Finding events for SIEM pipelines; see [Observe -> Synth -> Tighten](guides/observe-synth.md#3-ocsf-export).
+
 ## Next Steps
 
 - [Installation](getting-started/installation.md)

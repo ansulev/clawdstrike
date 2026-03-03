@@ -1,10 +1,12 @@
 use std::collections::HashMap;
+#[cfg(feature = "full")]
 use std::path::Path;
 use std::sync::Arc;
 
 use serde_json::Value;
 
 use crate::error::{Error, Result};
+#[cfg(feature = "full")]
 use crate::pkg::manifest::{PkgManifest, PkgType};
 
 use super::Guard;
@@ -60,6 +62,7 @@ impl CustomGuardRegistry {
     /// instances in the registry.
     ///
     /// Non-guard packages are silently ignored (returns `Ok(())`).
+    #[cfg(feature = "full")]
     pub fn register_from_package(
         &mut self,
         manifest: &PkgManifest,
@@ -72,7 +75,7 @@ impl CustomGuardRegistry {
         self.register_guards_from_package_impl(manifest, install_path)
     }
 
-    #[cfg(not(feature = "wasm-plugin-runtime"))]
+    #[cfg(all(feature = "full", not(feature = "wasm-plugin-runtime")))]
     fn register_guards_from_package_impl(
         &mut self,
         manifest: &PkgManifest,
@@ -86,7 +89,7 @@ impl CustomGuardRegistry {
         Ok(())
     }
 
-    #[cfg(feature = "wasm-plugin-runtime")]
+    #[cfg(all(feature = "full", feature = "wasm-plugin-runtime"))]
     fn register_guards_from_package_impl(
         &mut self,
         pkg_manifest: &PkgManifest,

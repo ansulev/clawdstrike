@@ -58,6 +58,7 @@ from clawdstrike.merkle import (
     hash_node,
 )
 from clawdstrike.native import NATIVE_AVAILABLE, init_native
+from clawdstrike.policy_lab import PolicyLab
 from clawdstrike.policy import (
     GuardConfigs,
     Policy,
@@ -82,7 +83,7 @@ from clawdstrike.receipt import (
 )
 from clawdstrike.types import Decision, DecisionStatus, SessionOptions, SessionSummary
 
-__version__ = "0.2.0"
+__version__ = "0.2.1"
 
 __all__ = [
     "__version__",
@@ -178,6 +179,8 @@ __all__ = [
     # Native backend
     "NATIVE_AVAILABLE",
     "init_native",
+    # PolicyLab
+    "PolicyLab",
     # Backend dispatch
     "EngineBackend",
     "NativeEngineBackend",

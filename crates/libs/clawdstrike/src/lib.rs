@@ -89,11 +89,11 @@ pub mod curator_config;
 pub mod decision_taxonomy;
 #[cfg(feature = "full")]
 pub mod engine;
-#[cfg(feature = "full")]
+#[cfg(any(feature = "full", feature = "policy-event"))]
 pub mod error;
-#[cfg(feature = "full")]
+#[cfg(any(feature = "full", feature = "policy-event"))]
 pub mod guards;
-#[cfg(feature = "full")]
+#[cfg(any(feature = "full", feature = "policy-event"))]
 pub mod identity;
 #[cfg(feature = "full")]
 pub mod irm;
@@ -103,19 +103,19 @@ pub mod marketplace_feed;
 pub mod pipeline;
 #[cfg(feature = "full")]
 pub mod pkg;
-#[cfg(feature = "full")]
+#[cfg(any(feature = "full", feature = "policy-event"))]
 mod placeholders;
 #[cfg(feature = "full")]
 pub mod plugins;
-#[cfg(feature = "full")]
+#[cfg(any(feature = "full", feature = "policy-event"))]
 pub mod policy;
 #[cfg(feature = "full")]
 pub mod policy_bundle;
-#[cfg(feature = "full")]
+#[cfg(any(feature = "full", feature = "policy-event"))]
 pub mod posture;
 #[cfg(feature = "full")]
 mod semver_utils;
-#[cfg(feature = "full")]
+#[cfg(all(feature = "full", feature = "spine"))]
 pub mod spine_bridge;
 #[cfg(feature = "full")]
 pub mod watermarking;
@@ -127,15 +127,15 @@ pub use curator_config::{
 };
 #[cfg(feature = "full")]
 pub use engine::{GuardReport, HushEngine, PostureAwareReport};
-#[cfg(feature = "full")]
+#[cfg(any(feature = "full", feature = "policy-event"))]
 pub use error::{Error, Result};
-#[cfg(feature = "full")]
+#[cfg(any(feature = "full", feature = "policy-event"))]
 pub use guards::{
     CustomGuardFactory, CustomGuardRegistry, EgressAllowlistGuard, ForbiddenPathGuard, Guard,
     GuardContext, GuardResult, JailbreakConfig, JailbreakGuard, McpToolGuard, PatchIntegrityGuard,
     PathAllowlistGuard, PromptInjectionGuard, SecretLeakGuard, Severity,
 };
-#[cfg(feature = "full")]
+#[cfg(any(feature = "full", feature = "policy-event"))]
 pub use identity::{
     AuthMethod, GeoLocation, IdentityPrincipal, IdentityProvider, OrganizationContext,
     OrganizationTier, RequestContext, SessionContext, SessionMetadata,
@@ -165,17 +165,17 @@ pub use plugins::{
     parse_plugin_manifest_toml, resolve_plugin_root, PluginExecutionMode, PluginInspectResult,
     PluginLoadPlan, PluginLoader, PluginLoaderOptions, PluginManifest,
 };
-#[cfg(feature = "full")]
+#[cfg(any(feature = "full", feature = "policy-event"))]
 pub use policy::{Policy, RuleSet};
 #[cfg(feature = "full")]
 pub use policy_bundle::{PolicyBundle, SignedPolicyBundle, POLICY_BUNDLE_SCHEMA_VERSION};
-#[cfg(feature = "full")]
+#[cfg(any(feature = "full", feature = "policy-event"))]
 pub use posture::{
     PostureBudgetCounter, PostureConfig, PostureProgram, PostureRuntimeState, PostureState,
     PostureTransition, PostureTransitionRecord, RuntimeTransitionTrigger, TransitionRequirement,
     TransitionTrigger,
 };
-#[cfg(feature = "full")]
+#[cfg(all(feature = "full", feature = "spine"))]
 pub use spine_bridge::{
     extract_spine_envelope_hash, policy_bundle_to_spine_envelope, POLICY_BUNDLE_FACT_TYPE,
 };

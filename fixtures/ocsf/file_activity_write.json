@@ -1,0 +1,24 @@
+{
+  "class_uid": 1001,
+  "category_uid": 1,
+  "type_uid": 100103,
+  "activity_id": 3,
+  "activity_name": "Update",
+  "time": 1709366400000,
+  "severity_id": 4,
+  "status_id": 2,
+  "message": "File write blocked",
+  "metadata": {
+    "version": "1.4.0",
+    "product": {
+      "name": "ClawdStrike",
+      "uid": "clawdstrike",
+      "vendor_name": "Backbay Labs",
+      "version": "0.1.3"
+    }
+  },
+  "file": {
+    "path": "/etc/shadow",
+    "name": "shadow"
+  }
+}

@@ -98,6 +98,8 @@ score = sigmoid(
 For high-security scenarios, an external LLM can score suspicious inputs:
 
 ```typescript
+import { JailbreakDetector } from "@clawdstrike/sdk";
+
 const detector = new JailbreakDetector({
   layers: { llmJudge: true },
   llmJudge: async (input) => {

@@ -1,4 +1,8 @@
 """Tests for native Rust backend (when available)."""
+import os
+import subprocess
+import sys
+
 import pytest
 
 from clawdstrike.native import NATIVE_AVAILABLE
@@ -97,3 +101,20 @@ class TestNativeAvailabilityFlag:
         """NATIVE_AVAILABLE should be importable from clawdstrike package."""
         from clawdstrike import NATIVE_AVAILABLE as imported_flag
         assert isinstance(imported_flag, bool)
+
+    def test_disable_native_env_forces_fallback(self):
+        """CLAWDSTRIKE_DISABLE_NATIVE=1 should force pure-Python fallback."""
+        env = os.environ.copy()
+        env["CLAWDSTRIKE_DISABLE_NATIVE"] = "1"
+        proc = subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                "from clawdstrike import NATIVE_AVAILABLE, init_native; print(f'{NATIVE_AVAILABLE},{init_native()}')",
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+        assert proc.stdout.strip() == "False,False"

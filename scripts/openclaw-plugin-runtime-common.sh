@@ -72,6 +72,15 @@ openclaw_runtime_prepare() {
     exit 1
   fi
 
+  # Workspace installs may hoist transitive deps (for example js-yaml used by
+  # @clawdstrike/policy) to the repo root. Ensure they are materialized in the
+  # plugin package tree before copying into the isolated runtime directory.
+  if [ ! -f "$OPENCLAW_RUNTIME_PLUGIN_PACKAGE_DIR/node_modules/js-yaml/package.json" ] \
+    || [ ! -f "$OPENCLAW_RUNTIME_PLUGIN_PACKAGE_DIR/node_modules/lru-cache/package.json" ]; then
+    echo "[openclaw-runtime] materializing plugin transitive deps (nested install)" >&2
+    npm --prefix "$OPENCLAW_RUNTIME_PLUGIN_PACKAGE_DIR" install --install-strategy=nested --omit=dev --ignore-scripts
+  fi
+
   mkdir -p "$OPENCLAW_RUNTIME_HOME" "$OPENCLAW_RUNTIME_STATE_DIR" "$OPENCLAW_RUNTIME_PLUGIN_DIR"
 
   cp "$OPENCLAW_RUNTIME_PLUGIN_PACKAGE_DIR/openclaw.plugin.json" "$OPENCLAW_RUNTIME_PLUGIN_DIR/openclaw.plugin.json"

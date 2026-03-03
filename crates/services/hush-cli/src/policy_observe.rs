@@ -19,6 +19,7 @@ pub struct PolicyObserveCommand {
     pub hushd_url: Option<String>,
     pub hushd_token: Option<String>,
     pub session: Option<String>,
+    pub ocsf_out: Option<PathBuf>,
     pub command: Vec<String>,
 }
 
@@ -54,6 +55,9 @@ pub async fn cmd_policy_observe(
         return ExitCode::InvalidArgs;
     }
 
+    let ocsf_out = args.ocsf_out.clone();
+    let events_out_path = args.out.clone();
+
     let code = hush_run::cmd_run(
         hush_run::RunArgs {
             policy: args.policy,
@@ -74,11 +78,58 @@ pub async fn cmd_policy_observe(
     )
     .await;
 
+    if let Some(ref ocsf_path) = ocsf_out {
+        if let Err(e) = post_process_ocsf(&events_out_path, ocsf_path) {
+            let _ = writeln!(stderr, "Warning: failed to write OCSF output: {}", e);
+        } else {
+            let _ = writeln!(stderr, "OCSF output: {}", ocsf_path.display());
+        }
+    }
+
     if code == 0 {
         ExitCode::Ok
     } else {
         ExitCode::RuntimeError
     }
+}
+
+/// Post-process an events JSONL file and write OCSF JSONL to the given path.
+fn post_process_ocsf(
+    events_path: &std::path::Path,
+    ocsf_path: &std::path::Path,
+) -> std::io::Result<()> {
+    use std::io::BufRead;
+
+    if let Some(parent) = ocsf_path.parent() {
+        if !parent.as_os_str().is_empty() {
+            std::fs::create_dir_all(parent)?;
+        }
+    }
+
+    let events_file = std::fs::File::open(events_path)?;
+    let reader = std::io::BufReader::new(events_file);
+    let ocsf_file = std::fs::File::create(ocsf_path)?;
+    let mut writer = std::io::BufWriter::new(ocsf_file);
+
+    for line in reader.lines() {
+        let line = line?;
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        let event: PolicyEvent = match serde_json::from_str(trimmed) {
+            Ok(v) => v,
+            Err(_) => continue,
+        };
+        if let Some(ocsf_val) = clawdstrike_policy_event::ocsf::policy_event_to_ocsf(&event) {
+            if let Ok(json_line) = serde_json::to_string(&ocsf_val) {
+                let _ = writeln!(writer, "{json_line}");
+            }
+        }
+    }
+
+    writer.flush()?;
+    Ok(())
 }
 
 async fn observe_hushd_session(
@@ -165,6 +216,28 @@ async fn observe_hushd_session(
     };
 
     let mut writer = std::io::BufWriter::new(out_file);
+    let mut ocsf_writer: Option<std::io::BufWriter<std::fs::File>> =
+        if let Some(ref ocsf_path) = args.ocsf_out {
+            if let Some(parent) = ocsf_path.parent() {
+                if !parent.as_os_str().is_empty() {
+                    let _ = std::fs::create_dir_all(parent);
+                }
+            }
+            match std::fs::File::create(ocsf_path) {
+                Ok(f) => Some(std::io::BufWriter::new(f)),
+                Err(err) => {
+                    let _ = writeln!(
+                        stderr,
+                        "Warning: failed to create OCSF output file: {}",
+                        err
+                    );
+                    None
+                }
+            }
+        } else {
+            None
+        };
+
     let mut count = 0usize;
 
     for (line_idx, line) in body.lines().enumerate() {
@@ -190,6 +263,16 @@ async fn observe_hushd_session(
             continue;
         };
 
+        if let Some(ref mut w) = ocsf_writer {
+            if let Some(ocsf_val) =
+                clawdstrike_policy_event::ocsf::policy_event_to_ocsf(&policy_event)
+            {
+                if let Ok(ocsf_line) = serde_json::to_string(&ocsf_val) {
+                    let _ = writeln!(w, "{ocsf_line}");
+                }
+            }
+        }
+
         match serde_json::to_string(&policy_event) {
             Ok(json_line) => {
                 if let Err(err) = writeln!(writer, "{}", json_line) {
@@ -208,6 +291,9 @@ async fn observe_hushd_session(
         let _ = writeln!(stderr, "Error: failed to flush output file: {}", err);
         return ExitCode::RuntimeError;
     }
+    if let Some(ref mut w) = ocsf_writer {
+        let _ = w.flush();
+    }
 
     let _ = writeln!(
         stdout,
@@ -216,6 +302,9 @@ async fn observe_hushd_session(
         session_id,
         args.out.display()
     );
+    if let Some(ref ocsf_path) = args.ocsf_out {
+        let _ = writeln!(stderr, "OCSF output: {}", ocsf_path.display());
+    }
 
     ExitCode::Ok
 }
@@ -224,12 +313,14 @@ fn map_audit_event(event: AuditEventLine) -> Option<PolicyEvent> {
     let timestamp = DateTime::parse_from_rfc3339(&event.timestamp)
         .map(|dt| dt.with_timezone(&Utc))
         .unwrap_or_else(|_| Utc::now());
+    let (allowed, is_warn) = normalize_audit_decision(&event.decision);
 
     let mut metadata = serde_json::Map::new();
     metadata.insert(
         "decision".to_string(),
         serde_json::json!({
-            "allowed": event.decision.eq_ignore_ascii_case("allowed"),
+            "allowed": allowed,
+            "warn": is_warn,
             "guard": event.guard,
             "severity": event.severity,
             "message": event.message,
@@ -314,6 +405,14 @@ fn map_audit_event(event: AuditEventLine) -> Option<PolicyEvent> {
         metadata: Some(serde_json::Value::Object(metadata)),
         context: None,
     })
+}
+
+fn normalize_audit_decision(decision: &str) -> (bool, bool) {
+    match decision.trim().to_ascii_lowercase().as_str() {
+        "allow" | "allowed" | "pass" | "passed" => (true, false),
+        "warn" | "warning" | "warned" | "logged" => (true, true),
+        _ => (false, false),
+    }
 }
 
 fn parse_host_port(target: &str) -> (String, u16) {
@@ -417,5 +516,56 @@ mod tests {
             decision.get("allowed").and_then(|v| v.as_bool()),
             Some(false)
         );
+        assert_eq!(decision.get("warn").and_then(|v| v.as_bool()), Some(false));
+    }
+
+    #[test]
+    fn map_audit_event_warn_maps_to_allowed_warn_metadata() {
+        let event = AuditEventLine {
+            id: "evt-3".to_string(),
+            timestamp: "2026-02-06T10:00:02Z".to_string(),
+            action_type: "shell".to_string(),
+            target: Some("rm -rf /tmp/demo".to_string()),
+            decision: "warn".to_string(),
+            guard: Some("ShellCommandGuard".to_string()),
+            severity: Some("warning".to_string()),
+            message: Some("logged".to_string()),
+            session_id: Some("sess-3".to_string()),
+            metadata: None,
+        };
+
+        let mapped = map_audit_event(event).expect("event should map");
+        let metadata = mapped.metadata.expect("metadata should exist");
+        let decision = metadata
+            .get("decision")
+            .and_then(|v| v.as_object())
+            .expect("decision metadata should exist");
+        assert_eq!(
+            decision.get("allowed").and_then(|v| v.as_bool()),
+            Some(true)
+        );
+        assert_eq!(decision.get("warn").and_then(|v| v.as_bool()), Some(true));
+    }
+
+    #[test]
+    fn map_audit_event_warn_produces_logged_ocsf_outcome() {
+        let event = AuditEventLine {
+            id: "evt-4".to_string(),
+            timestamp: "2026-02-06T10:00:03Z".to_string(),
+            action_type: "shell".to_string(),
+            target: Some("cat /etc/passwd".to_string()),
+            decision: "warn".to_string(),
+            guard: Some("ShellCommandGuard".to_string()),
+            severity: Some("warning".to_string()),
+            message: Some("command logged".to_string()),
+            session_id: Some("sess-4".to_string()),
+            metadata: None,
+        };
+
+        let mapped = map_audit_event(event).expect("event should map");
+        let json = clawdstrike_policy_event::ocsf::policy_event_to_ocsf(&mapped)
+            .expect("warn event should map to OCSF");
+        assert_eq!(json["action_id"], 1);
+        assert_eq!(json["disposition_id"], 17);
     }
 }

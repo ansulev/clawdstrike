@@ -11,6 +11,8 @@ use pyo3::types::{PyDict, PyModule};
 use std::collections::HashMap;
 use std::sync::{Mutex, OnceLock};
 
+mod policy_lab;
+
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 
 /// Verify a signed receipt using native Rust implementation.
@@ -588,9 +590,9 @@ fn sign_message_native(py: Python<'_>, message: &[u8], private_key: &[u8]) -> Py
     Ok(pyo3::types::PyBytes::new(py, &sig.to_bytes()).into())
 }
 
-/// Python module definition.
+/// Python module definition for `clawdstrike._native`.
 #[pymodule]
-fn hush_native(m: &Bound<'_, PyModule>) -> PyResult<()> {
+fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(verify_receipt_native, m)?)?;
     m.add_function(wrap_pyfunction!(sha256_native, m)?)?;
     m.add_function(wrap_pyfunction!(keccak256_native, m)?)?;
@@ -605,6 +607,7 @@ fn hush_native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(extract_watermark_native, m)?)?;
     m.add_function(wrap_pyfunction!(is_native_available, m)?)?;
     m.add_class::<NativeEngine>()?;
+    m.add_class::<policy_lab::PolicyLab>()?;
     m.add_function(wrap_pyfunction!(generate_keypair_native, m)?)?;
     m.add_function(wrap_pyfunction!(sign_message_native, m)?)?;
     Ok(())

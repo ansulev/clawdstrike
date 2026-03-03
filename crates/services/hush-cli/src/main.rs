@@ -586,6 +586,10 @@ enum PolicyCommands {
         /// Track posture state across events while simulating.
         #[arg(long)]
         track_posture: bool,
+
+        /// Optional path for parallel OCSF JSONL output.
+        #[arg(long)]
+        ocsf_out: Option<String>,
     },
 
     /// Observe runtime activity and write canonical PolicyEvent JSONL
@@ -605,6 +609,10 @@ enum PolicyCommands {
         /// Session ID for hushd observation mode.
         #[arg(long)]
         session: Option<String>,
+        /// Optional path for parallel OCSF JSONL output.
+        #[arg(long)]
+        ocsf_out: Option<String>,
+
         /// Command to run for local observation mode.
         #[arg(trailing_var_arg = true)]
         command: Vec<String>,
@@ -980,6 +988,10 @@ enum HuntCommands {
         /// Disable colored output
         #[arg(long)]
         no_color: bool,
+
+        /// Output as OCSF v1.4.0 JSONL
+        #[arg(long)]
+        ocsf: bool,
     },
 
     /// Reconstruct an activity timeline from spine envelopes
@@ -1059,6 +1071,10 @@ enum HuntCommands {
         /// Filter timeline by entity (agent, user, service)
         #[arg(long)]
         entity: Option<String>,
+
+        /// Output as OCSF v1.4.0 JSONL
+        #[arg(long)]
+        ocsf: bool,
     },
 
     /// Run correlation rules against spine envelopes in real-time watch mode
@@ -2616,6 +2632,7 @@ async fn cmd_policy(
             no_fail_on_deny,
             benchmark,
             track_posture,
+            ocsf_out,
         } => Ok(policy_pac::cmd_policy_simulate(
             policy_ref,
             events,
@@ -2628,6 +2645,7 @@ async fn cmd_policy(
                 fail_on_deny: fail_on_deny || !no_fail_on_deny,
                 benchmark,
                 track_posture,
+                ocsf_out,
             },
             stdout,
             stderr,
@@ -2640,6 +2658,7 @@ async fn cmd_policy(
             hushd_url,
             hushd_token,
             session,
+            ocsf_out,
             command,
         } => Ok(policy_observe::cmd_policy_observe(
             policy_observe::PolicyObserveCommand {
@@ -2648,6 +2667,7 @@ async fn cmd_policy(
                 hushd_url,
                 hushd_token,
                 session,
+                ocsf_out: ocsf_out.map(PathBuf::from),
                 command,
             },
             remote_extends,

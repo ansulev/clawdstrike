@@ -331,6 +331,7 @@ mod cli_parsing {
                     no_fail_on_deny,
                     benchmark,
                     track_posture,
+                    ocsf_out,
                 } => {
                     assert_eq!(policy_ref, "default");
                     assert_eq!(events, Some("events.jsonl".to_string()));
@@ -342,6 +343,7 @@ mod cli_parsing {
                     assert!(!no_fail_on_deny);
                     assert!(!benchmark);
                     assert!(!track_posture);
+                    assert!(ocsf_out.is_none());
                 }
                 _ => panic!("Expected Simulate subcommand"),
             },
@@ -2126,6 +2128,7 @@ mod policy_pac_contract {
                 fail_on_deny: true,
                 benchmark: false,
                 track_posture: false,
+                ocsf_out: None,
             },
             &mut out,
             &mut err,
@@ -2205,6 +2208,7 @@ mod policy_pac_contract {
                 fail_on_deny: true,
                 benchmark: false,
                 track_posture: false,
+                ocsf_out: None,
             },
             &mut out,
             &mut err,
@@ -2250,6 +2254,7 @@ mod policy_pac_contract {
                 fail_on_deny: true,
                 benchmark: false,
                 track_posture: false,
+                ocsf_out: None,
             },
             &mut out,
             &mut err,
@@ -2291,6 +2296,7 @@ mod policy_pac_contract {
                 fail_on_deny: false,
                 benchmark: false,
                 track_posture: false,
+                ocsf_out: None,
             },
             &mut out,
             &mut err,
@@ -2357,6 +2363,7 @@ mod policy_pac_contract {
                 fail_on_deny: false,
                 benchmark: false,
                 track_posture: false,
+                ocsf_out: None,
             },
             &mut out,
             &mut err,

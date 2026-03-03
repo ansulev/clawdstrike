@@ -2,6 +2,13 @@
 
 `clawdstrike hunt` provides six investigation subcommands for agent/MCP inventory, historical telemetry search, timeline reconstruction, rule correlation, live correlation watch, and IOC matching.
 
+## Prerequisites
+
+- `clawdstrike` CLI with `hunt` subcommands available.
+- One of:
+  - Live backend data via NATS + source pipelines (`receipt`, `tetragon`, `hubble`, `scan`), or
+  - Local exports for offline mode (`--offline --local-dir <dir>`).
+
 ## Subcommands
 
 | Command | Purpose |

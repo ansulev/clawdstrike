@@ -21,9 +21,10 @@ This runbook documents day-2 operations for the **agent-owned OpenClaw architect
   - `POST /api/v1/openclaw/request`
   - `GET /api/v1/openclaw/events` (SSE)
   - `POST /api/v1/openclaw/import-desktop-gateways`
-- Desktop client bridge:
-  - `apps/desktop/src/services/agentOpenClawClient.ts`
-  - `apps/desktop/src/context/OpenClawAgentProvider.tsx`
+- Agent OpenClaw runtime modules:
+  - `apps/agent/src-tauri/src/openclaw/manager.rs`
+  - `apps/agent/src-tauri/src/openclaw/protocol.rs`
+  - `apps/agent/src-tauri/src/openclaw/secret_store.rs`
 - Local auth token file: `~/.config/clawdstrike/agent-local-token`
 
 `POST /api/v1/openclaw/request` is policy-gated through the same local enforcement path as `/api/v1/agent/policy-check` (fail-closed when hushd is unreachable and enforcement is enabled).

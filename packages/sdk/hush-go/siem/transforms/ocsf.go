@@ -1,71 +1,125 @@
 package transforms
 
 import (
+	"fmt"
+
 	"github.com/backbay-labs/clawdstrike-go/siem"
 )
 
-// OCSF Activity IDs for Security Finding.
+// OCSF Detection Finding class constants.
 const (
-	ocsfClassUID    = 2001 // Security Finding
-	ocsfActivityNew = 1    // Create
+	ocsfClassUID       = 2004                                  // Detection Finding (NOT deprecated 2001 Security Finding)
+	ocsfCategoryUID    = 2                                     // Findings
+	ocsfActivityCreate = 1                                     // Create
+	ocsfTypeUID        = ocsfClassUID*100 + ocsfActivityCreate // 200401
+	ocsfVersion        = "1.4.0"
 )
 
 // outcomeToOCSF maps Clawdstrike outcomes to OCSF status IDs.
 var outcomeToOCSF = map[string]int{
 	"allow": 1, // Success
 	"deny":  2, // Failure
-	"warn":  0, // Unknown
+	"warn":  1, // Success (warn is non-blocking)
 }
 
 // severityToOCSF maps severity strings to OCSF severity IDs.
+// Critical = 5 (NOT 6 which is Fatal).
 var severityToOCSF = map[string]int{
 	"info":     1,
+	"low":      2,
 	"warning":  3,
 	"warn":     3,
-	"error":    4,
-	"low":      2,
 	"medium":   3,
+	"error":    4,
 	"high":     4,
 	"critical": 5,
 }
 
-// ToOCSF converts a SecurityEvent to Open Cybersecurity Schema Framework format.
+// severityLabels maps severity IDs to OCSF label strings.
+var severityLabels = map[int]string{
+	0:  "Unknown",
+	1:  "Informational",
+	2:  "Low",
+	3:  "Medium",
+	4:  "High",
+	5:  "Critical",
+	6:  "Fatal",
+	99: "Other",
+}
+
+// ToOCSF converts a SecurityEvent to OCSF v1.4.0 Detection Finding format.
 func ToOCSF(event siem.SecurityEvent) map[string]interface{} {
 	statusID := 0
 	if id, ok := outcomeToOCSF[event.Outcome]; ok {
 		statusID = id
 	}
 
+	actionID := 0      // Unknown
+	dispositionID := 0 // Unknown
+	if event.Decision != nil {
+		actionID = 1      // Allowed
+		dispositionID = 1 // Allowed
+		switch event.Outcome {
+		case "deny":
+			actionID = 2      // Denied
+			dispositionID = 2 // Blocked
+		case "warn":
+			actionID = 1       // Allowed (warn is non-blocking)
+			dispositionID = 17 // Logged
+		}
+	}
+
 	ocsf := map[string]interface{}{
-		"class_uid":   ocsfClassUID,
-		"activity_id": ocsfActivityNew,
-		"time":        event.Timestamp.UnixMilli(),
-		"status_id":   statusID,
-		"message":     event.EventType,
+		"class_uid":      ocsfClassUID,
+		"category_uid":   ocsfCategoryUID,
+		"type_uid":       ocsfTypeUID,
+		"activity_id":    ocsfActivityCreate,
+		"activity_name":  "Create",
+		"time":           event.Timestamp.UnixMilli(),
+		"status_id":      statusID,
+		"action_id":      actionID,
+		"disposition_id": dispositionID,
+		"message":        event.EventType,
 		"metadata": map[string]interface{}{
-			"version":      event.SchemaVersion,
-			"product":      map[string]string{"name": "clawdstrike", "vendor_name": "backbay"},
+			"version": ocsfVersion,
+			"product": map[string]string{
+				"name":        "ClawdStrike",
+				"uid":         "clawdstrike",
+				"vendor_name": "Backbay Labs",
+				// Note: AgentInfo has no Version field; omit rather than use wrong value.
+			},
 			"original_uid": event.EventID,
 		},
 		"actor": map[string]interface{}{
-			"agent": map[string]interface{}{
-				"uid":       event.Agent.ID,
-				"name":      event.Agent.Name,
-				"type_name": event.Agent.Type,
+			"user": map[string]interface{}{
+				"uid":  event.Agent.ID,
+				"name": event.Agent.Name,
 			},
+			"app_name": "clawdstrike",
 		},
 	}
 
+	sevID := 0
+	guardName := "unknown"
+	guardMessage := event.EventType
 	if event.Decision != nil {
-		sevID := 0
 		if id, ok := severityToOCSF[event.Decision.Severity]; ok {
 			sevID = id
 		}
-		ocsf["severity_id"] = sevID
-		ocsf["finding"] = map[string]interface{}{
-			"title":   event.Decision.Guard,
-			"message": event.Decision.Message,
-		}
+		guardName = event.Decision.Guard
+		guardMessage = event.Decision.Message
+	}
+	ocsf["severity_id"] = sevID
+	ocsf["severity"] = severityLabels[sevID]
+	ocsf["finding_info"] = map[string]interface{}{
+		"uid":   event.EventID,
+		"title": fmt.Sprintf("%s decision", guardName),
+		"analytic": map[string]interface{}{
+			"name":    guardName,
+			"type_id": 1,
+			"type":    "Rule",
+		},
+		"desc": guardMessage,
 	}
 
 	if event.Resource != nil {
@@ -78,13 +132,6 @@ func ToOCSF(event siem.SecurityEvent) map[string]interface{} {
 		ocsf["resources"] = resources
 	}
 
-	if event.Threat != nil {
-		ocsf["confidence_id"] = int(event.Threat.Confidence * 10)
-		ocsf["analytic"] = map[string]interface{}{
-			"category": event.Threat.Category,
-		}
-	}
-
 	return ocsf
 }
 
@@ -94,6 +141,8 @@ func resourceName(r *siem.ResourceInfo) string {
 		return r.Path
 	case "network":
 		return r.Host
+	case "process":
+		return r.Path
 	case "tool":
 		return r.Tool
 	default:

@@ -1,7 +1,7 @@
 """Cryptographic primitives with native-first dispatch.
 
-When the native Rust backend (hush_native) is available, crypto operations
-are delegated to it for performance and consistency with the Rust engine.
+When the bundled native Rust backend is available, crypto operations are
+delegated to it for performance and consistency with the Rust engine.
 Otherwise falls back to pure Python implementations using PyNaCl/pycryptodome.
 """
 
@@ -25,7 +25,7 @@ _generate_keypair_native = None
 _sign_message_native = None
 if NATIVE_AVAILABLE:
     try:
-        import hush_native as _hn
+        from clawdstrike import _native as _hn
 
         _generate_keypair_native = getattr(_hn, "generate_keypair_native", None)
         _sign_message_native = getattr(_hn, "sign_message_native", None)

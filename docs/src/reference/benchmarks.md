@@ -13,6 +13,13 @@ Clawdstrike is designed for minimal latency overhead at the tool boundary. This 
 
 **Bottom line:** Guard overhead is <0.01% of typical LLM API latency (500-2000ms).
 
+## Prerequisites
+
+- Rust toolchain installed for CLI benchmarks.
+- Node.js and npm installed for TypeScript/OpenClaw adapter benchmarks.
+- Run commands from a local clone of this repository.
+- Use release builds or production-like machine settings for reproducible numbers.
+
 ## Running Benchmarks
 
 ### TypeScript SDK (`@clawdstrike/sdk`)

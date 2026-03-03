@@ -8,7 +8,7 @@ Rust is the reference implementation for Clawdstrike policy evaluation. Other la
 |----------|------------|----------------------|
 | **Rust** | `clawdstrike`, `hush-core`, `hush-cli`, `clawdstriked` | Full policy engine + guards + prompt-security |
 | **TypeScript** | `@clawdstrike/sdk` | Crypto + receipts + guards + prompt-security utilities (no policy engine) |
-| **Python** | `clawdstrike` | Facade API + 9 guards + receipts/crypto; optional native Rust engine with all 12 guards |
+| **Python** | `clawdstrike` | Facade API + 9 guards + receipts/crypto; bundled native Rust engine on supported platforms with all 12 guards |
 | **WebAssembly** | `@clawdstrike/wasm` | Crypto + receipt verification |
 
 ## TypeScript
@@ -37,7 +37,7 @@ console.log(r.riskScore, r.signals.map(s => s.id));
 
 ## Python
 
-Python provides a `Clawdstrike` facade with built-in rulesets, typed check methods, and a `Decision` return type. When the optional `hush-native` extension is installed, evaluation runs in Rust with all 12 guards.
+Python provides a `Clawdstrike` facade with built-in rulesets, typed check methods, and a `Decision` return type. On supported platforms, evaluation runs in Rust with all 12 guards via the bundled native extension.
 
 ```python
 from clawdstrike import Clawdstrike

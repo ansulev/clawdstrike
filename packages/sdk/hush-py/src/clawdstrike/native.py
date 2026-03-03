@@ -1,11 +1,12 @@
 """Native Rust backend detection and imports.
 
-This module attempts to load the native Rust bindings (hush_native).
-If unavailable, NATIVE_AVAILABLE will be False and native_* functions
-will be None.
+This module attempts to load the bundled native Rust bindings
+(`clawdstrike._native`). If unavailable, ``NATIVE_AVAILABLE`` will be
+``False`` and native_* functions will be ``None``.
 """
 from __future__ import annotations
 
+import os
 from collections.abc import Callable
 
 # Try to import native bindings
@@ -24,60 +25,60 @@ watermark_public_key_native: Callable[[str], str] | None = None
 watermark_prompt_native: Callable[..., dict] | None = None
 extract_watermark_native: Callable[..., dict] | None = None
 
-try:
-    from hush_native import (
-        is_native_available as _is_native_available,
-    )
-    from hush_native import (
-        merkle_root_native as _merkle_root_native,
-    )
-    from hush_native import (
-        sha256_native as _sha256_native,
-    )
-    from hush_native import (
-        verify_receipt_native as _verify_receipt_native,
-    )
+_NATIVE_DISABLED = os.getenv("CLAWDSTRIKE_DISABLE_NATIVE", "").strip().lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
 
-    NATIVE_AVAILABLE = True
-    is_native_available = _is_native_available
-    sha256_native = _sha256_native
-    merkle_root_native = _merkle_root_native
-    verify_receipt_native = _verify_receipt_native
+if not _NATIVE_DISABLED:
+    try:
+        from clawdstrike import _native as _native_mod
 
-    # Import optional functions that may not exist in older versions.
-    # Uses getattr to avoid repetitive try/except ImportError blocks.
-    import hush_native as _hush_native_mod
+        NATIVE_AVAILABLE = True
+        is_native_available = getattr(_native_mod, "is_native_available", None)
+        sha256_native = getattr(_native_mod, "sha256_native", None)
+        merkle_root_native = getattr(_native_mod, "merkle_root_native", None)
+        verify_receipt_native = getattr(_native_mod, "verify_receipt_native", None)
 
-    _OPTIONAL_BINDINGS = [
-        "keccak256_native",
-        "verify_ed25519_native",
-        "generate_merkle_proof_native",
-        "canonicalize_native",
-        "detect_jailbreak_native",
-        "sanitize_output_native",
-        "watermark_public_key_native",
-        "watermark_prompt_native",
-        "extract_watermark_native",
-    ]
-    for _name in _OPTIONAL_BINDINGS:
-        _fn = getattr(_hush_native_mod, _name, None)
-        if _fn is not None:
-            globals()[_name] = _fn
+        # Import optional functions that may not exist in older wheels.
+        _OPTIONAL_BINDINGS = [
+            "keccak256_native",
+            "verify_ed25519_native",
+            "generate_merkle_proof_native",
+            "canonicalize_native",
+            "detect_jailbreak_native",
+            "sanitize_output_native",
+            "watermark_public_key_native",
+            "watermark_prompt_native",
+            "extract_watermark_native",
+        ]
+        for _name in _OPTIONAL_BINDINGS:
+            _fn = getattr(_native_mod, _name, None)
+            if _fn is not None:
+                globals()[_name] = _fn
 
-    del _hush_native_mod, _OPTIONAL_BINDINGS, _name, _fn
+        del _OPTIONAL_BINDINGS, _name, _fn
 
-except ImportError:
-    # hush_native is not installed; all native_* bindings remain None.
+    except ImportError:
+        # Native extension is unavailable; keep pure-Python fallback.
+        NATIVE_AVAILABLE = False
+else:
     NATIVE_AVAILABLE = False
 
 
 def get_native_module():
-    """Return the hush_native module, raising NativeBackendError if unavailable."""
+    """Return the bundled native module, raising NativeBackendError if unavailable."""
     if not NATIVE_AVAILABLE:
         from clawdstrike.exceptions import NativeBackendError
-        raise NativeBackendError("hush-native extension not installed")
-    import hush_native
-    return hush_native
+        if _NATIVE_DISABLED:
+            raise NativeBackendError(
+                "clawdstrike native extension disabled via CLAWDSTRIKE_DISABLE_NATIVE"
+            )
+        raise NativeBackendError("clawdstrike native extension not available")
+    from clawdstrike import _native
+    return _native
 
 
 def init_native() -> bool:
@@ -86,9 +87,11 @@ def init_native() -> bool:
     Returns:
         True if native engine is available, False otherwise.
     """
+    if _NATIVE_DISABLED:
+        return False
     try:
-        import hush_native
-        return hasattr(hush_native, "NativeEngine")
+        from clawdstrike import _native
+        return hasattr(_native, "NativeEngine")
     except ImportError:
         return False
 

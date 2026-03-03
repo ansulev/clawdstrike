@@ -2,6 +2,13 @@
 
 This guide defines the release-confidence pipeline for the Clawdstrike Helm chart.
 
+## Prerequisites
+
+- Helm 3.x and kubectl installed.
+- Access to a Kubernetes cluster for smoke/resilience runs.
+- OCI registry access for `ghcr.io/backbay-labs/clawdstrike/helm/*`.
+- For CI parity: required AWS/OIDC/EKS secrets and variables set (see below).
+
 The pipeline has three layers:
 
 1. Fast chart correctness checks on every commit.
@@ -76,7 +83,7 @@ Checks:
 ```bash
 scripts/helm-e2e-smoke.sh \
   --chart-ref oci://ghcr.io/backbay-labs/clawdstrike/helm/clawdstrike \
-  --chart-version 0.1.2 \
+  --chart-version <chart-version> \
   --namespace "clawdstrike-smoke-$(date +%s)" \
   --values infra/deploy/helm/clawdstrike/ci/cluster-smoke-values.yaml \
   --artifact-dir dist/helm-smoke/local
@@ -87,7 +94,7 @@ scripts/helm-e2e-smoke.sh \
 ```bash
 scripts/helm-resilience-security.sh \
   --chart-ref oci://ghcr.io/backbay-labs/clawdstrike/helm/clawdstrike \
-  --chart-version 0.1.2 \
+  --chart-version <chart-version> \
   --values infra/deploy/helm/clawdstrike/ci/resilience-values.yaml \
   --namespace "clawdstrike-resilience-$(date +%s)" \
   --artifact-dir dist/helm-resilience/local

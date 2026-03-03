@@ -536,7 +536,7 @@ OR                            filters: [                    - CLAWDSTRIKE_HUBBLE
 clawdstrike hunt              verdict=denied,
   --pod agent-pod             ],                            Spine envelope store:
   --verdict denied            output: Table,                - Receipt envelopes
-  --since 1h                  }                             - Policy bundle envelopes
+  --start 1h                  }                             - Policy bundle envelopes
                               |
                               v
                         +-----------+
@@ -572,7 +572,7 @@ clawdstrike hunt              verdict=denied,
 ### Consumer Strategy
 
 Hunt creates ephemeral JetStream consumers with `DeliverPolicy::ByStartTime`
-to seek into the time window specified by `--since` / `--until`. For
+to seek into the time window specified by `--start` / `--end`. For
 streaming mode (`hunt watch`), it uses `DeliverPolicy::New` with
 `AckPolicy::None` for real-time tailing.
 
@@ -581,7 +581,7 @@ streaming mode (`hunt watch`), it uses `DeliverPolicy::New` with
 Filters are applied in order of cheapness:
 
 1. **Subject filter** - NATS subject selection (e.g., only `process_exec.v1`)
-2. **Time filter** - `issued_at` within `[since, until]`
+2. **Time filter** - `issued_at` within `[start, end]`
 3. **Field filter** - JSON path matches on fact fields
 4. **Severity threshold** - minimum severity level
 5. **Correlation filter** - cross-source entity matching (expensive, last)

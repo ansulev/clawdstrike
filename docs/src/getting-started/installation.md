@@ -45,6 +45,8 @@ clawdstrike daemon start
 npm install @clawdstrike/sdk
 ```
 
+For `PolicyLab` examples (`observe -> synth -> tighten`), use a package build that includes PolicyLab-enabled WASM bindings.
+
 ```typescript
 import { Clawdstrike } from "@clawdstrike/sdk";
 
@@ -57,6 +59,8 @@ const decision = await cs.checkFile("~/.ssh/id_rsa", "read");
 ```bash
 pip install clawdstrike
 ```
+
+For `PolicyLab` examples, use a wheel that includes the bundled native extension with PolicyLab support.
 
 ```python
 from clawdstrike import Clawdstrike

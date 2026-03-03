@@ -1,5 +1,5 @@
 import type { PolicyEngineLike } from "@clawdstrike/adapter-core";
-import { initWasm, isWasmBackend } from "@clawdstrike/sdk";
+import { getWasmModule, initWasm, isWasmBackend } from "@clawdstrike/sdk";
 import { describe, expect, it, vi } from "vitest";
 import { ClawdstrikePromptSecurityError } from "./errors.js";
 import { createClawdstrikeMiddleware } from "./middleware.js";
@@ -8,7 +8,12 @@ import { createClawdstrikeMiddleware } from "./middleware.js";
 let wasmAvailable = false;
 try {
   const ok = await initWasm();
-  wasmAvailable = ok && isWasmBackend();
+  const wasm = getWasmModule();
+  wasmAvailable =
+    ok &&
+    isWasmBackend() &&
+    typeof wasm?.WasmJailbreakDetector === "function" &&
+    typeof wasm?.WasmOutputSanitizer === "function";
 } catch {
   // WASM module not installed — skip detection tests.
 }

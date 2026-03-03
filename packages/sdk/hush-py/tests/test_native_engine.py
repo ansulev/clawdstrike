@@ -1,6 +1,6 @@
 """Tests for the NativeEngine Rust extension.
 
-All tests in this module are skipped if hush_native is not available.
+All tests in this module are skipped if clawdstrike._native is not available.
 """
 
 from __future__ import annotations
@@ -9,7 +9,7 @@ import pytest
 
 from clawdstrike.native import NATIVE_AVAILABLE, init_native
 
-pytestmark = pytest.mark.skipif(not NATIVE_AVAILABLE, reason="hush_native not installed")
+pytestmark = pytest.mark.skipif(not NATIVE_AVAILABLE, reason="clawdstrike._native not installed")
 
 
 def _has_native_engine() -> bool:
@@ -18,44 +18,44 @@ def _has_native_engine() -> bool:
 
 skip_no_engine = pytest.mark.skipif(
     not _has_native_engine() if NATIVE_AVAILABLE else True,
-    reason="NativeEngine not available in hush_native",
+    reason="NativeEngine not available in clawdstrike._native",
 )
 
 
 @skip_no_engine
 class TestNativeEngineFromRuleset:
     def test_strict(self) -> None:
-        import hush_native
+        from clawdstrike import _native as native_mod
 
-        engine = hush_native.NativeEngine.from_ruleset("strict")
+        engine = native_mod.NativeEngine.from_ruleset("strict")
         assert engine is not None
 
     def test_default(self) -> None:
-        import hush_native
+        from clawdstrike import _native as native_mod
 
-        engine = hush_native.NativeEngine.from_ruleset("default")
+        engine = native_mod.NativeEngine.from_ruleset("default")
         assert engine is not None
 
     def test_permissive(self) -> None:
-        import hush_native
+        from clawdstrike import _native as native_mod
 
-        engine = hush_native.NativeEngine.from_ruleset("permissive")
+        engine = native_mod.NativeEngine.from_ruleset("permissive")
         assert engine is not None
 
     def test_invalid_ruleset_raises(self) -> None:
-        import hush_native
+        from clawdstrike import _native as native_mod
 
         with pytest.raises(ValueError):
-            hush_native.NativeEngine.from_ruleset("nonexistent_ruleset_xyz")
+            native_mod.NativeEngine.from_ruleset("nonexistent_ruleset_xyz")
 
 
 @skip_no_engine
 class TestNativeEngineChecks:
     @pytest.fixture
     def engine(self):
-        import hush_native
+        from clawdstrike import _native as native_mod
 
-        return hush_native.NativeEngine.from_ruleset("strict")
+        return native_mod.NativeEngine.from_ruleset("strict")
 
     def test_check_shell_blocks_rm_rf(self, engine) -> None:
         report = engine.check_shell("rm -rf /")
@@ -126,17 +126,17 @@ class TestNativeEngineChecks:
 @skip_no_engine
 class TestNativeEngineFromYaml:
     def test_from_yaml(self) -> None:
-        import hush_native
+        from clawdstrike import _native as native_mod
 
         yaml_str = 'version: "1.1.0"\nname: test\nextends: strict\n'
-        engine = hush_native.NativeEngine.from_yaml(yaml_str)
+        engine = native_mod.NativeEngine.from_yaml(yaml_str)
         assert engine is not None
 
     def test_from_yaml_invalid(self) -> None:
-        import hush_native
+        from clawdstrike import _native as native_mod
 
         with pytest.raises(ValueError):
-            hush_native.NativeEngine.from_yaml("not: valid: yaml: policy:")
+            native_mod.NativeEngine.from_yaml("not: valid: yaml: policy:")
 
 
 @skip_no_engine
@@ -144,13 +144,13 @@ class TestNativeVsPurePythonParity:
     """Verify that native and pure Python backends agree on verdicts."""
 
     def test_shell_command_parity(self) -> None:
-        import hush_native
+        from clawdstrike import _native as native_mod
 
         from clawdstrike.backend import PurePythonBackend
         from clawdstrike.policy import Policy, PolicyEngine
 
         yaml = 'version: "1.1.0"\nname: test\nextends: strict\n'
-        native_engine = hush_native.NativeEngine.from_ruleset("strict")
+        native_engine = native_mod.NativeEngine.from_ruleset("strict")
         policy = Policy.from_yaml_with_extends(yaml)
         pure = PurePythonBackend(PolicyEngine(policy))
 
@@ -170,13 +170,13 @@ class TestNativeVsPurePythonParity:
             )
 
     def test_file_access_parity(self) -> None:
-        import hush_native
+        from clawdstrike import _native as native_mod
 
         from clawdstrike.backend import PurePythonBackend
         from clawdstrike.policy import Policy, PolicyEngine
 
         yaml = 'version: "1.1.0"\nname: test\nextends: strict\n'
-        native_engine = hush_native.NativeEngine.from_ruleset("strict")
+        native_engine = native_mod.NativeEngine.from_ruleset("strict")
         policy = Policy.from_yaml_with_extends(yaml)
         pure = PurePythonBackend(PolicyEngine(policy))
 

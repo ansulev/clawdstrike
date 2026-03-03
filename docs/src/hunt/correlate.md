@@ -2,6 +2,8 @@
 
 Run correlation rules against historical events.
 
+Prerequisite: live NATS/source data, or local exported envelopes with `--offline --local-dir`.
+
 ## Usage
 
 ```bash

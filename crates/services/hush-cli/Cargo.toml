@@ -42,7 +42,7 @@ regorus = { version = "0.9.1", optional = true }
 toml.workspace = true
 dirs.workspace = true
 hunt-scan.workspace = true
-hunt-query.workspace = true
+hunt-query = { workspace = true, features = ["ocsf"] }
 hunt-correlate.workspace = true
 colored.workspace = true
 comfy-table.workspace = true
@@ -50,6 +50,7 @@ indicatif.workspace = true
 dialoguer.workspace = true
 console.workspace = true
 unicode-width = "0.2"
+clawdstrike-policy-event = { workspace = true, features = ["simulate"] }
 
 [features]
 default = ["rego-runtime", "wasm-plugin-runtime"]

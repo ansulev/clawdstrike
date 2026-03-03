@@ -21,16 +21,31 @@ fi
 
 echo "Bumping version to $VERSION..."
 
-# Detect sed flavor (GNU vs BSD)
+IS_GNU_SED=0
 if sed --version 2>/dev/null | grep -q GNU; then
-    SED_INPLACE="sed -i"
-else
-    SED_INPLACE="sed -i ''"
+    IS_GNU_SED=1
 fi
+
+sed_inplace() {
+    local expr="$1"
+    local file="$2"
+    if [[ "$IS_GNU_SED" -eq 1 ]]; then
+        sed -i -e "$expr" "$file"
+    else
+        sed -i '' -e "$expr" "$file"
+    fi
+}
+
+find_package_json_files() {
+    find packages \
+        \( -type d -name node_modules -o -type d -name .turbo \) -prune \
+        -o -type f -name package.json -print \
+        | sort
+}
 
 # Update root Cargo.toml workspace version
 echo "  Updating Cargo.toml workspace version..."
-$SED_INPLACE "s/^version = \"[^\"]*\"/version = \"$VERSION\"/" Cargo.toml
+sed_inplace "s/^version = \"[^\"]*\"/version = \"$VERSION\"/" Cargo.toml
 
 # Update all crate Cargo.toml files that use workspace version inheritance
 # (They inherit from workspace, so we only need to update the root)
@@ -47,7 +62,7 @@ if command -v node &> /dev/null; then
             pkg.version = version;
             fs.writeFileSync(path, JSON.stringify(pkg, null, 2) + '\\n');
         " "$PKG_JSON" "$VERSION"
-    done < <(find packages -type f -name package.json | sort)
+    done < <(find_package_json_files)
 
     if [[ -f "crates/libs/hush-wasm/package.json" ]]; then
         node -e "
@@ -60,24 +75,24 @@ if command -v node &> /dev/null; then
     fi
 else
     while IFS= read -r PKG_JSON; do
-        $SED_INPLACE "s/\"version\": \"[^\"]*\"/\"version\": \"$VERSION\"/" "$PKG_JSON"
-    done < <(find packages -type f -name package.json | sort)
+        sed_inplace "s/\"version\": \"[^\"]*\"/\"version\": \"$VERSION\"/" "$PKG_JSON"
+    done < <(find_package_json_files)
 
     if [[ -f "crates/libs/hush-wasm/package.json" ]]; then
-        $SED_INPLACE "s/\"version\": \"[^\"]*\"/\"version\": \"$VERSION\"/" crates/libs/hush-wasm/package.json
+        sed_inplace "s/\"version\": \"[^\"]*\"/\"version\": \"$VERSION\"/" crates/libs/hush-wasm/package.json
     fi
 fi
 
 FORMULA_PATH="infra/packaging/HomebrewFormula/hush.rb"
 if [[ -f "$FORMULA_PATH" ]]; then
     echo "  Updating ${FORMULA_PATH} tag URL..."
-    $SED_INPLACE "s#https://github.com/backbay-labs/clawdstrike/archive/refs/tags/v[0-9][0-9.]*\\.tar\\.gz#https://github.com/backbay-labs/clawdstrike/archive/refs/tags/v$VERSION.tar.gz#" "$FORMULA_PATH"
+    sed_inplace "s#https://github.com/backbay-labs/clawdstrike/archive/refs/tags/v[0-9][0-9.]*\\.tar\\.gz#https://github.com/backbay-labs/clawdstrike/archive/refs/tags/v$VERSION.tar.gz#" "$FORMULA_PATH"
 fi
 
 # Update pyproject.toml if it exists
 if [[ -f "packages/sdk/hush-py/pyproject.toml" ]]; then
     echo "  Updating packages/sdk/hush-py/pyproject.toml..."
-    $SED_INPLACE "s/^version = \"[^\"]*\"/version = \"$VERSION\"/" packages/sdk/hush-py/pyproject.toml
+    sed_inplace "s/^version = \"[^\"]*\"/version = \"$VERSION\"/" packages/sdk/hush-py/pyproject.toml
 fi
 
 PY_INIT_PATH=""
@@ -89,7 +104,7 @@ fi
 
 if [[ -n "$PY_INIT_PATH" ]]; then
     echo "  Updating ${PY_INIT_PATH} __version__..."
-    $SED_INPLACE "s/^__version__ = \"[^\"]*\"/__version__ = \"$VERSION\"/" "$PY_INIT_PATH"
+    sed_inplace "s/^__version__ = \"[^\"]*\"/__version__ = \"$VERSION\"/" "$PY_INIT_PATH"
 fi
 
 echo ""

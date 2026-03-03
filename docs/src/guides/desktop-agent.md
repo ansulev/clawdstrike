@@ -7,6 +7,8 @@ The Clawdstrike Desktop Agent is a Tauri-based application that provides local r
 - Rust 1.93+ (for building from source)
 - `clawdstrike` CLI installed ([Installation](../getting-started/installation.md))
 - `hushd` daemon available (optional but recommended)
+- `curl` and `jq` for API checks in this guide
+- `openclaw` CLI if using OpenClaw gateway integration sections
 - OS keyring support (optional; falls back to in-memory secret storage)
 
 ## Installation
@@ -14,7 +16,7 @@ The Clawdstrike Desktop Agent is a Tauri-based application that provides local r
 ### Build from source
 
 ```bash
-cd apps/desktop
+cd apps/agent
 
 # Install Tauri dependencies (macOS)
 cargo install tauri-cli
@@ -23,7 +25,7 @@ cargo install tauri-cli
 cargo tauri build
 ```
 
-The built application is written to `apps/desktop/src-tauri/target/release/`.
+The built application is written to `apps/agent/src-tauri/target/release/`.
 
 ### Development mode
 

@@ -115,7 +115,16 @@ impl Guard for JailbreakGuard {
         };
 
         let session_id = context.session_id.as_deref();
-        let r = self.detector.detect(text, session_id).await;
+        let r = {
+            #[cfg(feature = "full")]
+            {
+                self.detector.detect(text, session_id).await
+            }
+            #[cfg(not(feature = "full"))]
+            {
+                self.detector.detect_sync(text, session_id)
+            }
+        };
 
         let signal_ids: Vec<String> = r.signals.iter().map(|s| s.id.clone()).collect();
 

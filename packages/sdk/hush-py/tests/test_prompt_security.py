@@ -1,7 +1,7 @@
 import pytest
 
 
-pytest.importorskip("hush_native")
+pytest.importorskip("clawdstrike._native")
 
 
 from clawdstrike.prompt_security import (

@@ -597,7 +597,7 @@ pub struct HuntQuery {
 ### 2.2 CLI Flags
 
 ```
-hush hunt query \
+clawdstrike hunt query \
     --start 2026-02-26T00:00:00Z \
     --end   2026-02-27T00:00:00Z \
     --source tetragon,receipt \
@@ -612,7 +612,7 @@ Natural language shorthand with `--nl` (optional, requires `--llm` or keyword
 extraction fallback):
 
 ```
-hush hunt query --nl "show me all denied egress in the last 24 hours"
+clawdstrike hunt query --nl "show me all denied egress in the last 24 hours"
 ```
 
 ### 2.3 NATS JetStream Replay
@@ -620,7 +620,7 @@ hush hunt query --nl "show me all denied egress in the last 24 hours"
 Leverage `spine::nats_transport` for connectivity and JetStream replay:
 
 ```
-  hush hunt query
+  clawdstrike hunt query
        |
        v
 +------------------+     +---------------------+
@@ -733,7 +733,7 @@ workspace = true
 
 ### Phase 2 Acceptance Criteria
 
-- [ ] `hush hunt query --start ... --end ...` replays NATS JetStream envelopes
+- [ ] `clawdstrike hunt query --start ... --end ...` replays NATS JetStream envelopes
 - [ ] Query filters (source, process, namespace, verdict, search) work correctly
 - [ ] Timeline merges Tetragon, Hubble, Receipt, and Scan events by timestamp
 - [ ] Color-coded terminal output renders correctly; `--json` disables color
@@ -819,7 +819,7 @@ output:
 Real-time NATS subscription with continuous correlation:
 
 ```
-hush hunt watch \
+clawdstrike hunt watch \
     --rules rules/*.yaml \
     --nats-url nats://localhost:4222 \
     --signing-key hush.key
@@ -882,7 +882,7 @@ Input formats:
 CLI:
 
 ```
-hush hunt ioc \
+clawdstrike hunt ioc \
     --feed indicators.csv \
     --stix threat-feed.json \
     --start 2026-02-26T00:00:00Z \
@@ -954,7 +954,7 @@ workspace = true
 
 - [ ] Correlation YAML schema parses and validates (reject unknown fields)
 - [ ] Sliding-window correlation fires alerts for multi-step attack patterns
-- [ ] `hush hunt watch` streams NATS events and applies correlation rules live
+- [ ] `clawdstrike hunt watch` streams NATS events and applies correlation rules live
 - [ ] IOC matching works for SHA-256, domain, IPv4, and STIX 2.1 input
 - [ ] Reports contain valid Merkle proofs verifiable with `hush merkle verify`
 - [ ] Report signature verifiable with `hush verify`

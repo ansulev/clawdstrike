@@ -170,17 +170,31 @@ async function runTsEngine(env, policyRef, events, engineKind) {
     // JailbreakDetector (and other detection modules) require the WASM backend.
     // Initialize it before instantiating the SDK so guard construction succeeds.
     let wasmOk = false;
+    let wasmAdvancedOk = false;
     if (typeof mod.initWasm === 'function') {
       try {
         wasmOk = await mod.initWasm();
+        if (typeof mod.getWasmModule === 'function') {
+          const wasm = mod.getWasmModule();
+          wasmAdvancedOk =
+            typeof wasm?.detect_prompt_injection === 'function' &&
+            typeof wasm?.WasmJailbreakDetector === 'function' &&
+            typeof wasm?.WasmOutputSanitizer === 'function' &&
+            typeof wasm?.WasmInstructionHierarchyEnforcer === 'function';
+        }
       } catch {
         wasmOk = false;
+        wasmAdvancedOk = false;
       }
     }
     const sdk = await mod.Clawdstrike.fromPolicy(policyRef);
     for (const evt of events) {
       const decision = await evaluateSdkEvent(sdk, evt);
-      byId.set(evt.eventId, { ...decision, __wasmOk: wasmOk });
+      byId.set(evt.eventId, {
+        ...decision,
+        __wasmOk: wasmOk,
+        __wasmAdvancedOk: wasmAdvancedOk,
+      });
     }
     return byId;
   }
@@ -330,9 +344,12 @@ function compare(tsById, hushOutput) {
       // When WASM is unavailable, the TS engine skips WASM-dependent guards.
       // Tolerate mismatches where Rust denies via a WASM guard but TS allows.
       const wasmOk = tsDecision.__wasmOk ?? true;
-      if (!wasmOk && WASM_DEPENDENT_GUARDS.has(b.guard)) {
+      const wasmAdvancedOk = tsDecision.__wasmAdvancedOk ?? wasmOk;
+      if ((!wasmOk || !wasmAdvancedOk) && WASM_DEPENDENT_GUARDS.has(b.guard)) {
         // eslint-disable-next-line no-console
-        console.warn(`[parity] skipping ${id}: WASM guard ${b.guard} unavailable in TS`);
+        console.warn(
+          `[parity] skipping ${id}: WASM guard ${b.guard} unavailable in TS`,
+        );
         continue;
       }
       mismatches.push({ id, ts: a, hush: b });

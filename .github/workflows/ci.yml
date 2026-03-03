@@ -490,14 +490,14 @@ jobs:
         run: |
           SIZE=$(wc -c < crates/libs/hush-wasm/pkg/hush_wasm_bg.wasm)
           echo "Bundle size: $SIZE bytes ($(( SIZE / 1024 ))KB)"
-          # Limit raised from 512KB after adding clawdstrike detection modules
-          # (regex patterns for jailbreak/injection detection) to WASM.
-          # Current baseline ~1.6MB; 1.75MiB cap leaves ~10% headroom.
-          if [ $SIZE -gt 1835008 ]; then
-            echo "ERROR: Bundle exceeds 1.75MiB limit"
+          # Limit raised from 1.75MiB after adding policy-event + OCSF conversion
+          # support to hush-wasm (via clawdstrike-policy-event/clawdstrike-ocsf).
+          # Current baseline ~2.25MiB; 2.5MiB cap leaves ~10% headroom.
+          if [ $SIZE -gt 2621440 ]; then
+            echo "ERROR: Bundle exceeds 2.5MiB limit"
             exit 1
           fi
-          echo "Bundle size is within 1.75MiB limit"
+          echo "Bundle size is within 2.5MiB limit"
 
   proptest:
     name: Property Tests
@@ -1160,3 +1160,71 @@ jobs:
 
       - name: Run tests
         run: python -m pytest
+
+  python-native-wheel-smoke:
+    name: Python Native Wheel Smoke (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Sync Python sources for native wheel build
+        shell: bash
+        run: scripts/sync-hush-py-native-sources.sh
+
+      - name: Build native wheel
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          python -m pip install maturin
+          cd packages/sdk/hush-py/hush-native
+          maturin build --release --interpreter python --out dist-native
+          ls -la dist-native
+
+      - name: Install native wheel artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --force-reinstall packages/sdk/hush-py/hush-native/dist-native/clawdstrike-*.whl
+
+      - name: Verify bundled native backend is active
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import clawdstrike
+          from clawdstrike import NATIVE_AVAILABLE
+
+          assert NATIVE_AVAILABLE is True, "Expected bundled native backend to be available"
+          import clawdstrike._native as native_mod
+
+          assert hasattr(native_mod, "NativeEngine")
+          engine = native_mod.NativeEngine.from_ruleset("strict")
+          report = engine.check_file_access("/etc/shadow")
+          assert report["overall"]["allowed"] is False
+          print("Native smoke check passed")
+          PY
+
+      - name: Verify explicit pure-Python fallback toggle
+        shell: bash
+        run: |
+          set -euo pipefail
+          CLAWDSTRIKE_DISABLE_NATIVE=1 python - <<'PY'
+          from clawdstrike import NATIVE_AVAILABLE, init_native
+
+          assert NATIVE_AVAILABLE is False
+          assert init_native() is False
+          print("Fallback toggle smoke check passed")
+          PY

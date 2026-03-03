@@ -469,20 +469,6 @@ Composable, policy-driven security checks at the tool boundary. Each guard handl
 
 ---
 
-### Cryptographic Receipts
-
-Every policy decision produces an **Ed25519-signed receipt**: a tamper-evident attestation proving what was decided, under which policy, with what evidence. Portable across Rust, TypeScript, and Python via RFC 8785 canonical JSON.
-
-```rust
-// A receipt proves: "Under policy X, action Y was evaluated with verdict Z"
-// Signed with Ed25519. Forge one and we'll be impressed
-let receipt = engine.create_signed_receipt(content_hash).await?;
-```
-
-This isn't logging. This is **cryptographic proof** that holds up under audit.
-
----
-
 ### Multi-Agent Security Primitives
 
 When agents spawn agents, who controls whom? Clawdstrike's multi-agent layer provides:
@@ -525,9 +511,12 @@ The `Sanitize` decision verdict allows operations to proceed with modified conte
 </tr>
 <tr>
 <td width="50%" valign="top">
-<h4 align="center">Prompt Watermarking</h4>
+<a id="cryptographic-receipts"></a>
+<h4 align="center">Cryptographic Receipts + Prompt Watermarking</h4>
 
-Ed25519-signed provenance markers embedded in prompts for attribution and forensic tracing. Carries app ID, session ID, sequence number, and timestamp (RFC 8785). Survives model inference round-trips.
+Every policy decision produces an **Ed25519-signed receipt**: a tamper-evident attestation proving what was decided, under which policy, and with what evidence. Portable across Rust, TypeScript, and Python via RFC 8785 canonical JSON.
+
+Prompt watermarking embeds signed provenance markers for attribution and forensic tracing (app ID, session ID, sequence number, timestamp), designed to survive model inference round-trips.
 
 </td>
 <td width="50%" valign="top">
@@ -615,23 +604,19 @@ Clawdstrike scales from a single developer's laptop to a fleet of thousands of m
 <tr>
 <td width="55%" valign="top">
 
-The `@clawdstrike/engine-adaptive` package is designed for production turbulence: packet loss, control-plane outages, restarts, and partial partitions.
+The **@clawdstrike/engine-adaptive** package is built for production turbulence: packet loss, control-plane outages, restarts, and partial partitions.
 
-Build once against `PolicyEngineLike`; run from laptop to fleet with the same enforcement code.
+Build once against **PolicyEngineLike**; run from laptop to fleet with the same enforcement code.
 
-- **Health-aware routing** across local and remote evaluators.
-- **Automatic continuity** without failover playbooks.
-- **Signed, attributable decisions** in every mode.
-- **Offline receipt buffering/replay** to preserve audit continuity through disconnects.
-- **Consistent behavior** across dev, CI, and production agents.
-- **No blind window** where actions bypass policy evaluation.
+* Health-aware routing across local/remote evaluators
+* Continuity without failover playbooks
+* Signed, attributable decisions in every mode
+* Offline receipt buffering + replay to preserve audit continuity through disconnects
+* Consistent behavior across dev, CI, and production agents
+* No blind window where actions bypass policy evaluation
+* Explicit threat model: uncertainty tightens restriction, not exposure
 
-Its threat model is explicit: uncertainty tightens restriction, not exposure.
-
-- Connectivity loss never creates implicit allow paths.
-- Ambiguous failures resolve to deny.
-- Recovery is stateful, with queued evidence reconciliation.
-- Control-plane failure degrades to containment, not policy drift.
+No implicit allow paths on connectivity loss. Ambiguity resolves to deny. Recovery is stateful with queued evidence reconciliation. Control-plane failure degrades to containment, not policy drift.
 
 </td>
 <td width="45%" valign="top">
@@ -644,7 +629,9 @@ Its threat model is explicit: uncertainty tightens restriction, not exposure.
 
 ## Enterprise Architecture
 
-For organizations managing agent fleets across teams and environments, Clawdstrike provides a full enterprise control plane.
+For organizations managing agent fleets across teams and environments, Clawdstrike runs two connected enterprise planes.
+
+### 1. Control Plane
 
 ```mermaid
 flowchart TB
@@ -654,22 +641,69 @@ flowchart TB
         AN[Desktop Agent N]
     end
 
-    subgraph nats ["NATS JetStream"]
+    subgraph nats_control ["NATS Control Plane"]
         KV[(Policy KV)]
-        JS[(Telemetry Stream)]
-        CMD[Command Subjects]
+        CMD[Posture / Command Subjects]
     end
 
     subgraph cloud ["Cloud Control Plane"]
+        DASH[Cloud Dashboard]
         API[Cloud API]
         DB[(PostgreSQL)]
-        DASH[Cloud Dashboard]
+        PROV[External NATS Provisioner]
     end
 
-    A1 & A2 & AN <-->|policy sync<br/>telemetry<br/>posture commands| nats
-    nats <--> API
-    API <--> DB
     DASH <--> API
+    API <--> DB
+    API <--> PROV
+
+    A1 & A2 & AN -->|HTTPS enrollment| API
+    API -->|NATS creds + subject prefix| A1 & A2 & AN
+
+    API -->|policy publish/update| KV
+    KV -->|policy sync (KV watch)| A1 & A2 & AN
+
+    API -->|set_posture / reload / kill| CMD
+    CMD -->|request/reply ack| A1 & A2 & AN
+```
+
+### 2. Telemetry Plane
+
+```mermaid
+flowchart TB
+    subgraph sources ["Edge Sources"]
+        AG[Desktop Agent / hushd]
+        BR[Bridge Fleet<br/>auditd, k8s-audit, hubble, tetragon, darwin]
+    end
+
+    subgraph reliability ["Publisher Reliability"]
+        ABUF[Agent receipt buffering / replay]
+        BOUT[Bridge durable outbox / retry]
+    end
+
+    subgraph nats_data ["NATS JetStream Data Plane"]
+        ING[(Adaptive Ingress Stream)]
+        AUD[(Bridge Envelope Streams)]
+    end
+
+    subgraph cloud_ingest ["Cloud Ingestion Workers"]
+        APPR[Approval Request Consumer]
+        HEART[Heartbeat Consumer]
+        AUDC[Audit Consumer]
+    end
+
+    DB[(PostgreSQL)]
+
+    AG --> ABUF --> ING
+    BR --> BOUT --> AUD
+
+    ING --> APPR
+    ING --> HEART
+    AUD --> AUDC
+
+    APPR --> DB
+    HEART --> DB
+    AUDC --> DB
 ```
 
 ### Enrollment
@@ -742,19 +776,19 @@ Web UI for security teams to manage their agent fleet:
 
 See [Enterprise Enrollment Guide](docs/src/guides/enterprise-enrollment.md) and [Adaptive Deployment Guide](docs/src/guides/adaptive-deployment.md) for detailed setup instructions.
 
-### Compliance Templates
+### Compliance Mapping (Current + Planned)
 
-Every guard decision maps to a regulatory control. Templates ship with pre-built evidence collectors, guard-to-control mappings, and exportable evidence bundles for auditors.
+Clawdstrike generates signed receipts and structured audit facts that teams can map to common regulatory controls. This is implementation guidance, not legal advice, an auditor attestation, or an active Clawdstrike certification.
 
-| Framework        | What Clawdstrike Proves                                                                                                                                         | Key Controls                                                                                         |
-| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| **HIPAA**        | PHI never left the allowed path. Signed receipts for every access decision. Breach forensics from session reconstruction, not guesswork                         | 164.312(a)(1) Access Control · 164.312(b) Audit · 164.312(e)(1) Transmission Security                |
-| **PCI-DSS v4.0** | Cardholder data stayed in scope. Egress locked to the CDE. Secrets masked before they hit the model                                                             | 1.4.1 Network Segmentation · 3.5.1 PAN Masking · 7.2.1 Access Control · 10.2.1 Audit Trail           |
-| **SOC2 Type II** | Continuous control evidence across a 6-12 month observation window. Guard verdicts feed directly into CC6/CC7/CC8 criteria with zero manual evidence collection | CC6.1 Logical Access · CC6.6 Network Boundaries · CC7.2 Security Anomalies · CC8.1 Change Management |
+| Framework        | Evidence Clawdstrike Can Produce Today                                                                           | Example Controls Teams Commonly Map                                                        |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| **HIPAA**        | Signed access decisions, tamper-evident audit trails, and transport-policy evidence                              | 164.312(a)(1) Access Control · 164.312(b) Audit · 164.312(e)(1) Transmission Security     |
+| **PCI-DSS v4.0** | Egress policy decisions, redaction/masking events, and signed action history                                     | 1.4.1 Network Segmentation · 3.5.1 PAN Masking · 7.2.1 Access Control · 10.2.1 Audit Trail |
+| **SOC2 Type II** | Continuous control telemetry (where deployed), policy/verdict history, and change/audit artifacts for reviewers | CC6.1 Logical Access · CC6.6 Network Boundaries · CC7.2 Security Anomalies · CC8.1 Change Management |
 
-**Certification tiers:** Certified (OSS baseline) → Silver (egress lockdown, secret redaction, 90-day retention) → Gold (compliance templates, external auditor attestation, 1-year retention) → Platinum (multi-framework, 7-year archive, real-time SIEM, 99.9% SLA).
+No formal Clawdstrike certification program is generally available today. The tier model and framework template packs are design specs and roadmap material.
 
-See [Certification Program](docs/plans/certification/overview.md) · [HIPAA Template](docs/plans/certification/hipaa-template.md) · [PCI-DSS Template](docs/plans/certification/pci-dss-template.md) · [SOC2 Template](docs/plans/certification/soc2-template.md)
+See draft specs: [Certification & Compliance Specs](docs/plans/certification/README.md) · [Program Overview (Draft)](docs/plans/certification/overview.md) · [HIPAA Mapping Draft](docs/plans/certification/hipaa-template.md) · [PCI-DSS Mapping Draft](docs/plans/certification/pci-dss-template.md) · [SOC2 Mapping Draft](docs/plans/certification/soc2-template.md)
 
 ---
 

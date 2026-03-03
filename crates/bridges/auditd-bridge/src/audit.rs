@@ -510,13 +510,16 @@ impl AuditLogTailer {
                         break;
                     }
                     Ok(bytes_read) => {
-                        offset += bytes_read as u64;
-                        if line.ends_with('\n') {
-                            line.pop();
-                            if line.ends_with('\r') {
-                                line.pop();
-                            }
-                        }
+                        let Some(line) = finalize_complete_line(line, bytes_read, &mut offset)
+                        else {
+                            // `read_line` can return bytes at EOF without a trailing newline.
+                            // Keep `offset` unchanged so we re-read and stitch the full line.
+                            tracing::debug!(
+                                bytes_read,
+                                "partial audit line at EOF, waiting for newline before emitting"
+                            );
+                            break;
+                        };
 
                         if tx.send(line).await.is_err() {
                             tracing::warn!("line receiver dropped, stopping tailer");
@@ -533,6 +536,23 @@ impl AuditLogTailer {
             tokio::time::sleep(self.poll_interval).await;
         }
     }
+}
+
+/// Convert a freshly-read buffer into a complete line ready for downstream parsing.
+///
+/// Returns `None` for partial EOF fragments that do not end in `\n`; in that case,
+/// `offset` is intentionally left unchanged so the fragment is re-read next poll.
+fn finalize_complete_line(mut line: String, bytes_read: usize, offset: &mut u64) -> Option<String> {
+    if !line.ends_with('\n') {
+        return None;
+    }
+
+    *offset += bytes_read as u64;
+    line.pop(); // trailing '\n'
+    if line.ends_with('\r') {
+        line.pop();
+    }
+    Some(line)
 }
 
 #[cfg(test)]
@@ -605,6 +625,30 @@ mod tests {
     #[test]
     fn parse_garbage_returns_error() {
         assert!(parse_audit_line("this is not an audit line").is_err());
+    }
+
+    #[test]
+    fn finalize_complete_line_advances_offset_on_newline() {
+        let mut offset = 10_u64;
+        let line = "type=SYSCALL msg=...\n".to_string();
+        let bytes_read = line.len();
+
+        let finalized = finalize_complete_line(line, bytes_read, &mut offset);
+
+        assert_eq!(finalized, Some("type=SYSCALL msg=...".to_string()));
+        assert_eq!(offset, 10 + bytes_read as u64);
+    }
+
+    #[test]
+    fn finalize_complete_line_preserves_offset_for_partial_line() {
+        let mut offset = 42_u64;
+        let line = "type=SYSCALL msg=partial".to_string();
+        let bytes_read = line.len();
+
+        let finalized = finalize_complete_line(line, bytes_read, &mut offset);
+
+        assert_eq!(finalized, None);
+        assert_eq!(offset, 42);
     }
 
     #[test]

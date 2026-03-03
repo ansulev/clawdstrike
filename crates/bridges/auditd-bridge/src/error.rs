@@ -30,3 +30,21 @@ pub enum Error {
 
 /// Result type for bridge operations.
 pub type Result<T> = std::result::Result<T, Error>;
+
+#[cfg(test)]
+mod tests {
+    use super::Error;
+
+    #[test]
+    fn error_variants_display() {
+        let io = Error::from(std::io::Error::other("disk"));
+        let parse = Error::Parse("bad line".to_string());
+        let nats = Error::Nats("disconnected".to_string());
+        let config = Error::Config("missing key".to_string());
+
+        assert!(io.to_string().contains("I/O error"));
+        assert!(parse.to_string().contains("parse error"));
+        assert!(nats.to_string().contains("NATS error"));
+        assert!(config.to_string().contains("configuration error"));
+    }
+}

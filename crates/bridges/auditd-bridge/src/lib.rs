@@ -270,6 +270,7 @@ impl Bridge {
             )
             .await;
 
+            let mut channel_closed = false;
             let events = match line {
                 Ok(Some(line)) => match parse_audit_line(&line) {
                     Ok(record) => grouper.add_record(record),
@@ -280,7 +281,9 @@ impl Bridge {
                 },
                 Ok(None) => {
                     warn!("audit log tailer channel closed");
-                    break;
+                    channel_closed = true;
+                    // Ensure buffered multi-line events are emitted before exit.
+                    grouper.flush_all()
                 }
                 Err(_) => grouper.flush_expired(),
             };
@@ -305,6 +308,10 @@ impl Bridge {
                     consecutive_errors = 0;
                     backoff = Duration::from_millis(100);
                 }
+            }
+
+            if channel_closed {
+                break;
             }
         }
 

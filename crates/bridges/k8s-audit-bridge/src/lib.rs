@@ -370,6 +370,7 @@ async fn handle_webhook(State(bridge): State<Arc<Bridge>>, body: Bytes) -> impl 
     };
 
     let mut errors = 0u64;
+    let mut successes = 0u64;
     for event in &events {
         if let Err(e) = bridge.handle_event(event).await {
             error!(
@@ -378,22 +379,37 @@ async fn handle_webhook(State(bridge): State<Arc<Bridge>>, body: Bytes) -> impl 
                 "failed to handle audit event"
             );
             errors += 1;
+        } else {
+            successes += 1;
         }
     }
 
-    if errors > 0 {
+    let status = decide_webhook_status(successes, errors);
+    if status == StatusCode::SERVICE_UNAVAILABLE {
+        warn!(errors, total = events.len(), "all events failed to process");
+        bridge.metrics.inc_webhook_5xx();
+    } else if errors > 0 {
         warn!(
             errors,
+            successes,
             total = events.len(),
-            "some events failed to process"
+            "partial batch failure; returning 200 to avoid duplicate replay of already-published events"
         );
-        bridge.metrics.inc_webhook_5xx();
-        // With outbox enabled, publish failures are converted to enqueue success,
-        // so remaining failures still represent transient HTTP retry-worthy errors.
-        return StatusCode::SERVICE_UNAVAILABLE;
     }
 
-    StatusCode::OK
+    status
+}
+
+/// Decide webhook response status from per-batch processing outcomes.
+///
+/// If at least one event was already published, return 200 to prevent K8s from
+/// retrying the entire batch and duplicating previously published envelopes.
+fn decide_webhook_status(successes: u64, errors: u64) -> StatusCode {
+    if errors == 0 || successes > 0 {
+        StatusCode::OK
+    } else {
+        StatusCode::SERVICE_UNAVAILABLE
+    }
 }
 
 /// Axum handler for health check.
@@ -427,4 +443,25 @@ async fn handle_metrics(State(bridge): State<Arc<Bridge>>) -> Response {
         body,
     )
         .into_response()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::decide_webhook_status;
+    use axum::http::StatusCode;
+
+    #[test]
+    fn webhook_status_ok_when_all_events_succeed() {
+        assert_eq!(decide_webhook_status(3, 0), StatusCode::OK);
+    }
+
+    #[test]
+    fn webhook_status_ok_on_partial_success_to_avoid_batch_replay() {
+        assert_eq!(decide_webhook_status(2, 1), StatusCode::OK);
+    }
+
+    #[test]
+    fn webhook_status_503_when_entire_batch_fails() {
+        assert_eq!(decide_webhook_status(0, 2), StatusCode::SERVICE_UNAVAILABLE);
+    }
 }

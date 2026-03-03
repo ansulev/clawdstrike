@@ -150,7 +150,6 @@ async fn main() -> anyhow::Result<()> {
         outbox_retry_max_ms: cli.outbox_retry_max_ms,
         readiness_outbox_degraded_threshold: cli.readiness_outbox_degraded_threshold,
         force_publish_failures: cli.force_publish_failures,
-        ..BridgeConfig::default()
     };
 
     let mut backoff = Duration::from_secs(1);

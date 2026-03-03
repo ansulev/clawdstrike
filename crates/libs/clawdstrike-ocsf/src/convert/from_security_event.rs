@@ -58,6 +58,8 @@ pub struct SecurityEventInput<'a> {
     pub agent_name: &'a str,
     /// Session ID.
     pub session_id: Option<&'a str>,
+    /// Whether this is a warn event (non-blocking but logged).
+    pub is_warn: bool,
 }
 
 /// Result set from converting a SecurityEvent to OCSF.
@@ -87,7 +89,9 @@ pub fn security_event_to_ocsf(input: &SecurityEventInput<'_>) -> OcsfEventSet {
     } else {
         ActionId::Denied
     };
-    let disposition_id = if input.allowed {
+    let disposition_id = if input.is_warn {
+        DispositionId::Logged
+    } else if input.allowed {
         DispositionId::Allowed
     } else {
         DispositionId::Blocked
@@ -279,6 +283,7 @@ mod tests {
             agent_id: "agent-1",
             agent_name: "test-agent",
             session_id: Some("sess-1"),
+            is_warn: false,
         }
     }
 
@@ -427,5 +432,18 @@ mod tests {
         input.severity = "critical";
         let json = to_ocsf_json(&input);
         assert_eq!(json["severity_id"], 5);
+    }
+
+    #[test]
+    fn warn_event_produces_logged_disposition() {
+        let mut input = sample_input();
+        input.allowed = true;
+        input.outcome = "success";
+        input.severity = "medium";
+        input.is_warn = true;
+        let json = to_ocsf_json(&input);
+        assert_eq!(json["action_id"], 1); // Allowed (non-blocking)
+        assert_eq!(json["disposition_id"], 17); // Logged
+        assert_eq!(json["status_id"], 1); // Success
     }
 }

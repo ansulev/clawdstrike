@@ -81,6 +81,7 @@ fn golden_detection_finding_allow() {
         agent_id: "agent-1",
         agent_name: "test-agent",
         session_id: Some("sess-1"),
+        is_warn: false,
     };
 
     let result = security_event_to_ocsf(&input);
@@ -119,6 +120,7 @@ fn golden_detection_finding_deny() {
         agent_id: "agent-1",
         agent_name: "test-agent",
         session_id: Some("sess-1"),
+        is_warn: false,
     };
 
     let result = security_event_to_ocsf(&input);

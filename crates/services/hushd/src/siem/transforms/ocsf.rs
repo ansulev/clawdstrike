@@ -1,4 +1,4 @@
-use crate::siem::types::{Outcome, ResourceType, SecurityEvent};
+use crate::siem::types::{Outcome, ResourceType, SecurityEvent, SecurityEventType};
 use clawdstrike_ocsf::convert::from_security_event::{to_ocsf_json, SecurityEventInput};
 
 /// Convert a `SecurityEvent` to an OCSF Detection Finding JSON payload.
@@ -44,6 +44,7 @@ pub fn to_ocsf(event: &SecurityEvent) -> serde_json::Value {
         agent_id: &event.agent.id,
         agent_name: &event.agent.name,
         session_id: Some(&*event.session.id),
+        is_warn: matches!(event.event_type, SecurityEventType::GuardWarn),
     };
 
     to_ocsf_json(&input)

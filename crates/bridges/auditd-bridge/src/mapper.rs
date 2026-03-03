@@ -125,6 +125,8 @@ fn classify_auth_severity(event: &AuditEvent) -> Severity {
             if is_auth_failure_result(res) {
                 return Severity::High;
             }
+            // Structured result is authoritative for this record.
+            continue;
         }
 
         // Fallback for records where res is only present in raw line text.
@@ -147,6 +149,14 @@ fn raw_line_has_auth_failure_result(raw_line: &str) -> bool {
         .any(is_auth_failure_result)
 }
 
+fn is_path_like_field_key(key: &str) -> bool {
+    matches!(key, "exe" | "name" | "path" | "cwd")
+        || key
+            .strip_prefix('a')
+            .map(|suffix| !suffix.is_empty() && suffix.bytes().all(|b| b.is_ascii_digit()))
+            .unwrap_or(false)
+}
+
 /// Classify EXECVE severity: uid=0 + sensitive paths → Critical.
 fn classify_execve_severity(event: &AuditEvent) -> Severity {
     let mut is_root = false;
@@ -158,9 +168,9 @@ fn classify_execve_severity(event: &AuditEvent) -> Severity {
             is_root = true;
         }
 
-        // Check for sensitive paths in exe, name, or arguments
-        for value in record.fields.values() {
-            if SENSITIVE_PATHS.iter().any(|s| value.starts_with(s)) {
+        // Check path-bearing fields only (exe/name/path/cwd/aN args).
+        for (key, value) in &record.fields {
+            if is_path_like_field_key(key) && SENSITIVE_PATHS.iter().any(|s| value.starts_with(s)) {
                 touches_sensitive = true;
             }
         }
@@ -281,6 +291,16 @@ mod tests {
     }
 
     #[test]
+    fn structured_auth_success_is_not_overridden_by_raw_line_fallback() {
+        let mut record = make_record(AuditEventType::UserAuth, &[("res", "success")]);
+        record.raw_line =
+            "type=USER_AUTH msg=audit(1614556843.937:999): res=success msg='nested res=0'"
+                .to_string();
+        let event = make_event(AuditEventType::UserAuth, vec![record]);
+        assert_eq!(classify_severity(&event), Severity::Medium);
+    }
+
+    #[test]
     fn root_execve_sensitive_path_is_critical() {
         let event = make_event(
             AuditEventType::Execve,
@@ -318,6 +338,22 @@ mod tests {
             )],
         );
         assert_eq!(classify_severity(&event), Severity::Low);
+    }
+
+    #[test]
+    fn root_execve_non_path_fields_do_not_trigger_sensitive_match() {
+        let event = make_event(
+            AuditEventType::Execve,
+            vec![make_record(
+                AuditEventType::Syscall,
+                &[
+                    ("uid", "0"),
+                    ("comm", "/etc/shadow"), // non-path semantic field
+                    ("key", "/etc/shadow"),  // non-path semantic field
+                ],
+            )],
+        );
+        assert_eq!(classify_severity(&event), Severity::Medium);
     }
 
     #[test]

@@ -28,6 +28,7 @@ members = [
     "crates/libs/hunt-scan",
     "crates/libs/hunt-query",
     "crates/libs/hunt-correlate",
+    "crates/libs/clawdstrike-ocsf",
 ]
 exclude = [
     "fuzz",
@@ -158,6 +159,7 @@ bridge-runtime = { path = "crates/libs/bridge-runtime", version = "0.2.0" }
 hunt-scan = { path = "crates/libs/hunt-scan", version = "0.2.0" }
 hunt-query = { path = "crates/libs/hunt-query", version = "0.2.0" }
 hunt-correlate = { path = "crates/libs/hunt-correlate", version = "0.2.0" }
+clawdstrike-ocsf = { path = "crates/libs/clawdstrike-ocsf", version = "0.2.0" }
 
 [profile.release]
 lto = true

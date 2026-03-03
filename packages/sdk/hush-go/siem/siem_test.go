@@ -288,11 +288,27 @@ func TestToOCSF(t *testing.T) {
 	ev := sampleEvent("ocsf-1")
 	ocsf := transforms.ToOCSF(ev)
 
-	if ocsf["class_uid"] != 2001 {
-		t.Errorf("expected class_uid 2001, got %v", ocsf["class_uid"])
+	// Detection Finding class_uid = 2004 (not deprecated 2001)
+	if ocsf["class_uid"] != 2004 {
+		t.Errorf("expected class_uid 2004, got %v", ocsf["class_uid"])
+	}
+	if ocsf["category_uid"] != 2 { // Findings
+		t.Errorf("expected category_uid 2, got %v", ocsf["category_uid"])
+	}
+	if ocsf["type_uid"] != 200401 { // 2004*100 + 1
+		t.Errorf("expected type_uid 200401, got %v", ocsf["type_uid"])
+	}
+	if ocsf["activity_id"] != 1 { // Create
+		t.Errorf("expected activity_id 1, got %v", ocsf["activity_id"])
 	}
 	if ocsf["status_id"] != 2 { // deny -> Failure
 		t.Errorf("expected status_id 2 for deny, got %v", ocsf["status_id"])
+	}
+	if ocsf["action_id"] != 2 { // Denied
+		t.Errorf("expected action_id 2 for deny, got %v", ocsf["action_id"])
+	}
+	if ocsf["disposition_id"] != 2 { // Blocked
+		t.Errorf("expected disposition_id 2 for deny, got %v", ocsf["disposition_id"])
 	}
 	if ocsf["severity_id"] != 4 { // high
 		t.Errorf("expected severity_id 4 for high, got %v", ocsf["severity_id"])
@@ -302,9 +318,50 @@ func TestToOCSF(t *testing.T) {
 	if !ok {
 		t.Fatal("missing metadata")
 	}
+	if meta["version"] != "1.4.0" {
+		t.Errorf("expected metadata.version 1.4.0, got %v", meta["version"])
+	}
 	product, ok := meta["product"].(map[string]string)
-	if !ok || product["name"] != "clawdstrike" {
-		t.Error("expected product name clawdstrike")
+	if !ok || product["name"] != "ClawdStrike" {
+		t.Errorf("expected product name ClawdStrike, got %v", product["name"])
+	}
+	if product["vendor_name"] != "Backbay Labs" {
+		t.Errorf("expected vendor_name Backbay Labs, got %v", product["vendor_name"])
+	}
+
+	// Verify finding_info presence
+	findingInfo, ok := ocsf["finding_info"].(map[string]interface{})
+	if !ok {
+		t.Fatal("missing finding_info")
+	}
+	analytic, ok := findingInfo["analytic"].(map[string]interface{})
+	if !ok {
+		t.Fatal("missing finding_info.analytic")
+	}
+	if analytic["type_id"] != 1 {
+		t.Errorf("expected analytic type_id 1 (Rule), got %v", analytic["type_id"])
+	}
+}
+
+func TestToOCSF_NilDecision(t *testing.T) {
+	ev := sampleEvent("ocsf-nil")
+	ev.Decision = nil
+
+	ocsf := transforms.ToOCSF(ev)
+
+	// Must still have required OCSF fields even without Decision.
+	if ocsf["class_uid"] != 2004 {
+		t.Errorf("expected class_uid 2004, got %v", ocsf["class_uid"])
+	}
+	if ocsf["severity_id"] != 0 { // Unknown
+		t.Errorf("expected severity_id 0 for nil decision, got %v", ocsf["severity_id"])
+	}
+	findingInfo, ok := ocsf["finding_info"].(map[string]interface{})
+	if !ok {
+		t.Fatal("missing finding_info when Decision is nil")
+	}
+	if findingInfo["uid"] != "ocsf-nil" {
+		t.Errorf("expected finding_info.uid to match event ID, got %v", findingInfo["uid"])
 	}
 }
 

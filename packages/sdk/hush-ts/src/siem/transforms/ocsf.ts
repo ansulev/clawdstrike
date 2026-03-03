@@ -1,20 +1,19 @@
 import type { SecurityEvent } from "../types";
 
-function ocsfSeverity(sev: SecurityEvent["decision"]["severity"]): {
-  severity_id: number;
-  severity: string;
-} {
+const OCSF_VERSION = "1.4.0";
+
+function ocsfSeverityId(sev: SecurityEvent["decision"]["severity"]): number {
   switch (sev) {
     case "info":
-      return { severity_id: 1, severity: "informational" };
+      return 1; // Informational
     case "low":
-      return { severity_id: 2, severity: "low" };
+      return 2;
     case "medium":
-      return { severity_id: 3, severity: "medium" };
+      return 3;
     case "high":
-      return { severity_id: 4, severity: "high" };
+      return 4;
     case "critical":
-      return { severity_id: 6, severity: "critical" };
+      return 5; // Critical = 5, NOT 6 (Fatal)
     default: {
       const exhaustive: never = sev;
       return exhaustive;
@@ -22,71 +21,88 @@ function ocsfSeverity(sev: SecurityEvent["decision"]["severity"]): {
   }
 }
 
-export function toOcsf(event: SecurityEvent): Record<string, unknown> {
-  const { severity_id, severity } = ocsfSeverity(event.decision.severity);
-
-  const out: Record<string, unknown> = {
-    time: event.timestamp,
-    severity_id,
-    severity,
-    status: event.outcome,
-    activity_name: event.event_type,
-    category_name: event.event_category,
-    message: event.decision.reason,
-    metadata: {
-      version: event.schema_version,
-      product: {
-        name: "clawdstrike",
-        version: event.agent.version,
-      },
-    },
-    actor: {
-      id: event.agent.id,
-      name: event.agent.name,
-      type: event.agent.type,
-    },
-    session: {
-      id: event.session.id,
-      tenant_id: event.session.tenant_id,
-      environment: event.session.environment,
-    },
-    decision: {
-      allowed: event.decision.allowed,
-      guard: event.decision.guard,
-      severity: event.decision.severity,
-    },
-  };
-
-  switch (event.resource.type) {
-    case "file": {
-      out.file = {
-        path: event.resource.path,
-        name: event.resource.name,
-      };
-      break;
-    }
-    case "network": {
-      out.network = {
-        host: event.resource.host,
-        port: event.resource.port,
-      };
-      break;
-    }
-    case "process": {
-      out.process = { command_line: event.resource.name };
-      break;
-    }
-    case "tool": {
-      out.tool = { name: event.resource.name };
-      break;
-    }
-    case "configuration":
-      break;
+function ocsfSeverityLabel(sev: SecurityEvent["decision"]["severity"]): string {
+  switch (sev) {
+    case "info":
+      return "Informational";
+    case "low":
+      return "Low";
+    case "medium":
+      return "Medium";
+    case "high":
+      return "High";
+    case "critical":
+      return "Critical";
     default: {
-      const exhaustive: never = event.resource.type;
-      void exhaustive;
+      const exhaustive: never = sev;
+      return exhaustive;
     }
   }
+}
 
-  return out;
+/**
+ * Convert a SecurityEvent to an OCSF Detection Finding (class_uid=2004).
+ *
+ * OCSF v1.4.0 compliant with proper class_uid, category_uid, type_uid,
+ * action_id, disposition_id, finding_info, and corrected severity mapping.
+ */
+export function toOcsf(event: SecurityEvent): Record<string, unknown> {
+  const severityId = ocsfSeverityId(event.decision.severity);
+  const severityLabel = ocsfSeverityLabel(event.decision.severity);
+  const actionId = event.decision.allowed ? 1 : 2; // 1=Allowed, 2=Denied
+  const dispositionId = event.decision.allowed ? 1 : 2; // 1=Allowed, 2=Blocked
+  const statusId =
+    event.outcome === "success" ? 1 : event.outcome === "failure" ? 2 : 0;
+
+  const activityId = 1; // Create
+  const classUid = 2004; // Detection Finding
+
+  return {
+    class_uid: classUid,
+    category_uid: 2, // Findings
+    type_uid: classUid * 100 + activityId,
+    activity_id: activityId,
+    activity_name: "Create",
+    time: new Date(event.timestamp).getTime(),
+    severity_id: severityId,
+    severity: severityLabel,
+    status_id: statusId,
+    action_id: actionId,
+    disposition_id: dispositionId,
+    message: event.decision.reason,
+    metadata: {
+      version: OCSF_VERSION,
+      product: {
+        name: "ClawdStrike",
+        uid: "clawdstrike",
+        vendor_name: "Backbay Labs",
+        version: event.agent.version,
+      },
+      original_uid: event.event_id,
+    },
+    finding_info: {
+      uid: event.event_id,
+      title: `${event.decision.guard} decision`,
+      analytic: {
+        name: event.decision.guard,
+        type_id: 1, // Rule
+        type: "Rule",
+      },
+      desc: event.decision.reason,
+    },
+    actor: {
+      user: {
+        name: event.agent.name,
+        uid: event.agent.id,
+      },
+      app_name: "clawdstrike",
+      session: event.session.id ? { uid: event.session.id } : undefined,
+    },
+    resources: [
+      {
+        name: event.resource.name,
+        type: event.resource.type,
+      },
+    ],
+  };
 }

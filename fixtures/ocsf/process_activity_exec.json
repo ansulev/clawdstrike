@@ -1,0 +1,30 @@
+{
+  "class_uid": 1007,
+  "category_uid": 1,
+  "type_uid": 100701,
+  "activity_id": 1,
+  "activity_name": "Launch",
+  "time": 1709366400000,
+  "severity_id": 1,
+  "status_id": 1,
+  "message": "process_exec /usr/bin/curl",
+  "metadata": {
+    "version": "1.4.0",
+    "product": {
+      "name": "ClawdStrike",
+      "uid": "clawdstrike",
+      "vendor_name": "Backbay Labs",
+      "version": "0.1.3"
+    }
+  },
+  "process": {
+    "pid": 1234,
+    "name": "curl",
+    "cmd_line": "/usr/bin/curl https://example.com",
+    "file": {
+      "path": "/usr/bin/curl",
+      "name": "curl"
+    },
+    "cwd": "/tmp"
+  }
+}

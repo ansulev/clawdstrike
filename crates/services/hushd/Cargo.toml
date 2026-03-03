@@ -27,6 +27,7 @@ path = "src/bin/clawdstriked.rs"
 hush-core.workspace = true
 hush-proxy.workspace = true
 clawdstrike = { workspace = true, features = ["full"] }
+clawdstrike-ocsf.workspace = true
 hush-certification.workspace = true
 spine.workspace = true
 async-nats = "0.39"

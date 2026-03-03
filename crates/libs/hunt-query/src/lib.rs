@@ -9,3 +9,6 @@ pub mod query;
 pub mod render;
 pub mod replay;
 pub mod timeline;
+
+#[cfg(feature = "ocsf")]
+pub mod ocsf;

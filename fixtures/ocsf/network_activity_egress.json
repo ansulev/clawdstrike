@@ -1,0 +1,35 @@
+{
+  "class_uid": 4001,
+  "category_uid": 4,
+  "type_uid": 400106,
+  "activity_id": 6,
+  "activity_name": "Traffic",
+  "time": 1709366400000,
+  "severity_id": 1,
+  "status_id": 1,
+  "message": "egress TCP 10.0.0.1:8080 -> 93.184.216.34:443",
+  "metadata": {
+    "version": "1.4.0",
+    "product": {
+      "name": "ClawdStrike",
+      "uid": "clawdstrike",
+      "vendor_name": "Backbay Labs",
+      "version": "0.1.3"
+    }
+  },
+  "src_endpoint": {
+    "ip": "10.0.0.1",
+    "hostname": "web-server-xyz"
+  },
+  "dst_endpoint": {
+    "ip": "93.184.216.34"
+  },
+  "connection_info": {
+    "protocol_name": "TCP",
+    "protocol_num": 6,
+    "direction": "EGRESS",
+    "direction_id": 2
+  },
+  "action_id": 1,
+  "disposition_id": 1
+}

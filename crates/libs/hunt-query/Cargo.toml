@@ -23,6 +23,10 @@ crossterm.workspace = true
 regex.workspace = true
 dirs.workspace = true
 time = "0.3"
+clawdstrike-ocsf = { workspace = true, optional = true }
+
+[features]
+ocsf = ["dep:clawdstrike-ocsf"]
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }

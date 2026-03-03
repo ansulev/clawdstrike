@@ -158,23 +158,31 @@ fn extract_connection_info(fact: &Value) -> (Option<ConnectionInfo>, Option<u16>
         (
             "TCP",
             6u8,
-            tcp.get("source_port")
-                .and_then(|v| v.as_u64())
-                .and_then(|p| u16::try_from(p).ok()),
-            tcp.get("destination_port")
-                .and_then(|v| v.as_u64())
-                .and_then(|p| u16::try_from(p).ok()),
+            parse_port(tcp.get("source_port")),
+            parse_port(tcp.get("destination_port")),
         )
     } else if let Some(udp) = l4.get("UDP") {
         (
             "UDP",
             17,
-            udp.get("source_port")
-                .and_then(|v| v.as_u64())
-                .and_then(|p| u16::try_from(p).ok()),
-            udp.get("destination_port")
-                .and_then(|v| v.as_u64())
-                .and_then(|p| u16::try_from(p).ok()),
+            parse_port(udp.get("source_port")),
+            parse_port(udp.get("destination_port")),
+        )
+    } else if let Some(protocol) = l4.get("protocol").and_then(|v| v.as_str()) {
+        let protocol_upper = protocol.to_ascii_uppercase();
+        let (protocol_name, protocol_num) = match protocol_upper.as_str() {
+            "TCP" => ("TCP", 6u8),
+            "UDP" => ("UDP", 17u8),
+            "SCTP" => ("SCTP", 132u8),
+            "ICMPV4" => ("ICMPv4", 1u8),
+            "ICMPV6" => ("ICMPv6", 58u8),
+            _ => return (None, None, None),
+        };
+        (
+            protocol_name,
+            protocol_num,
+            parse_port(l4.get("source_port")),
+            parse_port(l4.get("destination_port")),
         )
     } else {
         return (None, None, None);
@@ -197,6 +205,12 @@ fn extract_connection_info(fact: &Value) -> (Option<ConnectionInfo>, Option<u16>
         src_port,
         dst_port,
     )
+}
+
+fn parse_port(value: Option<&Value>) -> Option<u16> {
+    value
+        .and_then(|v| v.as_u64())
+        .and_then(|p| u16::try_from(p).ok())
 }
 
 fn merge_port(endpoint: Option<NetworkEndpoint>, port: Option<u16>) -> Option<NetworkEndpoint> {
@@ -287,6 +301,34 @@ mod tests {
         assert_eq!(event.type_uid, 400105); // Refuse
         assert_eq!(event.status_id, 2); // Failure
         assert_eq!(event.action_id, Some(2)); // Denied
+    }
+
+    #[test]
+    fn forwarded_flow_with_flat_l4_schema() {
+        let fact = json!({
+            "verdict": "FORWARDED",
+            "traffic_direction": "EGRESS",
+            "summary": "TCP 10.0.0.1:8080 -> 93.184.216.34:443",
+            "ip": {
+                "source": "10.0.0.1",
+                "destination": "93.184.216.34"
+            },
+            "l4": {
+                "protocol": "TCP",
+                "source_port": 8080,
+                "destination_port": 443
+            }
+        });
+
+        let event = hubble_fact_to_network_activity(&fact, 1_709_366_400_000, "0.1.3").unwrap();
+        let src = event.src_endpoint.as_ref().unwrap();
+        let dst = event.dst_endpoint.as_ref().unwrap();
+        let ci = event.connection_info.as_ref().unwrap();
+
+        assert_eq!(src.port, Some(8080));
+        assert_eq!(dst.port, Some(443));
+        assert_eq!(ci.protocol_name.as_deref(), Some("TCP"));
+        assert_eq!(ci.protocol_num, Some(6));
     }
 
     #[test]

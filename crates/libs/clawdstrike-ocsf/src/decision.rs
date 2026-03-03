@@ -48,6 +48,10 @@ pub fn decision_object_is_warn(decision_obj: &serde_json::Map<String, Value>) ->
         return true;
     }
 
+    if decision_object_allowed(decision_obj) != Some(true) {
+        return false;
+    }
+
     matches!(
         decision_obj
             .get("severity")
@@ -93,5 +97,26 @@ mod tests {
     fn decision_field_warn_string_is_treated_as_warn() {
         let decision_obj = json!({ "decision": "warn" }).as_object().cloned().unwrap();
         assert!(decision_object_is_warn(&decision_obj));
+    }
+
+    #[test]
+    fn warning_severity_requires_allowed_true() {
+        let no_allowed = json!({ "severity": "warning" })
+            .as_object()
+            .cloned()
+            .unwrap();
+        assert!(!decision_object_is_warn(&no_allowed));
+
+        let allowed_true = json!({ "allowed": true, "severity": "warning" })
+            .as_object()
+            .cloned()
+            .unwrap();
+        assert!(decision_object_is_warn(&allowed_true));
+
+        let allowed_false = json!({ "allowed": false, "severity": "warning" })
+            .as_object()
+            .cloned()
+            .unwrap();
+        assert!(!decision_object_is_warn(&allowed_false));
     }
 }

@@ -45,7 +45,7 @@ pub fn tetragon_fact_to_process_activity(
         .and_then(|p| u32::try_from(p).ok());
     let uid = process_obj
         .and_then(|p| p.get("uid"))
-        .and_then(|u| u.as_str());
+        .and_then(process_uid_as_string);
 
     let severity_str = fact
         .get("severity")
@@ -73,9 +73,9 @@ pub fn tetragon_fact_to_process_activity(
         name: binary.map(|b| b.rsplit('/').next().unwrap_or(b).to_string()),
         cmd_line,
         file,
-        user: uid.map(|u| OcsfUser {
+        user: uid.as_ref().map(|u| OcsfUser {
             name: None,
-            uid: Some(u.to_string()),
+            uid: Some(u.clone()),
         }),
         parent_process: None,
         cwd: cwd.map(String::from),
@@ -89,6 +89,14 @@ pub fn tetragon_fact_to_process_activity(
         ProcessActivity::new(activity, time_ms, severity_id.as_u8(), 1, metadata, process)
             .with_message(summary),
     )
+}
+
+fn process_uid_as_string(value: &Value) -> Option<String> {
+    match value {
+        Value::String(s) => Some(s.to_string()),
+        Value::Number(n) => Some(n.to_string()),
+        _ => None,
+    }
 }
 
 #[cfg(test)]
@@ -105,6 +113,7 @@ mod tests {
                 "binary": "/usr/bin/curl",
                 "arguments": "https://example.com",
                 "pid": 1234,
+                "uid": 1000,
                 "cwd": "/tmp"
             },
             "severity": "info"
@@ -120,6 +129,10 @@ mod tests {
             Some("/usr/bin/curl https://example.com")
         );
         assert_eq!(event.process.cwd.as_deref(), Some("/tmp"));
+        assert_eq!(
+            event.process.user.as_ref().and_then(|u| u.uid.as_deref()),
+            Some("1000")
+        );
 
         let json_val = serde_json::to_value(&event).unwrap();
         let errors = validate_ocsf_json(&json_val);

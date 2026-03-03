@@ -1001,6 +1001,29 @@ mod tests {
     }
 
     #[test]
+    fn receipt_warning_severity_without_allowed_does_not_infer_warn_decision() {
+        let raw = json!({
+            "fact": {
+                "decision": {
+                    "severity": "warning",
+                    "guard": "WarnGuard"
+                },
+                "action_type": "shell"
+            }
+        });
+
+        let input = TimelineEventInput {
+            kind: "guard_decision",
+            source: "receipt",
+            time_ms: 1_709_366_400_000,
+            raw: &raw,
+            product_version: "0.1.3",
+        };
+
+        assert!(timeline_event_to_ocsf(&input).is_none());
+    }
+
+    #[test]
     fn receipt_nested_severity_object_maps_to_critical() {
         let raw = json!({
             "fact": {

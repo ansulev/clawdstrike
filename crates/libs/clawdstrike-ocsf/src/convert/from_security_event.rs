@@ -248,7 +248,7 @@ fn build_secondary(
                 .with_dst_endpoint(dst)
                 .with_actor(actor.clone())
                 .with_message(input.reason)
-                .with_action_id(if input.allowed {
+                .with_action_id(if input.is_warn || input.allowed {
                     ActionId::Allowed.as_u8()
                 } else {
                     ActionId::Denied.as_u8()
@@ -458,5 +458,25 @@ mod tests {
         let json = to_ocsf_json(&input);
         assert_eq!(json["action_id"], 1); // Allowed (non-blocking warn)
         assert_eq!(json["disposition_id"], 17); // Logged
+    }
+
+    #[test]
+    fn warn_network_secondary_uses_allowed_action() {
+        let mut input = sample_input();
+        input.resource_type = "network";
+        input.action = "egress";
+        input.resource_name = "warn.example.com";
+        input.resource_host = Some("warn.example.com");
+        input.resource_port = Some(443);
+        input.allowed = false;
+        input.is_warn = true;
+        input.outcome = "success";
+        let result = security_event_to_ocsf(&input);
+        match &result.secondary {
+            Some(SecondaryEvent::Network(na)) => {
+                assert_eq!(na.action_id, Some(1)); // Allowed (non-blocking warn)
+            }
+            other => panic!("expected Network secondary, got {:?}", other.is_some()),
+        }
     }
 }

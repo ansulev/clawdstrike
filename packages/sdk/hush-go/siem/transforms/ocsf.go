@@ -8,11 +8,11 @@ import (
 
 // OCSF Detection Finding class constants.
 const (
-	ocsfClassUID      = 2004 // Detection Finding (NOT deprecated 2001 Security Finding)
-	ocsfCategoryUID   = 2    // Findings
-	ocsfActivityCreate = 1   // Create
-	ocsfTypeUID       = ocsfClassUID*100 + ocsfActivityCreate // 200401
-	ocsfVersion       = "1.4.0"
+	ocsfClassUID       = 2004                                  // Detection Finding (NOT deprecated 2001 Security Finding)
+	ocsfCategoryUID    = 2                                     // Findings
+	ocsfActivityCreate = 1                                     // Create
+	ocsfTypeUID        = ocsfClassUID*100 + ocsfActivityCreate // 200401
+	ocsfVersion        = "1.4.0"
 )
 
 // outcomeToOCSF maps Clawdstrike outcomes to OCSF status IDs.
@@ -54,15 +54,19 @@ func ToOCSF(event siem.SecurityEvent) map[string]interface{} {
 		statusID = id
 	}
 
-	actionID := 1     // Allowed
-	dispositionID := 1 // Allowed
-	switch event.Outcome {
-	case "deny":
-		actionID = 2      // Denied
-		dispositionID = 2 // Blocked
-	case "warn":
-		actionID = 1       // Allowed (warn is non-blocking)
-		dispositionID = 17 // Logged
+	actionID := 0      // Unknown
+	dispositionID := 0 // Unknown
+	if event.Decision != nil {
+		actionID = 1      // Allowed
+		dispositionID = 1 // Allowed
+		switch event.Outcome {
+		case "deny":
+			actionID = 2      // Denied
+			dispositionID = 2 // Blocked
+		case "warn":
+			actionID = 1       // Allowed (warn is non-blocking)
+			dispositionID = 17 // Logged
+		}
 	}
 
 	ocsf := map[string]interface{}{

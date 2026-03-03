@@ -121,7 +121,11 @@ impl ActionId {
     }
 }
 
-/// OCSF disposition identifiers.
+/// OCSF disposition identifiers used as numeric constants.
+///
+/// The event structs serialize `disposition_id` as raw `u8` fields to match
+/// OCSF JSON payloads directly; this enum exists to provide well-named values
+/// and `as_u8()` conversions.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[repr(u8)]
 pub enum DispositionId {

@@ -271,6 +271,16 @@ impl RemotePolicyResolver {
             ));
         }
 
+        let pb = crate::ui::spinner(&format!("Fetching {}...", url));
+
+        // Ensure the spinner is always cleared, even on early `?` returns.
+        let result = self.fetch_http_bytes_inner(url);
+        pb.finish_and_clear();
+        result
+    }
+
+    /// Inner fetch logic, separated so the caller can wrap with a spinner guard.
+    fn fetch_http_bytes_inner(&self, url: &str) -> Result<Vec<u8>> {
         const MAX_REDIRECTS: usize = 5;
 
         let mut current = parse_remote_url(url, self.cfg.https_only).map_err(Error::ConfigError)?;
@@ -308,7 +318,6 @@ impl RemotePolicyResolver {
                     .join(location)
                     .map_err(|e| Error::ConfigError(format!("Invalid redirect URL: {}", e)))?;
 
-                // Fragments are never sent to servers; drop to keep keys consistent.
                 next.set_fragment(None);
 
                 let next = parse_remote_url(next.as_str(), self.cfg.https_only)

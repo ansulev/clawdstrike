@@ -44,6 +44,12 @@ dirs.workspace = true
 hunt-scan.workspace = true
 hunt-query.workspace = true
 hunt-correlate.workspace = true
+colored.workspace = true
+comfy-table.workspace = true
+indicatif.workspace = true
+dialoguer.workspace = true
+console.workspace = true
+unicode-width = "0.2"
 
 [features]
 default = ["rego-runtime", "wasm-plugin-runtime"]

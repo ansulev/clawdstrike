@@ -120,18 +120,31 @@ pub fn classify_severity(event: &AuditEvent) -> Severity {
 /// Classify auth event severity based on success/failure.
 fn classify_auth_severity(event: &AuditEvent) -> Severity {
     for record in &event.records {
-        // Check for failure in the fields or raw line
+        // Check structured fields first.
         if let Some(res) = record.fields.get("res") {
-            if res.eq_ignore_ascii_case("failed") || res == "0" {
+            if is_auth_failure_result(res) {
                 return Severity::High;
             }
         }
-        // Also check the raw line for res=failed pattern
-        if record.raw_line.contains("res=failed") || record.raw_line.contains("res=0") {
+
+        // Fallback for records where res is only present in raw line text.
+        if raw_line_has_auth_failure_result(&record.raw_line) {
             return Severity::High;
         }
     }
     Severity::Medium
+}
+
+fn is_auth_failure_result(res: &str) -> bool {
+    let normalized = res.trim_matches(|c| c == '\'' || c == '"');
+    normalized.eq_ignore_ascii_case("failed") || normalized == "0"
+}
+
+fn raw_line_has_auth_failure_result(raw_line: &str) -> bool {
+    raw_line
+        .split_whitespace()
+        .filter_map(|token| token.strip_prefix("res="))
+        .any(is_auth_failure_result)
 }
 
 /// Classify EXECVE severity: uid=0 + sensitive paths → Critical.
@@ -245,6 +258,25 @@ mod tests {
             AuditEventType::UserAuth,
             vec![make_record(AuditEventType::UserAuth, &[("res", "success")])],
         );
+        assert_eq!(classify_severity(&event), Severity::Medium);
+    }
+
+    #[test]
+    fn auth_result_substring_does_not_false_positive() {
+        let mut record = make_record(AuditEventType::UserAuth, &[("res", "success")]);
+        record.raw_line =
+            "type=USER_AUTH msg=audit(1614556843.937:999): adres=0 result=success".to_string();
+        let event = make_event(AuditEventType::UserAuth, vec![record]);
+        assert_eq!(classify_severity(&event), Severity::Medium);
+    }
+
+    #[test]
+    fn auth_result_numeric_prefix_does_not_false_positive() {
+        let mut record = make_record(AuditEventType::UserAuth, &[("res", "success")]);
+        record.raw_line =
+            "type=USER_AUTH msg=audit(1614556843.937:999): uid=0 msg='op=PAM:auth res=0123'"
+                .to_string();
+        let event = make_event(AuditEventType::UserAuth, vec![record]);
         assert_eq!(classify_severity(&event), Severity::Medium);
     }
 

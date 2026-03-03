@@ -62,8 +62,6 @@ pub struct BridgeConfig {
     pub stream_max_bytes: i64,
     /// Maximum age retained in the JetStream stream in seconds (0 = unlimited).
     pub stream_max_age_seconds: u64,
-    /// Maximum consecutive handle_event errors before run() returns an error.
-    pub max_consecutive_errors: u64,
     /// Path to SPIFFE SVID PEM file. When set, the bridge reads the workload
     /// SPIFFE ID and includes it in every published fact.
     pub svid_path: Option<String>,
@@ -97,7 +95,6 @@ impl Default for BridgeConfig {
             stream_replicas: 1,
             stream_max_bytes: 1_073_741_824,
             stream_max_age_seconds: 86_400,
-            max_consecutive_errors: 50,
             svid_path: None,
             outbox_enabled: false,
             outbox_path: Some("/tmp/k8s-audit-bridge-outbox.db".to_string()),

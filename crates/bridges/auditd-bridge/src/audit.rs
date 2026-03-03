@@ -192,30 +192,43 @@ fn extract_field(line: &str, prefix: &str) -> Option<String> {
 
 /// Parse key=value pairs from the body after `): `.
 fn parse_body_fields(line: &str) -> HashMap<String, String> {
-    let mut fields = HashMap::new();
-
     // Find the body after "): "
     let body = match line.find("): ") {
         Some(pos) => &line[pos + 3..],
-        None => return fields,
+        None => return HashMap::new(),
     };
 
-    // Parse key=value pairs, handling quoted values
+    let mut fields = parse_fields_from_body(body);
+
+    // USER_AUTH/USER_LOGIN records often embed key-value pairs inside msg='...'.
+    // Preserve the full msg field while also extracting nested fields like res=.
+    if let Some(msg_value) = fields.get("msg").cloned() {
+        for (key, value) in parse_fields_from_body(&msg_value) {
+            fields.entry(key).or_insert(value);
+        }
+    }
+
+    fields
+}
+
+fn parse_fields_from_body(body: &str) -> HashMap<String, String> {
+    let mut fields = HashMap::new();
+
+    // Parse key=value pairs, handling single and double-quoted values.
     let mut chars = body.chars().peekable();
     let mut current_key = String::new();
     let mut current_value = String::new();
     let mut in_key = true;
-    let mut in_quotes = false;
+    let mut quote_char: Option<char> = None;
 
     while let Some(ch) = chars.next() {
         if in_key {
             if ch == '=' {
                 in_key = false;
                 current_value.clear();
-                // Check if value starts with a quote
-                if chars.peek() == Some(&'"') {
-                    chars.next();
-                    in_quotes = true;
+                // Check if value starts with a quote.
+                if matches!(chars.peek().copied(), Some('"') | Some('\'')) {
+                    quote_char = chars.next();
                 }
             } else if ch == ' ' {
                 // Key without value (shouldn't happen often)
@@ -226,14 +239,14 @@ fn parse_body_fields(line: &str) -> HashMap<String, String> {
             } else {
                 current_key.push(ch);
             }
-        } else if in_quotes {
-            if ch == '"' {
-                in_quotes = false;
+        } else if let Some(expected_quote) = quote_char {
+            if ch == expected_quote {
+                quote_char = None;
                 fields.insert(current_key.clone(), current_value.clone());
                 current_key.clear();
                 current_value.clear();
                 in_key = true;
-                // Skip the space after the closing quote
+                // Skip the space after the closing quote.
                 if chars.peek() == Some(&' ') {
                     chars.next();
                 }
@@ -561,6 +574,21 @@ mod tests {
         let record = parse_audit_line(line).unwrap_or_else(|e| panic!("parse failed: {e}"));
         assert_eq!(record.event_type, AuditEventType::UserAuth);
         assert_eq!(record.serial, 999);
+        assert_eq!(record.fields.get("res"), Some(&"success".to_string()));
+        assert_eq!(
+            record.fields.get("terminal"),
+            Some(&"/dev/pts/0".to_string())
+        );
+    }
+
+    #[test]
+    fn parse_user_auth_failed_single_quoted_msg() {
+        let line = r#"type=USER_AUTH msg=audit(1614556843.937:1000): pid=5678 uid=0 auid=1000 ses=3 msg='op=PAM:authentication grantors=pam_unix acct="root" exe="/usr/bin/sudo" hostname=? addr=? terminal=/dev/pts/0 res=failed'"#;
+
+        let record = parse_audit_line(line).unwrap_or_else(|e| panic!("parse failed: {e}"));
+        assert_eq!(record.event_type, AuditEventType::UserAuth);
+        assert_eq!(record.serial, 1000);
+        assert_eq!(record.fields.get("res"), Some(&"failed".to_string()));
     }
 
     #[test]

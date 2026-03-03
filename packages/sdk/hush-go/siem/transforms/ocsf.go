@@ -19,7 +19,7 @@ const (
 var outcomeToOCSF = map[string]int{
 	"allow": 1, // Success
 	"deny":  2, // Failure
-	"warn":  0, // Unknown
+	"warn":  1, // Success (warn is non-blocking)
 }
 
 // severityToOCSF maps severity strings to OCSF severity IDs.

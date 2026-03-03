@@ -96,7 +96,7 @@ fn receipt_to_detection_finding(
         severity: severity_str,
         message: &format!("{guard_name} decision={decision}"),
         time_ms,
-        event_uid: &format!("receipt-{time_ms}"),
+        event_uid: &format!("receipt-{time_ms}-{guard_name}"),
         product_version,
         resource_name: fact.get("target").and_then(|v| v.as_str()),
         resource_type: Some(action_type),

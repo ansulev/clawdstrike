@@ -97,10 +97,15 @@ pub fn security_event_to_ocsf(input: &SecurityEventInput<'_>) -> OcsfEventSet {
     } else {
         DispositionId::Blocked
     };
-    let status_id = match input.outcome {
-        "success" => StatusId::Success,
-        "failure" => StatusId::Failure,
-        _ => StatusId::Unknown,
+    let status_id = if input.is_warn {
+        // Warn outcomes are non-blocking and should be represented as successful completion.
+        StatusId::Success
+    } else {
+        match input.outcome {
+            "success" => StatusId::Success,
+            "failure" => StatusId::Failure,
+            _ => StatusId::Unknown,
+        }
     };
 
     let metadata = Metadata::clawdstrike(input.product_version).with_original_uid(input.event_id);
@@ -464,6 +469,17 @@ mod tests {
         input.is_warn = true;
         let json = to_ocsf_json(&input);
         assert_eq!(json["action_id"], 1); // Allowed (non-blocking warn)
+        assert_eq!(json["disposition_id"], 17); // Logged
+    }
+
+    #[test]
+    fn warn_event_forces_success_status_even_with_failure_outcome() {
+        let mut input = sample_input();
+        input.allowed = false;
+        input.outcome = "failure";
+        input.is_warn = true;
+        let json = to_ocsf_json(&input);
+        assert_eq!(json["status_id"], 1); // Success
         assert_eq!(json["disposition_id"], 17); // Logged
     }
 

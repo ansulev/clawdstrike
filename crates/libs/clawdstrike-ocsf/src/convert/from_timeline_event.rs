@@ -10,7 +10,7 @@ use crate::classes::network_activity::NetworkActivity;
 use crate::classes::process_activity::ProcessActivity;
 use crate::convert::from_hubble_fact::hubble_fact_to_network_activity;
 use crate::convert::from_tetragon_fact::tetragon_fact_to_process_activity;
-use crate::decision::{decision_object_allowed, decision_object_is_warn};
+use crate::decision::{decision_object_allowed, decision_object_is_warn, severity_from_value};
 
 /// An OCSF event produced from a timeline event.
 pub enum TimelineOcsfEvent {
@@ -74,7 +74,7 @@ fn receipt_to_detection_finding(
         ReceiptDecisionKind::Allow | ReceiptDecisionKind::Warn
     );
     let guard_name = extract_receipt_guard_name(fact).unwrap_or("unknown");
-    let severity_str = extract_receipt_severity(fact).unwrap_or("info");
+    let severity_str = extract_receipt_severity(fact).unwrap_or_else(|| "info".to_string());
     let action_type = extract_receipt_action_type(fact).unwrap_or("unknown");
     let resource_name = extract_receipt_target(fact);
     let event_uid = extract_receipt_uid(fact, time_ms, guard_name, &decision_label);
@@ -85,13 +85,13 @@ fn receipt_to_detection_finding(
         allowed,
         is_warn,
         guard: guard_name,
-        severity: severity_str,
+        severity: &severity_str,
         message: &format!("{guard_name} decision={decision_label}"),
         time_ms,
         event_uid: &event_uid,
         product_version,
         resource_name,
-        resource_type: Some(action_type),
+        resource_type: Some(normalize_receipt_resource_type(action_type)),
     };
 
     Some(guard_result_to_detection_finding(&input))
@@ -160,19 +160,19 @@ fn extract_receipt_guard_name(fact: &Value) -> Option<&str> {
     })
 }
 
-fn extract_receipt_severity(fact: &Value) -> Option<&str> {
+fn extract_receipt_severity(fact: &Value) -> Option<String> {
     fact.get("severity")
-        .and_then(|v| v.as_str())
+        .and_then(severity_from_value)
         .or_else(|| {
             fact.get("metadata")
                 .and_then(|v| v.as_object())
                 .and_then(|obj| obj.get("severity"))
-                .and_then(|v| v.as_str())
+                .and_then(severity_from_value)
         })
         .or_else(|| {
             decision_object_from_fact(fact)?
                 .get("severity")
-                .and_then(|v| v.as_str())
+                .and_then(severity_from_value)
         })
 }
 
@@ -252,7 +252,8 @@ fn extract_receipt_uid(
         return format!("receipt-{event_id}");
     }
 
-    let digest = Sha256::digest(fact.to_string().as_bytes());
+    let canonical_fact = canonical_json_for_uid(fact);
+    let digest = Sha256::digest(canonical_fact.as_bytes());
     let mut fp_bytes = [0_u8; 8];
     fp_bytes.copy_from_slice(&digest[..8]);
     let fingerprint = u64::from_be_bytes(fp_bytes);
@@ -282,6 +283,51 @@ fn map_policy_event_type_to_resource_type(event_type: &str) -> Option<&'static s
         "tool_call" => Some("tool"),
         "secret_access" => Some("configuration"),
         _ => None,
+    }
+}
+
+fn normalize_receipt_resource_type<'a>(action_type: &'a str) -> &'a str {
+    match action_type {
+        "file" | "network" | "process" | "tool" | "configuration" => action_type,
+        "file_access" | "file_read" | "file_write" | "patch" | "patch_apply" => "file",
+        "egress" | "network_egress" => "network",
+        "shell" | "command_exec" => "process",
+        "mcp_tool" | "tool_call" => "tool",
+        "secret_access" => "configuration",
+        other => map_policy_event_type_to_resource_type(other).unwrap_or(other),
+    }
+}
+
+fn canonical_json_for_uid(value: &Value) -> String {
+    match value {
+        Value::Object(map) => {
+            let mut keys: Vec<&str> = map.keys().map(String::as_str).collect();
+            keys.sort_unstable();
+
+            let mut out = String::from("{");
+            for (idx, key) in keys.iter().enumerate() {
+                if idx > 0 {
+                    out.push(',');
+                }
+                out.push_str(&serde_json::to_string(key).unwrap_or_default());
+                out.push(':');
+                out.push_str(&canonical_json_for_uid(&map[*key]));
+            }
+            out.push('}');
+            out
+        }
+        Value::Array(items) => {
+            let mut out = String::from("[");
+            for (idx, item) in items.iter().enumerate() {
+                if idx > 0 {
+                    out.push(',');
+                }
+                out.push_str(&canonical_json_for_uid(item));
+            }
+            out.push(']');
+            out
+        }
+        _ => serde_json::to_string(value).unwrap_or_default(),
     }
 }
 
@@ -633,6 +679,22 @@ mod tests {
     }
 
     #[test]
+    fn receipt_uid_fallback_is_stable_across_key_order() {
+        let fact_a: Value = serde_json::from_str(
+            r#"{"decision":{"allowed":false,"guard":"ForbiddenPathGuard","severity":"high"},"eventType":"file_read","data":{"path":"/tmp/demo.txt"}}"#,
+        )
+        .unwrap();
+        let fact_b: Value = serde_json::from_str(
+            r#"{"data":{"path":"/tmp/demo.txt"},"eventType":"file_read","decision":{"severity":"high","guard":"ForbiddenPathGuard","allowed":false}}"#,
+        )
+        .unwrap();
+
+        let uid_a = extract_receipt_uid(&fact_a, 1_709_366_400_000, "ForbiddenPathGuard", "deny");
+        let uid_b = extract_receipt_uid(&fact_b, 1_709_366_400_000, "ForbiddenPathGuard", "deny");
+        assert_eq!(uid_a, uid_b);
+    }
+
+    #[test]
     fn receipt_verdict_string_takes_precedence_over_decision() {
         let raw = json!({
             "fact": {
@@ -757,6 +819,67 @@ mod tests {
             assert_eq!(df.action_id, 1); // Allowed
             assert_eq!(df.disposition_id, 17); // Logged
             assert_eq!(df.status_id, 1); // Success
+        } else {
+            panic!("expected Detection");
+        }
+    }
+
+    #[test]
+    fn receipt_nested_severity_object_maps_to_critical() {
+        let raw = json!({
+            "fact": {
+                "decision": "deny",
+                "guard": "ForbiddenPathGuard",
+                "severity": {
+                    "level": "critical"
+                },
+                "action_type": "file_access"
+            }
+        });
+
+        let input = TimelineEventInput {
+            kind: "guard_decision",
+            source: "receipt",
+            time_ms: 1_709_366_400_000,
+            raw: &raw,
+            product_version: "0.1.3",
+        };
+
+        let event = timeline_event_to_ocsf(&input).unwrap();
+        if let TimelineOcsfEvent::Detection(df) = event {
+            assert_eq!(df.severity_id, 5); // Critical
+        } else {
+            panic!("expected Detection");
+        }
+    }
+
+    #[test]
+    fn receipt_action_type_is_normalized_to_resource_taxonomy() {
+        let raw = json!({
+            "fact": {
+                "decision": "deny",
+                "guard": "EgressAllowlistGuard",
+                "action_type": "egress",
+                "target": "evil.example"
+            }
+        });
+
+        let input = TimelineEventInput {
+            kind: "guard_decision",
+            source: "receipt",
+            time_ms: 1_709_366_400_000,
+            raw: &raw,
+            product_version: "0.1.3",
+        };
+
+        let event = timeline_event_to_ocsf(&input).unwrap();
+        if let TimelineOcsfEvent::Detection(df) = event {
+            let resource_type = df
+                .resources
+                .as_ref()
+                .and_then(|r| r.first())
+                .and_then(|r| r.r#type.as_deref());
+            assert_eq!(resource_type, Some("network"));
         } else {
             panic!("expected Detection");
         }

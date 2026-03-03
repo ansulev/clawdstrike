@@ -110,8 +110,7 @@ class TestNativeAvailabilityFlag:
             [
                 sys.executable,
                 "-c",
-                "from clawdstrike import NATIVE_AVAILABLE, init_native; "
-                "print(f'{NATIVE_AVAILABLE},{init_native()}')",
+                "from clawdstrike import NATIVE_AVAILABLE, init_native; print(f'{NATIVE_AVAILABLE},{init_native()}')",
             ],
             check=True,
             capture_output=True,

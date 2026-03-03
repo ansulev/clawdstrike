@@ -37,7 +37,7 @@ fn to_camel_case_json(value: serde_json::Value) -> serde_json::Value {
     }
 }
 
-fn serialize_camel_case<T: serde::Serialize>(value: &T) -> Result<String, JsError> {
+pub(crate) fn serialize_camel_case<T: serde::Serialize>(value: &T) -> Result<String, JsError> {
     let json_value = serde_json::to_value(value)
         .map_err(|e| JsError::new(&format!("Serialization failed: {e}")))?;
     let camel = to_camel_case_json(json_value);

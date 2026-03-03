@@ -19,6 +19,7 @@ pub struct PolicyObserveCommand {
     pub hushd_url: Option<String>,
     pub hushd_token: Option<String>,
     pub session: Option<String>,
+    pub ocsf_out: Option<PathBuf>,
     pub command: Vec<String>,
 }
 
@@ -54,6 +55,9 @@ pub async fn cmd_policy_observe(
         return ExitCode::InvalidArgs;
     }
 
+    let ocsf_out = args.ocsf_out.clone();
+    let events_out_path = args.out.clone();
+
     let code = hush_run::cmd_run(
         hush_run::RunArgs {
             policy: args.policy,
@@ -74,11 +78,58 @@ pub async fn cmd_policy_observe(
     )
     .await;
 
+    if let Some(ref ocsf_path) = ocsf_out {
+        if let Err(e) = post_process_ocsf(&events_out_path, ocsf_path) {
+            let _ = writeln!(stderr, "Warning: failed to write OCSF output: {}", e);
+        } else {
+            let _ = writeln!(stderr, "OCSF output: {}", ocsf_path.display());
+        }
+    }
+
     if code == 0 {
         ExitCode::Ok
     } else {
         ExitCode::RuntimeError
     }
+}
+
+/// Post-process an events JSONL file and write OCSF JSONL to the given path.
+fn post_process_ocsf(
+    events_path: &std::path::Path,
+    ocsf_path: &std::path::Path,
+) -> std::io::Result<()> {
+    use std::io::BufRead;
+
+    if let Some(parent) = ocsf_path.parent() {
+        if !parent.as_os_str().is_empty() {
+            std::fs::create_dir_all(parent)?;
+        }
+    }
+
+    let events_file = std::fs::File::open(events_path)?;
+    let reader = std::io::BufReader::new(events_file);
+    let ocsf_file = std::fs::File::create(ocsf_path)?;
+    let mut writer = std::io::BufWriter::new(ocsf_file);
+
+    for line in reader.lines() {
+        let line = line?;
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        let event: PolicyEvent = match serde_json::from_str(trimmed) {
+            Ok(v) => v,
+            Err(_) => continue,
+        };
+        if let Some(ocsf_val) = clawdstrike_policy_event::ocsf::policy_event_to_ocsf(&event) {
+            if let Ok(json_line) = serde_json::to_string(&ocsf_val) {
+                let _ = writeln!(writer, "{json_line}");
+            }
+        }
+    }
+
+    writer.flush()?;
+    Ok(())
 }
 
 async fn observe_hushd_session(
@@ -165,6 +216,28 @@ async fn observe_hushd_session(
     };
 
     let mut writer = std::io::BufWriter::new(out_file);
+    let mut ocsf_writer: Option<std::io::BufWriter<std::fs::File>> =
+        if let Some(ref ocsf_path) = args.ocsf_out {
+            if let Some(parent) = ocsf_path.parent() {
+                if !parent.as_os_str().is_empty() {
+                    let _ = std::fs::create_dir_all(parent);
+                }
+            }
+            match std::fs::File::create(ocsf_path) {
+                Ok(f) => Some(std::io::BufWriter::new(f)),
+                Err(err) => {
+                    let _ = writeln!(
+                        stderr,
+                        "Warning: failed to create OCSF output file: {}",
+                        err
+                    );
+                    None
+                }
+            }
+        } else {
+            None
+        };
+
     let mut count = 0usize;
 
     for (line_idx, line) in body.lines().enumerate() {
@@ -190,6 +263,16 @@ async fn observe_hushd_session(
             continue;
         };
 
+        if let Some(ref mut w) = ocsf_writer {
+            if let Some(ocsf_val) =
+                clawdstrike_policy_event::ocsf::policy_event_to_ocsf(&policy_event)
+            {
+                if let Ok(ocsf_line) = serde_json::to_string(&ocsf_val) {
+                    let _ = writeln!(w, "{ocsf_line}");
+                }
+            }
+        }
+
         match serde_json::to_string(&policy_event) {
             Ok(json_line) => {
                 if let Err(err) = writeln!(writer, "{}", json_line) {
@@ -208,6 +291,9 @@ async fn observe_hushd_session(
         let _ = writeln!(stderr, "Error: failed to flush output file: {}", err);
         return ExitCode::RuntimeError;
     }
+    if let Some(ref mut w) = ocsf_writer {
+        let _ = w.flush();
+    }
 
     let _ = writeln!(
         stdout,
@@ -216,6 +302,9 @@ async fn observe_hushd_session(
         session_id,
         args.out.display()
     );
+    if let Some(ref ocsf_path) = args.ocsf_out {
+        let _ = writeln!(stderr, "OCSF output: {}", ocsf_path.display());
+    }
 
     ExitCode::Ok
 }

@@ -1,0 +1,23 @@
+//! Canonical PolicyEvent types, synthesis, simulation, bridge, and OCSF converters.
+//!
+//! This crate extracts the pure logic from `hush-cli` and `hushd` into a
+//! reusable library. It provides:
+//!
+//! - [`event`] - PolicyEvent types, mapping, and validation
+//! - [`stream`] - JSONL read/write helpers
+//! - [`synth`] - Policy synthesis from observed events
+//! - [`simulate`] - Replay events against a policy
+//! - [`bridge`] - PolicyEvent to TimelineEvent conversion
+//! - [`ocsf`] - PolicyEvent to OCSF conversion
+//! - [`facade`] - JSON-in/JSON-out facade for cross-language bindings
+
+pub mod bridge;
+pub mod event;
+pub mod facade;
+pub mod ocsf;
+pub mod simulate;
+pub mod stream;
+pub mod synth;
+
+pub use event::*;
+pub use facade::{PolicyLabHandle, SimulateResult, SynthResult};

@@ -73,6 +73,7 @@ pub async fn cmd_hunt(
             json,
             jsonl,
             no_color,
+            ocsf,
         } => cmd_hunt_query(
             HuntQueryArgs {
                 source,
@@ -93,6 +94,7 @@ pub async fn cmd_hunt(
                 json,
                 jsonl,
                 no_color: no_color || global_no_color,
+                ocsf,
                 entity: None,
             },
             stdout,
@@ -120,6 +122,7 @@ pub async fn cmd_hunt(
             jsonl,
             no_color,
             entity,
+            ocsf,
         } => cmd_hunt_timeline(
             HuntQueryArgs {
                 source,
@@ -140,6 +143,7 @@ pub async fn cmd_hunt(
                 json,
                 jsonl,
                 no_color: no_color || global_no_color,
+                ocsf,
                 entity,
             },
             stdout,
@@ -965,6 +969,7 @@ struct HuntQueryArgs {
     json: bool,
     jsonl: bool,
     no_color: bool,
+    ocsf: bool,
     entity: Option<String>,
 }
 
@@ -1199,6 +1204,22 @@ async fn cmd_hunt_query(
         }
     };
 
+    if args.ocsf {
+        let ocsf_values = hunt_query::ocsf::timeline_to_ocsf(&fetched.events);
+        for val in &ocsf_values {
+            if let Ok(line) = serde_json::to_string(val) {
+                let _ = writeln!(stdout, "{line}");
+            }
+        }
+        let _ = writeln!(
+            stderr,
+            "{} event(s) -> {} OCSF record(s)",
+            fetched.events.len(),
+            ocsf_values.len()
+        );
+        return ExitCode::Ok;
+    }
+
     if is_json {
         let output = HuntJsonOutput::<HuntQueryData> {
             version: CLI_JSON_VERSION,
@@ -1281,6 +1302,22 @@ async fn cmd_hunt_timeline(
         }
     };
     let timeline = hunt_query::timeline::merge_timeline(fetched.events);
+
+    if args.ocsf {
+        let ocsf_values = hunt_query::ocsf::timeline_to_ocsf(&timeline);
+        for val in &ocsf_values {
+            if let Ok(line) = serde_json::to_string(val) {
+                let _ = writeln!(stdout, "{line}");
+            }
+        }
+        let _ = writeln!(
+            stderr,
+            "{} event(s) -> {} OCSF record(s)",
+            timeline.len(),
+            ocsf_values.len()
+        );
+        return ExitCode::Ok;
+    }
 
     if is_json {
         let output = HuntJsonOutput::<HuntQueryData> {
@@ -1594,6 +1631,7 @@ async fn cmd_hunt_correlate(
         json: args.json,
         jsonl: args.jsonl,
         no_color: args.no_color,
+        ocsf: false,
         entity: None,
     };
 
@@ -1814,6 +1852,7 @@ async fn cmd_hunt_ioc(
         json: args.json,
         jsonl: false,
         no_color: args.no_color,
+        ocsf: false,
         entity: None,
     };
 
@@ -2119,6 +2158,7 @@ mod tests {
             json: false,
             jsonl: false,
             no_color: false,
+            ocsf: false,
             entity: None,
         };
         let result = build_hunt_query(&args);
@@ -2149,6 +2189,7 @@ mod tests {
             json: false,
             jsonl: false,
             no_color: false,
+            ocsf: false,
             entity: None,
         };
         let result = build_hunt_query(&args);
@@ -2178,6 +2219,7 @@ mod tests {
             json: false,
             jsonl: false,
             no_color: false,
+            ocsf: false,
             entity: None,
         };
         let result = build_hunt_query(&args);
@@ -2249,6 +2291,7 @@ mod tests {
             json: false,
             jsonl: true,
             no_color: true,
+            ocsf: false,
             entity: None,
         };
         let mut stdout = Vec::new();
@@ -2285,6 +2328,7 @@ mod tests {
             json: false,
             jsonl: false,
             no_color: true,
+            ocsf: false,
             entity: None,
         };
         let mut stdout = Vec::new();
@@ -2322,6 +2366,7 @@ mod tests {
             json: true,
             jsonl: false,
             no_color: true,
+            ocsf: false,
             entity: None,
         };
         let mut stdout = Vec::new();
@@ -2376,6 +2421,7 @@ mod tests {
             json: false,
             jsonl: true,
             no_color: true,
+            ocsf: false,
             entity: None,
         };
         let mut stdout = Vec::new();
@@ -2415,6 +2461,7 @@ mod tests {
             json: false,
             jsonl: false,
             no_color: true,
+            ocsf: false,
             entity: None,
         };
         let mut stdout = Vec::new();
@@ -2450,6 +2497,7 @@ mod tests {
             json: false,
             jsonl: false,
             no_color: true,
+            ocsf: false,
             entity: None,
         };
         let mut stdout = Vec::new();
@@ -2485,6 +2533,7 @@ mod tests {
             json: false,
             jsonl: false,
             no_color: true,
+            ocsf: false,
             entity: None,
         };
         let mut stdout = Vec::new();

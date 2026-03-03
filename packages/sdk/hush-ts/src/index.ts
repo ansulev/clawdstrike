@@ -199,6 +199,14 @@ export {
 } from "./receipt";
 // SIEM/SOAR
 export * as siem from "./siem";
+// PolicyLab
+export {
+  PolicyLab,
+  type SimulateResult,
+  type SimulationResultEntry,
+  type SimulationSummary,
+  type SynthResult,
+} from "./policy-lab";
 // Prompt watermarking
 export {
   type EncodedWatermark,

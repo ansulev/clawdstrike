@@ -7,6 +7,7 @@
 //! instruction hierarchy, canonical JSON).
 
 pub mod detect;
+pub mod policy_lab;
 
 use hush_core::{
     keccak256, receipt::PublicKeySet, sha256, Hash, Keypair, MerkleProof, MerkleTree, PublicKey,

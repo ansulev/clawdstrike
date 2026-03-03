@@ -19,6 +19,7 @@ mod error;
 mod hashing;
 mod jailbreak;
 mod merkle;
+mod policy_lab;
 mod receipt;
 mod sanitizer;
 mod signing;

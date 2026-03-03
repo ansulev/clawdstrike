@@ -29,6 +29,7 @@ members = [
     "crates/libs/hunt-query",
     "crates/libs/hunt-correlate",
     "crates/libs/clawdstrike-ocsf",
+    "crates/libs/clawdstrike-policy-event",
 ]
 exclude = [
     "fuzz",
@@ -160,6 +161,7 @@ hunt-scan = { path = "crates/libs/hunt-scan", version = "0.2.0" }
 hunt-query = { path = "crates/libs/hunt-query", version = "0.2.0" }
 hunt-correlate = { path = "crates/libs/hunt-correlate", version = "0.2.0" }
 clawdstrike-ocsf = { path = "crates/libs/clawdstrike-ocsf", version = "0.2.0" }
+clawdstrike-policy-event = { path = "crates/libs/clawdstrike-policy-event", version = "0.2.0" }
 
 [profile.release]
 lto = true

@@ -1764,6 +1764,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "clawdstrike-policy-event"
+version = "0.1.3"
+dependencies = [
+ "anyhow",
+ "base64 0.22.1",
+ "chrono",
+ "clawdstrike",
+ "clawdstrike-ocsf",
+ "hunt-query",
+ "hush-proxy",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "tokio",
+ "uuid",
+]
+
+[[package]]
 name = "clawdstrike-registry"
 version = "0.2.0"
 dependencies = [
@@ -3599,6 +3617,7 @@ dependencies = [
  "clap",
  "clap_complete",
  "clawdstrike",
+ "clawdstrike-policy-event",
  "colored",
  "comfy-table",
  "console",
@@ -3655,6 +3674,7 @@ version = "0.2.0"
 dependencies = [
  "base64 0.22.1",
  "clawdstrike",
+ "clawdstrike-policy-event",
  "hex",
  "hush-core",
  "serde_json",
@@ -3681,6 +3701,7 @@ version = "0.1.0"
 dependencies = [
  "base64 0.22.1",
  "clawdstrike",
+ "clawdstrike-policy-event",
  "futures",
  "hex",
  "hush-core",
@@ -3727,6 +3748,7 @@ name = "hush-wasm"
 version = "0.2.0"
 dependencies = [
  "clawdstrike",
+ "clawdstrike-policy-event",
  "console_error_panic_hook",
  "getrandom 0.4.1",
  "hex",
@@ -3754,6 +3776,7 @@ dependencies = [
  "clap",
  "clawdstrike",
  "clawdstrike-ocsf",
+ "clawdstrike-policy-event",
  "dashmap",
  "dirs",
  "flate2",

@@ -3,7 +3,10 @@
 use crate::daemon::DaemonState;
 use crate::decision::NormalizedDecision;
 use crate::events::PolicyEvent;
+use crate::notifications::show_notification;
 use crate::settings::Settings;
+use crate::AgentApiAuthToken;
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::time::Duration;
 use tauri::menu::{Menu, MenuEvent, MenuItem, PredefinedMenuItem, Submenu};
@@ -14,6 +17,25 @@ use tokio::net::{lookup_host, TcpStream};
 use tokio::sync::RwLock;
 use tokio::time::timeout;
 
+#[derive(Debug, Serialize)]
+struct UiBootstrapStartRequest {
+    next_path: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct UiBootstrapStartResponse {
+    session_id: String,
+    user_code: String,
+    expires_in_seconds: u64,
+}
+
+#[derive(Debug)]
+struct DashboardLaunchTarget {
+    url: String,
+    bootstrap_code: Option<String>,
+    bootstrap_ttl_seconds: Option<u64>,
+}
+
 /// Menu item IDs.
 #[allow(dead_code)]
 pub mod menu_ids {
@@ -21,7 +43,6 @@ pub mod menu_ids {
     pub const SESSION_INFO: &str = "session_info";
     pub const TOGGLE_ENABLED: &str = "toggle_enabled";
     pub const EVENT_PREFIX: &str = "event_";
-    pub const OPEN_DESKTOP: &str = "open_desktop";
     pub const OPEN_WEB_UI: &str = "open_web_ui";
     pub const INSTALL_HOOKS: &str = "install_hooks";
     pub const INTEGRATIONS_INSTALL_HOOKS: &str = "integrations_install_hooks";
@@ -98,13 +119,6 @@ pub fn build_menu<R: Runtime>(app: &AppHandle<R>, state: &TrayState) -> tauri::R
         true,
         None::<&str>,
     )?;
-    let open_desktop = MenuItem::with_id(
-        app,
-        menu_ids::OPEN_DESKTOP,
-        "Open SDR Desktop",
-        true,
-        None::<&str>,
-    )?;
     let open_web_ui = MenuItem::with_id(
         app,
         menu_ids::OPEN_WEB_UI,
@@ -125,7 +139,6 @@ pub fn build_menu<R: Runtime>(app: &AppHandle<R>, state: &TrayState) -> tauri::R
             &sep2,
             &integrations_submenu,
             &reload_policy,
-            &open_desktop,
             &open_web_ui,
             &sep3,
             &quit_item,
@@ -304,8 +317,121 @@ fn is_local_dashboard_url(candidate: &str) -> bool {
         Ok(url) => url,
         Err(_) => return false,
     };
-    let host = parsed.host_str().unwrap_or_default();
-    matches!(host, "localhost" | "127.0.0.1")
+    let host = parsed
+        .host_str()
+        .unwrap_or_default()
+        .trim_start_matches('[')
+        .trim_end_matches(']');
+    matches!(host, "localhost" | "127.0.0.1" | "::1")
+}
+
+fn is_loopback_host(parsed: &reqwest::Url) -> bool {
+    let host = parsed
+        .host_str()
+        .unwrap_or_default()
+        .trim_start_matches('[')
+        .trim_end_matches(']');
+    matches!(host, "localhost" | "127.0.0.1" | "::1")
+}
+
+fn is_local_agent_ui_url(parsed: &reqwest::Url, expected_port: u16) -> bool {
+    if !matches!(parsed.scheme(), "http" | "https") {
+        return false;
+    }
+    if !is_loopback_host(parsed) {
+        return false;
+    }
+    if parsed.port_or_known_default() != Some(expected_port) {
+        return false;
+    }
+    parsed.path().starts_with("/ui")
+}
+
+fn ui_next_path(parsed: &reqwest::Url) -> String {
+    let mut out = parsed.path().to_string();
+    if let Some(query) = parsed.query() {
+        out.push('?');
+        out.push_str(query);
+    }
+    if out.is_empty() || !out.starts_with("/ui") {
+        "/ui".to_string()
+    } else {
+        out
+    }
+}
+
+fn redact_url_for_log(url: &str) -> String {
+    let mut parsed = match reqwest::Url::parse(url) {
+        Ok(value) => value,
+        Err(_) => return "<invalid-url>".to_string(),
+    };
+    parsed.set_query(None);
+    parsed.set_fragment(None);
+    parsed.to_string()
+}
+
+async fn request_local_ui_bootstrap(
+    agent_api_port: u16,
+    auth_token: &str,
+    next_path: String,
+) -> Option<UiBootstrapStartResponse> {
+    let endpoint = format!(
+        "http://127.0.0.1:{}/api/v1/ui/bootstrap/start",
+        agent_api_port
+    );
+    let request = UiBootstrapStartRequest { next_path };
+    let response = reqwest::Client::new()
+        .post(&endpoint)
+        .bearer_auth(auth_token)
+        .json(&request)
+        .send()
+        .await
+        .ok()?;
+    if !response.status().is_success() {
+        return None;
+    }
+    response.json::<UiBootstrapStartResponse>().await.ok()
+}
+
+async fn build_dashboard_launch_target(
+    url: &str,
+    settings: &Settings,
+    auth_token: Option<&str>,
+) -> Option<DashboardLaunchTarget> {
+    let parsed = reqwest::Url::parse(url).ok()?;
+
+    if !is_loopback_host(&parsed) {
+        return Some(DashboardLaunchTarget {
+            url: parsed.to_string(),
+            bootstrap_code: None,
+            bootstrap_ttl_seconds: None,
+        });
+    }
+
+    if !is_local_agent_ui_url(&parsed, settings.agent_api_port) {
+        return Some(DashboardLaunchTarget {
+            url: parsed.to_string(),
+            bootstrap_code: None,
+            bootstrap_ttl_seconds: None,
+        });
+    }
+
+    let auth_token = auth_token
+        .map(str::trim)
+        .filter(|value| !value.is_empty())?;
+    let bootstrap =
+        request_local_ui_bootstrap(settings.agent_api_port, auth_token, ui_next_path(&parsed))
+            .await?;
+
+    let mut bootstrap_url = parsed;
+    bootstrap_url.set_path("/ui/bootstrap");
+    bootstrap_url.set_query(Some(&format!("session_id={}", bootstrap.session_id)));
+    bootstrap_url.set_fragment(None);
+    Some(DashboardLaunchTarget {
+        url: bootstrap_url.to_string(),
+        bootstrap_code: Some(bootstrap.user_code),
+        bootstrap_ttl_seconds: Some(bootstrap.expires_in_seconds),
+    })
 }
 
 fn is_legacy_local_dev_dashboard_url(candidate: &str) -> bool {
@@ -454,68 +580,123 @@ fn handle_menu_event<R: Runtime>(app: &AppHandle<R>, event: MenuEvent) {
             tracing::info!("Configure SIEM export clicked");
             let settings: Arc<RwLock<Settings>> =
                 app.state::<Arc<RwLock<Settings>>>().inner().clone();
+            let app_handle = app.clone();
+            let auth_token = app
+                .try_state::<AgentApiAuthToken>()
+                .map(|state| state.inner().0.clone());
             tauri::async_runtime::spawn(async move {
                 let settings_snapshot = settings.read().await.clone();
                 let Some(url) = resolve_dashboard_url(&settings_snapshot).await else {
                     tracing::warn!("Dashboard URL is invalid; refusing to open SIEM config");
                     return;
                 };
-                let Some(target) = build_dashboard_settings_url(&url, "siem") else {
+                let Some(raw_target) = build_dashboard_settings_url(&url, "siem") else {
                     tracing::warn!("Failed to build SIEM settings URL; refusing to open");
                     return;
                 };
-                tracing::debug!(url = %target, "Opening SIEM config");
-                open_dashboard_url(&target);
+                let Some(target) = build_dashboard_launch_target(
+                    &raw_target,
+                    &settings_snapshot,
+                    auth_token.as_deref(),
+                )
+                .await
+                else {
+                    tracing::warn!("Failed to create secure SIEM dashboard launch target");
+                    return;
+                };
+                if let Some(code) = target.bootstrap_code.as_deref() {
+                    let ttl = target.bootstrap_ttl_seconds.unwrap_or(60);
+                    show_notification(
+                        &app_handle,
+                        "Web UI One-Time Code",
+                        &format!("Enter code {code} in your browser within {ttl}s."),
+                    );
+                }
+                tracing::debug!(url = %redact_url_for_log(&target.url), "Opening SIEM config");
+                open_dashboard_url(&target.url);
             });
         }
         menu_ids::INTEGRATIONS_CONFIGURE_WEBHOOKS => {
             tracing::info!("Configure webhooks clicked");
             let settings: Arc<RwLock<Settings>> =
                 app.state::<Arc<RwLock<Settings>>>().inner().clone();
+            let app_handle = app.clone();
+            let auth_token = app
+                .try_state::<AgentApiAuthToken>()
+                .map(|state| state.inner().0.clone());
             tauri::async_runtime::spawn(async move {
                 let settings_snapshot = settings.read().await.clone();
                 let Some(url) = resolve_dashboard_url(&settings_snapshot).await else {
                     tracing::warn!("Dashboard URL is invalid; refusing to open webhook config");
                     return;
                 };
-                let Some(target) = build_dashboard_settings_url(&url, "webhooks") else {
+                let Some(raw_target) = build_dashboard_settings_url(&url, "webhooks") else {
                     tracing::warn!("Failed to build webhook settings URL; refusing to open");
                     return;
                 };
-                tracing::debug!(url = %target, "Opening webhook config");
-                open_dashboard_url(&target);
+                let Some(target) = build_dashboard_launch_target(
+                    &raw_target,
+                    &settings_snapshot,
+                    auth_token.as_deref(),
+                )
+                .await
+                else {
+                    tracing::warn!("Failed to create secure webhook dashboard launch target");
+                    return;
+                };
+                if let Some(code) = target.bootstrap_code.as_deref() {
+                    let ttl = target.bootstrap_ttl_seconds.unwrap_or(60);
+                    show_notification(
+                        &app_handle,
+                        "Web UI One-Time Code",
+                        &format!("Enter code {code} in your browser within {ttl}s."),
+                    );
+                }
+                tracing::debug!(
+                    url = %redact_url_for_log(&target.url),
+                    "Opening webhook config"
+                );
+                open_dashboard_url(&target.url);
             });
         }
         menu_ids::RELOAD_POLICY => {
             tracing::info!("Reload policy clicked");
             let _ = app.emit("reload_policy", ());
         }
-        menu_ids::OPEN_DESKTOP => {
-            tracing::info!("Open desktop clicked");
-            #[cfg(target_os = "macos")]
-            {
-                let _ = std::process::Command::new("open")
-                    .arg("-a")
-                    .arg("SDR Desktop")
-                    .spawn();
-            }
-            #[cfg(target_os = "linux")]
-            {
-                let _ = std::process::Command::new("sdr-desktop").spawn();
-            }
-        }
         menu_ids::OPEN_WEB_UI => {
             tracing::info!("Open Web UI clicked");
             let settings: Arc<RwLock<Settings>> =
                 app.state::<Arc<RwLock<Settings>>>().inner().clone();
+            let app_handle = app.clone();
+            let auth_token = app
+                .try_state::<AgentApiAuthToken>()
+                .map(|state| state.inner().0.clone());
             tauri::async_runtime::spawn(async move {
                 let settings_snapshot = settings.read().await.clone();
-                let Some(url) = resolve_dashboard_url(&settings_snapshot).await else {
+                let Some(raw_url) = resolve_dashboard_url(&settings_snapshot).await else {
                     tracing::warn!("Dashboard URL is invalid; refusing to open Web UI");
                     return;
                 };
-                tracing::debug!(url, "Opening Web UI");
-                open_dashboard_url(&url);
+                let Some(target) = build_dashboard_launch_target(
+                    &raw_url,
+                    &settings_snapshot,
+                    auth_token.as_deref(),
+                )
+                .await
+                else {
+                    tracing::warn!("Failed to create secure Web UI launch target");
+                    return;
+                };
+                if let Some(code) = target.bootstrap_code.as_deref() {
+                    let ttl = target.bootstrap_ttl_seconds.unwrap_or(60);
+                    show_notification(
+                        &app_handle,
+                        "Web UI One-Time Code",
+                        &format!("Enter code {code} in your browser within {ttl}s."),
+                    );
+                }
+                tracing::debug!(url = %redact_url_for_log(&target.url), "Opening Web UI");
+                open_dashboard_url(&target.url);
             });
         }
         menu_ids::QUIT => {
@@ -631,7 +812,8 @@ impl<R: Runtime> TrayManager<R> {
 mod tests {
     use super::{
         build_dashboard_settings_url, default_local_dashboard_url,
-        is_legacy_local_dev_dashboard_url, is_local_dashboard_url, validate_dashboard_url,
+        is_legacy_local_dev_dashboard_url, is_local_agent_ui_url, is_local_dashboard_url,
+        redact_url_for_log, ui_next_path, validate_dashboard_url,
     };
 
     #[test]
@@ -666,7 +848,42 @@ mod tests {
     fn local_dashboard_url_detection_is_precise() {
         assert!(is_local_dashboard_url("http://127.0.0.1:4200"));
         assert!(is_local_dashboard_url("https://localhost:3100/path"));
+        assert!(is_local_dashboard_url("https://[::1]:3100/path"));
         assert!(!is_local_dashboard_url("https://example.com/settings"));
+    }
+
+    #[test]
+    fn local_agent_ui_validation_pins_expected_origin() {
+        let allowed = reqwest::Url::parse("http://127.0.0.1:9878/ui/settings/siem")
+            .unwrap_or_else(|_| panic!("failed to parse allowed test url"));
+        let allowed_https = reqwest::Url::parse("https://127.0.0.1:9878/ui/settings/siem")
+            .unwrap_or_else(|_| panic!("failed to parse allowed-https test url"));
+        let wrong_port = reqwest::Url::parse("http://127.0.0.1:9999/ui")
+            .unwrap_or_else(|_| panic!("failed to parse wrong-port test url"));
+        let wrong_scheme = reqwest::Url::parse("ftp://127.0.0.1:9878/ui")
+            .unwrap_or_else(|_| panic!("failed to parse wrong-scheme test url"));
+        let wrong_path = reqwest::Url::parse("http://127.0.0.1:9878/api")
+            .unwrap_or_else(|_| panic!("failed to parse wrong-path test url"));
+        let remote_host = reqwest::Url::parse("http://example.com:9878/ui")
+            .unwrap_or_else(|_| panic!("failed to parse remote-host test url"));
+
+        assert!(is_local_agent_ui_url(&allowed, 9878));
+        assert!(is_local_agent_ui_url(&allowed_https, 9878));
+        assert!(!is_local_agent_ui_url(&wrong_port, 9878));
+        assert!(!is_local_agent_ui_url(&wrong_scheme, 9878));
+        assert!(!is_local_agent_ui_url(&wrong_path, 9878));
+        assert!(!is_local_agent_ui_url(&remote_host, 9878));
+    }
+
+    #[test]
+    fn ui_next_path_and_log_redaction_strip_sensitive_url_parts() {
+        let parsed = reqwest::Url::parse("http://127.0.0.1:9878/ui/settings/siem?x=1")
+            .unwrap_or_else(|_| panic!("failed to parse next-path test url"));
+        assert_eq!(ui_next_path(&parsed), "/ui/settings/siem?x=1".to_string());
+        assert_eq!(
+            redact_url_for_log("http://127.0.0.1:9878/ui/bootstrap?session_id=abc#fragment"),
+            "http://127.0.0.1:9878/ui/bootstrap"
+        );
     }
 
     #[test]

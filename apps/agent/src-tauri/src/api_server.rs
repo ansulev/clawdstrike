@@ -9,16 +9,18 @@ use crate::openclaw::{
     OpenClawManager,
 };
 use crate::policy::{evaluate_policy_check, PolicyCheckInput, PolicyCheckOutput};
+use crate::security::auth::constant_time_eq_token;
 use crate::session::SessionManager;
 use crate::settings::{IntegrationSettings, Settings};
 use crate::updater::{HushdUpdater, OtaStatus};
 use anyhow::{Context, Result};
 use axum::body::Body;
-use axum::extract::{Path, Request, State};
+use axum::extract::DefaultBodyLimit;
+use axum::extract::{Form, Path, Request, State};
 use axum::http::header::{
-    ACCEPT, AUTHORIZATION, CACHE_CONTROL, CONNECTION, CONTENT_TYPE, COOKIE, SET_COOKIE,
+    ACCEPT, AUTHORIZATION, CACHE_CONTROL, CONNECTION, CONTENT_TYPE, COOKIE, LOCATION, SET_COOKIE,
 };
-use axum::http::{HeaderMap, HeaderValue, StatusCode, Uri};
+use axum::http::{uri::Authority, HeaderMap, HeaderValue, StatusCode, Uri};
 use axum::middleware::Next;
 use axum::response::sse::{Event, KeepAlive, Sse};
 use axum::response::Html;
@@ -28,12 +30,13 @@ use axum::{Json, Router};
 use futures::{Stream, StreamExt, TryStreamExt};
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
+use std::collections::{HashMap, VecDeque};
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tokio::net::TcpListener;
-use tokio::sync::{broadcast, RwLock};
+use tokio::sync::{broadcast, Mutex, RwLock};
 use tokio_stream::wrappers::BroadcastStream;
 use tower_http::services::{ServeDir, ServeFile};
 
@@ -42,6 +45,14 @@ const AGENT_AUTH_COOKIE_NAME: &str = "clawdstrike_agent_auth";
 const POLICY_VERSION_CACHE_REFRESH_INTERVAL: Duration = Duration::from_secs(5);
 const POLICY_VERSION_FETCH_TIMEOUT: Duration = Duration::from_millis(200);
 const POLICY_VERSION_REFRESH_IN_FLIGHT_TIMEOUT: Duration = Duration::from_secs(20);
+const AGENT_API_MAX_BODY_BYTES: usize = 256 * 1024;
+const APPROVAL_RATE_LIMIT_WINDOW: Duration = Duration::from_secs(60);
+const APPROVAL_RATE_LIMIT_BURST_WINDOW: Duration = Duration::from_secs(1);
+const APPROVAL_RATE_LIMIT_PER_MINUTE: usize = 30;
+const APPROVAL_RATE_LIMIT_BURST: usize = 10;
+const UI_BOOTSTRAP_TTL: Duration = Duration::from_secs(60);
+const UI_BOOTSTRAP_MAX_ATTEMPTS: u8 = 5;
+const UI_BOOTSTRAP_MAX_SESSIONS: usize = 32;
 
 #[derive(Clone)]
 pub struct AgentApiServer {
@@ -71,6 +82,8 @@ struct AgentApiState {
     auth_token: String,
     http_client: reqwest::Client,
     policy_version_cache: Arc<RwLock<PolicyVersionCache>>,
+    approval_rate_limiter: Arc<Mutex<ApprovalSubmissionLimiter>>,
+    ui_bootstrap_sessions: Arc<Mutex<HashMap<String, UiBootstrapSession>>>,
 }
 
 #[derive(Debug, Default)]
@@ -123,6 +136,85 @@ impl PolicyVersionCache {
     }
 }
 
+#[derive(Debug, Default)]
+struct ApprovalSubmissionLimiter {
+    minute_events: VecDeque<Instant>,
+    burst_events: VecDeque<Instant>,
+}
+
+#[derive(Debug, Clone)]
+struct UiBootstrapSession {
+    code_normalized: String,
+    next_path: String,
+    created_at: Instant,
+    expires_at: Instant,
+    attempts: u8,
+}
+
+#[derive(Debug, Deserialize)]
+struct UiBootstrapStartInput {
+    #[serde(default)]
+    next_path: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct UiBootstrapStartResponse {
+    session_id: String,
+    user_code: String,
+    expires_in_seconds: u64,
+}
+
+#[derive(Debug, Deserialize)]
+struct UiBootstrapVerifyInput {
+    session_id: String,
+    user_code: String,
+}
+
+impl ApprovalSubmissionLimiter {
+    fn allow_now(&mut self, now: Instant) -> std::result::Result<(), u64> {
+        while self
+            .minute_events
+            .front()
+            .is_some_and(|ts| now.duration_since(*ts) >= APPROVAL_RATE_LIMIT_WINDOW)
+        {
+            let _ = self.minute_events.pop_front();
+        }
+        while self
+            .burst_events
+            .front()
+            .is_some_and(|ts| now.duration_since(*ts) >= APPROVAL_RATE_LIMIT_BURST_WINDOW)
+        {
+            let _ = self.burst_events.pop_front();
+        }
+
+        if self.minute_events.len() >= APPROVAL_RATE_LIMIT_PER_MINUTE {
+            if let Some(oldest) = self.minute_events.front().copied() {
+                let retry_after = APPROVAL_RATE_LIMIT_WINDOW
+                    .saturating_sub(now.duration_since(oldest))
+                    .as_secs()
+                    .max(1);
+                return Err(retry_after);
+            }
+            return Err(1);
+        }
+
+        if self.burst_events.len() >= APPROVAL_RATE_LIMIT_BURST {
+            if let Some(oldest) = self.burst_events.front().copied() {
+                let retry_after = APPROVAL_RATE_LIMIT_BURST_WINDOW
+                    .saturating_sub(now.duration_since(oldest))
+                    .as_secs()
+                    .max(1);
+                return Err(retry_after);
+            }
+            return Err(1);
+        }
+
+        self.minute_events.push_back(now);
+        self.burst_events.push_back(now);
+        Ok(())
+    }
+}
+
 impl AgentApiServer {
     pub fn new(port: u16, deps: AgentApiServerDeps) -> Self {
         Self {
@@ -137,6 +229,8 @@ impl AgentApiServer {
                 auth_token: deps.auth_token,
                 http_client: reqwest::Client::new(),
                 policy_version_cache: Arc::new(RwLock::new(PolicyVersionCache::default())),
+                approval_rate_limiter: Arc::new(Mutex::new(ApprovalSubmissionLimiter::default())),
+                ui_bootstrap_sessions: Arc::new(Mutex::new(HashMap::new())),
             }),
         }
     }
@@ -193,6 +287,12 @@ impl AgentApiServer {
             .route("/api/v1/approval/pending", get(list_pending_approvals))
             .route("/api/v1/enroll", post(enroll_agent))
             .route("/api/v1/enrollment-status", get(enrollment_status))
+            .route("/api/v1/ui/bootstrap/start", post(start_ui_bootstrap))
+            .route(
+                "/ui/bootstrap",
+                get(ui_bootstrap_page).post(ui_bootstrap_verify),
+            )
+            .layer(DefaultBodyLimit::max(AGENT_API_MAX_BODY_BYTES))
             .with_state(self.state.clone());
 
         if let Some(dashboard_dist) = resolve_control_console_dist() {
@@ -471,20 +571,16 @@ fn merged_authorization_header(
         .map(|key| format!("Bearer {}", key))
 }
 
-fn auth_cookie_header_value(auth_token: &str) -> String {
+fn auth_cookie_header_value(auth_token: &str, secure: bool) -> String {
+    let secure_flag = if secure { "; Secure" } else { "" };
     format!(
-        "{}={}; Path=/; HttpOnly; SameSite=Strict",
-        AGENT_AUTH_COOKIE_NAME, auth_token
+        "{}={}; Path=/; HttpOnly; SameSite=Strict{}",
+        AGENT_AUTH_COOKIE_NAME, auth_token, secure_flag
     )
 }
 
-async fn attach_ui_auth_cookie(
-    State(state): State<Arc<AgentApiState>>,
-    request: Request,
-    next: Next,
-) -> Response {
-    let mut response = next.run(request).await;
-    match HeaderValue::from_str(&auth_cookie_header_value(&state.auth_token)) {
+fn set_ui_auth_cookie(response: &mut Response, auth_token: &str, secure: bool) {
+    match HeaderValue::from_str(&auth_cookie_header_value(auth_token, secure)) {
         Ok(value) => {
             response.headers_mut().append(SET_COOKIE, value);
         }
@@ -492,6 +588,403 @@ async fn attach_ui_auth_cookie(
             tracing::warn!(error = %err, "Failed to build UI auth cookie header");
         }
     }
+}
+
+fn request_is_secure_uri(headers: &HeaderMap, uri: &Uri) -> bool {
+    if uri.scheme_str() == Some("https") {
+        return true;
+    }
+    if !is_local_host_header(headers) {
+        return false;
+    }
+    headers
+        .get("x-forwarded-proto")
+        .and_then(|value| value.to_str().ok())
+        .map(|value| value.eq_ignore_ascii_case("https"))
+        .unwrap_or(false)
+}
+
+fn request_is_secure(headers: &HeaderMap, request: &Request) -> bool {
+    request_is_secure_uri(headers, request.uri())
+}
+
+fn is_local_host_header(headers: &HeaderMap) -> bool {
+    let Some(host) = headers
+        .get("host")
+        .and_then(|value| value.to_str().ok())
+        .map(str::trim)
+    else {
+        return false;
+    };
+
+    let host_only = host
+        .parse::<Authority>()
+        .map(|authority| authority.host().to_ascii_lowercase())
+        .unwrap_or_else(|_| host.to_ascii_lowercase());
+    let host_only = host_only
+        .trim_start_matches('[')
+        .trim_end_matches(']')
+        .to_string();
+
+    host_only == "localhost" || host_only == "127.0.0.1" || host_only == "::1"
+}
+
+fn has_query_param(uri: &Uri, param_name: &str) -> bool {
+    let Some(query) = uri.query() else {
+        return false;
+    };
+
+    query.split('&').any(|pair| {
+        if pair.is_empty() {
+            return false;
+        }
+        let (name, _) = pair.split_once('=').unwrap_or((pair, ""));
+        name == param_name
+    })
+}
+
+async fn attach_ui_auth_cookie(
+    State(state): State<Arc<AgentApiState>>,
+    request: Request,
+    next: Next,
+) -> Response {
+    let secure_cookie = request_is_secure(request.headers(), &request);
+    if !secure_cookie && !is_local_host_header(request.headers()) {
+        return (
+            StatusCode::FORBIDDEN,
+            "Non-localhost dashboard access requires HTTPS",
+        )
+            .into_response();
+    }
+
+    if has_query_param(request.uri(), "agent_token") {
+        tracing::warn!(
+            path = %request.uri().path(),
+            "Rejected deprecated query-based UI bootstrap token"
+        );
+        return (
+            StatusCode::BAD_REQUEST,
+            "Query-based UI bootstrap is disabled",
+        )
+            .into_response();
+    }
+
+    if require_auth(request.headers(), &state).is_err() {
+        return (
+            StatusCode::UNAUTHORIZED,
+            "Missing authorization token for /ui",
+        )
+            .into_response();
+    }
+
+    let mut response = next.run(request).await;
+    set_ui_auth_cookie(&mut response, &state.auth_token, secure_cookie);
+    response
+}
+
+fn query_param(uri: &Uri, param_name: &str) -> Option<String> {
+    let query = uri.query()?;
+    for pair in query.split('&') {
+        if pair.is_empty() {
+            continue;
+        }
+        let (name, value) = pair.split_once('=').unwrap_or((pair, ""));
+        if name == param_name {
+            let trimmed = value.trim();
+            if trimmed.is_empty() {
+                return None;
+            }
+            return Some(trimmed.to_string());
+        }
+    }
+    None
+}
+
+fn sanitize_ui_next_path(candidate: Option<&str>) -> String {
+    let raw = candidate.unwrap_or("/ui").trim();
+    if raw.is_empty() {
+        return "/ui".to_string();
+    }
+    if raw.contains('\n') || raw.contains('\r') {
+        return "/ui".to_string();
+    }
+    if raw.starts_with("http://") || raw.starts_with("https://") {
+        return "/ui".to_string();
+    }
+    if !raw.starts_with("/ui") {
+        return "/ui".to_string();
+    }
+    raw.to_string()
+}
+
+fn normalize_bootstrap_code(raw: &str) -> Option<String> {
+    let normalized: String = raw
+        .chars()
+        .filter(|ch| ch.is_ascii_alphanumeric())
+        .map(|ch| ch.to_ascii_uppercase())
+        .collect();
+    if normalized.len() != 8 {
+        return None;
+    }
+    Some(normalized)
+}
+
+fn generate_ui_bootstrap_code() -> (String, String) {
+    let random = uuid::Uuid::new_v4()
+        .simple()
+        .to_string()
+        .to_ascii_uppercase();
+    let normalized = random.chars().take(8).collect::<String>();
+    let display = format!("{}-{}", &normalized[..4], &normalized[4..]);
+    (normalized, display)
+}
+
+fn is_valid_bootstrap_session_id(candidate: &str) -> bool {
+    !candidate.is_empty()
+        && candidate.len() <= 64
+        && candidate
+            .chars()
+            .all(|ch| ch.is_ascii_alphanumeric() || ch == '-')
+}
+
+fn prune_ui_bootstrap_sessions(sessions: &mut HashMap<String, UiBootstrapSession>, now: Instant) {
+    sessions.retain(|_, session| {
+        session.expires_at > now && session.attempts < UI_BOOTSTRAP_MAX_ATTEMPTS
+    });
+    while sessions.len() > UI_BOOTSTRAP_MAX_SESSIONS {
+        let Some((oldest_key, _)) = sessions
+            .iter()
+            .min_by_key(|(_, session)| session.created_at)
+            .map(|(id, session)| (id.clone(), session.created_at))
+        else {
+            break;
+        };
+        let _ = sessions.remove(&oldest_key);
+    }
+}
+
+async fn start_ui_bootstrap(
+    State(state): State<Arc<AgentApiState>>,
+    headers: HeaderMap,
+    Json(input): Json<UiBootstrapStartInput>,
+) -> Result<Json<UiBootstrapStartResponse>, (StatusCode, String)> {
+    require_auth(&headers, &state)?;
+
+    let now = Instant::now();
+    let session_id = uuid::Uuid::new_v4().to_string();
+    let (code_normalized, user_code) = generate_ui_bootstrap_code();
+    let next_path = sanitize_ui_next_path(input.next_path.as_deref());
+
+    {
+        let mut sessions = state.ui_bootstrap_sessions.lock().await;
+        prune_ui_bootstrap_sessions(&mut sessions, now);
+        sessions.insert(
+            session_id.clone(),
+            UiBootstrapSession {
+                code_normalized,
+                next_path,
+                created_at: now,
+                expires_at: now + UI_BOOTSTRAP_TTL,
+                attempts: 0,
+            },
+        );
+    }
+
+    Ok(Json(UiBootstrapStartResponse {
+        session_id,
+        user_code,
+        expires_in_seconds: UI_BOOTSTRAP_TTL.as_secs(),
+    }))
+}
+
+async fn ui_bootstrap_page(uri: Uri) -> impl IntoResponse {
+    let session_id = query_param(&uri, "session_id");
+    let valid_session = session_id
+        .as_deref()
+        .map(is_valid_bootstrap_session_id)
+        .unwrap_or(false);
+    if !valid_session {
+        return (
+            StatusCode::BAD_REQUEST,
+            "Missing or invalid bootstrap session id",
+        )
+            .into_response();
+    }
+
+    Html(
+        r##"<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Clawdstrike Agent Login</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #0f172a;
+      color: #e2e8f0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+      box-sizing: border-box;
+    }
+    .card {
+      width: 100%;
+      max-width: 420px;
+      background: #111827;
+      border: 1px solid #334155;
+      border-radius: 12px;
+      padding: 20px;
+      box-shadow: 0 12px 28px rgba(2, 6, 23, 0.35);
+    }
+    h1 {
+      margin: 0 0 10px 0;
+      font-size: 1.25rem;
+    }
+    p {
+      margin: 0 0 14px 0;
+      color: #94a3b8;
+      line-height: 1.4;
+    }
+    label {
+      display: block;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+    input[type="text"] {
+      width: 100%;
+      box-sizing: border-box;
+      border: 1px solid #475569;
+      background: #0b1220;
+      color: #e2e8f0;
+      border-radius: 8px;
+      font-size: 1rem;
+      padding: 10px 12px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    button {
+      margin-top: 14px;
+      width: 100%;
+      border: 0;
+      border-radius: 8px;
+      padding: 10px 12px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      background: #2563eb;
+      color: #f8fafc;
+      cursor: pointer;
+    }
+    .hint {
+      margin-top: 12px;
+      font-size: 0.85rem;
+      color: #64748b;
+    }
+  </style>
+</head>
+<body>
+  <main class="card">
+    <h1>Verify Local Browser Session</h1>
+    <p>Enter the one-time code shown by the agent tray to sign in.</p>
+    <form method="post" action="/ui/bootstrap">
+      <input id="session_id" type="hidden" name="session_id" />
+      <label for="user_code">One-time code</label>
+      <input id="user_code" name="user_code" type="text" required autocomplete="one-time-code" inputmode="latin-prose" />
+      <button type="submit">Continue to Dashboard</button>
+    </form>
+    <div class="hint">Codes expire after 60 seconds and can only be used once.</div>
+  </main>
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    const sessionId = params.get("session_id") || "";
+    const field = document.getElementById("session_id");
+    if (field) field.value = sessionId;
+  </script>
+</body>
+</html>"##,
+    )
+    .into_response()
+}
+
+async fn ui_bootstrap_verify(
+    State(state): State<Arc<AgentApiState>>,
+    headers: HeaderMap,
+    uri: Uri,
+    Form(input): Form<UiBootstrapVerifyInput>,
+) -> Response {
+    let secure_cookie = request_is_secure_uri(&headers, &uri);
+    if !secure_cookie && !is_local_host_header(&headers) {
+        return (
+            StatusCode::FORBIDDEN,
+            "Non-localhost dashboard access requires HTTPS",
+        )
+            .into_response();
+    }
+
+    if !is_valid_bootstrap_session_id(input.session_id.trim()) {
+        return (
+            StatusCode::UNAUTHORIZED,
+            "Invalid or expired bootstrap code",
+        )
+            .into_response();
+    }
+    let Some(code_normalized) = normalize_bootstrap_code(&input.user_code) else {
+        return (
+            StatusCode::UNAUTHORIZED,
+            "Invalid or expired bootstrap code",
+        )
+            .into_response();
+    };
+
+    let now = Instant::now();
+    let session_id = input.session_id.trim().to_string();
+
+    let next_path = {
+        let mut sessions = state.ui_bootstrap_sessions.lock().await;
+        prune_ui_bootstrap_sessions(&mut sessions, now);
+
+        let Some(session) = sessions.get_mut(&session_id) else {
+            return (
+                StatusCode::UNAUTHORIZED,
+                "Invalid or expired bootstrap code",
+            )
+                .into_response();
+        };
+        if !constant_time_eq_token(&code_normalized, &session.code_normalized) {
+            session.attempts = session.attempts.saturating_add(1);
+            if session.attempts >= UI_BOOTSTRAP_MAX_ATTEMPTS {
+                let _ = sessions.remove(&session_id);
+            }
+            return (
+                StatusCode::UNAUTHORIZED,
+                "Invalid or expired bootstrap code",
+            )
+                .into_response();
+        }
+        let next = session.next_path.clone();
+        let _ = sessions.remove(&session_id);
+        next
+    };
+
+    let mut response = StatusCode::SEE_OTHER.into_response();
+    match HeaderValue::from_str(&next_path) {
+        Ok(value) => {
+            response.headers_mut().insert(LOCATION, value);
+        }
+        Err(err) => {
+            tracing::warn!(
+                error = %err,
+                location = %next_path,
+                "Failed to build bootstrap redirect location"
+            );
+            response
+                .headers_mut()
+                .insert(LOCATION, HeaderValue::from_static("/ui"));
+        }
+    }
+    set_ui_auth_cookie(&mut response, &state.auth_token, secure_cookie);
     response
 }
 
@@ -835,7 +1328,9 @@ fn default_apply_integrations_changes() -> bool {
 
 async fn agent_health(
     State(state): State<Arc<AgentApiState>>,
+    headers: HeaderMap,
 ) -> Result<Json<AgentHealthResponse>, (StatusCode, String)> {
+    require_auth(&headers, &state)?;
     let daemon = state.daemon_manager.status().await;
     let session = state.session_manager.state().await;
     let openclaw = state.openclaw.list_gateways().await;
@@ -1131,7 +1626,7 @@ async fn create_gateway(
         .openclaw
         .upsert_gateway(input)
         .await
-        .map_err(internal_error)?;
+        .map_err(map_openclaw_error)?;
     Ok(Json(created))
 }
 
@@ -1162,7 +1657,7 @@ async fn patch_gateway(
             device_token: patch.device_token,
         })
         .await
-        .map_err(internal_error)?;
+        .map_err(map_openclaw_error)?;
 
     Ok(Json(updated))
 }
@@ -1270,7 +1765,10 @@ async fn gateway_request(
             content: None,
             args: Some({
                 let mut args = std::collections::HashMap::new();
-                args.insert("gateway_id".to_string(), serde_json::Value::String(input.gateway_id.clone()));
+                args.insert(
+                    "gateway_id".to_string(),
+                    serde_json::Value::String(input.gateway_id.clone()),
+                );
                 args.insert(
                     "method".to_string(),
                     serde_json::Value::String(input.method.clone()),
@@ -1312,7 +1810,7 @@ async fn import_desktop_gateways(
         .openclaw
         .import_desktop_gateways(payload)
         .await
-        .map_err(internal_error)?;
+        .map_err(map_openclaw_error)?;
     Ok(Json(result))
 }
 
@@ -1353,6 +1851,20 @@ async fn create_approval_request(
     Json(input): Json<ApprovalRequestInput>,
 ) -> Result<Json<ApprovalStatusResponse>, (StatusCode, String)> {
     require_auth(&headers, &state)?;
+
+    let retry_after_secs = {
+        let mut limiter = state.approval_rate_limiter.lock().await;
+        limiter.allow_now(Instant::now()).err()
+    };
+    if let Some(retry_after) = retry_after_secs {
+        return Err((
+            StatusCode::TOO_MANY_REQUESTS,
+            format!(
+                "Approval request rate limit exceeded; retry in {}s",
+                retry_after
+            ),
+        ));
+    }
 
     // Reject critical severity actions -- they are not approvable.
     if input.severity.eq_ignore_ascii_case("critical") {
@@ -1450,7 +1962,10 @@ async fn enroll_agent(
     require_auth(&headers, &state)?;
 
     let manager = crate::enrollment::EnrollmentManager::new(state.settings.clone());
-    match manager.enroll(&input.control_api_url, &input.enrollment_token).await {
+    match manager
+        .enroll(&input.control_api_url, &input.enrollment_token)
+        .await
+    {
         Ok(result) => {
             tracing::info!(
                 agent_uuid = %result.agent_uuid,
@@ -1464,7 +1979,10 @@ async fn enroll_agent(
                 "message": "Restart the agent to activate enterprise features (policy sync, telemetry, posture commands)",
             })))
         }
-        Err(err) => Err((StatusCode::BAD_REQUEST, format!("Enrollment failed: {}", err))),
+        Err(err) => Err((
+            StatusCode::BAD_REQUEST,
+            format!("Enrollment failed: {}", err),
+        )),
     }
 }
 
@@ -1508,14 +2026,16 @@ fn require_auth(headers: &HeaderMap, state: &AgentApiState) -> Result<(), (Statu
 
     if let Some(auth) = auth_header {
         if let Some(token) = auth.strip_prefix("Bearer ") {
-            if token.trim() == state.auth_token {
+            if constant_time_eq_token(token.trim(), &state.auth_token) {
                 return Ok(());
             }
         }
     }
 
-    if auth_token_from_cookie(headers).as_deref() == Some(state.auth_token.as_str()) {
-        return Ok(());
+    if let Some(cookie_token) = auth_token_from_cookie(headers) {
+        if constant_time_eq_token(cookie_token.trim(), &state.auth_token) {
+            return Ok(());
+        }
     }
 
     let err = match auth_header {
@@ -1529,6 +2049,19 @@ fn require_auth(headers: &HeaderMap, state: &AgentApiState) -> Result<(), (Statu
 fn internal_error(err: anyhow::Error) -> (StatusCode, String) {
     tracing::error!(error = %err, "Agent API error");
     (StatusCode::INTERNAL_SERVER_ERROR, err.to_string())
+}
+
+fn map_openclaw_error(err: anyhow::Error) -> (StatusCode, String) {
+    let message = err.to_string();
+    if message.contains("gateway_url")
+        || message.contains("wss://")
+        || message.contains("private/link-local")
+        || message.contains("failed to resolve gateway host")
+        || message.contains("pinned allowlist")
+    {
+        return (StatusCode::BAD_REQUEST, message);
+    }
+    internal_error(err)
 }
 
 fn deserialize_optional_string_field<'de, D>(
@@ -1581,6 +2114,8 @@ mod tests {
             auth_token: "test-token".to_string(),
             http_client: reqwest::Client::new(),
             policy_version_cache: Arc::new(RwLock::new(PolicyVersionCache::default())),
+            approval_rate_limiter: Arc::new(Mutex::new(ApprovalSubmissionLimiter::default())),
+            ui_bootstrap_sessions: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
@@ -1611,11 +2146,10 @@ mod tests {
         let mut cache = PolicyVersionCache::default();
         let started = std::time::Instant::now();
         assert!(cache.mark_refresh_started_if_due(started));
-        assert!(!cache.mark_refresh_started_if_due(
-            started + POLICY_VERSION_CACHE_REFRESH_INTERVAL
-        ));
+        assert!(!cache.mark_refresh_started_if_due(started + POLICY_VERSION_CACHE_REFRESH_INTERVAL));
 
-        let after_timeout = started + POLICY_VERSION_REFRESH_IN_FLIGHT_TIMEOUT + Duration::from_millis(1);
+        let after_timeout =
+            started + POLICY_VERSION_REFRESH_IN_FLIGHT_TIMEOUT + Duration::from_millis(1);
         assert!(cache.mark_refresh_started_if_due(after_timeout));
         assert!(cache.refresh_in_flight);
     }
@@ -1692,6 +2226,224 @@ mod tests {
 
         let result = require_auth(&headers, &state);
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn local_host_header_accepts_ipv6_loopback_with_port() {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            "host",
+            "[::1]:9878"
+                .parse()
+                .unwrap_or_else(|_| panic!("failed to build host header")),
+        );
+        assert!(is_local_host_header(&headers));
+    }
+
+    #[test]
+    fn local_host_header_rejects_public_host() {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            "host",
+            "example.com:9878"
+                .parse()
+                .unwrap_or_else(|_| panic!("failed to build host header")),
+        );
+        assert!(!is_local_host_header(&headers));
+    }
+
+    #[test]
+    fn local_host_header_rejects_missing_header() {
+        let headers = HeaderMap::new();
+        assert!(!is_local_host_header(&headers));
+    }
+
+    #[test]
+    fn map_openclaw_error_classifies_dns_resolution_failure_as_bad_request() {
+        let err = anyhow::anyhow!("failed to resolve gateway host bad.example:443");
+        let (status, message) = map_openclaw_error(err);
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert!(message.contains("failed to resolve gateway host"));
+    }
+
+    #[test]
+    fn request_is_secure_uri_accepts_https_scheme_without_proxy_header() {
+        let headers = HeaderMap::new();
+        let uri = "https://localhost/ui/bootstrap"
+            .parse::<Uri>()
+            .unwrap_or_else(|_| panic!("failed to parse https uri for secure check"));
+        assert!(request_is_secure_uri(&headers, &uri));
+    }
+
+    #[test]
+    fn request_is_secure_uri_rejects_forwarded_proto_for_non_local_host() {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            "host",
+            "example.com:9878"
+                .parse()
+                .unwrap_or_else(|_| panic!("failed to build host header")),
+        );
+        headers.insert(
+            "x-forwarded-proto",
+            "https"
+                .parse()
+                .unwrap_or_else(|_| panic!("failed to build x-forwarded-proto header")),
+        );
+        let uri = "/ui/bootstrap"
+            .parse::<Uri>()
+            .unwrap_or_else(|_| panic!("failed to parse relative uri for secure check"));
+        assert!(!request_is_secure_uri(&headers, &uri));
+    }
+
+    #[test]
+    fn request_is_secure_uri_accepts_forwarded_proto_for_local_host() {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            "host",
+            "127.0.0.1:9878"
+                .parse()
+                .unwrap_or_else(|_| panic!("failed to build host header")),
+        );
+        headers.insert(
+            "x-forwarded-proto",
+            "https"
+                .parse()
+                .unwrap_or_else(|_| panic!("failed to build x-forwarded-proto header")),
+        );
+        let uri = "/ui/bootstrap"
+            .parse::<Uri>()
+            .unwrap_or_else(|_| panic!("failed to parse relative uri for secure check"));
+        assert!(request_is_secure_uri(&headers, &uri));
+    }
+
+    #[tokio::test]
+    async fn ui_routes_require_auth_and_bootstrap_with_one_time_code() {
+        let state = Arc::new(test_state());
+        let ui_router = Router::new().route("/", get(|| async { "ok" })).layer(
+            axum::middleware::from_fn_with_state(state.clone(), attach_ui_auth_cookie),
+        );
+        let app = Router::new()
+            .route("/api/v1/ui/bootstrap/start", post(start_ui_bootstrap))
+            .route("/ui/bootstrap", post(ui_bootstrap_verify))
+            .nest("/ui", ui_router)
+            .with_state(state);
+
+        let unauth_req = axum::http::Request::builder()
+            .method("GET")
+            .uri("/ui")
+            .header("host", "127.0.0.1:9878")
+            .body(axum::body::Body::empty())
+            .unwrap_or_else(|e| panic!("failed to build unauth request: {e}"));
+        let unauth_resp = app
+            .clone()
+            .oneshot(unauth_req)
+            .await
+            .unwrap_or_else(|e| panic!("unauth request failed: {e}"));
+        assert_eq!(unauth_resp.status(), StatusCode::UNAUTHORIZED);
+        assert!(unauth_resp.headers().get(SET_COOKIE).is_none());
+
+        let deprecated_query_req = axum::http::Request::builder()
+            .method("GET")
+            .uri("/ui?agent_token=test-token")
+            .header("host", "127.0.0.1:9878")
+            .body(axum::body::Body::empty())
+            .unwrap_or_else(|e| panic!("failed to build deprecated query request: {e}"));
+        let deprecated_query_resp = app
+            .clone()
+            .oneshot(deprecated_query_req)
+            .await
+            .unwrap_or_else(|e| panic!("deprecated query request failed: {e}"));
+        assert_eq!(deprecated_query_resp.status(), StatusCode::BAD_REQUEST);
+
+        let start_req = axum::http::Request::builder()
+            .method("POST")
+            .uri("/api/v1/ui/bootstrap/start")
+            .header(AUTHORIZATION, "Bearer test-token")
+            .header(CONTENT_TYPE, "application/json")
+            .body(axum::body::Body::from(
+                r#"{"next_path":"/ui/settings/siem"}"#,
+            ))
+            .unwrap_or_else(|e| panic!("failed to build bootstrap start request: {e}"));
+        let start_resp = app
+            .clone()
+            .oneshot(start_req)
+            .await
+            .unwrap_or_else(|e| panic!("bootstrap start request failed: {e}"));
+        assert_eq!(start_resp.status(), StatusCode::OK);
+        let start_bytes = axum::body::to_bytes(start_resp.into_body(), 64 * 1024)
+            .await
+            .unwrap_or_else(|e| panic!("failed to read bootstrap start body: {e}"));
+        let payload: UiBootstrapStartResponse = serde_json::from_slice(&start_bytes)
+            .unwrap_or_else(|e| panic!("failed to decode bootstrap start payload: {e}"));
+
+        let verify_body = format!(
+            "session_id={}&user_code={}",
+            payload.session_id, payload.user_code
+        );
+        let verify_req = axum::http::Request::builder()
+            .method("POST")
+            .uri("/ui/bootstrap")
+            .header("host", "127.0.0.1:9878")
+            .header(CONTENT_TYPE, "application/x-www-form-urlencoded")
+            .body(axum::body::Body::from(verify_body))
+            .unwrap_or_else(|e| panic!("failed to build bootstrap verify request: {e}"));
+        let bootstrap_resp = app
+            .clone()
+            .oneshot(verify_req)
+            .await
+            .unwrap_or_else(|e| panic!("bootstrap verify request failed: {e}"));
+        assert_eq!(bootstrap_resp.status(), StatusCode::SEE_OTHER);
+        assert_eq!(
+            bootstrap_resp
+                .headers()
+                .get(LOCATION)
+                .and_then(|value| value.to_str().ok()),
+            Some("/ui/settings/siem")
+        );
+        assert!(bootstrap_resp.headers().get(SET_COOKIE).is_some());
+
+        let cookie_req = axum::http::Request::builder()
+            .method("GET")
+            .uri("/ui")
+            .header("host", "127.0.0.1:9878")
+            .header(COOKIE, format!("{AGENT_AUTH_COOKIE_NAME}=test-token"))
+            .body(axum::body::Body::empty())
+            .unwrap_or_else(|e| panic!("failed to build cookie request: {e}"));
+        let cookie_resp = app
+            .oneshot(cookie_req)
+            .await
+            .unwrap_or_else(|e| panic!("cookie request failed: {e}"));
+        assert_eq!(cookie_resp.status(), StatusCode::OK);
+    }
+
+    #[test]
+    fn approval_submission_limiter_enforces_burst_limit() {
+        let mut limiter = ApprovalSubmissionLimiter::default();
+        let now = Instant::now();
+        for _ in 0..APPROVAL_RATE_LIMIT_BURST {
+            assert!(limiter.allow_now(now).is_ok());
+        }
+        assert!(limiter.allow_now(now).is_err());
+    }
+
+    #[tokio::test]
+    async fn agent_health_route_requires_auth() {
+        let state = Arc::new(test_state());
+        let app = Router::new()
+            .route("/api/v1/agent/health", get(agent_health))
+            .with_state(state);
+
+        let req = axum::http::Request::builder()
+            .method("GET")
+            .uri("/api/v1/agent/health")
+            .body(axum::body::Body::empty())
+            .unwrap_or_else(|e| panic!("failed to build request: {e}"));
+        let resp = app
+            .oneshot(req)
+            .await
+            .unwrap_or_else(|e| panic!("request failed: {e}"));
+        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
     }
 
     #[test]

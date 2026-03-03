@@ -9,7 +9,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-use crate::settings::{enforce_private_mode, get_config_dir, hostname_best_effort, EnrollmentState, Settings};
+use crate::settings::{get_config_dir, hostname_best_effort, EnrollmentState, Settings};
 
 /// Result of a successful enrollment.
 #[derive(Debug, Clone, Serialize)]
@@ -39,6 +39,24 @@ struct EnrollResponse {
     #[serde(default)]
     approval_response_trusted_issuer: Option<String>,
     agent_id: String,
+}
+
+#[derive(Debug, Clone, Copy)]
+enum EnrollmentKeyPersistence {
+    Keyring,
+    LegacyFileFallback,
+}
+
+fn extract_trusted_issuer(issuer: Option<&str>) -> Result<String> {
+    issuer
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToString::to_string)
+        .ok_or_else(|| {
+            anyhow::anyhow!(
+                "Enrollment response missing approval_response_trusted_issuer; refusing to enable NATS"
+            )
+        })
 }
 
 /// Manages the enrollment lifecycle.
@@ -73,9 +91,7 @@ impl EnrollmentManager {
             }
         }
 
-        let result = self
-            .do_enroll(control_api_url, enrollment_token)
-            .await;
+        let result = self.do_enroll(control_api_url, enrollment_token).await;
 
         // `do_enroll` persists `enrollment_in_progress = false` on success.
         // On failure we clear and persist it here so crash-recovery state is accurate.
@@ -97,11 +113,26 @@ impl EnrollmentManager {
     ) -> Result<EnrollmentResult> {
         // Generate a new Ed25519 keypair.
         let keypair = hush_core::Keypair::generate();
+        let key_hex = keypair.to_hex();
         let public_key_hex = keypair.public_key().to_hex();
+        let previous_key_hex = match load_enrollment_key_hex() {
+            Ok(previous) => previous,
+            Err(err) => {
+                tracing::warn!(
+                    error = %err,
+                    "Failed to read existing enrollment key before enrollment; continuing without rollback key snapshot"
+                );
+                None
+            }
+        };
+        let previous_settings_snapshot = self.settings.read().await.clone();
 
         let hostname = hostname_best_effort();
 
-        let enroll_url = format!("{}/api/v1/agents/enroll", control_api_url.trim_end_matches('/'));
+        let enroll_url = format!(
+            "{}/api/v1/agents/enroll",
+            control_api_url.trim_end_matches('/')
+        );
 
         let body = EnrollRequest {
             enrollment_token: enrollment_token.to_string(),
@@ -130,12 +161,8 @@ impl EnrollmentManager {
             .json()
             .await
             .with_context(|| "Failed to parse enrollment response")?;
-
-        // Store the private key.
-        let key_path = get_config_dir().join("agent.key");
-        write_private_file(&key_path, keypair.to_hex().as_bytes())
-            .with_context(|| format!("Failed to write agent key to {:?}", key_path))?;
-        tracing::info!(path = ?key_path, "Agent private key stored");
+        let trusted_issuer =
+            extract_trusted_issuer(resp.approval_response_trusted_issuer.as_deref())?;
 
         // Update settings with enrollment state and all NATS configuration.
         {
@@ -156,10 +183,46 @@ impl EnrollmentManager {
             settings.nats.token = Some(resp.nats_token);
             settings.nats.nats_account = Some(resp.nats_account);
             settings.nats.subject_prefix = Some(resp.nats_subject_prefix);
-            settings.nats.approval_response_trusted_issuer = resp.approval_response_trusted_issuer;
+            settings.nats.require_signed_approval_responses = true;
+            settings.nats.approval_response_trusted_issuer = Some(trusted_issuer);
             settings
                 .save()
                 .with_context(|| "Failed to persist enrollment settings")?;
+        }
+
+        let persistence = match persist_enrollment_key(&key_hex)
+            .with_context(|| "Failed to persist enrollment key after enrollment response")
+        {
+            Ok(persistence) => persistence,
+            Err(store_err) => {
+                if let Err(rollback_err) = restore_previous_enrollment_key(previous_key_hex.clone())
+                {
+                    tracing::warn!(
+                        error = %rollback_err,
+                        "Failed to restore previous enrollment key after key-store write error"
+                    );
+                }
+                if let Err(rollback_err) =
+                    restore_previous_settings_snapshot(&self.settings, &previous_settings_snapshot)
+                        .await
+                {
+                    tracing::warn!(
+                        error = %rollback_err,
+                        "Failed to restore previous enrollment settings after key-store write error"
+                    );
+                }
+                return Err(store_err);
+            }
+        };
+        match persistence {
+            EnrollmentKeyPersistence::Keyring => {
+                tracing::info!("Agent private key stored in keyring-backed store");
+            }
+            EnrollmentKeyPersistence::LegacyFileFallback => {
+                tracing::warn!(
+                    "Agent private key persisted to legacy on-disk fallback because keyring write failed"
+                );
+            }
         }
 
         let result = EnrollmentResult {
@@ -177,41 +240,164 @@ impl EnrollmentManager {
     }
 }
 
+fn legacy_agent_key_path() -> PathBuf {
+    get_config_dir().join("agent.key")
+}
+
+fn persist_legacy_enrollment_key(key_hex: &str) -> Result<()> {
+    let trimmed = key_hex.trim();
+    if trimmed.is_empty() {
+        anyhow::bail!("Enrollment key cannot be empty");
+    }
+    let legacy_path = legacy_agent_key_path();
+    crate::security::fs::write_private_atomic(
+        &legacy_path,
+        trimmed.as_bytes(),
+        "legacy enrollment key",
+    )
+    .with_context(|| {
+        format!(
+            "Failed to persist legacy enrollment key at {:?}",
+            legacy_path
+        )
+    })
+}
+
+fn persist_enrollment_key(key_hex: &str) -> Result<EnrollmentKeyPersistence> {
+    let trimmed = key_hex.trim();
+    if trimmed.is_empty() {
+        anyhow::bail!("Enrollment key cannot be empty");
+    }
+
+    match crate::security::key_store::store_enrollment_key_hex(trimmed) {
+        Ok(()) => {
+            let legacy_path = legacy_agent_key_path();
+            if legacy_path.exists() {
+                if let Err(err) = std::fs::remove_file(&legacy_path) {
+                    tracing::warn!(
+                        error = %err,
+                        path = ?legacy_path,
+                        "Failed to remove legacy enrollment key file after keyring write"
+                    );
+                }
+            }
+            Ok(EnrollmentKeyPersistence::Keyring)
+        }
+        Err(err) => {
+            tracing::warn!(
+                error = %err,
+                "Failed to persist enrollment key to keyring; writing legacy fallback file"
+            );
+            persist_legacy_enrollment_key(trimmed)?;
+            Ok(EnrollmentKeyPersistence::LegacyFileFallback)
+        }
+    }
+}
+
+fn restore_previous_enrollment_key(previous_key_hex: Option<String>) -> Result<()> {
+    if let Some(previous_key_hex) = previous_key_hex {
+        let _ = persist_enrollment_key(previous_key_hex.trim())
+            .with_context(|| "Failed to restore previous enrollment key")?;
+    } else {
+        if let Err(err) = crate::security::key_store::delete_enrollment_key_hex() {
+            tracing::warn!(
+                error = %err,
+                "Failed to clear keyring enrollment key during rollback"
+            );
+        }
+        let legacy_path = legacy_agent_key_path();
+        if legacy_path.exists() {
+            std::fs::remove_file(&legacy_path).with_context(|| {
+                format!(
+                    "Failed to clear legacy enrollment key file during rollback {:?}",
+                    legacy_path
+                )
+            })?;
+        }
+    }
+    Ok(())
+}
+
+async fn restore_previous_settings_snapshot(
+    settings_handle: &Arc<RwLock<Settings>>,
+    snapshot: &Settings,
+) -> Result<()> {
+    let mut settings = settings_handle.write().await;
+    *settings = snapshot.clone();
+    settings
+        .save()
+        .with_context(|| "Failed to restore previous enrollment settings")?;
+    Ok(())
+}
+
+/// Load the enrollment private key hex from secure storage.
+///
+/// If a legacy on-disk `agent.key` exists, migrate it into keyring-backed storage.
+pub fn load_enrollment_key_hex() -> Result<Option<String>> {
+    match crate::security::key_store::load_enrollment_key_hex() {
+        Ok(Some(stored)) => {
+            let trimmed = stored.trim();
+            if !trimmed.is_empty() {
+                return Ok(Some(trimmed.to_string()));
+            }
+        }
+        Ok(None) => {}
+        Err(err) => {
+            tracing::warn!(
+                error = %err,
+                "Failed to load enrollment key from keyring-backed store; trying legacy key file and continuing if none exists"
+            );
+        }
+    }
+
+    let legacy_path = legacy_agent_key_path();
+    if !legacy_path.exists() {
+        return Ok(None);
+    }
+
+    let legacy = std::fs::read_to_string(&legacy_path).with_context(|| {
+        format!(
+            "Failed to read legacy enrollment key from {:?}",
+            legacy_path
+        )
+    })?;
+    let legacy_trimmed = legacy.trim().to_string();
+    if legacy_trimmed.is_empty() {
+        return Ok(None);
+    }
+
+    if let Err(err) = crate::security::key_store::store_enrollment_key_hex(&legacy_trimmed) {
+        tracing::warn!(
+            error = %err,
+            path = ?legacy_path,
+            "Failed to migrate legacy enrollment key into keyring-backed store; using legacy file"
+        );
+        return Ok(Some(legacy_trimmed));
+    }
+
+    std::fs::remove_file(&legacy_path).with_context(|| {
+        format!(
+            "Failed to remove migrated legacy enrollment key file {:?}",
+            legacy_path
+        )
+    })?;
+
+    Ok(Some(legacy_trimmed))
+}
+
+pub fn migrate_legacy_enrollment_key_file() -> Result<()> {
+    let _ = load_enrollment_key_hex()?;
+    Ok(())
+}
+
 /// Write a file with restricted permissions (owner-only read/write).
 ///
 /// On Unix, the file is created with mode 0o600 from the start to avoid
 /// a TOCTOU window where the private key would be world-readable.
+#[cfg(test)]
 fn write_private_file(path: &PathBuf, data: &[u8]) -> Result<()> {
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)
-            .with_context(|| format!("Failed to create directory {:?}", parent))?;
-    }
-
-    #[cfg(unix)]
-    {
-        use std::fs::OpenOptions;
-        use std::io::Write;
-        use std::os::unix::fs::OpenOptionsExt;
-
-        let mut file = OpenOptions::new()
-            .write(true)
-            .create(true)
-            .truncate(true)
-            .mode(0o600)
-            .open(path)
-            .with_context(|| format!("Failed to create private file {:?}", path))?;
-        file.write_all(data)
-            .with_context(|| format!("Failed to write file {:?}", path))?;
-        enforce_private_mode(path, "private file")?;
-    }
-
-    #[cfg(not(unix))]
-    {
-        std::fs::write(path, data)
-            .with_context(|| format!("Failed to write file {:?}", path))?;
-    }
-
-    Ok(())
+    crate::security::fs::write_private_atomic(path, data, "private file")
+        .with_context(|| format!("Failed to write file {:?}", path))
 }
 
 #[cfg(test)]
@@ -232,6 +418,19 @@ mod tests {
     fn get_hostname_returns_something() {
         let hostname = hostname_best_effort();
         assert!(!hostname.is_empty());
+    }
+
+    #[test]
+    fn extract_trusted_issuer_requires_non_empty_value() {
+        let issuer = extract_trusted_issuer(Some("  issuer-1  "))
+            .unwrap_or_else(|err| panic!("expected issuer parse to succeed: {err}"));
+        assert_eq!(issuer, "issuer-1");
+
+        let missing = extract_trusted_issuer(None);
+        assert!(missing.is_err());
+
+        let blank = extract_trusted_issuer(Some("   "));
+        assert!(blank.is_err());
     }
 
     #[cfg(unix)]

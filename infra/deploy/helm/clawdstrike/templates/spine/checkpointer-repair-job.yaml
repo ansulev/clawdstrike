@@ -1,38 +1,37 @@
-{{- if and .Values.spine.enabled .Values.spine.checkpointer.enabled (eq .Values.spine.checkpointer.mode "run") }}
-apiVersion: apps/v1
-kind: Deployment
+{{- if and .Values.spine.enabled .Values.spine.checkpointer.enabled (eq .Values.spine.checkpointer.mode "repair") }}
+apiVersion: batch/v1
+kind: Job
 metadata:
-  name: {{ include "clawdstrike.fullname" . }}-checkpointer
+  name: {{ include "clawdstrike.fullname" . }}-checkpointer-repair-{{ .Release.Revision }}
   namespace: {{ include "clawdstrike.namespace" . }}
   labels:
-    {{- include "clawdstrike.componentLabels" (dict "ctx" . "component" "checkpointer") | nindent 4 }}
+    {{- include "clawdstrike.componentLabels" (dict "ctx" . "component" "checkpointer-repair") | nindent 4 }}
 spec:
-  replicas: {{ .Values.spine.checkpointer.replicas }}
-  selector:
-    matchLabels:
-      {{- include "clawdstrike.componentSelectorLabels" (dict "ctx" . "component" "checkpointer") | nindent 6 }}
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 3600
   template:
     metadata:
       labels:
-        {{- include "clawdstrike.componentLabels" (dict "ctx" . "component" "checkpointer") | nindent 8 }}
+        {{- include "clawdstrike.componentLabels" (dict "ctx" . "component" "checkpointer-repair") | nindent 8 }}
       annotations:
         checksum/config: {{ include (print $.Template.BasePath "/spine/spine-configmap.yaml") . | sha256sum }}
         {{- with .Values.podAnnotations }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
     spec:
+      restartPolicy: Never
       {{- include "clawdstrike.imagePullSecrets" . | nindent 6 }}
       {{- include "clawdstrike.globalScheduling" . | nindent 6 }}
       serviceAccountName: {{ include "clawdstrike.serviceAccountName" . }}
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       containers:
-        - name: checkpointer
+        - name: checkpointer-repair
           image: "{{ .Values.spine.image.repository }}:{{ .Values.spine.image.tag | default (printf "spine-checkpointer-%s" .Chart.AppVersion) }}"
           imagePullPolicy: {{ .Values.global.imagePullPolicy }}
           args:
             - "--mode"
-            - {{ .Values.spine.checkpointer.mode | quote }}
+            - "repair"
             {{- if .Values.spine.checkpointer.repairApply }}
             - "--repair-apply"
             {{- end }}
@@ -49,21 +48,9 @@ spec:
           env:
             - name: SPINE_BIN
               value: spine-checkpointer
-            {{- if eq .Values.spine.checkpointer.mode "run" }}
-            - name: SPINE_LOG_SEED_HEX
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.spine.secrets.existingSecret | default (printf "%s-spine" (include "clawdstrike.fullname" .)) }}
-                  key: SPINE_LOG_SEED_HEX
-            {{- end }}
           envFrom:
             - configMapRef:
                 name: {{ include "clawdstrike.fullname" . }}-spine
-          livenessProbe:
-            exec:
-              command: ["test", "-f", "/proc/1/status"]
-            initialDelaySeconds: 5
-            periodSeconds: 15
           securityContext:
             {{- toYaml .Values.securityContext | nindent 12 }}
           resources:

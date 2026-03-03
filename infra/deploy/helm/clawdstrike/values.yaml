@@ -71,10 +71,22 @@ spine:
   checkpointer:
     enabled: true
     replicas: 1
+    # -- Checkpointer mode (`run` starts a Deployment; `repair` runs a one-shot Job)
+    mode: run
+    # -- Apply destructive writes in repair mode (`--repair-apply`)
+    repairApply: false
     # -- Hex-encoded 32-byte Ed25519 seed for spine-checkpointer (SPINE_LOG_SEED_HEX)
     logSeedHex: ""
     # -- JetStream replication factor to request when creating Spine streams
     streamReplicas: 1
+    # -- Chain enforcement mode (`warn` logs violations, `strict` quarantines and drops)
+    chainEnforcement: warn
+    # -- KV bucket storing per-issuer chain heads
+    issuerHeadsBucket: CLAWDSTRIKE_ISSUER_HEADS
+    # -- JetStream stream for strict-mode chain violations
+    chainViolationStream: CLAWDSTRIKE_CHAIN_VIOLATIONS
+    # -- Subject for strict-mode chain violation events
+    chainViolationSubject: clawdstrike.spine.chain_violation.v1
     resources:
       requests:
         cpu: 50m
@@ -100,6 +112,12 @@ spine:
     enabled: true
     replicas: 1
     port: 8080
+    # -- KV bucket storing per-issuer chain heads
+    issuerHeadsBucket: CLAWDSTRIKE_ISSUER_HEADS
+    # -- JetStream stream containing strict-mode chain violation events
+    chainViolationStream: CLAWDSTRIKE_CHAIN_VIOLATIONS
+    # -- Maximum events scanned by /v1/chain_violation_stats
+    chainViolationStatsScanCap: 10000
     resources:
       requests:
         cpu: 50m

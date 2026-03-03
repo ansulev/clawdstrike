@@ -146,4 +146,43 @@ mod tests {
         assert!(!timeline.is_empty());
         let _parsed: serde_json::Value = serde_json::from_str(&timeline).unwrap();
     }
+
+    #[test]
+    fn new_rejects_invalid_yaml() {
+        let result = PolicyLabHandle::new("not: valid: policy: yaml: {{{}}}");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn new_rejects_non_policy_yaml() {
+        let result = PolicyLabHandle::new("foo: bar\nbaz: 42");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn synth_rejects_malformed_jsonl() {
+        let result = PolicyLabHandle::synth("this is not json");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn to_ocsf_rejects_malformed_jsonl() {
+        let result = PolicyLabHandle::to_ocsf("{bad json");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn to_timeline_rejects_malformed_jsonl() {
+        let result = PolicyLabHandle::to_timeline("<<<invalid>>>");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn synth_empty_input_produces_risk_warning() {
+        let result = PolicyLabHandle::synth("").unwrap();
+        assert!(result
+            .risks
+            .iter()
+            .any(|r| r.contains("No events provided")));
+    }
 }

@@ -221,6 +221,81 @@ async fn event_ids_preserved_in_results() {
     assert_eq!(result.results[2].event_id, "sim-3");
 }
 
+fn posture_policy_yaml() -> &'static str {
+    r#"
+version: "1.1.0"
+name: PostureTest
+description: Test posture tracking
+
+guards:
+  egress_allowlist:
+    allow:
+      - "*"
+    block: []
+    default_action: allow
+
+  patch_integrity:
+    max_additions: 10000
+    max_deletions: 5000
+    require_balance: false
+    max_imbalance_ratio: 50.0
+
+posture:
+  initial: work
+  states:
+    work:
+      description: Working state
+      capabilities:
+        - file_access
+        - egress
+      budgets:
+        file_writes: 10
+        egress_calls: 5
+    quarantine:
+      description: Locked down
+      capabilities: []
+      budgets: {}
+  transitions:
+    - from: "*"
+      to: quarantine
+      on: critical_violation
+
+settings:
+  fail_fast: false
+"#
+}
+
+#[tokio::test]
+async fn posture_tracking_returns_state() {
+    let events = vec![PolicyEvent {
+        event_id: "posture-1".to_string(),
+        event_type: PolicyEventType::FileRead,
+        timestamp: Utc::now(),
+        session_id: None,
+        data: PolicyEventData::File(FileEventData {
+            path: "/workspace/src/main.rs".to_string(),
+            operation: Some("read".to_string()),
+            content_base64: None,
+            content: None,
+            content_hash: None,
+        }),
+        metadata: None,
+        context: None,
+    }];
+
+    let result = replay_events(posture_policy_yaml(), &events, true)
+        .await
+        .unwrap();
+
+    assert_eq!(result.summary.total, 1);
+    assert_eq!(result.summary.allowed, 1);
+    // With track_posture=true, each entry should have posture state
+    let entry = &result.results[0];
+    assert!(entry.posture.is_some());
+    let posture = entry.posture.as_ref().unwrap();
+    assert_eq!(posture.state, "work");
+}
+
 #[tokio::test]
 async fn mixed_allowed_and_blocked() {
     let events = vec![
@@ -278,6 +353,12 @@ async fn mixed_allowed_and_blocked() {
         .unwrap();
 
     assert_eq!(result.summary.total, 3);
-    assert!(result.summary.allowed >= 1);
-    assert!(result.summary.blocked >= 1);
+    // Exactly 1 blocked (/etc/shadow via forbidden_path)
+    assert_eq!(result.summary.blocked, 1);
+    // 2 allowed (safe file read + listed egress)
+    assert_eq!(result.summary.allowed, 2);
+    // Verify per-event outcomes
+    assert_eq!(result.results[0].outcome, "allowed");
+    assert_eq!(result.results[1].outcome, "blocked");
+    assert_eq!(result.results[2].outcome, "allowed");
 }

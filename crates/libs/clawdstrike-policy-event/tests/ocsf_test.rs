@@ -222,6 +222,125 @@ fn guard_decision_warn_maps_correctly() {
 }
 
 #[test]
+fn file_event_ocsf_has_resource_fields() {
+    let event = make_event(
+        "ocsf-res-file",
+        PolicyEventType::FileRead,
+        PolicyEventData::File(FileEventData {
+            path: "/workspace/src/main.rs".to_string(),
+            operation: None,
+            content_base64: None,
+            content: None,
+            content_hash: None,
+        }),
+    );
+
+    let json = policy_event_to_ocsf(&event).unwrap();
+    let resources = &json["resources"];
+    assert!(resources.is_array());
+    let first = &resources[0];
+    assert_eq!(first["type"], "file");
+    assert!(first["name"].is_string());
+}
+
+#[test]
+fn network_event_ocsf_has_resource_fields() {
+    let event = make_event(
+        "ocsf-res-net",
+        PolicyEventType::NetworkEgress,
+        PolicyEventData::Network(NetworkEventData {
+            host: "api.github.com".to_string(),
+            port: 443,
+            protocol: None,
+            url: None,
+        }),
+    );
+
+    let json = policy_event_to_ocsf(&event).unwrap();
+    let resources = &json["resources"];
+    assert!(resources.is_array());
+    let first = &resources[0];
+    assert_eq!(first["type"], "network");
+    assert!(first["name"].is_string());
+}
+
+#[test]
+fn verdict_deny_in_metadata_maps_to_blocked() {
+    let mut event = make_event(
+        "ocsf-deny-meta",
+        PolicyEventType::FileRead,
+        PolicyEventData::File(FileEventData {
+            path: "/etc/shadow".to_string(),
+            operation: None,
+            content_base64: None,
+            content: None,
+            content_hash: None,
+        }),
+    );
+    event.metadata = Some(serde_json::json!({ "verdict": "deny" }));
+
+    let json = policy_event_to_ocsf(&event).unwrap();
+    assert_eq!(json["action_id"], 2); // Denied
+    assert_eq!(json["disposition_id"], 2); // Blocked
+    assert_eq!(json["severity_id"], 4); // High
+}
+
+#[test]
+fn verdict_warn_in_metadata_maps_to_logged() {
+    let mut event = make_event(
+        "ocsf-warn-meta",
+        PolicyEventType::FileRead,
+        PolicyEventData::File(FileEventData {
+            path: "/var/log/syslog".to_string(),
+            operation: None,
+            content_base64: None,
+            content: None,
+            content_hash: None,
+        }),
+    );
+    event.metadata = Some(serde_json::json!({ "verdict": "warn" }));
+
+    let json = policy_event_to_ocsf(&event).unwrap();
+    assert_eq!(json["action_id"], 1); // Allowed
+    assert_eq!(json["disposition_id"], 17); // Logged
+}
+
+#[test]
+fn custom_event_produces_detection_finding() {
+    let event = make_event(
+        "ocsf-custom",
+        PolicyEventType::Custom,
+        PolicyEventData::Custom(CustomEventData {
+            custom_type: "my_custom".to_string(),
+            extra: serde_json::Map::new(),
+        }),
+    );
+
+    let json = policy_event_to_ocsf(&event).unwrap();
+    assert_eq!(json["class_uid"], 2004);
+}
+
+#[test]
+fn patch_event_produces_detection_finding() {
+    let event = make_event(
+        "ocsf-patch",
+        PolicyEventType::PatchApply,
+        PolicyEventData::Patch(PatchEventData {
+            file_path: "/workspace/src/lib.rs".to_string(),
+            patch_content: "--- a\n+++ b\n".to_string(),
+            patch_hash: None,
+        }),
+    );
+
+    let json = policy_event_to_ocsf(&event).unwrap();
+    assert_eq!(json["class_uid"], 2004);
+    let resources = &json["resources"];
+    assert!(resources.is_array());
+    let first = &resources[0];
+    assert_eq!(first["type"], "file");
+}
+
+#[test]
 fn batch_ocsf_jsonl_produces_valid_lines() {
     let events = vec![
         make_event(

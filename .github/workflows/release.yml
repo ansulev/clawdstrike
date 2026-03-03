@@ -358,10 +358,14 @@ jobs:
         if: steps.detect.outputs.none_missing == 'true'
         run: echo "wasm package version already exists; skipping wasm publish"
 
-  publish-pypi:
-    name: Publish PyPI package
+  pypi-detect:
+    name: Detect PyPI package status
     runs-on: ubuntu-latest
     needs: [resolve-version, preflight]
+    outputs:
+      name: ${{ steps.detect.outputs.name }}
+      version: ${{ steps.detect.outputs.version }}
+      none_missing: ${{ steps.detect.outputs.none_missing }}
     steps:
       - uses: actions/checkout@v6
 
@@ -376,6 +380,33 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          python3 - <<'PY'
+          import tomllib
+          from pathlib import Path
+
+          release_version = "${{ needs.resolve-version.outputs.version }}"
+          pure = tomllib.loads(Path("packages/sdk/hush-py/pyproject.toml").read_text(encoding="utf-8"))
+          native = tomllib.loads(Path("packages/sdk/hush-py/hush-native/pyproject.toml").read_text(encoding="utf-8"))
+
+          pure_name = pure["project"]["name"]
+          pure_version = pure["project"]["version"]
+          native_name = native["project"]["name"]
+          native_version = native["project"]["version"]
+
+          if pure_name != "clawdstrike":
+              raise SystemExit(f"Unexpected Python package name in pure pyproject: {pure_name}")
+          if native_name != "clawdstrike":
+              raise SystemExit(f"Unexpected Python package name in native pyproject: {native_name}")
+          if pure_version != release_version:
+              raise SystemExit(
+                  f"Version mismatch for pure pyproject: pyproject={pure_version} release={release_version}"
+              )
+          if native_version != release_version:
+              raise SystemExit(
+                  f"Version mismatch for native pyproject: pyproject={native_version} release={release_version}"
+              )
+          PY
+
           pkg_name="$(python3 - <<'PY'
           import tomllib
           with open("packages/sdk/hush-py/pyproject.toml", "rb") as f:
@@ -391,11 +422,6 @@ jobs:
           PY
           )"
 
-          if [[ "$pkg_version" != "$RELEASE_VERSION" ]]; then
-            echo "Version mismatch for ${pkg_name}: pyproject=$pkg_version release=$RELEASE_VERSION" >&2
-            exit 1
-          fi
-
           echo "name=${pkg_name}" >> "$GITHUB_OUTPUT"
           echo "version=${pkg_version}" >> "$GITHUB_OUTPUT"
 
@@ -408,8 +434,143 @@ jobs:
             echo "${pkg_name}==${pkg_version} missing on PyPI"
           fi
 
-      - name: Build and publish PyPI package
-        if: steps.detect.outputs.none_missing == 'false'
+  build-pypi-native-wheels:
+    name: Build native PyPI wheels (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    needs: [resolve-version, preflight, pypi-detect]
+    if: needs.pypi-detect.outputs.none_missing == 'false'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            cibw_archs_linux: "x86_64 aarch64"
+            cibw_archs_macos: ""
+            cibw_archs_windows: ""
+            artifact: pypi-native-wheels-linux
+          - os: macos-latest
+            cibw_archs_linux: ""
+            cibw_archs_macos: "x86_64 arm64"
+            cibw_archs_windows: ""
+            artifact: pypi-native-wheels-macos
+          - os: windows-latest
+            cibw_archs_linux: ""
+            cibw_archs_macos: ""
+            cibw_archs_windows: "AMD64"
+            artifact: pypi-native-wheels-windows
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup QEMU (linux aarch64 wheels)
+        if: runner.os == 'Linux'
+        uses: docker/setup-qemu-action@v3
+
+      - name: Sync Python sources for native wheel build
+        shell: bash
+        run: scripts/sync-hush-py-native-sources.sh
+
+      - name: Build native wheels
+        env:
+          CIBW_BUILD: "cp310-*"
+          CIBW_SKIP: "*-musllinux_* *-manylinux_i686 *-win32"
+          CIBW_ARCHS_LINUX: ${{ matrix.cibw_archs_linux }}
+          CIBW_ARCHS_MACOS: ${{ matrix.cibw_archs_macos }}
+          CIBW_ARCHS_WINDOWS: ${{ matrix.cibw_archs_windows }}
+          CIBW_BEFORE_ALL_LINUX: "curl https://sh.rustup.rs -sSf | sh -s -- -y --profile minimal && . $HOME/.cargo/env"
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          python -m pip install "cibuildwheel==2.23.3"
+          python -m cibuildwheel packages/sdk/hush-py/hush-native --output-dir wheelhouse
+          ls -la wheelhouse
+
+      - name: Upload native wheel artifacts
+        uses: actions/upload-artifact@v6
+        with:
+          name: ${{ matrix.artifact }}
+          path: wheelhouse/*.whl
+          if-no-files-found: error
+
+  publish-pypi:
+    name: Publish PyPI package
+    runs-on: ubuntu-latest
+    needs: [resolve-version, preflight, pypi-detect, build-pypi-native-wheels]
+    if: >
+      always() &&
+      needs.resolve-version.result == 'success' &&
+      needs.preflight.result == 'success' &&
+      needs.pypi-detect.result == 'success'
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Ensure native wheel matrix succeeded
+        if: needs.pypi-detect.outputs.none_missing == 'false'
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${{ needs.build-pypi-native-wheels.result }}" != "success" ]]; then
+            echo "Native wheel build matrix did not complete successfully" >&2
+            exit 1
+          fi
+
+      - name: Build pure Python sdist and universal wheel
+        if: needs.pypi-detect.outputs.none_missing == 'false'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          python -m pip install build
+          python -m build --sdist --wheel packages/sdk/hush-py
+
+      - name: Download native wheel artifacts
+        if: needs.pypi-detect.outputs.none_missing == 'false'
+        uses: actions/download-artifact@v7
+        with:
+          pattern: pypi-native-wheels-*
+          path: packages/sdk/hush-py/dist
+          merge-multiple: true
+
+      - name: Verify wheel set completeness
+        if: needs.pypi-detect.outputs.none_missing == 'false'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          dist = Path("packages/sdk/hush-py/dist")
+          files = [p.name for p in dist.glob("clawdstrike-*.whl")]
+          if not files:
+              raise SystemExit("No clawdstrike wheels found in dist/")
+
+          checks = {
+              "pure py3-none-any wheel": any("py3-none-any.whl" in f for f in files),
+              "linux native wheel": any("manylinux" in f for f in files),
+              "macOS native wheel": any("macosx" in f for f in files),
+              "windows x86_64 native wheel": any("win_amd64" in f for f in files),
+          }
+          missing = [name for name, ok in checks.items() if not ok]
+          if missing:
+              raise SystemExit(f"Missing expected wheel artifacts: {', '.join(missing)}")
+
+          if not any(p.suffix == ".gz" and p.name.endswith(".tar.gz") for p in dist.glob("clawdstrike-*.tar.gz")):
+              raise SystemExit("Missing clawdstrike source distribution (.tar.gz)")
+          PY
+
+      - name: Upload PyPI package
+        if: needs.pypi-detect.outputs.none_missing == 'false'
         env:
           TWINE_USERNAME: __token__
           TWINE_PASSWORD: ${{ secrets.PYPI_TOKEN }}
@@ -417,12 +578,11 @@ jobs:
         run: |
           set -euo pipefail
           python -m pip install --upgrade pip
-          python -m pip install build twine
-          python -m build --sdist --wheel packages/sdk/hush-py
+          python -m pip install twine
           twine upload packages/sdk/hush-py/dist/*
 
       - name: PyPI package already published
-        if: steps.detect.outputs.none_missing == 'true'
+        if: needs.pypi-detect.outputs.none_missing == 'true'
         run: echo "PyPI version already exists; skipping PyPI publish"
 
   build-binaries:

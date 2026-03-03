@@ -103,17 +103,17 @@ print(all(r.allowed for r in results))
 
 ## Native Engine (Recommended)
 
-Install the native extension for full Rust-powered evaluation:
-
-```bash
-pip install hush-native
-```
-
-The SDK automatically uses the native engine when available.
+The SDK automatically uses the bundled native engine when available.
 All 12 guards run in Rust with full detection capabilities.
 
-Without the native extension, the SDK falls back to pure Python
+On unsupported platforms, the SDK falls back to pure Python
 with 9 guards and heuristic-only detection.
+
+Native wheels are published for:
+
+- Linux: `manylinux` (`x86_64`, `aarch64`)
+- macOS: `x86_64`, `arm64`
+- Windows: `x86_64`
 
 ```python
 from clawdstrike import Clawdstrike, NATIVE_AVAILABLE, init_native
@@ -146,7 +146,7 @@ cs = Clawdstrike(backend)
 
 ## Features
 
-- **Native Rust engine** (via hush-native) with all 12 guards
+- **Native Rust engine** (bundled in `clawdstrike` wheels on supported platforms) with all 12 guards
 - Pure Python fallback with 9 guards:
   - **ForbiddenPathGuard** - Blocks sensitive filesystem paths
   - **PathAllowlistGuard** - Allowlist-based path access control

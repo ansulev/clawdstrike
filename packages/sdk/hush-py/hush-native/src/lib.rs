@@ -590,9 +590,9 @@ fn sign_message_native(py: Python<'_>, message: &[u8], private_key: &[u8]) -> Py
     Ok(pyo3::types::PyBytes::new(py, &sig.to_bytes()).into())
 }
 
-/// Python module definition.
+/// Python module definition for `clawdstrike._native`.
 #[pymodule]
-fn hush_native(m: &Bound<'_, PyModule>) -> PyResult<()> {
+fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(verify_receipt_native, m)?)?;
     m.add_function(wrap_pyfunction!(sha256_native, m)?)?;
     m.add_function(wrap_pyfunction!(keccak256_native, m)?)?;

@@ -89,6 +89,7 @@ These are standalone utilities wired into integrations (not policy guards):
 3. Your runtime calls `HushEngine::check_*` (or `check_action_report` for per-guard evidence).
 4. Your runtime uses the returned `GuardResult` to allow, warn, or block the action.
 5. Optionally, your runtime creates a signed receipt (`create_signed_receipt`) for a content hash that represents the run output/artifacts.
+6. For SIEM workflows, convert policy events to OCSF v1.4.0 Detection Finding records (class_uid `2004`) using the built-in OCSF converters.
 
 ## What Clawdstrike can and cannot enforce
 

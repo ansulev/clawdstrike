@@ -61,7 +61,7 @@ class TestPolicyLabSynth:
     """Test PolicyLab.synth() static method."""
 
     def test_synth_returns_valid_yaml(self):
-        from hush_native import PolicyLab
+        from clawdstrike._native import PolicyLab
 
         result = PolicyLab.synth(SAMPLE_EVENTS_JSONL)
         assert "policy_yaml" in result
@@ -72,21 +72,21 @@ class TestPolicyLabSynth:
         assert policy["name"] == "Synthesized Policy"
 
     def test_synth_returns_risks(self):
-        from hush_native import PolicyLab
+        from clawdstrike._native import PolicyLab
 
         result = PolicyLab.synth(SAMPLE_EVENTS_JSONL)
         assert "risks" in result
         assert isinstance(result["risks"], list)
 
     def test_synth_shell_risk(self):
-        from hush_native import PolicyLab
+        from clawdstrike._native import PolicyLab
 
         result = PolicyLab.synth(SAMPLE_EVENTS_JSONL)
         risk_text = " ".join(result["risks"])
         assert "shell" in risk_text.lower()
 
     def test_synth_empty_events(self):
-        from hush_native import PolicyLab
+        from clawdstrike._native import PolicyLab
 
         result = PolicyLab.synth("")
         assert "policy_yaml" in result
@@ -99,7 +99,7 @@ class TestPolicyLabSimulate:
     """Test PolicyLab.simulate() instance method."""
 
     def test_permissive_allows_all(self):
-        from hush_native import PolicyLab
+        from clawdstrike._native import PolicyLab
 
         lab = PolicyLab(PERMISSIVE_POLICY)
         result = lab.simulate(SAMPLE_EVENTS_JSONL)
@@ -109,7 +109,7 @@ class TestPolicyLabSimulate:
         assert summary["blocked"] == 0
 
     def test_strict_blocks_unlisted_egress(self):
-        from hush_native import PolicyLab
+        from clawdstrike._native import PolicyLab
 
         lab = PolicyLab(STRICT_POLICY)
         egress_event = json.dumps({
@@ -126,7 +126,7 @@ class TestPolicyLabSimulate:
         assert result["summary"]["blocked"] == 1
 
     def test_strict_blocks_forbidden_path(self):
-        from hush_native import PolicyLab
+        from clawdstrike._native import PolicyLab
 
         lab = PolicyLab(STRICT_POLICY)
         event = json.dumps({
@@ -143,7 +143,7 @@ class TestPolicyLabSimulate:
         assert result["summary"]["blocked"] == 1
 
     def test_results_contain_event_ids(self):
-        from hush_native import PolicyLab
+        from clawdstrike._native import PolicyLab
 
         lab = PolicyLab(PERMISSIVE_POLICY)
         result = lab.simulate(SAMPLE_EVENTS_JSONL)
@@ -152,7 +152,7 @@ class TestPolicyLabSimulate:
         assert "pl-005" in event_ids
 
     def test_invalid_policy_raises(self):
-        from hush_native import PolicyLab
+        from clawdstrike._native import PolicyLab
 
         with pytest.raises(ValueError):
             PolicyLab("not: valid: policy: {{")
@@ -163,7 +163,7 @@ class TestPolicyLabOcsf:
     """Test PolicyLab.to_ocsf() static method."""
 
     def test_ocsf_produces_jsonl(self):
-        from hush_native import PolicyLab
+        from clawdstrike._native import PolicyLab
 
         ocsf = PolicyLab.to_ocsf(SAMPLE_EVENTS_JSONL)
         assert len(ocsf) > 0
@@ -171,7 +171,7 @@ class TestPolicyLabOcsf:
         assert len(lines) == 5
 
     def test_ocsf_class_uid_is_2004(self):
-        from hush_native import PolicyLab
+        from clawdstrike._native import PolicyLab
 
         ocsf = PolicyLab.to_ocsf(SAMPLE_EVENTS_JSONL)
         for line in ocsf.strip().split("\n"):
@@ -181,7 +181,7 @@ class TestPolicyLabOcsf:
             assert parsed["class_uid"] == 2004
 
     def test_ocsf_has_required_fields(self):
-        from hush_native import PolicyLab
+        from clawdstrike._native import PolicyLab
 
         ocsf = PolicyLab.to_ocsf(SAMPLE_EVENTS_JSONL)
         first_line = ocsf.strip().split("\n")[0]
@@ -197,7 +197,7 @@ class TestPolicyLabTimeline:
     """Test PolicyLab.to_timeline() static method."""
 
     def test_timeline_produces_jsonl(self):
-        from hush_native import PolicyLab
+        from clawdstrike._native import PolicyLab
 
         timeline = PolicyLab.to_timeline(SAMPLE_EVENTS_JSONL)
         assert len(timeline) > 0
@@ -205,7 +205,7 @@ class TestPolicyLabTimeline:
         assert len(lines) == 5
 
     def test_timeline_has_correct_fields(self):
-        from hush_native import PolicyLab
+        from clawdstrike._native import PolicyLab
 
         timeline = PolicyLab.to_timeline(SAMPLE_EVENTS_JSONL)
         first_line = timeline.strip().split("\n")[0]
@@ -221,7 +221,7 @@ class TestPolicyLabFixtures:
     """Test PolicyLab against golden fixture files."""
 
     def test_fixture_file_parses(self):
-        from hush_native import PolicyLab
+        from clawdstrike._native import PolicyLab
 
         fixture = FIXTURES_DIR / "sample_observation.jsonl"
         if not fixture.exists():
@@ -233,7 +233,7 @@ class TestPolicyLabFixtures:
         assert len(lines) > 0
 
     def test_fixture_synth_round_trip(self):
-        from hush_native import PolicyLab
+        from clawdstrike._native import PolicyLab
 
         fixture = FIXTURES_DIR / "sample_observation.jsonl"
         if not fixture.exists():

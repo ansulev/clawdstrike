@@ -68,6 +68,22 @@ pyproject = read_toml("packages/sdk/hush-py/pyproject.toml")
 py_version = pyproject.get("project", {}).get("version")
 errors.append(check("packages/sdk/hush-py/pyproject.toml [project].version", py_version))
 
+native_pyproject = read_toml("packages/sdk/hush-py/hush-native/pyproject.toml")
+native_py_version = native_pyproject.get("project", {}).get("version")
+errors.append(
+    check(
+        "packages/sdk/hush-py/hush-native/pyproject.toml [project].version",
+        native_py_version,
+    )
+)
+
+native_pkg_name = native_pyproject.get("project", {}).get("name")
+if native_pkg_name != "clawdstrike":
+    errors.append(
+        "packages/sdk/hush-py/hush-native/pyproject.toml [project].name: "
+        f"expected clawdstrike, found {native_pkg_name}"
+    )
+
 py_init_rel = None
 for rel in ("packages/sdk/hush-py/src/clawdstrike/__init__.py", "packages/sdk/hush-py/src/hush/__init__.py"):
     if (repo_root / rel).exists():
@@ -81,7 +97,14 @@ else:
     match = re.search(r'^__version__\s*=\s*"([^"]+)"\s*$', py_init, flags=re.M)
     errors.append(check(f"{py_init_rel} __version__", match.group(1) if match else None))
 
+def is_package_manifest(path: Path) -> bool:
+    parts = set(path.parts)
+    return "node_modules" not in parts and ".turbo" not in parts
+
+
 for pkg_path in sorted((repo_root / "packages").rglob("package.json")):
+    if not is_package_manifest(pkg_path):
+        continue
     rel = str(pkg_path.relative_to(repo_root))
     data = read_json(rel)
     errors.append(check(rel, data.get("version")))

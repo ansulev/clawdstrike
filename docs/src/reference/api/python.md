@@ -7,7 +7,7 @@ It provides:
 - `Clawdstrike` facade with built-in rulesets and typed check methods
 - `Decision` return type aggregating per-guard results
 - 9 pure-Python guards (ForbiddenPath, PathAllowlist, EgressAllowlist, SecretLeak, PatchIntegrity, ShellCommand, McpTool, PromptInjection, Jailbreak)
-- optional native Rust engine (via `hush-native`) with all 12 guards
+- bundled native Rust engine on supported platforms (pure-Python fallback elsewhere) with all 12 guards
 - crypto + receipt signing/verification compatible with `hush-core`
 - stateful sessions via `ClawdstrikeSession`
 
@@ -77,7 +77,13 @@ print(f"Blocked: {summary.blocked_actions}")
 
 ## Native Engine
 
-When the `hush-native` extension is installed, the SDK auto-selects the native Rust engine for evaluation. All 12 guards run in Rust with full detection capabilities. Without it, the SDK falls back to pure Python with 9 guards.
+On supported platforms, the SDK auto-selects the bundled native Rust engine for evaluation. All 12 guards run in Rust with full detection capabilities. On unsupported platforms, it falls back to pure Python with 9 guards.
+
+Native wheels are published for:
+
+- Linux (`manylinux`): `x86_64`, `aarch64`
+- macOS: `x86_64`, `arm64`
+- Windows: `x86_64`
 
 ```python
 from clawdstrike import Clawdstrike, NATIVE_AVAILABLE

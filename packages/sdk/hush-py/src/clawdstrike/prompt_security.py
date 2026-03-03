@@ -1,7 +1,6 @@
 """Prompt-security utilities (native-backed).
 
-This module requires the optional native extension `hush_native` and fails closed when it is
-missing. Install/build `packages/sdk/hush-py/hush-native` to enable.
+This module requires the bundled native extension and fails closed when it is missing.
 """
 
 from __future__ import annotations
@@ -23,7 +22,7 @@ from clawdstrike.native import (
 def _require_native() -> None:
     missing: list[str] = []
     if not NATIVE_AVAILABLE:
-        missing.append("hush_native (module)")
+        missing.append("clawdstrike._native (module)")
     if detect_jailbreak_native is None:
         missing.append("detect_jailbreak_native")
     if sanitize_output_native is None:
@@ -37,9 +36,8 @@ def _require_native() -> None:
 
     if missing:
         raise ImportError(
-            "clawdstrike.prompt_security requires the optional native extension (hush-native). "
-            f"Missing: {', '.join(missing)}. "
-            "Build/install it from `packages/sdk/hush-py/hush-native`."
+            "clawdstrike.prompt_security requires the bundled native extension. "
+            f"Missing: {', '.join(missing)}."
         )
 
 
@@ -142,4 +140,3 @@ class WatermarkExtractor:
     def extract(self, text: str) -> dict[str, Any]:
         assert extract_watermark_native is not None
         return extract_watermark_native(text, self._config_json)
-

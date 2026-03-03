@@ -484,6 +484,117 @@ cd clawdstrike
 
 The Cursor plugin includes 6 additional hooks beyond Claude Code (`beforeShellExecution`, `afterShellExecution`, `beforeMCPExecution`, `afterMCPExecution`, `beforeReadFile`, `afterFileEdit`) for granular security enforcement. See [`cursor-plugin/README.md`](cursor-plugin/README.md) for the full reference.
 
+### Observe -> Synth -> Tighten
+
+Build least-privilege policy from real agent behavior in one loop:
+
+```bash
+# 1) Observe real activity (+ optional OCSF export for SIEM)
+clawdstrike policy observe \
+  --out run.events.jsonl \
+  --ocsf-out run.ocsf.jsonl \
+  -- your-agent-command --task "representative workload"
+
+# 2) Synthesize a candidate policy from observed events
+clawdstrike policy synth run.events.jsonl \
+  --extends clawdstrike:default \
+  --out candidate.yaml \
+  --risk-out candidate.risks.md
+
+# 3) Validate + replay; tighten until no unexpected allows remain
+clawdstrike policy validate candidate.yaml
+clawdstrike policy simulate candidate.yaml run.events.jsonl --fail-on-deny
+clawdstrike hunt query --source receipt --verdict warn --start 24h --offline --local-dir .
+```
+
+TypeScript automation (runs the same CLI loop from code):
+
+```typescript
+import { execFileSync } from "node:child_process";
+
+// 1) Observe
+execFileSync(
+  "clawdstrike",
+  ["policy", "observe", "--out", "run.events.jsonl", "--", "/bin/sh", "-lc", "echo hello"],
+  { stdio: "inherit" },
+);
+
+// 2) Synthesize
+execFileSync(
+  "clawdstrike",
+  [
+    "policy",
+    "synth",
+    "run.events.jsonl",
+    "--extends",
+    "clawdstrike:default",
+    "--out",
+    "candidate.yaml",
+    "--risk-out",
+    "candidate.risks.md",
+  ],
+  { stdio: "inherit" },
+);
+
+// 3) Tighten (validate + replay)
+execFileSync("clawdstrike", ["policy", "validate", "candidate.yaml"], { stdio: "inherit" });
+execFileSync(
+  "clawdstrike",
+  ["policy", "simulate", "candidate.yaml", "run.events.jsonl", "--fail-on-deny"],
+  { stdio: "inherit" },
+);
+```
+
+Python automation (runs the same CLI loop from code):
+
+```python
+import subprocess
+
+# 1) Observe
+subprocess.run(
+    [
+        "clawdstrike",
+        "policy",
+        "observe",
+        "--out",
+        "run.events.jsonl",
+        "--ocsf-out",
+        "run.ocsf.jsonl",
+        "--",
+        "/bin/sh",
+        "-lc",
+        "echo hello",
+    ],
+    check=True,
+)
+
+# 2) Synthesize
+subprocess.run(
+    [
+        "clawdstrike",
+        "policy",
+        "synth",
+        "run.events.jsonl",
+        "--extends",
+        "clawdstrike:default",
+        "--out",
+        "candidate.yaml",
+        "--risk-out",
+        "candidate.risks.md",
+    ],
+    check=True,
+)
+
+# 3) Tighten (validate + replay)
+subprocess.run(["clawdstrike", "policy", "validate", "candidate.yaml"], check=True)
+subprocess.run(
+    ["clawdstrike", "policy", "simulate", "candidate.yaml", "run.events.jsonl", "--fail-on-deny"],
+    check=True,
+)
+```
+
+See the full workflow in [`docs/src/guides/observe-synth.md`](docs/src/guides/observe-synth.md).
+
 ### Additional SDKs & Bindings
 
 Framework adapters: [OpenAI](packages/adapters/clawdstrike-openai/README.md) · [Claude](packages/adapters/clawdstrike-claude/README.md) · [Vercel AI](docs/src/guides/vercel-ai-integration.md) · [LangChain](docs/src/guides/langchain-integration.md)
@@ -598,6 +709,8 @@ The `Sanitize` decision verdict allows operations to proceed with modified conte
 <h4 align="center">Cryptographic Receipts + Prompt Watermarking</h4>
 
 Every policy decision produces an **Ed25519-signed receipt**: a tamper-evident attestation proving what was decided, under which policy, and with what evidence. Portable across Rust, TypeScript, and Python via RFC 8785 canonical JSON.
+
+The same decision and receipt stream can be exported as **OCSF v1.4.0-compliant events** for SIEM ingestion, including clean `allow`, hard `deny`, and logged `warn` outcomes.
 
 Prompt watermarking embeds signed provenance markers for attribution and forensic tracing (app ID, session ID, sequence number, timestamp), designed to survive model inference round-trips.
 

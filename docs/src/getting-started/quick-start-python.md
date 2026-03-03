@@ -5,7 +5,7 @@ The Python SDK (`clawdstrike`) provides:
 - a `Clawdstrike` facade with built-in rulesets and typed check methods
 - a `Decision` return type with `.allowed`, `.denied`, `.status`, `.guard`, `.message`
 - 9 pure-Python guards (ForbiddenPath, PathAllowlist, EgressAllowlist, SecretLeak, PatchIntegrity, ShellCommand, McpTool, PromptInjection, Jailbreak)
-- optional native Rust engine (via `hush-native`) with all 12 guards
+- bundled native Rust engine on supported platforms (with pure-Python fallback elsewhere) with all 12 guards
 - crypto + receipts (signing/verification)
 - stateful sessions for tracking checks
 

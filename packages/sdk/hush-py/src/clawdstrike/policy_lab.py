@@ -1,6 +1,6 @@
 """PolicyLab: unified observe -> hunt -> OCSF -> synth pipeline (native-backed).
 
-Requires the hush_native extension with PolicyLab support.
+Requires the bundled native extension with PolicyLab support.
 """
 
 from __future__ import annotations
@@ -14,14 +14,12 @@ def _require_native() -> None:
     """Fail-closed: ensure native PolicyLab bindings are available."""
     if not NATIVE_AVAILABLE:
         raise ImportError(
-            "clawdstrike.policy_lab requires the native extension (hush-native). "
-            "Build/install from `packages/sdk/hush-py/hush-native`."
+            "clawdstrike.policy_lab requires the bundled native extension."
         )
     mod = get_native_module()
     if not hasattr(mod, "PolicyLab"):
         raise ImportError(
-            "hush-native does not include PolicyLab bindings. "
-            "Rebuild with latest hush-native."
+            "clawdstrike native extension does not include PolicyLab bindings."
         )
 
 

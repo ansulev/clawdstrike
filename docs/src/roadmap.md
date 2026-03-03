@@ -28,7 +28,7 @@ Clawdstrike is a fail-closed policy engine and cryptographic attestation runtime
 | Compliance templates (HIPAA, PCI-DSS, SOC2) | `hush-certification` | Stable |
 | Multi-agent orchestration (delegation, attenuation, revocation) | `hush-multi-agent` | Stable |
 | Network proxy utilities | `hush-proxy` | Stable |
-| Native Python extension | `hush-native` | Stable |
+| Native Python extension | bundled in `clawdstrike` wheels | Stable |
 
 ### Guard Stack (12 Built-in Guards)
 

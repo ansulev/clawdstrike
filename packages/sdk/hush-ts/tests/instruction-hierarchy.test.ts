@@ -3,7 +3,7 @@ import { describe, it, expect } from "vitest";
 import { InstructionHierarchyEnforcer, InstructionLevel } from "../src/instruction-hierarchy";
 
 // biome-ignore lint/suspicious/noExplicitAny: vitest global from setup.ts
-const wasmAvailable = (globalThis as any).__WASM_AVAILABLE__ as boolean;
+const wasmAvailable = (globalThis as any).__WASM_ADVANCED_AVAILABLE__ as boolean;
 
 describe.skipIf(!wasmAvailable)("instruction hierarchy", () => {
   it("wraps external content and blocks override attempts", () => {
@@ -39,4 +39,3 @@ describe.skipIf(!wasmAvailable)("instruction hierarchy", () => {
     expect(r.messages[0].content).toContain("[REDACTED_DELIMITER]");
   });
 });
-

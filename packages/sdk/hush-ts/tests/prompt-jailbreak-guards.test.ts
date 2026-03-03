@@ -5,7 +5,7 @@ import { PromptInjectionGuard } from "../src/guards/prompt-injection";
 import { GuardAction, GuardContext, Severity } from "../src/guards/types";
 
 // biome-ignore lint/suspicious/noExplicitAny: vitest global from setup.ts
-const wasmAvailable = (globalThis as any).__WASM_AVAILABLE__ as boolean;
+const wasmAvailable = (globalThis as any).__WASM_ADVANCED_AVAILABLE__ as boolean;
 
 describe.skipIf(!wasmAvailable)("PromptInjectionGuard", () => {
   test("blocks high-risk untrusted text payloads", () => {

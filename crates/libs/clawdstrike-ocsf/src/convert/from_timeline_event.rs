@@ -98,24 +98,18 @@ fn receipt_to_detection_finding(
 }
 
 fn extract_receipt_decision(fact: &Value) -> Option<(ReceiptDecisionKind, String)> {
-    let direct_decision = fact
-        .get("verdict")
-        .and_then(|v| v.as_str())
-        .or_else(|| fact.get("decision").and_then(|v| v.as_str()))
-        .or_else(|| {
-            fact.get("metadata")
-                .and_then(|v| v.as_object())
-                .and_then(|obj| {
-                    obj.get("verdict")
-                        .and_then(|v| v.as_str())
-                        .or_else(|| obj.get("decision").and_then(|v| v.as_str()))
-                })
-        });
-
-    if let Some(decision_str) = direct_decision {
-        let decision_kind = parse_receipt_decision(decision_str);
-        if !matches!(decision_kind, ReceiptDecisionKind::Unknown) {
-            return Some((decision_kind, decision_str.to_string()));
+    if let Some(parsed) = parse_receipt_decision_string(fact.get("verdict")) {
+        return Some(parsed);
+    }
+    if let Some(parsed) = parse_receipt_decision_string(fact.get("decision")) {
+        return Some(parsed);
+    }
+    if let Some(metadata) = fact.get("metadata").and_then(|v| v.as_object()) {
+        if let Some(parsed) = parse_receipt_decision_string(metadata.get("verdict")) {
+            return Some(parsed);
+        }
+        if let Some(parsed) = parse_receipt_decision_string(metadata.get("decision")) {
+            return Some(parsed);
         }
     }
 
@@ -141,6 +135,15 @@ fn extract_receipt_decision(fact: &Value) -> Option<(ReceiptDecisionKind, String
             "deny".to_string()
         },
     ))
+}
+
+fn parse_receipt_decision_string(value: Option<&Value>) -> Option<(ReceiptDecisionKind, String)> {
+    let decision_str = value?.as_str()?;
+    let decision_kind = parse_receipt_decision(decision_str);
+    if matches!(decision_kind, ReceiptDecisionKind::Unknown) {
+        return None;
+    }
+    Some((decision_kind, decision_str.to_string()))
 }
 
 fn parse_receipt_decision(decision: &str) -> ReceiptDecisionKind {
@@ -717,6 +720,37 @@ mod tests {
         if let TimelineOcsfEvent::Detection(df) = event {
             assert_eq!(df.action_id, 2); // Denied
             assert_eq!(df.finding_info.analytic.name, "ForbiddenPathGuard");
+            assert_eq!(
+                df.finding_info.desc.as_deref(),
+                Some("ForbiddenPathGuard decision=deny")
+            );
+        } else {
+            panic!("expected Detection");
+        }
+    }
+
+    #[test]
+    fn receipt_unrecognized_verdict_falls_back_to_decision_string() {
+        let raw = json!({
+            "fact": {
+                "verdict": "observe",
+                "decision": "deny",
+                "guard": "ForbiddenPathGuard",
+                "action_type": "file"
+            }
+        });
+
+        let input = TimelineEventInput {
+            kind: "guard_decision",
+            source: "receipt",
+            time_ms: 1_709_366_400_000,
+            raw: &raw,
+            product_version: "0.1.3",
+        };
+
+        let event = timeline_event_to_ocsf(&input).unwrap();
+        if let TimelineOcsfEvent::Detection(df) = event {
+            assert_eq!(df.action_id, 2); // Denied
             assert_eq!(
                 df.finding_info.desc.as_deref(),
                 Some("ForbiddenPathGuard decision=deny")

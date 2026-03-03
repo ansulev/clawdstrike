@@ -213,6 +213,9 @@ fn fallback_verdict_from_metadata(metadata: Option<&serde_json::Value>) -> &'sta
             _ => "none",
         },
         Some(serde_json::Value::Object(decision_obj)) => {
+            if decision_obj.get("allowed").and_then(|v| v.as_bool()) == Some(false) {
+                return "deny";
+            }
             if decision_obj
                 .get("warn")
                 .and_then(|v| v.as_bool())
@@ -220,11 +223,10 @@ fn fallback_verdict_from_metadata(metadata: Option<&serde_json::Value>) -> &'sta
             {
                 return "warn";
             }
-            match decision_obj.get("allowed").and_then(|v| v.as_bool()) {
-                Some(true) => "allow",
-                Some(false) => "deny",
-                None => "none",
+            if decision_obj.get("allowed").and_then(|v| v.as_bool()) == Some(true) {
+                return "allow";
             }
+            "none"
         }
         _ => "none",
     }
@@ -237,16 +239,27 @@ fn fallback_extract_severity(metadata: Option<&serde_json::Value>) -> Option<Str
     };
 
     obj.get("severity")
-        .and_then(|v| v.as_str())
-        .map(str::to_string)
+        .and_then(fallback_severity_from_value)
         .or_else(|| {
             obj.get("decision")
                 .or_else(|| obj.get("verdict"))
                 .and_then(|v| v.as_object())
                 .and_then(|d| d.get("severity"))
-                .and_then(|v| v.as_str())
-                .map(str::to_string)
+                .and_then(fallback_severity_from_value)
         })
+}
+
+#[cfg(not(feature = "timeline"))]
+fn fallback_severity_from_value(value: &serde_json::Value) -> Option<String> {
+    if let Some(severity) = value.as_str() {
+        return Some(severity.to_string());
+    }
+
+    let obj = value.as_object()?;
+    obj.get("level")
+        .and_then(|v| v.as_str())
+        .or_else(|| obj.get("severity").and_then(|v| v.as_str()))
+        .map(str::to_string)
 }
 
 #[cfg(test)]
@@ -335,5 +348,33 @@ mod tests {
             .risks
             .iter()
             .any(|r| r.contains("No events provided")));
+    }
+
+    #[cfg(not(feature = "timeline"))]
+    #[test]
+    fn fallback_verdict_denied_takes_precedence_over_warn() {
+        let metadata = serde_json::json!({
+            "decision": {
+                "allowed": false,
+                "warn": true
+            }
+        });
+
+        assert_eq!(fallback_verdict_from_metadata(Some(&metadata)), "deny");
+    }
+
+    #[cfg(not(feature = "timeline"))]
+    #[test]
+    fn fallback_extract_severity_supports_nested_object() {
+        let metadata = serde_json::json!({
+            "severity": {
+                "level": "warning"
+            }
+        });
+
+        assert_eq!(
+            fallback_extract_severity(Some(&metadata)).as_deref(),
+            Some("warning")
+        );
     }
 }

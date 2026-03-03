@@ -24,7 +24,7 @@
     "format:check": "biome check src/"
   },
   "dependencies": {
-    "@clawdstrike/adapter-core": "^0.1.1",
+    "@clawdstrike/adapter-core": "^0.2.1",
     "js-yaml": "^4.1.0",
     "lru-cache": "^11.2.2"
   },

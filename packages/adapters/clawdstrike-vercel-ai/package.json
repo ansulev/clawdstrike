@@ -24,8 +24,8 @@
     "format:check": "biome check src/"
   },
   "dependencies": {
-    "@clawdstrike/adapter-core": "^0.1.1",
-    "@clawdstrike/sdk": "^0.1.0"
+    "@clawdstrike/adapter-core": "^0.2.1",
+    "@clawdstrike/sdk": "^0.2.1"
   },
   "peerDependencies": {
     "@ai-sdk/react": ">=3.0.0",

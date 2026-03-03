@@ -13,6 +13,7 @@
 
 #[cfg(feature = "timeline")]
 pub mod bridge;
+mod decision;
 pub mod event;
 pub mod facade;
 pub mod ocsf;

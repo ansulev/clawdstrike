@@ -3,6 +3,7 @@
 use hunt_query::query::EventSource;
 use hunt_query::timeline::{NormalizedVerdict, TimelineEvent, TimelineEventKind};
 
+use crate::decision::{decision_allowed, decision_object_is_warn, severity_from_value};
 use crate::event::{PolicyEvent, PolicyEventData, PolicyEventType};
 
 /// Convert a single PolicyEvent to a TimelineEvent.
@@ -94,12 +95,16 @@ fn verdict_from_metadata(metadata: Option<&serde_json::Value>) -> NormalizedVerd
         },
         // Object form: {"allowed": false, "guard": "..."} — decode the decision details.
         Some(serde_json::Value::Object(decision_obj)) => {
+            let allowed = decision_allowed(decision_obj);
+            if allowed == Some(false) {
+                return NormalizedVerdict::Deny;
+            }
             if decision_object_is_warn(decision_obj) {
                 return NormalizedVerdict::Warn;
             }
-            match decision_obj.get("allowed").and_then(|v| v.as_bool()) {
+            match allowed {
                 Some(true) => NormalizedVerdict::Allow,
-                Some(false) => NormalizedVerdict::Deny,
+                Some(false) => unreachable!("handled above"),
                 None => NormalizedVerdict::None,
             }
         }
@@ -122,48 +127,6 @@ fn extract_severity(metadata: Option<&serde_json::Value>) -> Option<String> {
                 .and_then(|d| d.get("severity"))
                 .and_then(severity_from_value)
         })
-}
-
-fn decision_object_is_warn(decision_obj: &serde_json::Map<String, serde_json::Value>) -> bool {
-    if decision_obj
-        .get("warn")
-        .or_else(|| decision_obj.get("warning"))
-        .and_then(|v| v.as_bool())
-        .unwrap_or(false)
-    {
-        return true;
-    }
-
-    if matches!(
-        decision_obj
-            .get("verdict")
-            .and_then(|v| v.as_str())
-            .map(|s| s.to_lowercase()),
-        Some(v) if matches!(v.as_str(), "warn" | "warning" | "warned" | "logged")
-    ) {
-        return true;
-    }
-
-    matches!(
-        decision_obj
-            .get("severity")
-            .and_then(severity_from_value)
-            .map(|s| s.to_lowercase()),
-        Some(v) if matches!(v.as_str(), "warn" | "warning")
-    )
-}
-
-fn severity_from_value(value: &serde_json::Value) -> Option<String> {
-    match value {
-        serde_json::Value::String(s) => Some(s.to_string()),
-        serde_json::Value::Object(obj) => obj
-            .get("level")
-            .or_else(|| obj.get("name"))
-            .or_else(|| obj.get("value"))
-            .and_then(|v| v.as_str())
-            .map(|s| s.to_string()),
-        _ => None,
-    }
 }
 
 #[cfg(test)]
@@ -342,6 +305,14 @@ mod tests {
             "decision": { "allowed": true, "severity": "warning" }
         })));
         assert_eq!(v, NormalizedVerdict::Warn);
+    }
+
+    #[test]
+    fn verdict_from_metadata_object_warn_with_denied_is_denied() {
+        let v = verdict_from_metadata(Some(&serde_json::json!({
+            "decision": { "allowed": false, "warn": true, "severity": "warning" }
+        })));
+        assert_eq!(v, NormalizedVerdict::Deny);
     }
 
     #[test]

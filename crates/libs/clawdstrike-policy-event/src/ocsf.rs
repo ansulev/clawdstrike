@@ -4,6 +4,7 @@
 
 use clawdstrike_ocsf::convert::from_security_event::{security_event_to_ocsf, SecurityEventInput};
 
+use crate::decision::{decision_allowed, decision_object_is_warn, severity_from_value};
 use crate::event::{MappedGuardAction, PolicyEvent, PolicyEventData, PolicyEventType};
 
 /// Convert a single PolicyEvent to an OCSF JSON value.
@@ -110,7 +111,7 @@ fn parse_decision_metadata(metadata: Option<&serde_json::Value>) -> DecisionMeta
             }
         },
         Some(serde_json::Value::Object(decision_obj)) => {
-            let allowed = decision_obj.get("allowed").and_then(|v| v.as_bool());
+            let allowed = decision_allowed(decision_obj);
             if allowed == Some(false) {
                 out.allowed = false;
                 out.is_warn = false;
@@ -151,48 +152,6 @@ fn parse_decision_metadata(metadata: Option<&serde_json::Value>) -> DecisionMeta
     }
 
     out
-}
-
-fn decision_object_is_warn(decision_obj: &serde_json::Map<String, serde_json::Value>) -> bool {
-    if decision_obj
-        .get("warn")
-        .or_else(|| decision_obj.get("warning"))
-        .and_then(|v| v.as_bool())
-        .unwrap_or(false)
-    {
-        return true;
-    }
-
-    if matches!(
-        decision_obj
-            .get("verdict")
-            .and_then(|v| v.as_str())
-            .map(|s| s.to_lowercase()),
-        Some(v) if matches!(v.as_str(), "warn" | "warning" | "warned" | "logged")
-    ) {
-        return true;
-    }
-
-    matches!(
-        decision_obj
-            .get("severity")
-            .and_then(severity_from_value)
-            .map(|s| s.to_lowercase()),
-        Some(v) if matches!(v.as_str(), "warn" | "warning")
-    )
-}
-
-fn severity_from_value(value: &serde_json::Value) -> Option<String> {
-    match value {
-        serde_json::Value::String(s) => Some(s.to_string()),
-        serde_json::Value::Object(obj) => obj
-            .get("level")
-            .or_else(|| obj.get("name"))
-            .or_else(|| obj.get("value"))
-            .and_then(|v| v.as_str())
-            .map(|s| s.to_string()),
-        _ => None,
-    }
 }
 
 /// Convert a MappedGuardAction + report into an OCSF JSON value.
@@ -649,6 +608,35 @@ mod tests {
             json["finding_info"]["analytic"]["name"],
             "ShellCommandGuard"
         );
+    }
+
+    #[test]
+    fn object_form_decision_denied_with_warn_flag_stays_blocked() {
+        let event = PolicyEvent {
+            event_id: "evt-obj-deny-warn".to_string(),
+            event_type: PolicyEventType::FileRead,
+            timestamp: Utc::now(),
+            session_id: None,
+            data: PolicyEventData::File(FileEventData {
+                path: "/etc/shadow".to_string(),
+                operation: None,
+                content_base64: None,
+                content: None,
+                content_hash: None,
+            }),
+            metadata: Some(serde_json::json!({
+                "decision": {
+                    "allowed": false,
+                    "warn": true,
+                    "severity": "warning"
+                }
+            })),
+            context: None,
+        };
+
+        let json = policy_event_to_ocsf(&event).unwrap();
+        assert_eq!(json["action_id"], 2); // Denied
+        assert_eq!(json["disposition_id"], 2); // Blocked
     }
 
     #[test]

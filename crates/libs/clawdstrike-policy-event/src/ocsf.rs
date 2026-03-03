@@ -31,9 +31,10 @@ pub fn policy_event_to_ocsf(event: &PolicyEvent) -> Option<serde_json::Value> {
         event.metadata.as_ref(),
         &["verdict", "decision"],
     );
-    let (allowed, is_warn) = match verdict_str.as_deref() {
+    let verdict_lower = verdict_str.map(|s| s.to_lowercase());
+    let (allowed, is_warn) = match verdict_lower.as_deref() {
         Some("deny" | "denied" | "block" | "blocked") => (false, false),
-        Some("warn" | "warned" | "logged") => (true, true),
+        Some("warn" | "warning" | "warned" | "logged") => (true, true),
         _ => (true, false),
     };
     let outcome = if allowed { "success" } else { "failure" };

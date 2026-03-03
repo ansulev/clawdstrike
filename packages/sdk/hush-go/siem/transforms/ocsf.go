@@ -141,6 +141,8 @@ func resourceName(r *siem.ResourceInfo) string {
 		return r.Path
 	case "network":
 		return r.Host
+	case "process":
+		return r.Path
 	case "tool":
 		return r.Tool
 	default:

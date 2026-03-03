@@ -252,6 +252,13 @@ fn build_secondary(
                     ActionId::Allowed.as_u8()
                 } else {
                     ActionId::Denied.as_u8()
+                })
+                .with_disposition_id(if input.is_warn {
+                    DispositionId::Logged.as_u8()
+                } else if input.allowed {
+                    DispositionId::Allowed.as_u8()
+                } else {
+                    DispositionId::Blocked.as_u8()
                 }),
             ))
         }

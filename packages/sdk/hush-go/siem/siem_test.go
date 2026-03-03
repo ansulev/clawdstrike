@@ -343,6 +343,25 @@ func TestToOCSF(t *testing.T) {
 	}
 }
 
+func TestToOCSF_WarnOutcome(t *testing.T) {
+	ev := sampleEvent("ocsf-warn")
+	ev.Outcome = "warn"
+	ev.Decision = &siem.DecisionInfo{Guard: "ShellCommandGuard", Severity: "medium", Message: "risky command"}
+
+	ocsf := transforms.ToOCSF(ev)
+
+	// Warn is non-blocking: action_id=1 (Allowed), disposition_id=17 (Logged)
+	if ocsf["action_id"] != 1 {
+		t.Errorf("expected action_id 1 for warn, got %v", ocsf["action_id"])
+	}
+	if ocsf["disposition_id"] != 17 {
+		t.Errorf("expected disposition_id 17 (Logged) for warn, got %v", ocsf["disposition_id"])
+	}
+	if ocsf["status_id"] != 0 { // Unknown for warn
+		t.Errorf("expected status_id 0 for warn, got %v", ocsf["status_id"])
+	}
+}
+
 func TestToOCSF_NilDecision(t *testing.T) {
 	ev := sampleEvent("ocsf-nil")
 	ev.Decision = nil

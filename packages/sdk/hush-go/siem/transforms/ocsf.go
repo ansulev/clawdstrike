@@ -54,11 +54,15 @@ func ToOCSF(event siem.SecurityEvent) map[string]interface{} {
 		statusID = id
 	}
 
-	actionID := 1 // Allowed
+	actionID := 1     // Allowed
 	dispositionID := 1 // Allowed
-	if event.Outcome == "deny" {
-		actionID = 2     // Denied
+	switch event.Outcome {
+	case "deny":
+		actionID = 2      // Denied
 		dispositionID = 2 // Blocked
+	case "warn":
+		actionID = 1       // Allowed (warn is non-blocking)
+		dispositionID = 17 // Logged
 	}
 
 	ocsf := map[string]interface{}{
@@ -78,7 +82,7 @@ func ToOCSF(event siem.SecurityEvent) map[string]interface{} {
 				"name":        "ClawdStrike",
 				"uid":         "clawdstrike",
 				"vendor_name": "Backbay Labs",
-				"version":     event.SchemaVersion,
+				// Note: AgentInfo has no Version field; omit rather than use wrong value.
 			},
 			"original_uid": event.EventID,
 		},

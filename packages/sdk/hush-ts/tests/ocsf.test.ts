@@ -3,7 +3,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 
 import { toOcsf } from "../src/siem/transforms/ocsf";
-import { uuidv7, type SecurityEvent } from "../src/siem/types";
+import type { SecurityEvent } from "../src/siem/types";
 
 function loadFixture(name: string): Record<string, unknown> {
   const fixturePath = path.resolve(__dirname, "../../../../fixtures/ocsf", name);

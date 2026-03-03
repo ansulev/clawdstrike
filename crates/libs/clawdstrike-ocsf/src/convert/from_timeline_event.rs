@@ -75,10 +75,13 @@ fn receipt_to_detection_finding(
         .and_then(|s| s.as_str())
         .unwrap_or("info");
 
-    let allowed = matches!(
-        decision.to_lowercase().as_str(),
-        "allow" | "allowed" | "pass" | "passed"
-    );
+    let decision_lower = decision.to_lowercase();
+    let is_warn = matches!(decision_lower.as_str(), "warn" | "warning");
+    let allowed = is_warn
+        || matches!(
+            decision_lower.as_str(),
+            "allow" | "allowed" | "pass" | "passed"
+        );
 
     use crate::convert::from_guard_result::{guard_result_to_detection_finding, GuardResultInput};
 
@@ -99,7 +102,14 @@ fn receipt_to_detection_finding(
         resource_type: Some(action_type),
     };
 
-    Some(guard_result_to_detection_finding(&input))
+    let mut finding = guard_result_to_detection_finding(&input);
+
+    // Warn decisions are non-blocking but should be logged, not marked as allowed.
+    if is_warn {
+        finding.disposition_id = crate::base::DispositionId::Logged.as_u8();
+    }
+
+    Some(finding)
 }
 
 #[cfg(test)]
@@ -232,6 +242,35 @@ mod tests {
         let event = timeline_event_to_ocsf(&input).unwrap();
         if let TimelineOcsfEvent::Detection(df) = event {
             assert_eq!(df.action_id, 1); // Allowed
+        } else {
+            panic!("expected Detection");
+        }
+    }
+
+    #[test]
+    fn receipt_warn_decision_is_logged() {
+        let raw = json!({
+            "fact": {
+                "decision": "warn",
+                "guard": "ShellCommandGuard",
+                "action_type": "shell",
+                "severity": "medium"
+            }
+        });
+
+        let input = TimelineEventInput {
+            kind: "guard_decision",
+            source: "receipt",
+            time_ms: 1_709_366_400_000,
+            raw: &raw,
+            product_version: "0.1.3",
+        };
+
+        let event = timeline_event_to_ocsf(&input).unwrap();
+        if let TimelineOcsfEvent::Detection(df) = event {
+            assert_eq!(df.action_id, 1); // Allowed (non-blocking)
+            assert_eq!(df.disposition_id, 17); // Logged
+            assert_eq!(df.status_id, 1); // Success
         } else {
             panic!("expected Detection");
         }

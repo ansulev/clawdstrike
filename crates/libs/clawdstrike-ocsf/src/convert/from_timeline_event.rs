@@ -324,7 +324,7 @@ fn map_policy_event_type_to_resource_type(event_type: &str) -> Option<&'static s
     }
 }
 
-fn normalize_receipt_resource_type<'a>(action_type: &'a str) -> &'a str {
+fn normalize_receipt_resource_type(action_type: &str) -> &str {
     match action_type {
         "file" | "network" | "process" | "tool" | "configuration" => action_type,
         "file_access" | "file_read" | "file_write" | "patch" | "patch_apply" => "file",

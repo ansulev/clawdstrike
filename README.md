@@ -695,45 +695,27 @@ For organizations managing agent fleets across teams and environments, Clawdstri
 
 ```mermaid
 flowchart TB
-    subgraph agents ["Agent Fleet"]
-        A1[Desktop Agent 1]
-        A2[Desktop Agent 2]
-        AN[Desktop Agent N]
-    end
+    AF[Agent Fleet]
+    API[Cloud API]
+    DASH[Cloud Dashboard]
+    DB[(PostgreSQL)]
+    PROV[External NATS Provisioner]
+    KV[(Policy KV)]
+    CMD[(Command Subjects)]
 
-    subgraph nats_control ["NATS Control Plane"]
-        KV[(Policy KV)]
-        CMD[Posture / Command Subjects]
-    end
-
-    subgraph cloud ["Cloud Control Plane"]
-        DASH[Cloud Dashboard]
-        API[Cloud API]
-        DB[(PostgreSQL)]
-        PROV[External NATS Provisioner]
-    end
-
-    DASH <--> API;
-    API <--> DB;
-    API <--> PROV;
-
-    A1 -->|https enrollment| API;
-    A2 -->|https enrollment| API;
-    AN -->|https enrollment| API;
-    API -->|nats creds + subject prefix| A1;
-    API -->|nats creds + subject prefix| A2;
-    API -->|nats creds + subject prefix| AN;
-
-    API -->|policy publish update| KV;
-    KV -->|policy sync kv watch| A1;
-    KV -->|policy sync kv watch| A2;
-    KV -->|policy sync kv watch| AN;
-
-    API -->|set posture reload kill| CMD;
-    CMD -->|request reply ack| A1;
-    CMD -->|request reply ack| A2;
-    CMD -->|request reply ack| AN;
+    DASH <--> API
+    API <--> DB
+    API <--> PROV
+    AF <--> API
+    API --> KV
+    KV --> AF
+    API --> CMD
+    CMD --> AF
 ```
+
+- Enrollment runs over HTTPS (`Agent Fleet <-> Cloud API`), and the API returns NATS credentials + subject prefix.
+- Policy sync is `Cloud API -> Policy KV -> Agent Fleet` (KV watch model).
+- Commands are `Cloud API -> Command Subjects -> Agent Fleet` with request/reply acknowledgements.
 
 ### 2. Telemetry Plane
 

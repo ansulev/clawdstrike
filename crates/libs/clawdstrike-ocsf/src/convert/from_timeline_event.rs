@@ -76,7 +76,8 @@ fn receipt_to_detection_finding(
         ReceiptDecisionKind::Allow | ReceiptDecisionKind::Warn
     );
     let guard_name = extract_receipt_guard_name(envelope, fact).unwrap_or("unknown");
-    let severity_str = extract_receipt_severity(fact).unwrap_or_else(|| "info".to_string());
+    let severity_str =
+        extract_receipt_severity(envelope, fact).unwrap_or_else(|| "info".to_string());
     let action_type = extract_receipt_action_type(fact).unwrap_or("unknown");
     let resource_name = extract_receipt_target(fact);
     let event_uid = extract_receipt_uid(envelope, fact, time_ms, guard_name, &decision_label);
@@ -191,9 +192,10 @@ fn extract_receipt_guard_name<'a>(envelope: &'a Value, fact: &'a Value) -> Optio
         })
 }
 
-fn extract_receipt_severity(fact: &Value) -> Option<String> {
+fn extract_receipt_severity(envelope: &Value, fact: &Value) -> Option<String> {
     fact.get("severity")
         .and_then(severity_from_value)
+        .or_else(|| envelope.get("severity").and_then(severity_from_value))
         .or_else(|| {
             fact.get("metadata")
                 .and_then(|v| v.as_object())
@@ -201,7 +203,19 @@ fn extract_receipt_severity(fact: &Value) -> Option<String> {
                 .and_then(severity_from_value)
         })
         .or_else(|| {
+            envelope
+                .get("metadata")
+                .and_then(|v| v.as_object())
+                .and_then(|obj| obj.get("severity"))
+                .and_then(severity_from_value)
+        })
+        .or_else(|| {
             decision_object_from_fact(fact)?
+                .get("severity")
+                .and_then(severity_from_value)
+        })
+        .or_else(|| {
+            decision_object_from_fact(envelope)?
                 .get("severity")
                 .and_then(severity_from_value)
         })
@@ -819,6 +833,7 @@ mod tests {
             assert_eq!(df.action_id, 2); // Denied
             assert_eq!(df.finding_info.uid, "receipt-evt-envelope-decision-1");
             assert_eq!(df.finding_info.analytic.name, "MetadataGuard");
+            assert_eq!(df.severity_id, 5); // Critical
         } else {
             panic!("expected Detection");
         }

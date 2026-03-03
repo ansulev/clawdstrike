@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 #[serde(rename_all = "snake_case")]
 pub enum EventSource {
     Process,
+    #[serde(rename = "fsevents", alias = "fs_events")]
     FsEvents,
     UnifiedLog,
 }
@@ -525,11 +526,17 @@ mod tests {
         );
         assert_eq!(
             serde_json::to_string(&EventSource::FsEvents).unwrap_or_default(),
-            r#""fs_events""#
+            r#""fsevents""#
         );
         assert_eq!(
             serde_json::to_string(&EventSource::UnifiedLog).unwrap_or_default(),
             r#""unified_log""#
         );
+    }
+
+    #[test]
+    fn event_source_serde_accepts_legacy_fs_events_alias() {
+        let parsed: EventSource = serde_json::from_str(r#""fs_events""#).expect("deserialize");
+        assert_eq!(parsed, EventSource::FsEvents);
     }
 }

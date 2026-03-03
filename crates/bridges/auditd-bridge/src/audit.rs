@@ -500,22 +500,28 @@ impl AuditLogTailer {
                 }
             }
 
-            let reader = tokio::io::BufReader::new(file);
-            let mut lines = reader.lines();
+            let mut reader = tokio::io::BufReader::new(file);
 
             loop {
-                match lines.next_line().await {
-                    Ok(Some(line)) => {
-                        offset += line.len() as u64 + 1; // +1 for newline
+                let mut line = String::new();
+                match reader.read_line(&mut line).await {
+                    Ok(0) => {
+                        // EOF reached, wait and check for new data or rotation
+                        break;
+                    }
+                    Ok(bytes_read) => {
+                        offset += bytes_read as u64;
+                        if line.ends_with('\n') {
+                            line.pop();
+                            if line.ends_with('\r') {
+                                line.pop();
+                            }
+                        }
 
                         if tx.send(line).await.is_err() {
                             tracing::warn!("line receiver dropped, stopping tailer");
                             return Ok(());
                         }
-                    }
-                    Ok(None) => {
-                        // EOF reached, wait and check for new data or rotation
-                        break;
                     }
                     Err(e) => {
                         tracing::warn!(error = %e, "error reading audit log");

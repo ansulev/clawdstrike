@@ -622,22 +622,40 @@ Prompt watermarking embeds signed provenance markers for attribution and forensi
 
 ### Off-Grid Enforcement (Plane A-R)
 
-Your revocation doesn't matter if it can't reach the node. Cut the fiber, jam the satellite uplink, airgap the facility. If your security plane requires the internet, you don't have a security plane. You have a suggestion.
+Agents are becoming infrastructure—and infrastructure needs defense-grade enforcement. Clawdstrike is built to support U.S. cyber defenders as agent systems become the next attack surface. It keeps policy, revocations, and cryptographic proof moving even in contested networks, airgaps, and degraded links.
 
-For agents running local models in environments where the internet is a liability, not an assumption.
+This is for environments where the internet is not an assumption—sometimes it's the threat model.
 
-Clawdstrike's [Spine protocol](docs/specs/12-reticulum-adapter.md) carries the same Ed25519-signed envelopes over [Reticulum](https://reticulum.network/) mesh networks: LoRa radios, packet radio, serial lines, WiFi, TCP/UDP. Anything that can move 5 bits per second through a 500-byte aperture. The transport changes. The cryptographic proof doesn't.
+Clawdstrike's **Spine** protocol carries the same **Ed25519-signed envelopes** over **Reticulum** transports: LoRa radios, packet radio, serial lines, Wi-Fi, TCP/UDP—anything that can move a few bits per second through a few hundred bytes. The transport changes. The proof doesn't.
 
-| Environment                            | What Propagates                           | How                                                   |
-| -------------------------------------- | ----------------------------------------- | ----------------------------------------------------- |
-| **SCIF / air-gapped facility**         | Policy deltas, revocations, checkpoints   | USB sneakernet with offline Merkle proof verification |
-| **Disaster response / degraded infra** | Emergency revocations, incident facts     | Ad-hoc LoRa mesh, store-and-forward via LXMF          |
-| **Hostile network / denied spectrum**  | Signed revocations at priority 1          | Multi-hop Reticulum over any available carrier        |
-| **Remote IoT / edge**                  | Policy enforcement + attestation receipts | LoRa at 1,200 bps, 6+ km line-of-sight                |
+#### What moves, even when the network doesn't
 
-**Bandwidth-aware priority scheduling.** Seven tiers. Revocations always transmit first. Under 2 seconds on LoRa. Heartbeats drop when the link can't spare the bytes. A compromised signing key gets revoked across the mesh before the attacker finishes their coffee.
+| Environment                        | What propagates                           | How                                                 |
+| ---------------------------------- | ----------------------------------------- | --------------------------------------------------- |
+| SCIF / air-gapped facility         | Policy deltas, revocations, checkpoints   | USB transfer with offline Merkle-proof verification |
+| Disaster response / degraded infra | Emergency revocations, incident facts     | Ad-hoc LoRa mesh, store-and-forward via LXMF        |
+| Hostile network / denied spectrum  | Signed revocations (priority 1)           | Multi-hop Reticulum over any available carrier      |
+| Remote IoT / edge                  | Policy enforcement + attestation receipts | LoRa at ~1,200 bps, multi-km line-of-sight          |
 
-**[$98 reference gateway.](integrations/transports/reticulum/pi-gateway/)** Raspberry Pi 4 + RNode LoRa USB radio. Bridges the off-grid mesh to your NATS backbone. Disclosure policy controls what crosses the boundary. Hash-chained audit log records every envelope forwarded or dropped. 5 watts.
+#### Bandwidth discipline, by design
+
+Spine is **bandwidth-aware** and **priority-scheduled**:
+
+* **Seven priority tiers.** Revocations always transmit first.
+* **Graceful degradation.** When the link is tight, heartbeats yield; policy and incident-critical envelopes still move.
+* **Fail-closed posture at the edge.** If the node can't receive new guidance, it doesn't silently drift into "best effort" permissiveness.
+* **Key compromise response.** A compromised signing key can be revoked and propagated across the mesh quickly enough to matter in the early minutes of an incident.
+
+#### Reference gateway
+
+**[$98 reference gateway.](integrations/transports/reticulum/pi-gateway/)** Raspberry Pi 4 + RNode LoRa USB radio.
+
+* Bridges the off-grid mesh to your **NATS** backbone.
+* **Disclosure policy** controls what is allowed to cross the boundary (mesh ↔ backbone).
+* **Hash-chained audit log** records every envelope forwarded or dropped.
+* Runs in the field on ~**5W**.
+
+Off-grid doesn't mean off-control. Plane A-R is how Clawdstrike keeps enforcement real when the network is not.
 
 ---
 

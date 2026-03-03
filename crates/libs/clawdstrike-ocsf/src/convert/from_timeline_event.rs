@@ -119,15 +119,15 @@ fn extract_receipt_decision(fact: &Value) -> Option<(ReceiptDecisionKind, String
     }
 
     let decision_obj = decision_object_from_fact(fact)?;
-    if decision_obj
-        .get("warn")
-        .and_then(|v| v.as_bool())
-        .unwrap_or(false)
-    {
+    let allowed = decision_object_allowed(decision_obj);
+    if allowed == Some(false) {
+        return Some((ReceiptDecisionKind::Deny, "deny".to_string()));
+    }
+    if decision_object_is_warn(decision_obj) {
         return Some((ReceiptDecisionKind::Warn, "warn".to_string()));
     }
 
-    let allowed = decision_obj.get("allowed").and_then(|v| v.as_bool())?;
+    let allowed = allowed?;
     Some((
         if allowed {
             ReceiptDecisionKind::Allow
@@ -151,6 +151,67 @@ fn parse_receipt_decision(decision: &str) -> ReceiptDecisionKind {
     }
 }
 
+fn decision_object_allowed(decision_obj: &serde_json::Map<String, Value>) -> Option<bool> {
+    decision_obj
+        .get("allowed")
+        .and_then(|v| v.as_bool())
+        .or_else(|| decision_obj.get("passed").and_then(|v| v.as_bool()))
+        .or_else(|| {
+            decision_obj
+                .get("denied")
+                .and_then(|v| v.as_bool())
+                .map(|v| !v)
+        })
+        .or_else(|| {
+            decision_obj
+                .get("blocked")
+                .and_then(|v| v.as_bool())
+                .map(|v| !v)
+        })
+}
+
+fn decision_object_is_warn(decision_obj: &serde_json::Map<String, Value>) -> bool {
+    if decision_obj
+        .get("warn")
+        .or_else(|| decision_obj.get("warning"))
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false)
+    {
+        return true;
+    }
+
+    if matches!(
+        decision_obj
+            .get("verdict")
+            .or_else(|| decision_obj.get("decision"))
+            .and_then(|v| v.as_str())
+            .map(parse_receipt_decision),
+        Some(ReceiptDecisionKind::Warn)
+    ) {
+        return true;
+    }
+
+    matches!(
+        decision_obj
+            .get("severity")
+            .and_then(severity_from_value)
+            .map(|s| s.to_ascii_lowercase()),
+        Some(v) if matches!(v.as_str(), "warn" | "warning")
+    )
+}
+
+fn severity_from_value(value: &Value) -> Option<String> {
+    match value {
+        Value::String(s) => Some(s.to_string()),
+        Value::Object(obj) => obj
+            .get("level")
+            .or_else(|| obj.get("name"))
+            .or_else(|| obj.get("value"))
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string()),
+        _ => None,
+    }
+}
 fn extract_receipt_guard_name(fact: &Value) -> Option<&str> {
     fact.get("guard").and_then(|v| v.as_str()).or_else(|| {
         decision_object_from_fact(fact)?
@@ -240,8 +301,10 @@ fn extract_receipt_uid(
     decision_label: &str,
 ) -> String {
     if let Some(event_id) = fact
-        .get("eventId")
+        .get("receipt_id")
         .and_then(|v| v.as_str())
+        .or_else(|| fact.get("receiptId").and_then(|v| v.as_str()))
+        .or_else(|| fact.get("eventId").and_then(|v| v.as_str()))
         .or_else(|| fact.get("event_id").and_then(|v| v.as_str()))
         .or_else(|| fact.get("id").and_then(|v| v.as_str()))
         .or_else(|| fact.get("uid").and_then(|v| v.as_str()))
@@ -696,6 +759,134 @@ mod tests {
         } else {
             panic!("expected Detection");
         }
+    }
+
+    #[test]
+    fn receipt_denied_decision_object_takes_precedence_over_warn() {
+        let raw = json!({
+            "fact": {
+                "decision": {
+                    "allowed": false,
+                    "warn": true,
+                    "guard": "DenyGuard"
+                },
+                "action_type": "file"
+            }
+        });
+
+        let input = TimelineEventInput {
+            kind: "guard_decision",
+            source: "receipt",
+            time_ms: 1_709_366_400_000,
+            raw: &raw,
+            product_version: "0.1.3",
+        };
+
+        let event = timeline_event_to_ocsf(&input).unwrap();
+        if let TimelineOcsfEvent::Detection(df) = event {
+            assert_eq!(df.action_id, 2); // Denied
+            assert_eq!(df.disposition_id, 2); // Blocked
+        } else {
+            panic!("expected Detection");
+        }
+    }
+
+    #[test]
+    fn receipt_warning_severity_decision_object_maps_to_warn() {
+        let raw = json!({
+            "fact": {
+                "decision": {
+                    "allowed": true,
+                    "severity": "warning",
+                    "guard": "WarnGuard"
+                },
+                "action_type": "shell"
+            }
+        });
+
+        let input = TimelineEventInput {
+            kind: "guard_decision",
+            source: "receipt",
+            time_ms: 1_709_366_400_000,
+            raw: &raw,
+            product_version: "0.1.3",
+        };
+
+        let event = timeline_event_to_ocsf(&input).unwrap();
+        if let TimelineOcsfEvent::Detection(df) = event {
+            assert_eq!(df.action_id, 1); // Allowed
+            assert_eq!(df.disposition_id, 17); // Logged
+            assert_eq!(df.status_id, 1); // Success
+        } else {
+            panic!("expected Detection");
+        }
+    }
+
+    #[test]
+    fn receipt_verdict_object_passed_is_allowed() {
+        let raw = json!({
+            "fact": {
+                "verdict": {
+                    "passed": true
+                }
+            }
+        });
+
+        let input = TimelineEventInput {
+            kind: "guard_decision",
+            source: "receipt",
+            time_ms: 1_709_366_400_000,
+            raw: &raw,
+            product_version: "0.1.3",
+        };
+
+        let event = timeline_event_to_ocsf(&input).unwrap();
+        if let TimelineOcsfEvent::Detection(df) = event {
+            assert_eq!(df.action_id, 1); // Allowed
+            assert_eq!(df.disposition_id, 1); // Allowed
+        } else {
+            panic!("expected Detection");
+        }
+    }
+
+    #[test]
+    fn receipt_verdict_object_failed_is_denied() {
+        let raw = json!({
+            "fact": {
+                "verdict": {
+                    "passed": false
+                }
+            }
+        });
+
+        let input = TimelineEventInput {
+            kind: "guard_decision",
+            source: "receipt",
+            time_ms: 1_709_366_400_000,
+            raw: &raw,
+            product_version: "0.1.3",
+        };
+
+        let event = timeline_event_to_ocsf(&input).unwrap();
+        if let TimelineOcsfEvent::Detection(df) = event {
+            assert_eq!(df.action_id, 2); // Denied
+            assert_eq!(df.disposition_id, 2); // Blocked
+        } else {
+            panic!("expected Detection");
+        }
+    }
+
+    #[test]
+    fn receipt_uid_prefers_receipt_id_when_present() {
+        let fact = json!({
+            "receipt_id": "snap-posture-allow",
+            "verdict": {
+                "passed": true
+            }
+        });
+
+        let uid = extract_receipt_uid(&fact, 1_709_366_499_999, "unknown", "allow");
+        assert_eq!(uid, "receipt-snap-posture-allow");
     }
 
     #[test]

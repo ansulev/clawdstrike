@@ -2,6 +2,8 @@
 
 use serde::Serialize;
 
+#[cfg(not(feature = "timeline"))]
+use crate::event::{PolicyEvent, PolicyEventData, PolicyEventType};
 use crate::ocsf::policy_events_to_ocsf_jsonl;
 use crate::stream::read_events_from_str;
 use crate::synth::{build_candidate_policy, collect_stats};
@@ -89,6 +91,7 @@ impl PolicyLabHandle {
     }
 
     /// Convert events JSONL to timeline JSONL.
+    #[cfg(feature = "timeline")]
     pub fn to_timeline(events_jsonl: &str) -> anyhow::Result<String> {
         let events = read_events_from_str(events_jsonl)?;
         let timeline = crate::bridge::policy_events_to_timeline(&events);
@@ -100,6 +103,150 @@ impl PolicyLabHandle {
         }
         Ok(lines.join("\n"))
     }
+
+    /// Convert events JSONL to timeline JSONL.
+    #[cfg(not(feature = "timeline"))]
+    pub fn to_timeline(events_jsonl: &str) -> anyhow::Result<String> {
+        let events = read_events_from_str(events_jsonl)?;
+
+        let mut lines = Vec::with_capacity(events.len());
+        for event in &events {
+            let line = serde_json::to_string(&fallback_timeline_event(event)?)?;
+            lines.push(line);
+        }
+        Ok(lines.join("\n"))
+    }
+}
+
+#[cfg(not(feature = "timeline"))]
+fn fallback_timeline_event(event: &PolicyEvent) -> anyhow::Result<serde_json::Value> {
+    let (action_type, summary) = fallback_action_type_and_summary(event);
+    let verdict = fallback_verdict_from_metadata(event.metadata.as_ref());
+    let severity = fallback_extract_severity(event.metadata.as_ref());
+
+    let mut obj = serde_json::Map::new();
+    obj.insert(
+        "timestamp".to_string(),
+        serde_json::to_value(event.timestamp)?,
+    );
+    obj.insert(
+        "source".to_string(),
+        serde_json::Value::String("receipt".to_string()),
+    );
+    obj.insert(
+        "kind".to_string(),
+        serde_json::Value::String("guard_decision".to_string()),
+    );
+    obj.insert(
+        "verdict".to_string(),
+        serde_json::Value::String(verdict.to_string()),
+    );
+    if let Some(severity) = severity {
+        obj.insert("severity".to_string(), serde_json::Value::String(severity));
+    }
+    obj.insert("summary".to_string(), serde_json::Value::String(summary));
+    obj.insert(
+        "action_type".to_string(),
+        serde_json::Value::String(action_type.to_string()),
+    );
+    obj.insert("raw".to_string(), serde_json::to_value(event)?);
+    Ok(serde_json::Value::Object(obj))
+}
+
+#[cfg(not(feature = "timeline"))]
+fn fallback_action_type_and_summary(event: &PolicyEvent) -> (&'static str, String) {
+    match (&event.event_type, &event.data) {
+        (PolicyEventType::FileRead, PolicyEventData::File(f)) => {
+            ("file", format!("file_read {}", f.path))
+        }
+        (PolicyEventType::FileWrite, PolicyEventData::File(f)) => {
+            ("file", format!("file_write {}", f.path))
+        }
+        (PolicyEventType::NetworkEgress, PolicyEventData::Network(n)) => {
+            ("egress", format!("network_egress {}:{}", n.host, n.port))
+        }
+        (PolicyEventType::CommandExec, PolicyEventData::Command(c)) => {
+            ("shell", format!("command_exec {}", c.command))
+        }
+        (PolicyEventType::PatchApply, PolicyEventData::Patch(p)) => {
+            ("patch", format!("patch_apply {}", p.file_path))
+        }
+        (PolicyEventType::ToolCall, PolicyEventData::Tool(t)) => {
+            ("tool", format!("tool_call {}", t.tool_name))
+        }
+        (PolicyEventType::SecretAccess, PolicyEventData::Secret(s)) => {
+            ("secret", format!("secret_access {}", s.secret_name))
+        }
+        (PolicyEventType::Custom, PolicyEventData::Custom(c)) => {
+            ("custom", format!("custom {}", c.custom_type))
+        }
+        (
+            PolicyEventType::RemoteSessionConnect
+            | PolicyEventType::RemoteSessionDisconnect
+            | PolicyEventType::RemoteSessionReconnect
+            | PolicyEventType::InputInject
+            | PolicyEventType::ClipboardTransfer
+            | PolicyEventType::FileTransfer
+            | PolicyEventType::RemoteAudio
+            | PolicyEventType::RemoteDriveMapping
+            | PolicyEventType::RemotePrinting
+            | PolicyEventType::SessionShare,
+            PolicyEventData::Cua(cua),
+        ) => ("cua", format!("{} {}", event.event_type, cua.cua_action)),
+        _ => ("unknown", format!("{}", event.event_type)),
+    }
+}
+
+#[cfg(not(feature = "timeline"))]
+fn fallback_verdict_from_metadata(metadata: Option<&serde_json::Value>) -> &'static str {
+    let Some(serde_json::Value::Object(obj)) = metadata else {
+        return "none";
+    };
+
+    let decision_val = obj.get("verdict").or_else(|| obj.get("decision"));
+
+    match decision_val {
+        Some(serde_json::Value::String(s)) => match s.to_lowercase().as_str() {
+            "allow" | "allowed" | "pass" | "passed" => "allow",
+            "deny" | "denied" | "block" | "blocked" => "deny",
+            "warn" | "warning" | "warned" => "warn",
+            _ => "none",
+        },
+        Some(serde_json::Value::Object(decision_obj)) => {
+            if decision_obj
+                .get("warn")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false)
+            {
+                return "warn";
+            }
+            match decision_obj.get("allowed").and_then(|v| v.as_bool()) {
+                Some(true) => "allow",
+                Some(false) => "deny",
+                None => "none",
+            }
+        }
+        _ => "none",
+    }
+}
+
+#[cfg(not(feature = "timeline"))]
+fn fallback_extract_severity(metadata: Option<&serde_json::Value>) -> Option<String> {
+    let Some(serde_json::Value::Object(obj)) = metadata else {
+        return None;
+    };
+
+    obj.get("severity")
+        .and_then(|v| v.as_str())
+        .map(str::to_string)
+        .or_else(|| {
+            obj.get("decision")
+                .or_else(|| obj.get("verdict"))
+                .and_then(|v| v.as_object())
+                .and_then(|d| d.get("severity"))
+                .and_then(|v| v.as_str())
+                .map(str::to_string)
+        })
 }
 
 #[cfg(test)]

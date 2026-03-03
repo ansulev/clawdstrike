@@ -219,6 +219,48 @@ fn severity_extracted_from_metadata() {
 }
 
 #[test]
+fn severity_extracted_from_object_decision() {
+    let event = make_event(
+        "br-sev-obj",
+        PolicyEventType::FileRead,
+        PolicyEventData::File(FileEventData {
+            path: "/test".to_string(),
+            operation: None,
+            content_base64: None,
+            content: None,
+            content_hash: None,
+        }),
+        Some(serde_json::json!({
+            "decision": { "allowed": true, "severity": "high" }
+        })),
+    );
+
+    let te = policy_event_to_timeline(&event);
+    assert_eq!(te.severity.as_deref(), Some("high"));
+}
+
+#[test]
+fn object_decision_warn_maps_to_warn_verdict() {
+    let event = make_event(
+        "br-warn-obj",
+        PolicyEventType::FileRead,
+        PolicyEventData::File(FileEventData {
+            path: "/tmp/warn".to_string(),
+            operation: None,
+            content_base64: None,
+            content: None,
+            content_hash: None,
+        }),
+        Some(serde_json::json!({
+            "decision": { "allowed": true, "warn": true }
+        })),
+    );
+
+    let te = policy_event_to_timeline(&event);
+    assert_eq!(te.verdict, NormalizedVerdict::Warn);
+}
+
+#[test]
 fn raw_json_included() {
     let event = make_event(
         "br-raw",

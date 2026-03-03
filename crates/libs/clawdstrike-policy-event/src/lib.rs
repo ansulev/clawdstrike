@@ -11,6 +11,7 @@
 //! - [`ocsf`] - PolicyEvent to OCSF conversion
 //! - [`facade`] - JSON-in/JSON-out facade for cross-language bindings
 
+#[cfg(feature = "timeline")]
 pub mod bridge;
 pub mod event;
 pub mod facade;

@@ -26,30 +26,22 @@ pub fn policy_event_to_ocsf(event: &PolicyEvent) -> Option<serde_json::Value> {
     )
     .unwrap_or_else(|| "agent".to_string());
 
-    // Check metadata for a verdict/decision field; default to allowed for observations.
-    // Supports both string form ("deny") and object form ({"allowed": false, "guard": "..."}).
-    let verdict_str = crate::event::extract_metadata_string(
-        event.metadata.as_ref(),
-        &["verdict", "decision"],
-    );
-    let (allowed, is_warn) = if let Some(ref s) = verdict_str {
-        match s.to_lowercase().as_str() {
-            "deny" | "denied" | "block" | "blocked" => (false, false),
-            "warn" | "warning" | "warned" | "logged" => (true, true),
-            _ => (true, false),
-        }
-    } else {
-        // Fallback: decode object-form decision (e.g. {"allowed": false, "guard": "..."})
-        decode_object_decision(event.metadata.as_ref())
-    };
+    let decision = parse_decision_metadata(event.metadata.as_ref());
+    let allowed = decision.allowed;
+    let is_warn = decision.is_warn;
     let outcome = if allowed { "success" } else { "failure" };
-    let severity = if !allowed {
+    let default_severity = if !allowed {
         "high"
     } else if is_warn {
         "medium"
     } else {
         "info"
     };
+    let severity = decision.severity.as_deref().unwrap_or(default_severity);
+    let guard = decision.guard.as_deref().unwrap_or("PolicyEvent");
+    let reason = decision
+        .message
+        .unwrap_or_else(|| format!("{} observation", event.event_type));
 
     let input = SecurityEventInput {
         event_id: &event.event_id,
@@ -57,8 +49,8 @@ pub fn policy_event_to_ocsf(event: &PolicyEvent) -> Option<serde_json::Value> {
         allowed,
         outcome,
         severity,
-        guard: "PolicyEvent",
-        reason: &format!("{} observation", event.event_type),
+        guard,
+        reason: &reason,
         product_version: env!("CARGO_PKG_VERSION"),
         action,
         resource_type,
@@ -74,6 +66,100 @@ pub fn policy_event_to_ocsf(event: &PolicyEvent) -> Option<serde_json::Value> {
 
     let event_set = security_event_to_ocsf(&input);
     serde_json::to_value(&event_set.detection_finding).ok()
+}
+
+struct DecisionMetadata {
+    allowed: bool,
+    is_warn: bool,
+    guard: Option<String>,
+    severity: Option<String>,
+    message: Option<String>,
+}
+
+impl Default for DecisionMetadata {
+    fn default() -> Self {
+        Self {
+            allowed: true,
+            is_warn: false,
+            guard: None,
+            severity: None,
+            message: None,
+        }
+    }
+}
+
+fn parse_decision_metadata(metadata: Option<&serde_json::Value>) -> DecisionMetadata {
+    let mut out = DecisionMetadata::default();
+    let obj = match metadata {
+        Some(serde_json::Value::Object(obj)) => obj,
+        _ => return out,
+    };
+
+    let decision_val = obj.get("verdict").or_else(|| obj.get("decision"));
+    match decision_val {
+        Some(serde_json::Value::String(s)) => match s.to_lowercase().as_str() {
+            "deny" | "denied" | "block" | "blocked" => {
+                out.allowed = false;
+            }
+            "warn" | "warning" | "warned" | "logged" => {
+                out.allowed = true;
+                out.is_warn = true;
+            }
+            _ => {
+                out.allowed = true;
+            }
+        },
+        Some(serde_json::Value::Object(decision_obj)) => {
+            if decision_obj
+                .get("warn")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false)
+            {
+                out.allowed = true;
+                out.is_warn = true;
+            } else if let Some(allowed) = decision_obj.get("allowed").and_then(|v| v.as_bool()) {
+                out.allowed = allowed;
+                out.is_warn = false;
+            }
+
+            out.guard = decision_obj
+                .get("guard")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+            out.severity = decision_obj
+                .get("severity")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+            out.message = decision_obj
+                .get("message")
+                .or_else(|| decision_obj.get("reason"))
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+        }
+        _ => {}
+    }
+
+    if out.severity.is_none() {
+        out.severity = obj
+            .get("severity")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+    }
+    if out.guard.is_none() {
+        out.guard = obj
+            .get("guard")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+    }
+    if out.message.is_none() {
+        out.message = obj
+            .get("message")
+            .or_else(|| obj.get("reason"))
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+    }
+
+    out
 }
 
 /// Convert a MappedGuardAction + report into an OCSF JSON value.
@@ -191,7 +277,16 @@ fn classify_event(
             None,
         ),
         (PolicyEventType::ToolCall, PolicyEventData::Tool(t)) => {
-            ("mcp_tool", "tool", t.tool_name.clone(), None, None, None)
+            let is_mcp = metadata_tool_kind_is_mcp(event.metadata.as_ref())
+                || t.tool_name.starts_with("mcp__");
+            (
+                if is_mcp { "mcp_tool" } else { "custom" },
+                "tool",
+                t.tool_name.clone(),
+                None,
+                None,
+                None,
+            )
         }
         (PolicyEventType::SecretAccess, PolicyEventData::Secret(s)) => (
             "secret_access",
@@ -210,6 +305,19 @@ fn classify_event(
             None,
         ),
     }
+}
+
+fn metadata_tool_kind_is_mcp(metadata: Option<&serde_json::Value>) -> bool {
+    let Some(serde_json::Value::Object(obj)) = metadata else {
+        return false;
+    };
+
+    let kind = obj
+        .get("toolKind")
+        .or_else(|| obj.get("tool_kind"))
+        .and_then(|v| v.as_str());
+
+    kind.map(|s| s.eq_ignore_ascii_case("mcp")).unwrap_or(false)
 }
 
 /// Classify a MappedGuardAction into OCSF resource fields.
@@ -302,32 +410,6 @@ fn classify_action(
         context: None,
     };
     classify_event(&stub)
-}
-
-/// Decode an object-form decision from metadata.
-///
-/// When `metadata.decision` (or `metadata.verdict`) is an object like
-/// `{"allowed": false, "guard": "ForbiddenPathGuard"}`, extract the boolean
-/// `allowed` field. Returns `(true, false)` (allowed, not warn) as the
-/// default when the field is absent or not an object.
-fn decode_object_decision(metadata: Option<&serde_json::Value>) -> (bool, bool) {
-    let obj = match metadata {
-        Some(serde_json::Value::Object(o)) => o,
-        _ => return (true, false),
-    };
-
-    let decision_val = obj.get("verdict").or_else(|| obj.get("decision"));
-
-    match decision_val {
-        Some(serde_json::Value::Object(decision_obj)) => {
-            match decision_obj.get("allowed").and_then(|v| v.as_bool()) {
-                Some(true) => (true, false),
-                Some(false) => (false, false),
-                None => (true, false),
-            }
-        }
-        _ => (true, false),
-    }
 }
 
 #[cfg(test)]
@@ -431,6 +513,10 @@ mod tests {
         // Object-form {allowed: false} → action_id 2 (Denied)
         assert_eq!(json["action_id"], 2);
         assert_eq!(json["disposition_id"], 2); // Blocked
+        assert_eq!(
+            json["finding_info"]["analytic"]["name"],
+            "ForbiddenPathGuard"
+        );
     }
 
     #[test]
@@ -458,6 +544,81 @@ mod tests {
         // Object-form {allowed: true} → action_id 1 (Allowed)
         assert_eq!(json["action_id"], 1);
         assert_eq!(json["disposition_id"], 1); // Allowed
+    }
+
+    #[test]
+    fn object_form_decision_warn_carries_message_and_severity() {
+        let event = PolicyEvent {
+            event_id: "evt-obj-warn".to_string(),
+            event_type: PolicyEventType::FileRead,
+            timestamp: Utc::now(),
+            session_id: None,
+            data: PolicyEventData::File(FileEventData {
+                path: "/var/log/syslog".to_string(),
+                operation: None,
+                content_base64: None,
+                content: None,
+                content_hash: None,
+            }),
+            metadata: Some(serde_json::json!({
+                "decision": {
+                    "allowed": true,
+                    "warn": true,
+                    "guard": "ShellCommandGuard",
+                    "severity": "warning",
+                    "message": "Logged command"
+                }
+            })),
+            context: None,
+        };
+
+        let json = policy_event_to_ocsf(&event).unwrap();
+        assert_eq!(json["action_id"], 1); // Allowed
+        assert_eq!(json["disposition_id"], 17); // Logged
+        assert_eq!(json["severity_id"], 3); // Medium
+        assert_eq!(
+            json["finding_info"]["analytic"]["name"],
+            "ShellCommandGuard"
+        );
+        assert_eq!(json["finding_info"]["desc"], "Logged command");
+    }
+
+    #[test]
+    fn classify_tool_call_uses_metadata_tool_kind() {
+        let event = PolicyEvent {
+            event_id: "evt-tool".to_string(),
+            event_type: PolicyEventType::ToolCall,
+            timestamp: Utc::now(),
+            session_id: None,
+            data: PolicyEventData::Tool(crate::event::ToolEventData {
+                tool_name: "read_file".to_string(),
+                parameters: serde_json::json!({}),
+            }),
+            metadata: Some(serde_json::json!({ "toolKind": "mcp" })),
+            context: None,
+        };
+
+        let (action, _, _, _, _, _) = classify_event(&event);
+        assert_eq!(action, "mcp_tool");
+    }
+
+    #[test]
+    fn classify_tool_call_non_mcp_uses_custom_action() {
+        let event = PolicyEvent {
+            event_id: "evt-tool-non-mcp".to_string(),
+            event_type: PolicyEventType::ToolCall,
+            timestamp: Utc::now(),
+            session_id: None,
+            data: PolicyEventData::Tool(crate::event::ToolEventData {
+                tool_name: "read_file".to_string(),
+                parameters: serde_json::json!({}),
+            }),
+            metadata: Some(serde_json::json!({ "toolKind": "native" })),
+            context: None,
+        };
+
+        let (action, _, _, _, _, _) = classify_event(&event);
+        assert_eq!(action, "custom");
     }
 
     #[test]

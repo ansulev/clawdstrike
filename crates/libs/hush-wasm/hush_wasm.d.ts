@@ -22,6 +22,23 @@ export class WasmOutputSanitizer {
     sanitize(text: string): string;
 }
 
+/**
+ * WASM wrapper around `PolicyLabHandle` for policy validation.
+ *
+ * Simulation is not available in WASM. Use the native FFI or PyO3
+ * bindings for simulate support.
+ */
+export class WasmPolicyLab {
+    free(): void;
+    [Symbol.dispose](): void;
+    /**
+     * Create a new PolicyLab handle from a policy YAML string.
+     *
+     * Validates that the YAML is a well-formed policy.
+     */
+    constructor(policy_yaml: string);
+}
+
 export function canonicalize_json(json_str: string): string;
 
 /**
@@ -141,6 +158,23 @@ export function hash_sha256_prefixed(data: Uint8Array): string;
  * Initialize the WASM module (call once at startup)
  */
 export function init(): void;
+
+/**
+ * Synthesize a policy from observed events (JSONL).
+ *
+ * Returns a camelCase JSON string with `policyYaml` and `risks`.
+ */
+export function policy_lab_synth(events_jsonl: string): string;
+
+/**
+ * Convert events JSONL to OCSF JSONL.
+ */
+export function policy_lab_to_ocsf(events_jsonl: string): string;
+
+/**
+ * Convert events JSONL to timeline JSONL.
+ */
+export function policy_lab_to_timeline(events_jsonl: string): string;
 
 /**
  * Derive an Ed25519 public key from a private key.

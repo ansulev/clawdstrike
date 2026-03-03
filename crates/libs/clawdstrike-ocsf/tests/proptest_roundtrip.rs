@@ -91,6 +91,7 @@ proptest! {
 
         let input = GuardResultInput {
             allowed,
+            is_warn: false,
             guard: "TestGuard",
             severity,
             message: "test message",

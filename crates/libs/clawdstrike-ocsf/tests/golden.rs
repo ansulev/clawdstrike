@@ -192,6 +192,7 @@ fn all_guard_names_produce_valid_ocsf() {
     for guard in guards {
         let input = GuardResultInput {
             allowed: false,
+            is_warn: false,
             guard,
             severity: "high",
             message: &format!("{guard} blocked action"),

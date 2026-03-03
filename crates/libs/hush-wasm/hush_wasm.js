@@ -163,6 +163,44 @@ if (Symbol.dispose) WasmOutputSanitizer.prototype[Symbol.dispose] = WasmOutputSa
 exports.WasmOutputSanitizer = WasmOutputSanitizer;
 
 /**
+ * WASM wrapper around `PolicyLabHandle` for policy validation.
+ *
+ * Simulation is not available in WASM. Use the native FFI or PyO3
+ * bindings for simulate support.
+ */
+class WasmPolicyLab {
+    __destroy_into_raw() {
+        const ptr = this.__wbg_ptr;
+        this.__wbg_ptr = 0;
+        WasmPolicyLabFinalization.unregister(this);
+        return ptr;
+    }
+    free() {
+        const ptr = this.__destroy_into_raw();
+        wasm.__wbg_wasmpolicylab_free(ptr, 0);
+    }
+    /**
+     * Create a new PolicyLab handle from a policy YAML string.
+     *
+     * Validates that the YAML is a well-formed policy.
+     * @param {string} policy_yaml
+     */
+    constructor(policy_yaml) {
+        const ptr0 = passStringToWasm0(policy_yaml, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.wasmpolicylab_new(ptr0, len0);
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        this.__wbg_ptr = ret[0] >>> 0;
+        WasmPolicyLabFinalization.register(this, this.__wbg_ptr, this);
+        return this;
+    }
+}
+if (Symbol.dispose) WasmPolicyLab.prototype[Symbol.dispose] = WasmPolicyLab.prototype.free;
+exports.WasmPolicyLab = WasmPolicyLab;
+
+/**
  * @param {string} json_str
  * @returns {string}
  */
@@ -501,6 +539,89 @@ function init() {
     wasm.init();
 }
 exports.init = init;
+
+/**
+ * Synthesize a policy from observed events (JSONL).
+ *
+ * Returns a camelCase JSON string with `policyYaml` and `risks`.
+ * @param {string} events_jsonl
+ * @returns {string}
+ */
+function policy_lab_synth(events_jsonl) {
+    let deferred3_0;
+    let deferred3_1;
+    try {
+        const ptr0 = passStringToWasm0(events_jsonl, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.policy_lab_synth(ptr0, len0);
+        var ptr2 = ret[0];
+        var len2 = ret[1];
+        if (ret[3]) {
+            ptr2 = 0; len2 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred3_0 = ptr2;
+        deferred3_1 = len2;
+        return getStringFromWasm0(ptr2, len2);
+    } finally {
+        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+    }
+}
+exports.policy_lab_synth = policy_lab_synth;
+
+/**
+ * Convert events JSONL to OCSF JSONL.
+ * @param {string} events_jsonl
+ * @returns {string}
+ */
+function policy_lab_to_ocsf(events_jsonl) {
+    let deferred3_0;
+    let deferred3_1;
+    try {
+        const ptr0 = passStringToWasm0(events_jsonl, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.policy_lab_to_ocsf(ptr0, len0);
+        var ptr2 = ret[0];
+        var len2 = ret[1];
+        if (ret[3]) {
+            ptr2 = 0; len2 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred3_0 = ptr2;
+        deferred3_1 = len2;
+        return getStringFromWasm0(ptr2, len2);
+    } finally {
+        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+    }
+}
+exports.policy_lab_to_ocsf = policy_lab_to_ocsf;
+
+/**
+ * Convert events JSONL to timeline JSONL.
+ * @param {string} events_jsonl
+ * @returns {string}
+ */
+function policy_lab_to_timeline(events_jsonl) {
+    let deferred3_0;
+    let deferred3_1;
+    try {
+        const ptr0 = passStringToWasm0(events_jsonl, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.policy_lab_to_timeline(ptr0, len0);
+        var ptr2 = ret[0];
+        var len2 = ret[1];
+        if (ret[3]) {
+            ptr2 = 0; len2 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred3_0 = ptr2;
+        deferred3_1 = len2;
+        return getStringFromWasm0(ptr2, len2);
+    } finally {
+        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+    }
+}
+exports.policy_lab_to_timeline = policy_lab_to_timeline;
 
 /**
  * Derive an Ed25519 public key from a private key.
@@ -885,6 +1006,9 @@ const WasmJailbreakDetectorFinalization = (typeof FinalizationRegistry === 'unde
 const WasmOutputSanitizerFinalization = (typeof FinalizationRegistry === 'undefined')
     ? { register: () => {}, unregister: () => {} }
     : new FinalizationRegistry(ptr => wasm.__wbg_wasmoutputsanitizer_free(ptr >>> 0, 1));
+const WasmPolicyLabFinalization = (typeof FinalizationRegistry === 'undefined')
+    ? { register: () => {}, unregister: () => {} }
+    : new FinalizationRegistry(ptr => wasm.__wbg_wasmpolicylab_free(ptr >>> 0, 1));
 
 function addToExternrefTable0(obj) {
     const idx = wasm.__externref_table_alloc();

@@ -57,6 +57,8 @@ export class PolicyLab {
    * @throws Error always — simulation is not supported in the WASM/TS SDK.
    */
   simulate(_eventsJsonl: string): SimulateResult {
+    // Keep handle live for API shape parity with native SDKs.
+    void this.inner;
     throw new Error(
       "PolicyLab.simulate() is not available in the WASM build. " +
         "Use the Python SDK, Go SDK, or Rust CLI for simulation.",

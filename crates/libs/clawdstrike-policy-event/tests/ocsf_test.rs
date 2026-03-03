@@ -306,6 +306,40 @@ fn verdict_warn_in_metadata_maps_to_logged() {
 }
 
 #[test]
+fn object_decision_metadata_preserves_guard_and_message() {
+    let mut event = make_event(
+        "ocsf-obj-decision",
+        PolicyEventType::FileRead,
+        PolicyEventData::File(FileEventData {
+            path: "/var/log/syslog".to_string(),
+            operation: None,
+            content_base64: None,
+            content: None,
+            content_hash: None,
+        }),
+    );
+    event.metadata = Some(serde_json::json!({
+        "decision": {
+            "allowed": true,
+            "warn": true,
+            "guard": "ShellCommandGuard",
+            "severity": "warning",
+            "message": "Logged command"
+        }
+    }));
+
+    let json = policy_event_to_ocsf(&event).unwrap();
+    assert_eq!(json["action_id"], 1); // Allowed
+    assert_eq!(json["disposition_id"], 17); // Logged
+    assert_eq!(json["severity_id"], 3); // Medium
+    assert_eq!(
+        json["finding_info"]["analytic"]["name"],
+        "ShellCommandGuard"
+    );
+    assert_eq!(json["finding_info"]["desc"], "Logged command");
+}
+
+#[test]
 fn custom_event_produces_detection_finding() {
     let event = make_event(
         "ocsf-custom",

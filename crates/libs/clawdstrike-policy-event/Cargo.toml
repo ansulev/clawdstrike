@@ -8,17 +8,18 @@ repository.workspace = true
 rust-version.workspace = true
 
 [features]
-default = ["simulate"]
-simulate = ["dep:tokio"]
+default = ["simulate", "timeline"]
+simulate = ["dep:tokio", "clawdstrike/full"]
+timeline = ["dep:hunt-query"]
 
 [dependencies]
 serde.workspace = true
 serde_json.workspace = true
 serde_yaml.workspace = true
 chrono.workspace = true
-clawdstrike = { workspace = true, features = ["full"] }
+clawdstrike = { workspace = true, default-features = false, features = ["policy-event"] }
 clawdstrike-ocsf.workspace = true
-hunt-query.workspace = true
+hunt-query = { workspace = true, optional = true }
 uuid.workspace = true
 anyhow.workspace = true
 base64.workspace = true

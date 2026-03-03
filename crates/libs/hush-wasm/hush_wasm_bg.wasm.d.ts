@@ -4,6 +4,7 @@ export const memory: WebAssembly.Memory;
 export const __wbg_wasminstructionhierarchyenforcer_free: (a: number, b: number) => void;
 export const __wbg_wasmjailbreakdetector_free: (a: number, b: number) => void;
 export const __wbg_wasmoutputsanitizer_free: (a: number, b: number) => void;
+export const __wbg_wasmpolicylab_free: (a: number, b: number) => void;
 export const canonicalize_json: (a: number, b: number) => [number, number, number, number];
 export const compute_merkle_root: (a: number, b: number) => [number, number, number, number];
 export const detect_prompt_injection: (a: number, b: number, c: number) => [number, number, number, number];
@@ -16,6 +17,9 @@ export const hash_receipt: (a: number, b: number, c: number, d: number) => [numb
 export const hash_sha256: (a: number, b: number) => [number, number];
 export const hash_sha256_bytes: (a: number, b: number) => [number, number];
 export const hash_sha256_prefixed: (a: number, b: number) => [number, number];
+export const policy_lab_synth: (a: number, b: number) => [number, number, number, number];
+export const policy_lab_to_ocsf: (a: number, b: number) => [number, number, number, number];
+export const policy_lab_to_timeline: (a: number, b: number) => [number, number, number, number];
 export const public_key_from_private: (a: number, b: number) => [number, number, number, number];
 export const sign_ed25519: (a: number, b: number, c: number, d: number) => [number, number, number, number];
 export const verify_ed25519: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number];
@@ -28,6 +32,7 @@ export const wasmjailbreakdetector_detect: (a: number, b: number, c: number, d: 
 export const wasmjailbreakdetector_new: (a: number, b: number) => [number, number, number];
 export const wasmoutputsanitizer_new: (a: number, b: number) => [number, number, number];
 export const wasmoutputsanitizer_sanitize: (a: number, b: number, c: number) => [number, number, number, number];
+export const wasmpolicylab_new: (a: number, b: number) => [number, number, number];
 export const init: () => void;
 export const __wbindgen_malloc: (a: number, b: number) => number;
 export const __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;

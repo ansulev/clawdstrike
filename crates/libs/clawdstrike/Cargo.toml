@@ -74,10 +74,20 @@ harness = false
 
 [features]
 default = ["full"]
+spine = ["dep:spine"]
+policy-event = [
+  "dep:async-trait",
+  "dep:hush-proxy",
+  "dep:serde_yaml",
+  "dep:toml",
+  "dep:glob",
+  "dep:chrono",
+  "dep:globset",
+]
 full = [
-  "dep:async-trait", "dep:hush-proxy", "dep:spine", "dep:tokio",
-  "dep:dirs", "dep:serde_yaml", "dep:toml", "dep:glob",
-  "dep:chrono", "dep:globset", "dep:dashmap", "dep:futures", "dep:uuid",
+  "policy-event",
+  "spine",
+  "dep:tokio", "dep:dirs", "dep:dashmap", "dep:futures", "dep:uuid",
   "dep:reqwest", "dep:sha2", "dep:semver", "dep:pubgrub", "dep:tar", "dep:zstd",
 ]
 ipfs = ["full"]

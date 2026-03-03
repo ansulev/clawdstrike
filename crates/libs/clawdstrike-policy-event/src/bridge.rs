@@ -94,6 +94,13 @@ fn verdict_from_metadata(metadata: Option<&serde_json::Value>) -> NormalizedVerd
         },
         // Object form: {"allowed": false, "guard": "..."} — decode the boolean
         Some(serde_json::Value::Object(decision_obj)) => {
+            if decision_obj
+                .get("warn")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false)
+            {
+                return NormalizedVerdict::Warn;
+            }
             match decision_obj.get("allowed").and_then(|v| v.as_bool()) {
                 Some(true) => NormalizedVerdict::Allow,
                 Some(false) => NormalizedVerdict::Deny,
@@ -113,6 +120,14 @@ fn extract_severity(metadata: Option<&serde_json::Value>) -> Option<String> {
     obj.get("severity")
         .and_then(|v| v.as_str())
         .map(|s| s.to_string())
+        .or_else(|| {
+            obj.get("decision")
+                .or_else(|| obj.get("verdict"))
+                .and_then(|v| v.as_object())
+                .and_then(|d| d.get("severity"))
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string())
+        })
 }
 
 #[cfg(test)]
@@ -278,10 +293,26 @@ mod tests {
     }
 
     #[test]
+    fn verdict_from_metadata_object_warn() {
+        let v = verdict_from_metadata(Some(&serde_json::json!({
+            "decision": { "allowed": true, "warn": true }
+        })));
+        assert_eq!(v, NormalizedVerdict::Warn);
+    }
+
+    #[test]
     fn verdict_from_metadata_object_missing_allowed_field() {
         let v = verdict_from_metadata(Some(&serde_json::json!({
             "decision": { "guard": "SomeGuard" }
         })));
         assert_eq!(v, NormalizedVerdict::None);
+    }
+
+    #[test]
+    fn extract_severity_from_object_decision() {
+        let s = extract_severity(Some(&serde_json::json!({
+            "decision": { "severity": "high" }
+        })));
+        assert_eq!(s.as_deref(), Some("high"));
     }
 }

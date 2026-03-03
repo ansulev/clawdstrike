@@ -13,6 +13,8 @@ use crate::severity::map_severity;
 pub struct GuardResultInput<'a> {
     /// Whether the action was allowed.
     pub allowed: bool,
+    /// Whether this is a warning decision (non-blocking but logged).
+    pub is_warn: bool,
     /// Guard name that produced the result.
     pub guard: &'a str,
     /// Severity string (e.g., "info", "warning", "error", "critical").
@@ -36,19 +38,22 @@ pub struct GuardResultInput<'a> {
 pub fn guard_result_to_detection_finding(input: &GuardResultInput<'_>) -> DetectionFinding {
     let severity_id = map_severity(input.severity);
 
-    let action_id = if input.allowed {
+    // Warn outcomes are non-blocking and should be modeled as Allowed + Logged.
+    let action_id = if input.is_warn || input.allowed {
         ActionId::Allowed
     } else {
         ActionId::Denied
     };
 
-    let disposition_id = if input.allowed {
+    let disposition_id = if input.is_warn {
+        DispositionId::Logged
+    } else if input.allowed {
         DispositionId::Allowed
     } else {
         DispositionId::Blocked
     };
 
-    let status_id = if input.allowed {
+    let status_id = if input.is_warn || input.allowed {
         StatusId::Success
     } else {
         StatusId::Failure
@@ -99,6 +104,7 @@ mod tests {
     fn allowed_guard_result() {
         let input = GuardResultInput {
             allowed: true,
+            is_warn: false,
             guard: "EgressAllowlistGuard",
             severity: "info",
             message: "Allowed",
@@ -125,6 +131,7 @@ mod tests {
     fn denied_guard_result() {
         let input = GuardResultInput {
             allowed: false,
+            is_warn: false,
             guard: "ForbiddenPathGuard",
             severity: "critical",
             message: "Blocked /etc/shadow",
@@ -140,6 +147,31 @@ mod tests {
         assert_eq!(finding.disposition_id, DispositionId::Blocked.as_u8());
         assert_eq!(finding.status_id, StatusId::Failure.as_u8());
         assert_eq!(finding.severity_id, 5); // Critical = 5, NOT 6
+
+        let json = serde_json::to_value(&finding).unwrap();
+        let errors = validate_ocsf_json(&json);
+        assert!(errors.is_empty(), "validation errors: {:?}", errors);
+    }
+
+    #[test]
+    fn warn_guard_result() {
+        let input = GuardResultInput {
+            allowed: false,
+            is_warn: true,
+            guard: "ShellCommandGuard",
+            severity: "warning",
+            message: "Logged shell command",
+            time_ms: 1_709_366_400_000,
+            event_uid: "evt-003",
+            product_version: "0.1.3",
+            resource_name: Some("rm -rf /tmp"),
+            resource_type: Some("process"),
+        };
+
+        let finding = guard_result_to_detection_finding(&input);
+        assert_eq!(finding.action_id, ActionId::Allowed.as_u8());
+        assert_eq!(finding.disposition_id, DispositionId::Logged.as_u8());
+        assert_eq!(finding.status_id, StatusId::Success.as_u8());
 
         let json = serde_json::to_value(&finding).unwrap();
         let errors = validate_ocsf_json(&json);

@@ -3,6 +3,8 @@
 //! Dispatches based on the event kind/source to produce the correct OCSF class.
 
 use serde_json::Value;
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
 
 use crate::classes::detection_finding::DetectionFinding;
 use crate::classes::network_activity::NetworkActivity;
@@ -65,62 +67,219 @@ fn receipt_to_detection_finding(
     time_ms: i64,
     product_version: &str,
 ) -> Option<DetectionFinding> {
-    let decision = fact.get("decision").and_then(|v| v.as_str())?;
-    let guard_name = fact
-        .get("guard")
-        .and_then(|v| v.as_str())
-        .unwrap_or("unknown");
-    let severity_str = fact
-        .get("severity")
-        .and_then(|s| s.as_str())
-        .unwrap_or("info");
-
-    let decision_lower = decision.to_lowercase();
-    let decision_kind = match decision_lower.as_str() {
-        "allow" | "allowed" | "pass" | "passed" => ReceiptDecisionKind::Allow,
-        "deny" | "denied" | "block" | "blocked" => ReceiptDecisionKind::Deny,
-        "warn" | "warning" | "warned" => ReceiptDecisionKind::Warn,
-        // Unknown decision strings should not be coerced into denies.
-        _ => ReceiptDecisionKind::Unknown,
-    };
-
-    if matches!(decision_kind, ReceiptDecisionKind::Unknown) {
-        return None;
-    }
-
+    let (decision_kind, decision_label) = extract_receipt_decision(fact)?;
     let is_warn = matches!(decision_kind, ReceiptDecisionKind::Warn);
     let allowed = matches!(
         decision_kind,
         ReceiptDecisionKind::Allow | ReceiptDecisionKind::Warn
     );
+    let guard_name = extract_receipt_guard_name(fact).unwrap_or("unknown");
+    let severity_str = extract_receipt_severity(fact).unwrap_or("info");
+    let action_type = extract_receipt_action_type(fact).unwrap_or("unknown");
+    let resource_name = extract_receipt_target(fact);
+    let event_uid = extract_receipt_uid(fact, time_ms, guard_name, &decision_label);
 
     use crate::convert::from_guard_result::{guard_result_to_detection_finding, GuardResultInput};
 
-    let action_type = fact
-        .get("action_type")
-        .and_then(|v| v.as_str())
-        .unwrap_or("unknown");
-
     let input = GuardResultInput {
         allowed,
+        is_warn,
         guard: guard_name,
         severity: severity_str,
-        message: &format!("{guard_name} decision={decision}"),
+        message: &format!("{guard_name} decision={decision_label}"),
         time_ms,
-        event_uid: &format!("receipt-{time_ms}-{guard_name}"),
+        event_uid: &event_uid,
         product_version,
-        resource_name: fact.get("target").and_then(|v| v.as_str()),
+        resource_name,
         resource_type: Some(action_type),
     };
 
-    let mut finding = guard_result_to_detection_finding(&input);
+    Some(guard_result_to_detection_finding(&input))
+}
 
-    // Warn decisions are non-blocking but should be logged, not marked as allowed.
-    if is_warn {
-        finding.disposition_id = crate::base::DispositionId::Logged.as_u8();
+fn extract_receipt_decision(fact: &Value) -> Option<(ReceiptDecisionKind, String)> {
+    let direct_decision = fact
+        .get("decision")
+        .and_then(|v| v.as_str())
+        .or_else(|| fact.get("verdict").and_then(|v| v.as_str()))
+        .or_else(|| {
+            fact.get("metadata")
+                .and_then(|v| v.as_object())
+                .and_then(|obj| {
+                    obj.get("decision")
+                        .and_then(|v| v.as_str())
+                        .or_else(|| obj.get("verdict").and_then(|v| v.as_str()))
+                })
+        });
+
+    if let Some(decision_str) = direct_decision {
+        let decision_kind = parse_receipt_decision(decision_str);
+        if !matches!(decision_kind, ReceiptDecisionKind::Unknown) {
+            return Some((decision_kind, decision_str.to_string()));
+        }
     }
 
-    Some(finding)
+    let decision_obj = decision_object_from_fact(fact)?;
+    if decision_obj
+        .get("warn")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false)
+    {
+        return Some((ReceiptDecisionKind::Warn, "warn".to_string()));
+    }
+
+    let allowed = decision_obj.get("allowed").and_then(|v| v.as_bool())?;
+    Some((
+        if allowed {
+            ReceiptDecisionKind::Allow
+        } else {
+            ReceiptDecisionKind::Deny
+        },
+        if allowed {
+            "allow".to_string()
+        } else {
+            "deny".to_string()
+        },
+    ))
+}
+
+fn parse_receipt_decision(decision: &str) -> ReceiptDecisionKind {
+    match decision.to_lowercase().as_str() {
+        "allow" | "allowed" | "pass" | "passed" => ReceiptDecisionKind::Allow,
+        "deny" | "denied" | "block" | "blocked" => ReceiptDecisionKind::Deny,
+        "warn" | "warning" | "warned" | "logged" => ReceiptDecisionKind::Warn,
+        _ => ReceiptDecisionKind::Unknown,
+    }
+}
+
+fn extract_receipt_guard_name(fact: &Value) -> Option<&str> {
+    fact.get("guard").and_then(|v| v.as_str()).or_else(|| {
+        decision_object_from_fact(fact)?
+            .get("guard")
+            .and_then(|v| v.as_str())
+    })
+}
+
+fn extract_receipt_severity(fact: &Value) -> Option<&str> {
+    fact.get("severity")
+        .and_then(|v| v.as_str())
+        .or_else(|| {
+            fact.get("metadata")
+                .and_then(|v| v.as_object())
+                .and_then(|obj| obj.get("severity"))
+                .and_then(|v| v.as_str())
+        })
+        .or_else(|| {
+            decision_object_from_fact(fact)?
+                .get("severity")
+                .and_then(|v| v.as_str())
+        })
+}
+
+fn extract_receipt_action_type(fact: &Value) -> Option<&str> {
+    fact.get("action_type")
+        .and_then(|v| v.as_str())
+        .or_else(|| fact.get("actionType").and_then(|v| v.as_str()))
+        .or_else(|| {
+            fact.get("eventType")
+                .and_then(|v| v.as_str())
+                .or_else(|| fact.get("event_type").and_then(|v| v.as_str()))
+                .and_then(map_policy_event_type_to_resource_type)
+        })
+        .or_else(|| {
+            fact.get("data")
+                .and_then(|v| v.get("type"))
+                .and_then(|v| v.as_str())
+        })
+}
+
+fn extract_receipt_target(fact: &Value) -> Option<&str> {
+    fact.get("target")
+        .and_then(|v| v.as_str())
+        .or_else(|| fact.get("resource").and_then(|v| v.as_str()))
+        .or_else(|| {
+            fact.get("data")
+                .and_then(|v| v.get("path"))
+                .and_then(|v| v.as_str())
+        })
+        .or_else(|| {
+            fact.get("data")
+                .and_then(|v| v.get("host"))
+                .and_then(|v| v.as_str())
+        })
+        .or_else(|| {
+            fact.get("data")
+                .and_then(|v| v.get("command"))
+                .and_then(|v| v.as_str())
+        })
+        .or_else(|| {
+            fact.get("data")
+                .and_then(|v| v.get("toolName"))
+                .and_then(|v| v.as_str())
+                .or_else(|| {
+                    fact.get("data")
+                        .and_then(|v| v.get("tool_name"))
+                        .and_then(|v| v.as_str())
+                })
+        })
+        .or_else(|| {
+            fact.get("data")
+                .and_then(|v| v.get("secretName"))
+                .and_then(|v| v.as_str())
+                .or_else(|| {
+                    fact.get("data")
+                        .and_then(|v| v.get("secret_name"))
+                        .and_then(|v| v.as_str())
+                })
+        })
+}
+
+fn extract_receipt_uid(
+    fact: &Value,
+    time_ms: i64,
+    guard_name: &str,
+    decision_label: &str,
+) -> String {
+    if let Some(event_id) = fact
+        .get("eventId")
+        .and_then(|v| v.as_str())
+        .or_else(|| fact.get("event_id").and_then(|v| v.as_str()))
+        .or_else(|| fact.get("id").and_then(|v| v.as_str()))
+        .or_else(|| fact.get("uid").and_then(|v| v.as_str()))
+    {
+        return format!("receipt-{event_id}");
+    }
+
+    let mut hasher = DefaultHasher::new();
+    fact.to_string().hash(&mut hasher);
+    let fingerprint = hasher.finish();
+    format!("receipt-{time_ms}-{guard_name}-{decision_label}-{fingerprint:016x}")
+}
+
+fn decision_object_from_fact(fact: &Value) -> Option<&serde_json::Map<String, Value>> {
+    fact.get("decision")
+        .and_then(|v| v.as_object())
+        .or_else(|| fact.get("verdict").and_then(|v| v.as_object()))
+        .or_else(|| {
+            fact.get("metadata")
+                .and_then(|v| v.as_object())
+                .and_then(|obj| {
+                    obj.get("decision")
+                        .and_then(|v| v.as_object())
+                        .or_else(|| obj.get("verdict").and_then(|v| v.as_object()))
+                })
+        })
+}
+
+fn map_policy_event_type_to_resource_type(event_type: &str) -> Option<&'static str> {
+    match event_type {
+        "file_read" | "file_write" | "patch_apply" => Some("file"),
+        "network_egress" => Some("network"),
+        "command_exec" => Some("process"),
+        "tool_call" => Some("tool"),
+        "secret_access" => Some("configuration"),
+        _ => None,
+    }
 }
 
 enum ReceiptDecisionKind {
@@ -348,6 +507,105 @@ mod tests {
         } else {
             panic!("expected Detection");
         }
+    }
+
+    #[test]
+    fn bridged_policy_event_receipt_is_parsed() {
+        let raw = json!({
+            "eventId": "evt-bridge-1",
+            "eventType": "file_read",
+            "data": {
+                "type": "file",
+                "path": "/etc/shadow"
+            },
+            "metadata": {
+                "decision": {
+                    "allowed": false,
+                    "guard": "ForbiddenPathGuard",
+                    "severity": "critical",
+                    "message": "Blocked /etc/shadow"
+                }
+            }
+        });
+
+        let input = TimelineEventInput {
+            kind: "guard_decision",
+            source: "receipt",
+            time_ms: 1_709_366_400_000,
+            raw: &raw,
+            product_version: "0.1.3",
+        };
+
+        let event = timeline_event_to_ocsf(&input).unwrap();
+        if let TimelineOcsfEvent::Detection(df) = event {
+            assert_eq!(df.action_id, 2); // Denied
+            assert_eq!(df.disposition_id, 2); // Blocked
+            assert_eq!(df.severity_id, 5); // Critical
+            assert_eq!(df.finding_info.uid, "receipt-evt-bridge-1");
+            assert_eq!(df.finding_info.analytic.name, "ForbiddenPathGuard");
+            assert_eq!(
+                df.finding_info.desc.as_deref(),
+                Some("ForbiddenPathGuard decision=deny")
+            );
+        } else {
+            panic!("expected Detection");
+        }
+    }
+
+    #[test]
+    fn receipt_uid_uses_source_event_id_when_present() {
+        let raw1 = json!({
+            "eventId": "evt-bridge-uid-1",
+            "eventType": "file_read",
+            "data": { "type": "file", "path": "/tmp/a" },
+            "metadata": {
+                "decision": {
+                    "allowed": false,
+                    "guard": "ForbiddenPathGuard",
+                    "severity": "high"
+                }
+            }
+        });
+        let raw2 = json!({
+            "eventId": "evt-bridge-uid-2",
+            "eventType": "file_read",
+            "data": { "type": "file", "path": "/tmp/b" },
+            "metadata": {
+                "decision": {
+                    "allowed": false,
+                    "guard": "ForbiddenPathGuard",
+                    "severity": "high"
+                }
+            }
+        });
+
+        let input1 = TimelineEventInput {
+            kind: "guard_decision",
+            source: "receipt",
+            time_ms: 1_709_366_400_000,
+            raw: &raw1,
+            product_version: "0.1.3",
+        };
+        let input2 = TimelineEventInput {
+            kind: "guard_decision",
+            source: "receipt",
+            time_ms: 1_709_366_400_000,
+            raw: &raw2,
+            product_version: "0.1.3",
+        };
+
+        let uid1 = match timeline_event_to_ocsf(&input1).unwrap() {
+            TimelineOcsfEvent::Detection(df) => df.finding_info.uid,
+            _ => panic!("expected Detection"),
+        };
+        let uid2 = match timeline_event_to_ocsf(&input2).unwrap() {
+            TimelineOcsfEvent::Detection(df) => df.finding_info.uid,
+            _ => panic!("expected Detection"),
+        };
+
+        assert_eq!(uid1, "receipt-evt-bridge-uid-1");
+        assert_eq!(uid2, "receipt-evt-bridge-uid-2");
+        assert_ne!(uid1, uid2);
     }
 
     #[test]

@@ -332,7 +332,7 @@ async fn run_stdio_session(
             "capabilities": {},
             "clientInfo": {
                 "name": "clawdstrike",
-                "version": "0.1.3"
+                "version": "0.2.0"
             }
         })),
     );
@@ -503,7 +503,7 @@ async fn introspect_http(
             "capabilities": {},
             "clientInfo": {
                 "name": "clawdstrike",
-                "version": "0.1.3"
+                "version": "0.2.0"
             }
         })),
     );

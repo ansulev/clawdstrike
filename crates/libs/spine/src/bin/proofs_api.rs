@@ -221,6 +221,31 @@ fn tree_size_to_usize(tree_size: u64) -> Result<usize, ApiError> {
     usize::try_from(tree_size).map_err(|_| ApiError::internal("requested tree_size too large"))
 }
 
+fn chain_violation_scan_window(
+    message_count: u64,
+    first_sequence: u64,
+    last_sequence: u64,
+    scan_cap: u64,
+) -> Result<Option<(bool, u64, u64, usize)>, ApiError> {
+    if message_count == 0 {
+        return Ok(None);
+    }
+
+    let truncated = message_count > scan_cap;
+    let desired_span = if truncated { scan_cap } else { message_count };
+    let start_seq = last_sequence
+        .saturating_sub(desired_span.saturating_sub(1))
+        .max(first_sequence);
+    let end_seq = last_sequence;
+    let expected_u64 = end_seq
+        .checked_sub(start_seq)
+        .and_then(|v| v.checked_add(1))
+        .ok_or_else(|| ApiError::internal("invalid chain violation sequence window"))?;
+    let expected = usize::try_from(expected_u64)
+        .map_err(|_| ApiError::internal("chain violation scan window too large"))?;
+    Ok(Some((truncated, start_seq, end_seq, expected)))
+}
+
 async fn get_checkpoint_value(state: &AppState, key: &str) -> Result<Value, ApiError> {
     let bytes = state
         .checkpoint_kv
@@ -630,8 +655,13 @@ async fn v1_chain_violation_stats(
         .info()
         .await
         .map_err(|_| ApiError::internal("failed to read chain violation stream info"))?;
-    let total_messages = stream_info.state.messages;
-    if total_messages == 0 {
+    let Some((truncated, start_seq, end_seq, expected)) = chain_violation_scan_window(
+        stream_info.state.messages,
+        stream_info.state.first_sequence,
+        stream_info.state.last_sequence,
+        scan_cap_u64,
+    )?
+    else {
         return Ok(Json(json!({
             "schema": "clawdstrike.spine.query.chain_violation_stats.v1",
             "total_events_scanned": 0,
@@ -643,17 +673,7 @@ async fn v1_chain_violation_stats(
             "top_issuers": [],
             "latest_violation_at": Value::Null
         })));
-    }
-
-    let truncated = total_messages > scan_cap_u64;
-    let start_seq = if truncated {
-        total_messages - scan_cap_u64 + 1
-    } else {
-        1
     };
-    let end_seq = total_messages;
-    let expected = usize::try_from(end_seq - start_seq + 1)
-        .map_err(|_| ApiError::internal("scan range too large"))?;
 
     let consumer = stream
         .create_consumer(async_nats::jetstream::consumer::pull::Config {
@@ -1178,6 +1198,28 @@ mod tests {
         }
         assert!(!truncated);
         assert!(selected.is_empty());
+    }
+
+    #[test]
+    fn chain_violation_scan_window_uses_last_sequence_window() {
+        let window = chain_violation_scan_window(10, 41, 50, 100).unwrap();
+        assert!(window.is_some());
+        let (truncated, start, end, expected) = window.unwrap_or((false, 0, 0, 0));
+        assert!(!truncated);
+        assert_eq!(start, 41);
+        assert_eq!(end, 50);
+        assert_eq!(expected, 10);
+    }
+
+    #[test]
+    fn chain_violation_scan_window_clamps_start_to_first_sequence() {
+        let window = chain_violation_scan_window(100, 995, 1000, 20).unwrap();
+        assert!(window.is_some());
+        let (truncated, start, end, expected) = window.unwrap_or((false, 0, 0, 0));
+        assert!(truncated);
+        assert_eq!(start, 995);
+        assert_eq!(end, 1000);
+        assert_eq!(expected, 6);
     }
 
     #[test]

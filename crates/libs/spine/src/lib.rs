@@ -61,3 +61,11 @@ pub fn normalize_seed_hex(seed: &str) -> String {
         .unwrap_or(trimmed)
         .to_string()
 }
+
+/// Shared max batch size for JetStream leaf fetch loops.
+pub const LEAF_FETCH_BATCH_SIZE: usize = 512;
+
+/// Compute the next fetch size bounded by [`LEAF_FETCH_BATCH_SIZE`].
+pub fn next_leaf_batch_size(remaining: usize) -> usize {
+    remaining.min(LEAF_FETCH_BATCH_SIZE)
+}

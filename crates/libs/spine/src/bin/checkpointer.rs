@@ -20,13 +20,12 @@ use tracing_subscriber::{fmt, EnvFilter};
 use async_nats::jetstream::context::Publish;
 use hush_core::{sha256_hex, Hash, Keypair, MerkleTree, PublicKey, Signature};
 use spine::{
-    chain_head_from_envelope, checkpoint, nats_transport as nats, verify_chain_link,
-    ChainLinkVerdict, IssuerChainHead, TrustBundle,
+    chain_head_from_envelope, checkpoint, nats_transport as nats, next_leaf_batch_size,
+    verify_chain_link, ChainLinkVerdict, IssuerChainHead, TrustBundle,
 };
 
 const INGEST_RETRY_ATTEMPTS: usize = 4;
 const INGEST_RETRY_BASE_BACKOFF_MS: u64 = 100;
-const LEAF_FETCH_BATCH_SIZE: usize = 512;
 const CHAIN_VIOLATION_SCHEMA: &str = "clawdstrike.spine.event.chain_violation.v1";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
@@ -184,10 +183,6 @@ fn is_safe_index_key_token(s: &str, max_len: usize) -> bool {
 
 fn normalize_issuer_id(issuer: &str) -> String {
     issuer.to_ascii_lowercase()
-}
-
-fn next_leaf_batch_size(remaining: usize) -> usize {
-    remaining.min(LEAF_FETCH_BATCH_SIZE)
 }
 
 fn issuer_heads_kv_key(issuer: &str) -> String {
@@ -1555,32 +1550,32 @@ async fn main() -> Result<()> {
                         enforcement = %args.chain_enforcement,
                         "chain integrity violation detected"
                     );
+                    let publish_result = run_with_retries(
+                        &retry_policy,
+                        "publish_chain_violation",
+                        &envelope_hash_hex,
+                        || async {
+                            publish_chain_violation_event(
+                                &js,
+                                &args.chain_violation_subject,
+                                &envelope,
+                                &envelope_hash_hex,
+                                &envelope_issuer,
+                                &chain_verdict,
+                                &args.chain_enforcement,
+                            )
+                            .await
+                        },
+                    )
+                    .await;
+                    if let Err(err) = publish_result {
+                        warn!(
+                            issuer = %envelope_issuer,
+                            envelope_hash = %envelope_hash_hex,
+                            "failed to publish chain violation event: {err:#}"
+                        );
+                    }
                     if chain_strict {
-                        let publish_result = run_with_retries(
-                            &retry_policy,
-                            "publish_chain_violation",
-                            &envelope_hash_hex,
-                            || async {
-                                publish_chain_violation_event(
-                                    &js,
-                                    &args.chain_violation_subject,
-                                    &envelope,
-                                    &envelope_hash_hex,
-                                    &envelope_issuer,
-                                    &chain_verdict,
-                                    &args.chain_enforcement,
-                                )
-                                .await
-                            },
-                        )
-                        .await;
-                        if let Err(err) = publish_result {
-                            warn!(
-                                issuer = %envelope_issuer,
-                                envelope_hash = %envelope_hash_hex,
-                                "failed to publish strict-mode chain violation event: {err:#}"
-                            );
-                        }
                         continue;
                     }
                     // warn mode: update head anyway (self-heal on first deploy)

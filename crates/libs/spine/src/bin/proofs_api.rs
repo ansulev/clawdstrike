@@ -25,7 +25,7 @@ use tracing::{info, warn};
 use tracing_subscriber::{fmt, EnvFilter};
 
 use hush_core::{Hash, MerkleTree};
-use spine::{hash, nats_transport as nats};
+use spine::{hash, nats_transport as nats, next_leaf_batch_size};
 
 #[derive(Parser, Debug)]
 #[command(name = "spine-proofs-api")]
@@ -312,12 +312,6 @@ async fn load_leaves_for_tree_range(
     }
 
     Ok(leaves)
-}
-
-const LEAF_FETCH_BATCH_SIZE: usize = 512;
-
-fn next_leaf_batch_size(remaining: usize) -> usize {
-    remaining.min(LEAF_FETCH_BATCH_SIZE)
 }
 
 async fn healthz() -> &'static str {

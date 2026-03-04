@@ -238,6 +238,22 @@ fn handle_list_tools() -> JsonRpcResponse {
                     "type": "object",
                     "description": "Optional args (used for mcp_tool).",
                     "additionalProperties": true
+                },
+                "agent_id": {
+                    "type": "string",
+                    "description": "Optional legacy endpoint agent ID override."
+                },
+                "endpoint_agent_id": {
+                    "type": "string",
+                    "description": "Optional canonical endpoint agent ID override."
+                },
+                "runtime_agent_id": {
+                    "type": "string",
+                    "description": "Optional AI runtime agent identifier."
+                },
+                "runtime_agent_kind": {
+                    "type": "string",
+                    "description": "Optional runtime kind (openclaw, claude_code, mcp, unknown)."
                 }
             },
             "required": ["action_type", "target"]
@@ -278,7 +294,7 @@ async fn handle_call_tool(state: &McpState, params: Option<serde_json::Value>) -
 
     match tool_name {
         "policy_check" => {
-            let check_params: PolicyCheckInput = match serde_json::from_value(arguments) {
+            let mut check_params: PolicyCheckInput = match serde_json::from_value(arguments) {
                 Ok(p) => p,
                 Err(e) => {
                     return JsonRpcResponse {
@@ -293,6 +309,12 @@ async fn handle_call_tool(state: &McpState, params: Option<serde_json::Value>) -
                     };
                 }
             };
+            if check_params.runtime_agent_kind.is_none() {
+                check_params.runtime_agent_kind = Some("mcp".to_string());
+            }
+            if check_params.runtime_agent_id.is_none() {
+                check_params.runtime_agent_id = Some("mcp-local".to_string());
+            }
 
             let session_id = state.session_manager.session_id().await;
             let result = evaluate_policy_check(
@@ -300,6 +322,7 @@ async fn handle_call_tool(state: &McpState, params: Option<serde_json::Value>) -
                 &state.http_client,
                 check_params,
                 session_id,
+                None,
             )
             .await;
 
@@ -419,6 +442,10 @@ mod tests {
             target: "run_command".to_string(),
             content: None,
             args: Some(args),
+            agent_id: None,
+            endpoint_agent_id: None,
+            runtime_agent_id: None,
+            runtime_agent_kind: None,
         };
         assert!(input.args.as_ref().is_some_and(|m| m.contains_key("flag")));
     }

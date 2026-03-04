@@ -9,7 +9,7 @@ use axum::{
 use serde::{Deserialize, Serialize};
 
 use crate::api::v1::V1Error;
-use crate::audit::{AuditError, AuditEvent, AuditFilter, ExportFormat};
+use crate::audit::{serialize_events, AuditError, AuditEvent, AuditFilter, ExportFormat};
 use crate::auth::{AuthenticatedActor, Scope};
 use crate::authz::require_api_key_scope_or_user_permission;
 use crate::rbac::{Action, ResourceType};
@@ -215,16 +215,8 @@ pub async fn query_audit(
         decision: query.decision,
         session_id: query.session_id,
         agent_id: query.agent_id,
-        limit: if use_runtime_filters || query.cursor.is_some() {
-            None
-        } else {
-            Some(limit)
-        },
-        offset: if use_runtime_filters || query.cursor.is_some() {
-            None
-        } else {
-            Some(offset)
-        },
+        limit: Some(limit),
+        offset: Some(offset),
         ..Default::default()
     };
 
@@ -249,11 +241,33 @@ pub async fn query_audit(
             _ => ExportFormat::Json,
         };
 
-        let data = state
-            .ledger
-            .export_async(filter, format.clone())
-            .await
-            .map_err(|e| V1Error::internal("AUDIT_EXPORT_ERROR", e.to_string()))?;
+        let export_filter = AuditFilter {
+            limit: None,
+            offset: None,
+            ..filter.clone()
+        };
+        let data = if use_runtime_filters {
+            let mut events = state
+                .ledger
+                .query_async(export_filter)
+                .await
+                .map_err(|e| V1Error::internal("AUDIT_EXPORT_ERROR", e.to_string()))?;
+            events.retain(|event| {
+                matches_runtime_filters(
+                    event,
+                    runtime_agent_id.as_deref(),
+                    runtime_agent_kind.as_deref(),
+                )
+            });
+            serialize_events(&events, &format)
+                .map_err(|e| V1Error::internal("AUDIT_EXPORT_ERROR", e.to_string()))?
+        } else {
+            state
+                .ledger
+                .export_async(export_filter, format.clone())
+                .await
+                .map_err(|e| V1Error::internal("AUDIT_EXPORT_ERROR", e.to_string()))?
+        };
 
         let content_type = match format {
             ExportFormat::Csv => "text/csv",
@@ -272,7 +286,7 @@ pub async fn query_audit(
         Action::Read,
     )?;
 
-    let (events, total) = if use_runtime_filters || query.cursor.is_some() {
+    let (events, total) = if use_runtime_filters {
         let mut all = state
             .ledger
             .query_async(AuditFilter {
@@ -282,16 +296,13 @@ pub async fn query_audit(
             })
             .await
             .map_err(|e| V1Error::internal("AUDIT_QUERY_ERROR", e.to_string()))?;
-
-        if use_runtime_filters {
-            all.retain(|event| {
-                matches_runtime_filters(
-                    event,
-                    runtime_agent_id.as_deref(),
-                    runtime_agent_kind.as_deref(),
-                )
-            });
-        }
+        all.retain(|event| {
+            matches_runtime_filters(
+                event,
+                runtime_agent_id.as_deref(),
+                runtime_agent_kind.as_deref(),
+            )
+        });
         let total = all.len();
         let page = all.into_iter().skip(offset).take(limit).collect::<Vec<_>>();
         (page, total)

@@ -30,7 +30,7 @@ Notes:
 Remote `extends` is disabled by default and must be explicitly allowlisted.
 
 - `hushd`: configure `remote_extends.allowed_hosts`
-- CLI: pass `--remote-extends-allow-host` (repeatable)
+- CLI (`clawdstrike` / `hush` alias): pass `--remote-extends-allow-host` (repeatable)
 
 Integrity pinning and resolver hardening:
 

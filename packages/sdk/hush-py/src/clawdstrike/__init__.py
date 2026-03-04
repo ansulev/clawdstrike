@@ -87,7 +87,7 @@ from clawdstrike.receipt import (
 )
 from clawdstrike.types import Decision, DecisionStatus, SessionOptions, SessionSummary
 
-__version__ = "0.2.3"
+__version__ = "0.2.4"
 
 __all__ = [
     "__version__",

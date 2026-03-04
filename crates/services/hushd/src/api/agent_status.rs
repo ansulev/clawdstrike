@@ -7,6 +7,9 @@ use rusqlite::params;
 use serde::{Deserialize, Serialize};
 
 use crate::api::v1::V1Error;
+use crate::auth::{AuthenticatedActor, Scope};
+use crate::authz::require_api_key_scope_or_user_permission;
+use crate::rbac::{Action, ResourceType};
 use crate::state::{AppState, DaemonEvent};
 
 const DEFAULT_STATUS_LIMIT: usize = 200;
@@ -127,12 +130,25 @@ fn seconds_since_heartbeat(last_heartbeat_at: &str) -> i64 {
     (Utc::now() - parsed).num_seconds().max(0)
 }
 
+fn require_service_principal(actor: Option<&AuthenticatedActor>) -> Result<(), V1Error> {
+    if matches!(actor, Some(AuthenticatedActor::User(_))) {
+        return Err(V1Error::forbidden(
+            "SERVICE_PRINCIPAL_REQUIRED",
+            "service_principal_required",
+        ));
+    }
+    Ok(())
+}
+
 /// POST /api/v1/agent/heartbeat
 pub async fn ingest_agent_heartbeat(
     State(state): State<AppState>,
     ConnectInfo(addr): ConnectInfo<std::net::SocketAddr>,
+    actor: Option<axum::extract::Extension<AuthenticatedActor>>,
     Json(request): Json<AgentHeartbeatRequest>,
 ) -> Result<Json<AgentHeartbeatResponse>, V1Error> {
+    require_service_principal(actor.as_ref().map(|e| &e.0))?;
+
     let endpoint_agent_id =
         normalized_opt(Some(request.endpoint_agent_id.as_str())).ok_or_else(|| {
             V1Error::bad_request(
@@ -320,7 +336,16 @@ pub async fn ingest_agent_heartbeat(
 pub async fn list_agent_status(
     State(state): State<AppState>,
     Query(query): Query<AgentStatusQuery>,
+    actor: Option<axum::extract::Extension<AuthenticatedActor>>,
 ) -> Result<Json<AgentStatusResponse>, V1Error> {
+    require_api_key_scope_or_user_permission(
+        actor.as_ref().map(|e| &e.0),
+        &state.rbac,
+        Scope::Read,
+        ResourceType::AuditLog,
+        Action::Read,
+    )?;
+
     let limit = query
         .limit
         .unwrap_or(DEFAULT_STATUS_LIMIT)

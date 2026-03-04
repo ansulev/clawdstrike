@@ -147,8 +147,12 @@ export function AgentExplorer(_props: { windowId?: string }) {
     () => endpoints.reduce((sum, endpoint) => sum + endpoint.unattributedRuntimeEvents, 0),
     [endpoints],
   );
-  const onlineEndpoints = liveness?.endpoints.filter((endpoint) => endpoint.online).length ?? 0;
-  const onlineRuntimes = liveness?.runtimes.filter((runtime) => runtime.online).length ?? 0;
+  const onlineEndpoints = (Array.isArray(liveness?.endpoints) ? liveness.endpoints : []).filter(
+    (endpoint) => endpoint.online,
+  ).length;
+  const onlineRuntimes = (Array.isArray(liveness?.runtimes) ? liveness.runtimes : []).filter(
+    (runtime) => runtime.online,
+  ).length;
 
   const selectedSessionDrilldown = useMemo(() => {
     if (!selectedSession) return null;

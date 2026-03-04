@@ -241,7 +241,6 @@ pub async fn evaluate_policy_check(
         "content": input.content,
         "args": input.args,
         "endpoint_agent_id": endpoint_agent_id.clone(),
-        "agent_id": endpoint_agent_id.clone(),
     });
     if let Some(sid) = session_id.clone() {
         body["session_id"] = serde_json::Value::String(sid);

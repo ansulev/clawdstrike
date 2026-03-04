@@ -1,11 +1,11 @@
 //! System tray management for Clawdstrike Agent.
 
+use crate::agent_auth::ensure_local_api_token;
 use crate::daemon::DaemonState;
 use crate::decision::NormalizedDecision;
 use crate::events::PolicyEvent;
 use crate::notifications::show_notification;
 use crate::settings::Settings;
-use crate::AgentApiAuthToken;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -489,6 +489,16 @@ async fn build_dashboard_launch_target(
     })
 }
 
+fn load_current_local_api_token() -> Option<String> {
+    match ensure_local_api_token() {
+        Ok(token) => Some(token),
+        Err(err) => {
+            tracing::warn!(error = %err, "Failed to read current local API auth token");
+            None
+        }
+    }
+}
+
 fn is_legacy_local_dev_dashboard_url(candidate: &str) -> bool {
     let parsed = match reqwest::Url::parse(candidate) {
         Ok(url) => url,
@@ -755,9 +765,6 @@ fn handle_menu_event<R: Runtime>(app: &AppHandle<R>, event: MenuEvent) {
             let settings: Arc<RwLock<Settings>> =
                 app.state::<Arc<RwLock<Settings>>>().inner().clone();
             let app_handle = app.clone();
-            let auth_token = app
-                .try_state::<AgentApiAuthToken>()
-                .map(|state| state.inner().0.clone());
             tauri::async_runtime::spawn(async move {
                 let settings_snapshot = settings.read().await.clone();
                 let Some(url) = resolve_dashboard_url(&settings_snapshot).await else {
@@ -768,6 +775,7 @@ fn handle_menu_event<R: Runtime>(app: &AppHandle<R>, event: MenuEvent) {
                     tracing::warn!("Failed to build SIEM settings URL; refusing to open");
                     return;
                 };
+                let auth_token = load_current_local_api_token();
                 let Some(target) = build_dashboard_launch_target(
                     &raw_target,
                     &settings_snapshot,
@@ -791,9 +799,6 @@ fn handle_menu_event<R: Runtime>(app: &AppHandle<R>, event: MenuEvent) {
             let settings: Arc<RwLock<Settings>> =
                 app.state::<Arc<RwLock<Settings>>>().inner().clone();
             let app_handle = app.clone();
-            let auth_token = app
-                .try_state::<AgentApiAuthToken>()
-                .map(|state| state.inner().0.clone());
             tauri::async_runtime::spawn(async move {
                 let settings_snapshot = settings.read().await.clone();
                 let Some(url) = resolve_dashboard_url(&settings_snapshot).await else {
@@ -804,6 +809,7 @@ fn handle_menu_event<R: Runtime>(app: &AppHandle<R>, event: MenuEvent) {
                     tracing::warn!("Failed to build webhook settings URL; refusing to open");
                     return;
                 };
+                let auth_token = load_current_local_api_token();
                 let Some(target) = build_dashboard_launch_target(
                     &raw_target,
                     &settings_snapshot,
@@ -834,11 +840,9 @@ fn handle_menu_event<R: Runtime>(app: &AppHandle<R>, event: MenuEvent) {
             let settings: Arc<RwLock<Settings>> =
                 app.state::<Arc<RwLock<Settings>>>().inner().clone();
             let app_handle = app.clone();
-            let auth_token = app
-                .try_state::<AgentApiAuthToken>()
-                .map(|state| state.inner().0.clone());
             tauri::async_runtime::spawn(async move {
                 let settings_snapshot = settings.read().await.clone();
+                let auth_token = load_current_local_api_token();
                 let Some(token) = auth_token
                     .as_deref()
                     .map(str::trim)
@@ -955,11 +959,9 @@ fn handle_menu_event<R: Runtime>(app: &AppHandle<R>, event: MenuEvent) {
             let settings: Arc<RwLock<Settings>> =
                 app.state::<Arc<RwLock<Settings>>>().inner().clone();
             let app_handle = app.clone();
-            let auth_token = app
-                .try_state::<AgentApiAuthToken>()
-                .map(|state| state.inner().0.clone());
             tauri::async_runtime::spawn(async move {
                 let settings_snapshot = settings.read().await.clone();
+                let auth_token = load_current_local_api_token();
                 let Some(token) = auth_token
                     .as_deref()
                     .map(str::trim)
@@ -1000,15 +1002,13 @@ fn handle_menu_event<R: Runtime>(app: &AppHandle<R>, event: MenuEvent) {
             let settings: Arc<RwLock<Settings>> =
                 app.state::<Arc<RwLock<Settings>>>().inner().clone();
             let app_handle = app.clone();
-            let auth_token = app
-                .try_state::<AgentApiAuthToken>()
-                .map(|state| state.inner().0.clone());
             tauri::async_runtime::spawn(async move {
                 let settings_snapshot = settings.read().await.clone();
                 let Some(raw_url) = resolve_dashboard_url(&settings_snapshot).await else {
                     tracing::warn!("Dashboard URL is invalid; refusing to open Web UI");
                     return;
                 };
+                let auth_token = load_current_local_api_token();
                 let Some(target) = build_dashboard_launch_target(
                     &raw_url,
                     &settings_snapshot,

@@ -48,6 +48,7 @@ use notifications::{
 };
 use openclaw::OpenClawManager;
 use session::SessionManager;
+use runtime_registry::resolve_effective_endpoint_agent_id;
 use settings::{ensure_default_policy, NatsSettings, Settings};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -1093,25 +1094,19 @@ async fn local_heartbeat_loop(
             }
             _ = tokio::time::sleep(interval) => {
                 let (daemon_url, api_key, endpoint_agent_id, runtime_identities) = {
-                    let guard = settings.read().await;
-                    let endpoint_agent_id = guard
-                        .nats
-                        .agent_id
-                        .as_deref()
-                        .map(str::trim)
-                        .filter(|value| !value.is_empty())
-                        .map(ToString::to_string)
-                        .or_else(|| {
-                            guard.enrollment.agent_uuid.as_deref().map(str::trim).filter(|value| !value.is_empty()).map(ToString::to_string)
-                        })
-                        .or_else(|| {
-                            guard.local_agent_id.as_deref().map(str::trim).filter(|value| !value.is_empty()).map(ToString::to_string)
-                        })
-                        .unwrap_or_else(|| format!("endpoint-{}", settings::hostname_best_effort()));
+                    let mut guard = settings.write().await;
+                    let endpoint_agent_id =
+                        resolve_effective_endpoint_agent_id(&mut guard, None);
+                    let staleness_threshold = chrono::Utc::now() - chrono::Duration::minutes(5);
                     let runtime_identities = guard
                         .runtime_registry
                         .runtimes
                         .iter()
+                        .filter(|runtime| {
+                            chrono::DateTime::parse_from_rfc3339(&runtime.last_seen_at)
+                                .map(|ts| ts >= staleness_threshold)
+                                .unwrap_or(false)
+                        })
                         .map(|runtime| {
                             (
                                 runtime.runtime_agent_id.clone(),

@@ -219,8 +219,8 @@ impl EventEmitter {
 #[derive(Clone, Debug)]
 pub struct RunArgs {
     pub policy: String,
-    pub events_out: String,
-    pub receipt_out: String,
+    pub events_out: Option<String>,
+    pub receipt_out: Option<String>,
     pub signing_key: String,
     pub no_proxy: bool,
     pub proxy_port: u16,
@@ -282,6 +282,8 @@ pub async fn cmd_run(
     let engine = Arc::new(engine);
 
     let session_id = Uuid::new_v4().to_string();
+    let (events_out, receipt_out) =
+        default_run_artifact_paths(&session_id, events_out.as_deref(), receipt_out.as_deref());
 
     let base_context = GuardContext::new()
         .with_session_id(&session_id)
@@ -392,11 +394,13 @@ pub async fn cmd_run(
         Ok(status) => status,
         Err(e) => {
             let _ = writeln!(stderr, "Error: {}", e);
-            drop(event_emitter);
-            let _ = writer_handle.await;
+            // Abort proxy first so its task drops EventEmitter clones; otherwise
+            // waiting on writer_handle can block forever on channel close.
             if let Some(h) = proxy_handle {
                 h.abort();
             }
+            drop(event_emitter);
+            let _ = writer_handle.await;
             return ExitCode::RuntimeError.as_i32();
         }
     };
@@ -557,9 +561,11 @@ pub async fn cmd_run(
         }
     }
 
+    let events_abs = absolutize_output_path(Path::new(&events_out));
+    let receipt_abs = absolutize_output_path(&receipt_path);
     let _ = writeln!(stdout, "Session: {}", session_id);
-    let _ = writeln!(stdout, "Events: {}", Path::new(&events_out).display());
-    let _ = writeln!(stdout, "Receipt: {}", receipt_path.display());
+    let _ = writeln!(stdout, "Events: {}", events_abs.display());
+    let _ = writeln!(stdout, "Receipt: {}", receipt_abs.display());
     if let Some(url) = env_proxy_url.as_ref() {
         let _ = writeln!(stdout, "Proxy: {}", url);
     } else {
@@ -584,6 +590,30 @@ fn child_exit_code(status: std::process::ExitStatus) -> i32 {
     }
     // On Unix, a signal-terminated process yields None. Use a conventional non-zero value.
     1
+}
+
+fn default_run_artifact_paths(
+    session_id: &str,
+    events_out: Option<&str>,
+    receipt_out: Option<&str>,
+) -> (String, String) {
+    let events = events_out
+        .map(std::string::ToString::to_string)
+        .unwrap_or_else(|| format!("clawdstrike.events.{session_id}.jsonl"));
+    let receipt = receipt_out
+        .map(std::string::ToString::to_string)
+        .unwrap_or_else(|| format!("clawdstrike.run.receipt.{session_id}.json"));
+    (events, receipt)
+}
+
+fn absolutize_output_path(path: &Path) -> PathBuf {
+    if path.is_absolute() {
+        return path.to_path_buf();
+    }
+    match std::env::current_dir() {
+        Ok(cwd) => cwd.join(path),
+        Err(_) => path.to_path_buf(),
+    }
 }
 
 fn load_policy(
@@ -1658,6 +1688,82 @@ guards:
             queued += 1;
         }
         assert_eq!(queued, 2, "queue must stay bounded at channel capacity");
+    }
+
+    #[test]
+    fn absolutize_output_path_resolves_relative_paths() {
+        let rel = Path::new("clawdstrike.run.receipt.json");
+        let abs = absolutize_output_path(rel);
+        assert!(abs.is_absolute());
+        assert!(abs.ends_with(rel));
+    }
+
+    #[test]
+    fn default_run_artifact_paths_use_session_id_when_unspecified() {
+        let session_id = "sess-123";
+        let (events, receipt) = default_run_artifact_paths(session_id, None, None);
+        assert_eq!(events, "clawdstrike.events.sess-123.jsonl");
+        assert_eq!(receipt, "clawdstrike.run.receipt.sess-123.json");
+    }
+
+    #[test]
+    fn default_run_artifact_paths_preserve_explicit_values() {
+        let (events, receipt) = default_run_artifact_paths(
+            "sess-123",
+            Some("/tmp/custom.events.jsonl"),
+            Some("/tmp/custom.receipt.json"),
+        );
+        assert_eq!(events, "/tmp/custom.events.jsonl");
+        assert_eq!(receipt, "/tmp/custom.receipt.json");
+    }
+
+    #[tokio::test]
+    async fn cmd_run_spawn_failure_does_not_hang_with_proxy_enabled() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let policy_path = temp.path().join("policy.yaml");
+        std::fs::write(
+            &policy_path,
+            "version: \"1.1.0\"\nname: \"spawn-failure\"\n",
+        )
+        .expect("write policy");
+
+        let args = RunArgs {
+            policy: policy_path.display().to_string(),
+            events_out: Some(temp.path().join("events.jsonl").display().to_string()),
+            receipt_out: Some(temp.path().join("receipt.json").display().to_string()),
+            signing_key: temp.path().join("clawdstrike.key").display().to_string(),
+            no_proxy: false,
+            proxy_port: 0,
+            proxy_allow_private_ips: false,
+            sandbox: false,
+            hushd_url: None,
+            hushd_token: None,
+            command: vec!["echo ~/.ssh".to_string()],
+        };
+
+        let remote = crate::remote_extends::RemoteExtendsConfig::disabled();
+        let mut stdout = Vec::new();
+        let mut stderr = Vec::new();
+
+        let code = tokio::time::timeout(
+            Duration::from_secs(5),
+            cmd_run(args, &remote, &mut stdout, &mut stderr),
+        )
+        .await
+        .expect("cmd_run should return even when command spawn fails");
+
+        assert_eq!(code, ExitCode::RuntimeError.as_i32());
+        let stderr_text = String::from_utf8_lossy(&stderr);
+        assert!(
+            stderr_text.contains("Proxy listening on"),
+            "test requires proxy startup; stderr was:\n{}",
+            stderr_text
+        );
+        assert!(
+            stderr_text.contains("Error: spawn child process"),
+            "expected spawn failure in stderr; stderr was:\n{}",
+            stderr_text
+        );
     }
 
     #[tokio::test]

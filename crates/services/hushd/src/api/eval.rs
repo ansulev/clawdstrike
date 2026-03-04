@@ -137,11 +137,13 @@ fn extract_eval_identity(
     (endpoint_agent_id, runtime_agent_id, runtime_agent_kind)
 }
 
+type AgentIdentity = (Option<String>, Option<String>, Option<String>);
+
 fn validate_eval_identity(
     endpoint_agent_id: Option<String>,
     runtime_agent_id: Option<String>,
     runtime_agent_kind: Option<String>,
-) -> Result<(Option<String>, Option<String>, Option<String>), V1Error> {
+) -> Result<AgentIdentity, V1Error> {
     if runtime_agent_id.is_some() ^ runtime_agent_kind.is_some() {
         return Err(V1Error::bad_request(
             "INVALID_EVENT",

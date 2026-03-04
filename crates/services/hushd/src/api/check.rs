@@ -91,6 +91,8 @@ pub struct CheckRequest {
     pub runtime_agent_kind: Option<String>,
 }
 
+type AgentIdentity = (Option<String>, Option<String>, Option<String>);
+
 fn normalize_identity_component(value: Option<&str>) -> Option<String> {
     value
         .map(str::trim)
@@ -102,7 +104,7 @@ fn normalize_and_validate_agent_identity(
     endpoint_agent_id: Option<&str>,
     runtime_agent_id: Option<&str>,
     runtime_agent_kind: Option<&str>,
-) -> Result<(Option<String>, Option<String>, Option<String>), V1Error> {
+) -> Result<AgentIdentity, V1Error> {
     let endpoint_agent_id = normalize_identity_component(endpoint_agent_id);
     let runtime_agent_id = normalize_identity_component(runtime_agent_id);
     let runtime_agent_kind =

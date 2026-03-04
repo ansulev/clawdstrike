@@ -6,6 +6,7 @@ use crate::policy::{evaluate_policy_check, PolicyCheckInput};
 use crate::security::auth::constant_time_eq_token;
 use crate::session::SessionManager;
 use crate::settings::Settings;
+use crate::agent_auth::read_local_api_token;
 use anyhow::{Context, Result};
 use axum::extract::{DefaultBodyLimit, State};
 use axum::http::header::AUTHORIZATION;
@@ -190,8 +191,19 @@ fn mcp_authorized(headers: &HeaderMap, auth_token: &str) -> bool {
         .and_then(|value| value.strip_prefix("Bearer "))
         .map(str::trim);
 
+    let expected_token = match read_local_api_token() {
+        Ok(token) => token,
+        Err(err) => {
+            tracing::warn!(
+                error = %err,
+                "Falling back to startup MCP auth token because current token could not be read"
+            );
+            auth_token.to_string()
+        }
+    };
+
     match token {
-        Some(candidate) => constant_time_eq_token(candidate, auth_token),
+        Some(candidate) => constant_time_eq_token(candidate, &expected_token),
         None => false,
     }
 }
@@ -452,10 +464,11 @@ mod tests {
 
     #[test]
     fn mcp_requires_bearer_token() {
+        let expected_token = read_local_api_token().unwrap_or_else(|_| "secret-token".to_string());
         let mut headers = HeaderMap::new();
         headers.insert(
             AUTHORIZATION,
-            "Bearer secret-token"
+            format!("Bearer {}", expected_token)
                 .parse()
                 .unwrap_or_else(|err| panic!("failed to parse authorization header: {err}")),
         );

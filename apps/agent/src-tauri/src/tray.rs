@@ -1,6 +1,6 @@
 //! System tray management for Clawdstrike Agent.
 
-use crate::agent_auth::ensure_local_api_token;
+use crate::agent_auth::read_local_api_token;
 use crate::daemon::DaemonState;
 use crate::decision::NormalizedDecision;
 use crate::events::PolicyEvent;
@@ -490,7 +490,7 @@ async fn build_dashboard_launch_target(
 }
 
 fn load_current_local_api_token() -> Option<String> {
-    match ensure_local_api_token() {
+    match read_local_api_token() {
         Ok(token) => Some(token),
         Err(err) => {
             tracing::warn!(error = %err, "Failed to read current local API auth token");

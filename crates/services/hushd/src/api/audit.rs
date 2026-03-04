@@ -145,8 +145,17 @@ fn is_duplicate_audit_error(err: &AuditError) -> bool {
 /// POST /api/v1/audit/batch
 pub async fn ingest_audit_batch(
     State(state): State<AppState>,
+    actor: Option<axum::extract::Extension<AuthenticatedActor>>,
     Json(request): Json<AuditBatchRequest>,
 ) -> Result<Json<AuditBatchResponse>, V1Error> {
+    require_api_key_scope_or_user_permission(
+        actor.as_ref().map(|e| &e.0),
+        &state.rbac,
+        Scope::Admin,
+        ResourceType::AuditLog,
+        Action::Create,
+    )?;
+
     if request.events.len() > 5_000 {
         return Err(V1Error::bad_request(
             "AUDIT_BATCH_TOO_LARGE",

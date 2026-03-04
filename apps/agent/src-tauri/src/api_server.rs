@@ -310,6 +310,7 @@ impl AgentApiServer {
             .route("/api/v1/audit", get(proxy_daemon_get))
             .route("/api/v1/audit/stats", get(proxy_daemon_get))
             .route("/api/v1/policy", get(proxy_daemon_get))
+            .route("/api/v1/agents/status", get(proxy_daemon_get))
             .route("/api/v1/events", get(proxy_daemon_events))
             .route("/api/v1/siem/exporters", get(proxy_daemon_get))
             .route("/api/v1/agent/health", get(agent_health))

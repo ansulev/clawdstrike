@@ -1,10 +1,9 @@
 import { expect, test } from "@playwright/test";
 import { createServer, type ServerResponse } from "node:http";
 
-test("authenticated SSE reconnects and resumes events", async ({ page }) => {
+test("agent explorer groups runtime agents under endpoint agents", async ({ page }) => {
   const apiKey = "test-api-key";
   const openResponses = new Set<ServerResponse>();
-  let connectionCount = 0;
 
   const server = createServer((req, res) => {
     const method = req.method ?? "GET";
@@ -33,39 +32,44 @@ test("authenticated SSE reconnects and resumes events", async ({ page }) => {
       return;
     }
 
-    connectionCount += 1;
     res.writeHead(200, {
       "Content-Type": "text/event-stream",
       "Cache-Control": "no-cache",
       Connection: "keep-alive",
       "Access-Control-Allow-Origin": "*",
     });
-
     openResponses.add(res);
-    res.on("close", () => {
-      openResponses.delete(res);
-    });
+    res.on("close", () => openResponses.delete(res));
 
-    const isFirstConnection = connectionCount === 1;
-    const sendEvent = () => {
+    const baseEvent = {
+      action_type: "mcp_tool",
+      session_id: "s-1",
+      agent_id: "desktop-1",
+      runtime_agent_id: "claude-1",
+      runtime_agent_kind: "claude_code",
+      timestamp: new Date().toISOString(),
+    };
+
+    setTimeout(() => {
       const payload = {
-        action_type: "file_access",
-        target: isFirstConnection ? "/tmp/first" : "/tmp/second",
-        allowed: false,
-        guard: "fs_blocklist",
-        timestamp: new Date().toISOString(),
+        ...baseEvent,
+        target: "openclaw.search",
+        allowed: true,
+        guard: "mcp_allow",
       };
       res.write(`event: check\ndata: ${JSON.stringify(payload)}\n\n`);
-    };
-    setTimeout(sendEvent, isFirstConnection ? 250 : 50);
+    }, 50);
 
-    if (isFirstConnection) {
-      setTimeout(() => {
-        if (!res.writableEnded) {
-          res.end();
-        }
-      }, 1000);
-    }
+    setTimeout(() => {
+      const payload = {
+        ...baseEvent,
+        target: "openclaw.exec",
+        allowed: false,
+        guard: "mcp_policy",
+        timestamp: new Date().toISOString(),
+      };
+      res.write(`event: violation\ndata: ${JSON.stringify(payload)}\n\n`);
+    }, 120);
   });
 
   await new Promise<void>((resolve) => {
@@ -84,18 +88,22 @@ test("authenticated SSE reconnects and resumes events", async ({ page }) => {
         localStorage.setItem("hushd_url", base);
         localStorage.setItem("hushd_api_key", key);
       },
-      { base: hushdUrl, key: apiKey }
+      { base: hushdUrl, key: apiKey },
     );
 
-    // Navigate to root and open Event Stream via desktop icon
     await page.goto("/");
-    await page.getByRole("button", { name: "Event Stream" }).first().dblclick();
-    await expect(page.getByRole("columnheader", { name: "Target" })).toBeVisible();
+    await page.getByRole("button", { name: "Agent Explorer" }).first().dblclick();
 
-    // Wait for events to appear in the event stream table
-    await expect(page.locator("tr", { hasText: "/tmp/first" })).toBeVisible({ timeout: 10_000 });
-    await expect(page.locator("tr", { hasText: "/tmp/second" })).toBeVisible({ timeout: 20_000 });
-    expect(connectionCount).toBeGreaterThanOrEqual(2);
+    await expect(page.getByText("1 endpoint agents · 1 runtime agents")).toBeVisible({
+      timeout: 10_000,
+    });
+    await expect(page.getByText("desktop-1")).toBeVisible();
+    await expect(page.getByText("claude-1")).toBeVisible();
+    await expect(page.getByText("claude_code")).toBeVisible();
+
+    await page.getByRole("button", { name: /s-1/i }).first().click();
+    await expect(page.getByText("Runtime session s-1")).toBeVisible();
+    await expect(page.getByRole("row", { name: /claude_code/i }).first()).toBeVisible();
   } finally {
     for (const response of openResponses) {
       if (!response.writableEnded) {

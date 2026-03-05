@@ -155,23 +155,12 @@ brew install clawdstrike
 clawdstrike --version
 ```
 
-#### Initialize & Start Daemon
+#### Initialize
 
 ```bash
 # Scaffold a .clawdstrike/ project (policy, config, signing keys)
 clawdstrike init --keygen
 # → creates policy.yaml, config.toml, keys/clawdstrike.key + .pub
-
-# Start the enforcement daemon
-clawdstrike daemon start
-# → Starting clawdstrike daemon on 127.0.0.1:9876...
-
-# Verify it's running
-clawdstrike daemon status
-# → Status: healthy
-
-# Stop when done
-clawdstrike daemon stop
 ```
 
 #### Enforce

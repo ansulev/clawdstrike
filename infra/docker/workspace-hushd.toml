@@ -7,6 +7,8 @@ members = [
     "crates/libs/clawdstrike",
     "crates/libs/clawdstrike-ocsf",
     "crates/libs/clawdstrike-policy-event",
+    "crates/libs/hunt-scan",
+    "crates/libs/hunt-query",
     "crates/libs/hush-certification",
     "crates/services/hushd",
 ]
@@ -58,6 +60,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 # Time
 chrono = { version = "0.4", features = ["serde"] }
 chrono-tz = { version = "0.10", features = ["serde"] }
+crossterm = "0.28"
 
 # UUID
 uuid = { version = "1.21", features = ["v4", "v7", "serde", "js"] }
@@ -113,6 +116,8 @@ spine = { package = "hush-spine", path = "crates/libs/spine", version = "0.2.4" 
 clawdstrike = { path = "crates/libs/clawdstrike", version = "0.2.4" }
 clawdstrike-ocsf = { path = "crates/libs/clawdstrike-ocsf", version = "0.2.4" }
 clawdstrike-policy-event = { path = "crates/libs/clawdstrike-policy-event", version = "0.2.4", default-features = false }
+hunt-scan = { path = "crates/libs/hunt-scan", version = "0.2.4" }
+hunt-query = { path = "crates/libs/hunt-query", version = "0.2.4" }
 hush-certification = { path = "crates/libs/hush-certification", version = "0.2.4" }
 
 [profile.release]

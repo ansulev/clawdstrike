@@ -163,6 +163,22 @@ clawdstrike init --keygen
 # → creates policy.yaml, config.toml, keys/clawdstrike.key + .pub
 ```
 
+#### Start the Daemon
+
+```bash
+# Start the enforcement daemon (runs hushd on 127.0.0.1:9876)
+clawdstrike daemon start
+
+# Verify it's running
+clawdstrike daemon status
+# → Status: healthy | Version: 0.2.5 | Uptime: 2s
+
+# Stop when done
+clawdstrike daemon stop
+```
+
+The daemon provides an HTTP API for real-time policy checks, receipt storage, and audit logging. SDKs and adapters can point at the daemon instead of embedding the engine in-process. See [Deployment Modes](#deployment-modes) for details.
+
 #### Enforce
 
 ```bash

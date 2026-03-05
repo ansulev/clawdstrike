@@ -94,15 +94,15 @@ async fn main() -> anyhow::Result<()> {
     let keypair = load_keypair(&cli.seed_hex)?;
     let fact = build_fact(&cli)?;
 
-    let envelope =
-        spine::build_signed_envelope(&keypair, 0, None, fact, spine::now_rfc3339())
-            .map_err(|e| anyhow::anyhow!("failed to build signed envelope: {e}"))?;
+    let envelope = spine::build_signed_envelope(&keypair, 0, None, fact, spine::now_rfc3339())
+        .map_err(|e| anyhow::anyhow!("failed to build signed envelope: {e}"))?;
 
     let payload = serde_json::to_vec(&envelope)
         .map_err(|e| anyhow::anyhow!("failed to serialize envelope: {e}"))?;
 
     eprintln!("Connecting to {}...", cli.nats_url);
-    let client = spine::nats_transport::connect(&cli.nats_url).await
+    let client = spine::nats_transport::connect(&cli.nats_url)
+        .await
         .map_err(|e| anyhow::anyhow!("NATS connection failed: {e}"))?;
 
     eprintln!("Publishing to subject: {}", cli.subject);
@@ -116,12 +116,7 @@ async fn main() -> anyhow::Result<()> {
 
     let timeout = Duration::from_secs(cli.timeout_secs);
 
-    match tokio::time::timeout(
-        timeout,
-        client.request(cli.subject.clone(), payload.into()),
-    )
-    .await
-    {
+    match tokio::time::timeout(timeout, client.request(cli.subject.clone(), payload.into())).await {
         Ok(Ok(response)) => {
             let body = String::from_utf8_lossy(&response.payload);
             println!("{body}");
@@ -133,7 +128,10 @@ async fn main() -> anyhow::Result<()> {
                 .publish(cli.subject, serde_json::to_vec(&envelope)?.into())
                 .await
                 .map_err(|e| anyhow::anyhow!("NATS publish error: {e}"))?;
-            client.flush().await.map_err(|e| anyhow::anyhow!("NATS flush error: {e}"))?;
+            client
+                .flush()
+                .await
+                .map_err(|e| anyhow::anyhow!("NATS flush error: {e}"))?;
             println!("{{\"status\":\"published\",\"message\":\"command sent (no responder)\"}}");
         }
         Err(_) => {
@@ -144,7 +142,10 @@ async fn main() -> anyhow::Result<()> {
                 "No reply within {}s — command was delivered but no subscriber responded.",
                 cli.timeout_secs
             );
-            eprintln!("This is expected if the agent is not listening on {}", cli.subject);
+            eprintln!(
+                "This is expected if the agent is not listening on {}",
+                cli.subject
+            );
             println!("{{\"status\":\"delivered\",\"message\":\"command sent, no reply within timeout\"}}");
         }
     }

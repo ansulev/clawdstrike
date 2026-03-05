@@ -49,7 +49,7 @@ describe('Cross-Adapter Interface Consistency', () => {
       expect(adapter.version.length).toBeGreaterThan(0);
     });
 
-    it('exposes all 7 FrameworkAdapter methods', () => {
+    it('exposes all FrameworkAdapter methods', () => {
       const requiredMethods = [
         'initialize',
         'createContext',
@@ -59,9 +59,17 @@ describe('Cross-Adapter Interface Consistency', () => {
         'getEngine',
         'getHooks',
       ] as const;
+      const optionalMethods = ['interceptInboundMessage'] as const;
 
       for (const method of requiredMethods) {
         expect(typeof (adapter as Record<string, unknown>)[method]).toBe('function');
+      }
+
+      for (const method of optionalMethods) {
+        const candidate = (adapter as Record<string, unknown>)[method];
+        if (candidate !== undefined) {
+          expect(typeof candidate).toBe('function');
+        }
       }
     });
 

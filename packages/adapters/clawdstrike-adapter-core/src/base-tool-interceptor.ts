@@ -1,5 +1,7 @@
 import type { AdapterConfig, GenericToolCall } from "./adapter.js";
 import type { AuditEvent } from "./audit.js";
+import { emitAuditEvent as emitAuditEventShared } from "./audit-event-emitter.js";
+import { sanitizeAuditText } from "./audit-sanitizer.js";
 import type { SecurityContext } from "./context.js";
 import { DefaultOutputSanitizer } from "./default-output-sanitizer.js";
 import type { PolicyEngineLike } from "./engine.js";
@@ -412,8 +414,11 @@ export class BaseToolInterceptor implements ToolInterceptor {
     }
 
     if (typeof value === "string") {
-      const secretRedacted = this.engine.redactSecrets ? this.engine.redactSecrets(value) : value;
-      return this.config.audit?.redactPII ? redactPII(secretRedacted) : secretRedacted;
+      return sanitizeAuditText(
+        value,
+        this.engine.redactSecrets?.bind(this.engine),
+        this.config.audit?.redactPII,
+      );
     }
 
     if (typeof value !== "object") {
@@ -447,38 +452,8 @@ export class BaseToolInterceptor implements ToolInterceptor {
   }
 
   private async emitAuditEvent(context: SecurityContext, event: AuditEvent): Promise<void> {
-    if (this.config.audit?.enabled === false) {
-      return;
-    }
-
-    const allowedEvents = this.config.audit?.events;
-    if (allowedEvents && !allowedEvents.includes(event.type)) {
-      return;
-    }
-
-    context.addAuditEvent(event);
-
-    const logger = this.config.audit?.logger;
-    if (!logger) {
-      return;
-    }
-
-    try {
-      await logger.log(event);
-    } catch (error) {
-      this.config.handlers?.onError?.(error as Error);
-    }
+    await emitAuditEventShared(context, this.config, event, (error) => {
+      this.config.handlers?.onError?.(error);
+    });
   }
-}
-
-function redactPII(value: string): string {
-  let redacted = value;
-
-  redacted = redacted.replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, "[REDACTED_EMAIL]");
-
-  redacted = redacted.replace(/\b\d{3}-\d{2}-\d{4}\b/g, "[REDACTED_SSN]");
-
-  redacted = redacted.replace(/\+?\d[\d\s().-]{8,}\d/g, "[REDACTED_PHONE]");
-
-  return redacted;
 }

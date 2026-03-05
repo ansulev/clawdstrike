@@ -26,6 +26,7 @@ export type {
   EventData,
   EventType,
   FileEventData,
+  InboundConfig,
   LogLevel,
   NetworkEventData,
   PatchEventData,
@@ -77,6 +78,7 @@ export interface InputInjectionCapabilityGuardConfig {
 import type {
   ClawdstrikeConfig as AdapterCoreClawdstrikeConfig,
   GuardToggles as AdapterCoreGuardToggles,
+  InboundConfig as AdapterCoreInboundConfig,
 } from "@clawdstrike/adapter-core";
 
 // Keep openclaw config tolerant to newer guard toggles even when adapter-core
@@ -87,6 +89,7 @@ export interface GuardToggles extends AdapterCoreGuardToggles {
 
 export interface ClawdstrikeConfig extends Omit<AdapterCoreClawdstrikeConfig, "guards"> {
   guards?: GuardToggles;
+  inbound?: AdapterCoreInboundConfig;
 }
 
 export interface PolicyGuards extends GuardToggles {
@@ -370,6 +373,29 @@ export interface ToolCallEvent {
 }
 
 /**
+ * Hook event context for inbound pre-LLM message checks.
+ */
+export interface InboundMessageEvent {
+  type: "inbound_message" | "user_input";
+  timestamp: string;
+  context: {
+    sessionId: string;
+    message: {
+      id?: string;
+      text: string;
+      senderId?: string;
+      senderName?: string;
+      channel?: string;
+      chatType?: "dm" | "group" | "channel";
+      timestamp?: string;
+      metadata?: Record<string, unknown>;
+      blocked?: boolean;
+    };
+  };
+  messages: string[];
+}
+
+/**
  * Modern OpenClaw before_tool_call hook payload (v2026 runtime).
  */
 export interface BeforeToolCallHookEvent {
@@ -390,7 +416,7 @@ export interface OpenClawHookContext {
 /**
  * Generic hook event type
  */
-export type HookEvent = ToolResultPersistEvent | AgentBootstrapEvent | ToolCallEvent;
+export type HookEvent = ToolResultPersistEvent | AgentBootstrapEvent | ToolCallEvent | InboundMessageEvent;
 
 /**
  * Hook handler function type

@@ -14,6 +14,8 @@ COPY crates/libs/hush-core crates/libs/hush-core
 COPY crates/libs/hush-proxy crates/libs/hush-proxy
 COPY crates/libs/spine crates/libs/spine
 COPY crates/libs/clawdstrike crates/libs/clawdstrike
+COPY crates/libs/clawdstrike-ocsf crates/libs/clawdstrike-ocsf
+COPY crates/libs/clawdstrike-policy-event crates/libs/clawdstrike-policy-event
 COPY crates/libs/hush-certification crates/libs/hush-certification
 COPY crates/services/hushd crates/services/hushd
 

@@ -996,7 +996,7 @@ mod tests {
     fn test_path_allowlist_does_not_grant_entire_working_dir() {
         use nono::query::{QueryContext, QueryResult};
 
-        let tmp = tempfile::TempDir::new().unwrap();
+        let tmp = tempfile::tempdir_in(std::env::current_dir().unwrap()).unwrap();
         let test_file = tmp.path().join("allowed_read.txt");
         std::fs::write(&test_file, "test").unwrap();
 
@@ -1011,18 +1011,24 @@ mod tests {
         let (caps, warnings) = CapabilityBuilder::new(policy, tmp.path().to_path_buf())
             .build_with_diagnostics()
             .unwrap();
-        let ctx = QueryContext::new(caps);
 
         assert!(
             matches!(
-                ctx.query_path(&test_file, AccessMode::Read),
+                QueryContext::new(caps.clone()).query_path(&test_file, AccessMode::Read),
                 QueryResult::Allowed(_)
             ),
             "explicit allowlisted file should remain accessible"
         );
         assert!(
+            !caps.fs_capabilities().iter().any(|cap| {
+                cap.resolved == tmp.path().canonicalize().unwrap()
+                    && cap.access == AccessMode::ReadWrite
+            }),
+            "builder must not emit a direct ReadWrite grant for the working directory when deny-by-default allowlists are enabled"
+        );
+        assert!(
             !matches!(
-                ctx.query_path(tmp.path(), AccessMode::ReadWrite),
+                QueryContext::new(caps).query_path(tmp.path(), AccessMode::ReadWrite),
                 QueryResult::Allowed(_)
             ),
             "builder must not grant the entire working directory when deny-by-default allowlists are enabled"

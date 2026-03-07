@@ -671,4 +671,45 @@ mod tests {
             Some(&serde_json::json!("events.jsonl"))
         );
     }
+
+    #[test]
+    fn test_is_kernel_enforced() {
+        let keypair = Keypair::generate();
+
+        // No metadata → not enforced
+        let receipt = make_test_receipt();
+        let signed = SignedReceipt::sign(receipt, &keypair).unwrap();
+        assert!(!signed.is_kernel_enforced());
+
+        // With sandbox.enforced = true
+        let receipt = make_test_receipt().with_metadata(serde_json::json!({
+            "sandbox": {"enforced": true}
+        }));
+        let signed = SignedReceipt::sign(receipt, &keypair).unwrap();
+        assert!(signed.is_kernel_enforced());
+
+        // With sandbox.enforced = false
+        let receipt = make_test_receipt().with_metadata(serde_json::json!({
+            "sandbox": {"enforced": false}
+        }));
+        let signed = SignedReceipt::sign(receipt, &keypair).unwrap();
+        assert!(!signed.is_kernel_enforced());
+    }
+
+    #[test]
+    fn test_enforcement_level() {
+        let keypair = Keypair::generate();
+
+        // No metadata → None
+        let receipt = make_test_receipt();
+        let signed = SignedReceipt::sign(receipt, &keypair).unwrap();
+        assert_eq!(signed.enforcement_level(), None);
+
+        // With enforcement_level
+        let receipt = make_test_receipt().with_metadata(serde_json::json!({
+            "sandbox": {"enforcement_level": "kernel_static"}
+        }));
+        let signed = SignedReceipt::sign(receipt, &keypair).unwrap();
+        assert_eq!(signed.enforcement_level(), Some("kernel_static".to_string()));
+    }
 }

@@ -12,6 +12,17 @@ readme = "README.md"
 keywords = ["sandbox", "security", "capability", "landlock", "seatbelt"]
 categories = ["os", "api-bindings"]
 
+[features]
+default = ["sandbox"]
+# Core sandbox enforcement (Landlock/Seatbelt) — requires Unix
+sandbox = []
+# Keystore integration (keychain access) — requires keyring
+keystore = ["dep:keyring"]
+# Trust/attestation verification — requires sigstore
+trust = ["dep:sigstore-verify", "dep:x509-cert", "dep:der"]
+# Undo/snapshot system — requires ignore
+undo = ["dep:ignore"]
+
 [dependencies]
 thiserror = "2"
 serde = { version = "1", features = ["derive"] }
@@ -21,28 +32,25 @@ zeroize = { version = "1", features = ["alloc"] }
 sha2 = "0.10"
 getrandom = "0.4"
 walkdir = "2"
-ignore = "0.4"
 globset = "0.4"
 
-# Unix socket IPC for supervisor
+# Optional dependencies gated behind features
+ignore = { version = "0.4", optional = true }
+keyring = { version = "3", optional = true }
+sigstore-verify = { version = "0.6", default-features = false, optional = true }
+x509-cert = { version = "0.2", default-features = false, optional = true }
+der = { version = "0.7", default-features = false, optional = true }
+
+# Unix-only dependencies for sandbox enforcement
+[target.'cfg(unix)'.dependencies]
 libc = "0.2"
-
-# Keychain access
-keyring = "3"
-
-# Sigstore bundle verification
-sigstore-verify = { version = "0.6", default-features = false }
-x509-cert = { version = "0.2", default-features = false }
-der = { version = "0.7", default-features = false }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 landlock = "0.4"
 nix = { version = "0.31.2", features = ["fs", "user"] }
-keyring = { version = "3", features = ["sync-secret-service"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 nix = { version = "0.31.2", features = ["fs", "user"] }
-keyring = { version = "3", features = ["apple-native"] }
 
 [dev-dependencies]
 tempfile = "3"

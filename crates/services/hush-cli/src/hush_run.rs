@@ -474,8 +474,10 @@ pub async fn cmd_run(
         SandboxMode::None => (SandboxExecution::None, "disabled".to_string()),
     };
 
-    // Build sandbox attestation metadata before consuming sandbox_execution
-    let sandbox_attestation_json = match &sandbox_execution {
+    // Build sandbox attestation metadata before consuming sandbox_execution.
+    // For the Supervised path, this initial attestation lacks supervisor stats
+    // and denials — those are merged after the child exits (see below).
+    let mut sandbox_attestation_json = match &sandbox_execution {
         SandboxExecution::Nono { caps, .. } => {
             let attestation = clawdstrike::sandbox::build_attestation(caps, false);
             serde_json::to_value(&attestation).ok()
@@ -535,6 +537,17 @@ pub async fn cmd_run(
                         result.stats.requests_denied,
                         result.stats.never_grant_blocks,
                     );
+                    // Merge supervisor stats and denials into attestation
+                    if let Some(ref mut att_json) = sandbox_attestation_json {
+                        if let Ok(stats_val) = serde_json::to_value(&result.stats) {
+                            att_json["supervisor"] = stats_val;
+                        }
+                        if !result.denials.is_empty() {
+                            if let Ok(denials_val) = serde_json::to_value(&result.denials) {
+                                att_json["denials"] = denials_val;
+                            }
+                        }
+                    }
                     use std::os::unix::process::ExitStatusExt;
                     std::process::ExitStatus::from_raw(result.exit_code << 8)
                 }

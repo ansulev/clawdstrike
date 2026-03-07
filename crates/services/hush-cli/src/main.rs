@@ -60,7 +60,6 @@ mod policy_test;
 mod policy_version;
 mod registry_config;
 mod remote_extends;
-#[allow(dead_code)] // Phase 1 foundation: wired in by Phase 1B
 mod sandbox_nono;
 mod tui;
 mod ui;
@@ -89,6 +88,17 @@ impl ExitCode {
     fn as_i32(self) -> i32 {
         self as i32
     }
+}
+
+/// Sandbox implementation to use for `hush run`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]
+enum SandboxMode {
+    /// Nono kernel-level sandbox (Landlock/Seatbelt)
+    Nono,
+    /// Legacy sandbox-exec (macOS) / bwrap (Linux)
+    Legacy,
+    /// No sandboxing
+    None,
 }
 
 struct CheckArgs {
@@ -197,9 +207,9 @@ enum Commands {
         #[arg(long)]
         proxy_allow_private_ips: bool,
 
-        /// Enable best-effort OS sandbox wrapper (macOS: sandbox-exec; Linux: bwrap when available)
-        #[arg(long)]
-        sandbox: bool,
+        /// OS sandbox mode: nono (default), legacy (sandbox-exec/bwrap), or none
+        #[arg(long, value_enum, default_value_t = SandboxMode::Nono)]
+        sandbox: SandboxMode,
 
         /// Optional hushd URL to forward events for centralized audit (best-effort)
         #[arg(long)]

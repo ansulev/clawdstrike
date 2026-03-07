@@ -25,7 +25,9 @@ use crate::policy_event::{
     PolicyEventType,
 };
 use crate::remote_extends;
+use crate::sandbox_nono;
 use crate::ExitCode;
+use crate::SandboxMode;
 
 const EVENT_QUEUE_CAPACITY_DEFAULT: usize = 1024;
 const PROXY_MAX_IN_FLIGHT_CONNECTIONS_DEFAULT: usize = 256;
@@ -225,7 +227,7 @@ pub struct RunArgs {
     pub no_proxy: bool,
     pub proxy_port: u16,
     pub proxy_allow_private_ips: bool,
-    pub sandbox: bool,
+    pub sandbox: SandboxMode,
     pub hushd_url: Option<String>,
     pub hushd_token: Option<String>,
     pub command: Vec<String>,
@@ -374,34 +376,108 @@ pub async fn cmd_run(
         }
     };
 
-    let (sandbox_wrapper, sandbox_note) = match maybe_prepare_sandbox(sandbox, stderr) {
-        Ok(v) => v,
-        Err(e) => {
-            let _ = writeln!(stderr, "Warning: failed to prepare sandbox: {}", e);
-            (SandboxWrapper::None, "disabled".to_string())
+    let (sandbox_execution, sandbox_note) = match sandbox {
+        SandboxMode::Nono => {
+            let working_dir = std::env::current_dir()
+                .unwrap_or_else(|_| PathBuf::from("."));
+            match sandbox_nono::build_capability_set(
+                &working_dir,
+                &command,
+                env_proxy_url.as_ref().and_then(|url| {
+                    // Extract port from proxy URL like "http://127.0.0.1:PORT"
+                    url.rsplit(':').next().and_then(|p| p.parse::<u16>().ok())
+                }),
+                &[], // extra_read_paths (Phase 2 will populate from policy)
+                &[], // extra_write_paths
+                &[], // blocked_commands (Phase 2 will populate from policy)
+            ) {
+                Ok(caps) => {
+                    // Pre-flight validation
+                    let warnings = sandbox_nono::validate_capabilities(&caps, &command, &working_dir);
+                    for w in &warnings {
+                        let _ = writeln!(stderr, "[nono] warning: {}", w);
+                    }
+
+                    // Check platform support
+                    if !nono::Sandbox::is_supported() {
+                        let support = nono::Sandbox::support_info();
+                        let _ = writeln!(stderr, "[nono] warning: sandbox not supported: {}", support.details);
+                    }
+
+                    (SandboxExecution::Nono { caps: Box::new(caps), working_dir }, "nono".to_string())
+                }
+                Err(e) => {
+                    let _ = writeln!(stderr, "Warning: failed to build nono sandbox: {}", e);
+                    (SandboxExecution::None, "disabled".to_string())
+                }
+            }
         }
+        SandboxMode::Legacy => {
+            match maybe_prepare_sandbox(true, stderr) {
+                Ok((wrapper, note)) => (SandboxExecution::Legacy(wrapper), note),
+                Err(e) => {
+                    let _ = writeln!(stderr, "Warning: failed to prepare sandbox: {}", e);
+                    (SandboxExecution::None, "disabled".to_string())
+                }
+            }
+        }
+        SandboxMode::None => (SandboxExecution::None, "disabled".to_string()),
     };
 
-    let child_status = match spawn_and_wait_child(
-        &command,
-        sandbox_wrapper,
-        env_proxy_url.as_deref(),
-        &session_id,
-        stderr,
-    )
-    .await
-    {
-        Ok(status) => status,
-        Err(e) => {
-            let _ = writeln!(stderr, "Error: {}", e);
-            // Abort proxy first so its task drops EventEmitter clones; otherwise
-            // waiting on writer_handle can block forever on channel close.
-            if let Some(h) = proxy_handle {
-                h.abort();
+    let child_status = match sandbox_execution {
+        SandboxExecution::Nono { caps, .. } => {
+            // Build env overrides for the child
+            let mut env_overrides = HashMap::new();
+            env_overrides.insert("HUSH_SESSION_ID".to_string(), session_id.clone());
+            if let Some(ref proxy_url) = env_proxy_url {
+                env_overrides.insert("HTTPS_PROXY".to_string(), proxy_url.clone());
+                env_overrides.insert("ALL_PROXY".to_string(), proxy_url.clone());
             }
-            drop(event_emitter);
-            let _ = writer_handle.await;
-            return ExitCode::RuntimeError.as_i32();
+            let _ = writeln!(stderr, "Running: {}", command.join(" "));
+            match sandbox_nono::spawn_sandboxed_child(&caps, &command, &env_overrides) {
+                Ok(exit_code) => {
+                    // Convert i32 to ExitStatus for compatibility
+                    use std::os::unix::process::ExitStatusExt;
+                    std::process::ExitStatus::from_raw(exit_code << 8)
+                }
+                Err(e) => {
+                    let _ = writeln!(stderr, "Error: {}", e);
+                    if let Some(h) = proxy_handle {
+                        h.abort();
+                    }
+                    drop(event_emitter);
+                    let _ = writer_handle.await;
+                    return ExitCode::RuntimeError.as_i32();
+                }
+            }
+        }
+        SandboxExecution::Legacy(wrapper) => {
+            match spawn_and_wait_child(&command, wrapper, env_proxy_url.as_deref(), &session_id, stderr).await {
+                Ok(status) => status,
+                Err(e) => {
+                    let _ = writeln!(stderr, "Error: {}", e);
+                    if let Some(h) = proxy_handle {
+                        h.abort();
+                    }
+                    drop(event_emitter);
+                    let _ = writer_handle.await;
+                    return ExitCode::RuntimeError.as_i32();
+                }
+            }
+        }
+        SandboxExecution::None => {
+            match spawn_and_wait_child(&command, SandboxWrapper::None, env_proxy_url.as_deref(), &session_id, stderr).await {
+                Ok(status) => status,
+                Err(e) => {
+                    let _ = writeln!(stderr, "Error: {}", e);
+                    if let Some(h) = proxy_handle {
+                        h.abort();
+                    }
+                    drop(event_emitter);
+                    let _ = writer_handle.await;
+                    return ExitCode::RuntimeError.as_i32();
+                }
+            }
         }
     };
 
@@ -685,6 +761,20 @@ enum SandboxWrapper {
     Bwrap {
         args: Vec<String>,
     },
+}
+
+/// Execution mode for the child process sandbox.
+enum SandboxExecution {
+    /// Nono kernel-level sandbox
+    Nono {
+        caps: Box<nono::CapabilitySet>,
+        #[allow(dead_code)] // reserved for Phase 2 diagnostics
+        working_dir: PathBuf,
+    },
+    /// Legacy sandbox-exec/bwrap wrapper
+    Legacy(SandboxWrapper),
+    /// No sandboxing
+    None,
 }
 
 fn maybe_prepare_sandbox(
@@ -1735,7 +1825,7 @@ guards:
             no_proxy: false,
             proxy_port: 0,
             proxy_allow_private_ips: false,
-            sandbox: false,
+            sandbox: SandboxMode::None,
             hushd_url: None,
             hushd_token: None,
             command: vec!["echo ~/.ssh".to_string()],

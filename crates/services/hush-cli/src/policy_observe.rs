@@ -67,7 +67,7 @@ pub async fn cmd_policy_observe(
             no_proxy: false,
             proxy_port: 0,
             proxy_allow_private_ips: false,
-            sandbox: false,
+            sandbox: crate::SandboxMode::None,
             hushd_url: None,
             hushd_token: None,
             command: args.command,

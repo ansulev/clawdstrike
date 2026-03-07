@@ -154,12 +154,12 @@ pub fn build_attestation(caps: &nono::CapabilitySet, supervised: bool) -> Sandbo
 
     SandboxAttestation {
         enforced: support.is_supported,
-        enforcement_level: if supervised {
-            EnforcementLevel::KernelSupervised
-        } else if support.is_supported {
-            EnforcementLevel::Kernel
-        } else {
+        enforcement_level: if !support.is_supported {
             EnforcementLevel::None
+        } else if supervised {
+            EnforcementLevel::KernelSupervised
+        } else {
+            EnforcementLevel::Kernel
         },
         platform: PlatformInfo {
             name: support.platform.to_string(),

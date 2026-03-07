@@ -191,12 +191,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          cargo build -p hush-cli --bin clawdstrike
+          cargo build -p hush-cli --bin clawdstrike --bin hush
 
           STAGE="$RUNNER_TEMP/clawdstrike-tui-stage"
           mkdir -p "$STAGE/bin" "$STAGE/share/clawdstrike/tui"
 
           cp target/debug/clawdstrike "$STAGE/bin/clawdstrike"
+          cp target/debug/hush "$STAGE/bin/hush"
           cp apps/terminal/package.json "$STAGE/share/clawdstrike/tui/"
           cp apps/terminal/bun.lockb "$STAGE/share/clawdstrike/tui/"
           cp crates/services/hush-cli/assets/tui/cli.js "$STAGE/share/clawdstrike/tui/"

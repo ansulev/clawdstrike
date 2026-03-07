@@ -16,12 +16,11 @@ categories = ["os", "api-bindings"]
 default = ["sandbox"]
 # Core sandbox enforcement (Landlock/Seatbelt) — requires Unix
 sandbox = []
-# Keystore integration (keychain access) — requires keyring
-keystore = ["dep:keyring"]
-# Trust/attestation verification — requires sigstore
-trust = ["dep:sigstore-verify", "dep:x509-cert", "dep:der"]
-# Undo/snapshot system — requires ignore
-undo = ["dep:ignore"]
+# Stub features — optional deps removed from this vendored copy since
+# clawdstrike only enables "sandbox". Keeps lib.rs cfg gates compiling.
+keystore = []
+trust = []
+undo = []
 
 [dependencies]
 thiserror = "2"
@@ -33,13 +32,6 @@ sha2 = "0.10"
 getrandom = "0.4"
 walkdir = "2"
 globset = "0.4"
-
-# Optional dependencies gated behind features
-ignore = { version = "0.4", optional = true }
-keyring = { version = "3", optional = true }
-sigstore-verify = { version = "0.6", default-features = false, optional = true }
-x509-cert = { version = "0.2", default-features = false, optional = true }
-der = { version = "0.7", default-features = false, optional = true }
 
 # Unix-only dependencies for sandbox enforcement
 [target.'cfg(unix)'.dependencies]

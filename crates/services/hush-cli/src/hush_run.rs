@@ -230,6 +230,7 @@ pub struct RunArgs {
     pub sandbox: SandboxMode,
     pub hushd_url: Option<String>,
     pub hushd_token: Option<String>,
+    pub supervised: bool,
     pub command: Vec<String>,
 }
 
@@ -250,6 +251,7 @@ pub async fn cmd_run(
         sandbox,
         hushd_url,
         hushd_token,
+        supervised: _supervised,
         command,
     } = args;
 
@@ -450,6 +452,15 @@ pub async fn cmd_run(
         SandboxMode::None => (SandboxExecution::None, "disabled".to_string()),
     };
 
+    // Build sandbox attestation metadata before consuming sandbox_execution
+    let sandbox_attestation_json = match &sandbox_execution {
+        SandboxExecution::Nono { caps, .. } => {
+            let attestation = clawdstrike::sandbox::build_attestation(caps, false);
+            serde_json::to_value(&attestation).ok()
+        }
+        _ => None,
+    };
+
     let child_status = match sandbox_execution {
         SandboxExecution::Nono { caps, .. } => {
             // Build env overrides for the child
@@ -614,6 +625,13 @@ pub async fn cmd_run(
             let _ = writeln!(stderr, "Error: failed to create receipt: {}", e);
             return ExitCode::RuntimeError.as_i32();
         }
+    };
+
+    // Merge sandbox attestation into receipt metadata
+    let receipt = if let Some(sandbox_json) = sandbox_attestation_json {
+        receipt.merge_metadata(serde_json::json!({ "sandbox": sandbox_json }))
+    } else {
+        receipt
     };
 
     // Override verdict with the run outcome (warns are pass; blocks are fail).

@@ -394,6 +394,28 @@ impl SignedReceipt {
         result
     }
 
+    /// Check if this receipt attests to kernel-level enforcement.
+    pub fn is_kernel_enforced(&self) -> bool {
+        self.receipt
+            .metadata
+            .as_ref()
+            .and_then(|m| m.get("sandbox"))
+            .and_then(|s| s.get("enforced"))
+            .and_then(|e| e.as_bool())
+            .unwrap_or(false)
+    }
+
+    /// Get the enforcement level string from metadata.
+    pub fn enforcement_level(&self) -> Option<String> {
+        self.receipt
+            .metadata
+            .as_ref()
+            .and_then(|m| m.get("sandbox"))
+            .and_then(|s| s.get("enforcement_level"))
+            .and_then(|l| l.as_str())
+            .map(String::from)
+    }
+
     /// Serialize to JSON
     pub fn to_json(&self) -> Result<String> {
         Ok(serde_json::to_string_pretty(self)?)

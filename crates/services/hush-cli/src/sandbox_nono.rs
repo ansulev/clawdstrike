@@ -121,6 +121,11 @@ fn close_inherited_fds(from_fd: i32) {
     }
 }
 
+/// Public wrapper for signal forwarding, used by `supervised_exec`.
+pub(crate) fn install_signal_forwarding_pub(child: nix::unistd::Pid) {
+    install_signal_forwarding(child);
+}
+
 /// Install signal forwarding so SIGINT/SIGTERM sent to the parent
 /// are forwarded to the child process.
 fn install_signal_forwarding(child: nix::unistd::Pid) {

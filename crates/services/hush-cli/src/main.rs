@@ -61,6 +61,7 @@ mod policy_version;
 mod registry_config;
 mod remote_extends;
 mod sandbox_nono;
+mod supervised_exec;
 mod tui;
 mod ui;
 
@@ -218,6 +219,12 @@ enum Commands {
         /// Bearer token for daemon (if omitted, uses CLAWDSTRIKE_ADMIN_KEY or CLAWDSTRIKE_API_KEY env vars)
         #[arg(long)]
         hushd_token: Option<String>,
+
+        /// Enable supervised execution with dynamic guard enforcement (experimental).
+        /// The supervisor intercepts file operations and routes them through
+        /// ClawdStrike guards for real-time allow/deny decisions.
+        #[arg(long)]
+        supervised: bool,
 
         /// Command to run (use `--` before the command if it contains flags)
         #[arg(trailing_var_arg = true, required = true)]
@@ -1476,6 +1483,7 @@ async fn run(cli: Cli, stdout: &mut dyn Write, stderr: &mut dyn Write) -> i32 {
             sandbox,
             hushd_url,
             hushd_token,
+            supervised,
             command,
         } => {
             hush_run::cmd_run(
@@ -1490,6 +1498,7 @@ async fn run(cli: Cli, stdout: &mut dyn Write, stderr: &mut dyn Write) -> i32 {
                     sandbox,
                     hushd_url,
                     hushd_token,
+                    supervised,
                     command,
                 },
                 &remote_extends,

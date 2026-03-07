@@ -1,11 +1,12 @@
 # Huntronomer Swarm Execution Plan
 
-> **Status:** Draft | **Date:** 2026-03-07
-> **Purpose:** Turn the Huntronomer roadmap into executable Codex swarm lanes, waves, and merge gates
-> **Active metadata:** `.codex/swarm/lanes.tsv`, `.codex/swarm/waves.tsv`
+> **Status:** Historical | **Date:** 2026-03-07
+> **Purpose:** Historical reference for the earlier Huntronomer surface-refactor swarm
+> **Metadata status:** Superseded by `docs/plans/clawdstrike/huntronomer/workspace-shell/swarm-plan.md`
 
-This plan reseeds the active swarm metadata for Huntronomer. Earlier dispatch and fleet examples
-remain useful as historical patterns, but they are no longer the active launcher target.
+This plan captured the earlier Huntronomer surface-refactor swarm. It remains useful as historical
+context for the Wire, Huntboard, Vault, and trust-surface rollout, but the active `.codex/swarm`
+metadata now points at the workspace-shell initiative.
 
 ## 1. Execution Goal
 

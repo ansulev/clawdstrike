@@ -150,12 +150,13 @@ codex exec -C ../clawdstrike-sdks-p1a -p swarm-review \
 ## Current Seeded Initiative
 
 `.codex/swarm/lanes.tsv` and `.codex/swarm/waves.tsv` are currently seeded for the Huntronomer
-desktop initiative described in:
+workspace-shell initiative described in:
 
-- `docs/plans/clawdstrike/huntronomer/README.md`
-- `docs/plans/clawdstrike/huntronomer/roadmap.md`
-- `docs/plans/clawdstrike/huntronomer/swarm-plan.md`
-- `docs/specs/16-huntronomer-event-model.md`
+- `docs/plans/clawdstrike/huntronomer/workspace-shell/README.md`
+- `docs/plans/clawdstrike/huntronomer/workspace-shell/roadmap.md`
+- `docs/plans/clawdstrike/huntronomer/workspace-shell/swarm-plan.md`
+- `docs/specs/17-huntronomer-workspace-services.md`
+- `docs/specs/18-huntronomer-shell-command-model.md`
 
 Older dispatch and fleet-security lane maps remain valid examples, but they are not the active
 launcher target anymore.

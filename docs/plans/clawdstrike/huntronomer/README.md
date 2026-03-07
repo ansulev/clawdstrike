@@ -23,6 +23,11 @@ changing the product center of gravity from a multi-plugin SDR launcher to:
 5. [Implementation Roadmap](./roadmap.md)
 6. [Swarm Execution Plan](./swarm-plan.md)
 
+## Related Initiatives
+
+- [Workspace Shell](./workspace-shell/README.md) - native-backed filesystem, editor, search,
+  terminal, and git planning set for the desktop app; currently the active Codex swarm initiative
+
 ## Source Material
 
 - Product spec: Huntronomer Product Spec v0.1 (provided in the task thread)

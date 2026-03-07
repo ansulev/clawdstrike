@@ -241,8 +241,28 @@ jobs:
             ${{ runner.os }}-cargo-tauri-
             ${{ runner.os }}-cargo-
 
+      - name: Check desktop Tauri crate
+        run: cargo check --manifest-path apps/desktop/src-tauri/Cargo.toml
+
       - name: Check agent Tauri crate
         run: cargo check --manifest-path apps/agent/src-tauri/Cargo.toml
+
+  desktop-frontend:
+    name: Desktop Frontend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        working-directory: apps/desktop
+        run: bun install --frozen-lockfile
+
+      - name: Type check
+        working-directory: apps/desktop
+        run: bun run typecheck
 
   control-console:
     name: Control Console

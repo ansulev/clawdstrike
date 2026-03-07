@@ -149,14 +149,16 @@ codex exec -C ../clawdstrike-sdks-p1a -p swarm-review \
 
 ## Current Seeded Initiative
 
-`.codex/swarm/lanes.tsv` and `.codex/swarm/waves.tsv` are currently seeded for the TUI dispatch initiative described in:
+`.codex/swarm/lanes.tsv` and `.codex/swarm/waves.tsv` are currently seeded for the Huntronomer
+desktop initiative described in:
 
-- `apps/terminal/docs/dispatch-ux-spec.md`
-- `apps/terminal/docs/dispatch-ux-plan.md`
-- `apps/terminal/docs/dispatch-phase1-engineering.md`
-- `apps/terminal/docs/dispatch-phases2-5-overview.md`
+- `docs/plans/clawdstrike/huntronomer/README.md`
+- `docs/plans/clawdstrike/huntronomer/roadmap.md`
+- `docs/plans/clawdstrike/huntronomer/swarm-plan.md`
+- `docs/specs/16-huntronomer-event-model.md`
 
-Replace those lane rows when a different initiative becomes the active swarm target.
+Older dispatch and fleet-security lane maps remain valid examples, but they are not the active
+launcher target anymore.
 
 ## Guardrails
 

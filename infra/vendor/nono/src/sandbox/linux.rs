@@ -368,8 +368,8 @@ pub const SYS_OPENAT2: i32 = 437;
 
 /// struct open_how from <linux/openat2.h>
 ///
-/// Used by openat2() syscall. args[2] is a pointer to this struct, NOT the flags integer.
-/// This is a critical security distinction from openat() where args[2] IS the flags.
+/// Used by openat2() syscall. args\[2\] is a pointer to this struct, NOT the flags integer.
+/// This is a critical security distinction from openat() where args\[2\] IS the flags.
 #[repr(C)]
 #[derive(Debug, Clone, Default)]
 pub struct OpenHow {
@@ -384,7 +384,7 @@ pub struct OpenHow {
 /// Classify access mode from open flags.
 ///
 /// Extracts O_ACCMODE bits and maps to AccessMode. Used by both openat (where flags
-/// come from args[2] directly) and openat2 (where flags come from open_how.flags).
+/// come from args\[2\] directly) and openat2 (where flags come from open_how.flags).
 #[must_use]
 pub fn classify_access_from_flags(flags: i32) -> crate::AccessMode {
     match flags & libc::O_ACCMODE {
@@ -396,7 +396,7 @@ pub fn classify_access_from_flags(flags: i32) -> crate::AccessMode {
 
 /// Validate that the openat2 size argument is large enough to hold the open_how struct.
 ///
-/// For openat2, args[3] contains the size of the open_how struct passed by the caller.
+/// For openat2, args\[3\] contains the size of the open_how struct passed by the caller.
 /// If this is smaller than our expected struct size, the request is malformed and should
 /// be denied to avoid reading garbage or partial data.
 ///
@@ -598,7 +598,7 @@ pub fn recv_notif(notify_fd: std::os::fd::RawFd) -> Result<SeccompNotif> {
 /// Read the path argument from a seccomp notification.
 ///
 /// Reads from `/proc/PID/mem` at the pointer address in the second syscall
-/// argument (args[1] for openat/openat2, which is the pathname pointer).
+/// argument (args\[1\] for openat/openat2, which is the pathname pointer).
 ///
 /// # TOCTOU Warning
 ///
@@ -650,12 +650,12 @@ pub fn read_notif_path(pid: u32, addr: u64) -> Result<std::path::PathBuf> {
 
 /// Read the open_how struct from a seccomp notification for openat2 syscalls.
 ///
-/// For openat2, args[2] is a pointer to `struct open_how`, NOT the flags integer.
+/// For openat2, args\[2\] is a pointer to `struct open_how`, NOT the flags integer.
 /// This function safely reads the struct from the child's memory.
 ///
 /// # Security
 ///
-/// This is critical for access-mode classification. Treating args[2] as an integer
+/// This is critical for access-mode classification. Treating args\[2\] as an integer
 /// (as with openat) when it's actually a pointer leads to misclassifying access mode,
 /// potentially granting broader permissions than the child requested.
 ///

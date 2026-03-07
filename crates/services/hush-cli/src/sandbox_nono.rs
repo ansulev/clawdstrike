@@ -37,9 +37,10 @@ pub fn spawn_sandboxed_child(
         anyhow::bail!("empty command");
     }
 
-    // Pre-fork: prepare all C strings
+    // Pre-fork: resolve command through PATH (execve does NOT do PATH lookup)
+    let resolved = resolve_command_path(&command[0])?;
     let c_program =
-        CString::new(command[0].as_str()).map_err(|e| anyhow::anyhow!("invalid command: {}", e))?;
+        CString::new(resolved.as_str()).map_err(|e| anyhow::anyhow!("invalid command: {}", e))?;
     let c_args: Vec<CString> = command
         .iter()
         .map(|a| CString::new(a.as_str()).map_err(|e| anyhow::anyhow!("invalid arg: {}", e)))
@@ -125,6 +126,35 @@ fn close_inherited_fds(from_fd: i32) {
         // SAFETY: closing an fd is safe; EBADF for non-open fds is harmless
         unsafe { libc::close(fd) };
     }
+}
+
+/// Resolve a command name to an absolute path via PATH lookup.
+///
+/// `execve` does not search PATH, so we must resolve before fork.
+/// Returns the original string if it's already absolute.
+fn resolve_command_path(cmd: &str) -> anyhow::Result<String> {
+    let path = std::path::Path::new(cmd);
+    if path.is_absolute() {
+        return Ok(cmd.to_string());
+    }
+    // Search PATH
+    if let Ok(path_var) = std::env::var("PATH") {
+        for dir in path_var.split(':') {
+            let candidate = std::path::Path::new(dir).join(cmd);
+            if candidate.exists() {
+                return Ok(candidate.to_string_lossy().into_owned());
+            }
+        }
+    }
+    anyhow::bail!(
+        "command not found in PATH: {}. execve requires an absolute path.",
+        cmd
+    )
+}
+
+/// Public wrapper for PATH resolution, used by `supervised_exec`.
+pub(crate) fn resolve_command_path_pub(cmd: &str) -> anyhow::Result<String> {
+    resolve_command_path(cmd)
 }
 
 /// Public wrapper for signal forwarding, used by `supervised_exec`.
@@ -442,6 +472,30 @@ mod tests {
     #[test]
     fn test_close_inherited_fds_does_not_panic() {
         close_inherited_fds(100);
+    }
+
+    #[test]
+    fn test_resolve_command_path_absolute() {
+        let result = resolve_command_path("/bin/ls");
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "/bin/ls");
+    }
+
+    #[test]
+    fn test_resolve_command_path_relative() {
+        let result = resolve_command_path("ls");
+        assert!(result.is_ok());
+        let resolved = result.unwrap();
+        assert!(
+            std::path::Path::new(&resolved).is_absolute(),
+            "resolved path should be absolute, got: {resolved}"
+        );
+    }
+
+    #[test]
+    fn test_resolve_command_path_not_found() {
+        let result = resolve_command_path("nonexistent_command_xyz_12345");
+        assert!(result.is_err());
     }
 
     #[test]

@@ -62,9 +62,10 @@ pub fn spawn_supervised_child(
     let (supervisor_sock, child_sock) = SupervisorSocket::pair()
         .map_err(|e| anyhow::anyhow!("failed to create supervisor socket: {e}"))?;
 
-    // Pre-fork: prepare all C strings (no allocation after fork)
+    // Pre-fork: resolve command through PATH (execve does NOT do PATH lookup)
+    let resolved = sandbox_nono::resolve_command_path_pub(&command[0])?;
     let c_program =
-        CString::new(command[0].as_str()).map_err(|e| anyhow::anyhow!("invalid command: {e}"))?;
+        CString::new(resolved.as_str()).map_err(|e| anyhow::anyhow!("invalid command: {e}"))?;
     let c_args: Vec<CString> = command
         .iter()
         .map(|a| CString::new(a.as_str()).map_err(|e| anyhow::anyhow!("invalid arg: {e}")))

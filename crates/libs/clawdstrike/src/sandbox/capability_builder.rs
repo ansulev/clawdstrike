@@ -58,18 +58,44 @@ impl CapabilityBuilder {
         //    On Linux (Landlock), once a path is granted it cannot be revoked.
         let forbidden_patterns = self.collect_forbidden_patterns();
 
-        // 2. System read paths -- skip forbidden
+        // 2. System read paths -- skip forbidden (including parent dirs of forbidden files)
         for path in system_read_paths() {
-            if path.exists() && !is_path_forbidden(&path, &forbidden_patterns) {
-                caps = caps.allow_path(&path, AccessMode::Read)?;
+            if !path.exists() {
+                continue;
             }
+            if is_path_forbidden(&path, &forbidden_patterns) {
+                warnings.push(TranslationWarning {
+                    guard: "ForbiddenPathGuard".into(),
+                    message: format!(
+                        "Skipping system read path {} because it contains forbidden subpaths. \
+                         Use --supervised mode or add specific paths to the allowlist.",
+                        path.display()
+                    ),
+                    severity: WarningSeverity::Warning,
+                });
+                continue;
+            }
+            caps = caps.allow_path(&path, AccessMode::Read)?;
         }
 
-        // 3. System write paths -- skip forbidden
+        // 3. System write paths -- skip forbidden (including parent dirs of forbidden files)
         for path in system_write_paths() {
-            if path.exists() && !is_path_forbidden(&path, &forbidden_patterns) {
-                caps = caps.allow_path(&path, AccessMode::ReadWrite)?;
+            if !path.exists() {
+                continue;
             }
+            if is_path_forbidden(&path, &forbidden_patterns) {
+                warnings.push(TranslationWarning {
+                    guard: "ForbiddenPathGuard".into(),
+                    message: format!(
+                        "Skipping system write path {} because it contains forbidden subpaths. \
+                         Use --supervised mode or add specific paths to the allowlist.",
+                        path.display()
+                    ),
+                    severity: WarningSeverity::Warning,
+                });
+                continue;
+            }
+            caps = caps.allow_path(&path, AccessMode::ReadWrite)?;
         }
 
         // 4. Working directory (ReadWrite)
@@ -305,6 +331,11 @@ fn try_fs_capability(path: &Path, mode: AccessMode) -> nono::Result<FsCapability
 ///
 /// Uses `Path::components()` for dotfile/dotdir matching to avoid
 /// string `starts_with` vulnerabilities on path segments.
+///
+/// Also checks whether granting `path` would implicitly expose a forbidden
+/// child path (e.g. granting `/etc` when `/etc/shadow` is forbidden).
+/// On Linux Landlock, directory grants are irrevocable — once granted,
+/// subdirectories cannot be denied.
 fn is_path_forbidden(path: &Path, patterns: &[String]) -> bool {
     for pattern in patterns {
         let clean = pattern
@@ -315,6 +346,12 @@ fn is_path_forbidden(path: &Path, patterns: &[String]) -> bool {
         if clean.starts_with('/') {
             // Absolute path pattern -- use Path::starts_with for component-level comparison
             if path.starts_with(clean) {
+                return true;
+            }
+            // Reverse check: granting `path` would expose forbidden child `clean`.
+            // e.g. granting `/etc` when `/etc/shadow` is forbidden.
+            let forbidden_path = Path::new(clean);
+            if forbidden_path.starts_with(path) && forbidden_path != path {
                 return true;
             }
         } else if clean.starts_with('.') {
@@ -512,6 +549,28 @@ mod tests {
             Path::new("/tmp/build/output.txt"),
             &patterns
         ));
+    }
+
+    #[test]
+    fn test_is_path_forbidden_parent_of_forbidden_file() {
+        // Granting /etc should be blocked when /etc/shadow is forbidden,
+        // because on Linux Landlock the grant is irrevocable and would
+        // expose the forbidden file.
+        let patterns = vec!["/etc/shadow".to_string()];
+        assert!(
+            is_path_forbidden(Path::new("/etc"), &patterns),
+            "parent directory of a forbidden file should be considered forbidden"
+        );
+    }
+
+    #[test]
+    fn test_is_path_forbidden_unrelated_path_not_blocked() {
+        // /usr should NOT be blocked by /etc/shadow being forbidden
+        let patterns = vec!["/etc/shadow".to_string()];
+        assert!(
+            !is_path_forbidden(Path::new("/usr"), &patterns),
+            "unrelated directory should not be blocked"
+        );
     }
 
     #[test]

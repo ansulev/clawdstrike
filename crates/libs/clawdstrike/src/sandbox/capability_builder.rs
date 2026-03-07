@@ -393,7 +393,7 @@ mod tests {
     #![allow(clippy::expect_used, clippy::unwrap_used)]
 
     use super::*;
-    use crate::guards::{ForbiddenPathConfig, ShellCommandConfig};
+    use crate::guards::{EgressAllowlistConfig, ForbiddenPathConfig, PathAllowlistConfig, ShellCommandConfig};
 
     fn minimal_policy() -> Policy {
         Policy::default()
@@ -544,6 +544,499 @@ mod tests {
         assert_eq!(
             escape_seatbelt_path("/path/with\\backslash"),
             "/path/with\\\\backslash"
+        );
+    }
+
+    // --- Phase 2C: Comprehensive policy translation tests ---
+
+    #[test]
+    fn test_default_policy_ssh_denied() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let builder = CapabilityBuilder::new(minimal_policy(), tmp.path().to_path_buf());
+        let (caps, _) = builder.build_with_diagnostics().unwrap();
+
+        // .ssh paths must not appear in granted filesystem capabilities
+        let has_ssh_grant = caps.fs_capabilities().iter().any(|cap| {
+            let p = cap.resolved.to_string_lossy();
+            p.contains(".ssh")
+        });
+        assert!(
+            !has_ssh_grant,
+            "default policy must not grant access to .ssh paths"
+        );
+    }
+
+    #[test]
+    fn test_default_policy_working_dir_granted() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let working_dir = tmp.path().canonicalize().unwrap();
+        let builder = CapabilityBuilder::new(minimal_policy(), working_dir.clone());
+        let (caps, _) = builder.build_with_diagnostics().unwrap();
+
+        let ctx = nono::query::QueryContext::new(caps);
+        assert!(
+            matches!(
+                ctx.query_path(&working_dir, AccessMode::ReadWrite),
+                nono::query::QueryResult::Allowed(_)
+            ),
+            "working directory must be accessible in the capability set"
+        );
+    }
+
+    #[test]
+    fn test_default_policy_network_blocked_with_proxy() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let builder = CapabilityBuilder::new(minimal_policy(), tmp.path().to_path_buf())
+            .with_proxy_port(9090);
+        let (caps, _) = builder.build_with_diagnostics().unwrap();
+
+        assert!(
+            caps.is_network_blocked(),
+            "default policy with proxy port should block direct network access"
+        );
+        assert!(
+            matches!(caps.network_mode(), NetworkMode::ProxyOnly { port: 9090, .. }),
+            "network mode should be ProxyOnly with the specified port"
+        );
+    }
+
+    #[test]
+    fn test_default_policy_network_blocked_without_proxy() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let builder = CapabilityBuilder::new(minimal_policy(), tmp.path().to_path_buf());
+        let (caps, _) = builder.build_with_diagnostics().unwrap();
+
+        assert!(
+            caps.is_network_blocked(),
+            "default policy without proxy should block network access"
+        );
+        assert!(
+            matches!(caps.network_mode(), NetworkMode::Blocked),
+            "network mode should be Blocked when no proxy port and no egress config"
+        );
+    }
+
+    #[test]
+    fn test_strict_policy_no_extra_grants_over_default() {
+        let tmp = tempfile::TempDir::new().unwrap();
+
+        let default_caps = CapabilityBuilder::new(minimal_policy(), tmp.path().to_path_buf())
+            .build()
+            .unwrap();
+
+        // Strict: more forbidden patterns, same system paths
+        let mut strict_policy = minimal_policy();
+        strict_policy.guards.forbidden_path = Some(ForbiddenPathConfig {
+            enabled: true,
+            patterns: Some(vec![
+                "**/.ssh/**".into(),
+                "**/.aws/**".into(),
+                "**/.env".into(),
+                "**/.env.*".into(),
+                "**/.vault/**".into(),
+                "**/.secrets/**".into(),
+                "**/credentials/**".into(),
+                "**/private/**".into(),
+                "/etc/shadow".into(),
+                "/etc/passwd".into(),
+                "/etc/sudoers".into(),
+            ]),
+            exceptions: vec![],
+            additional_patterns: vec![],
+            remove_patterns: vec![],
+        });
+
+        let strict_caps = CapabilityBuilder::new(strict_policy, tmp.path().to_path_buf())
+            .build()
+            .unwrap();
+
+        // Strict should grant no more filesystem capabilities than default
+        assert!(
+            strict_caps.fs_capabilities().len() <= default_caps.fs_capabilities().len(),
+            "strict policy must not grant more fs capabilities than default (strict={}, default={})",
+            strict_caps.fs_capabilities().len(),
+            default_caps.fs_capabilities().len()
+        );
+    }
+
+    #[test]
+    fn test_forbidden_before_grants_ordering() {
+        let tmp = tempfile::TempDir::new().unwrap();
+
+        // Create a policy with a forbidden pattern that overlaps system paths
+        let mut policy = minimal_policy();
+        policy.guards.forbidden_path = Some(ForbiddenPathConfig {
+            enabled: true,
+            patterns: Some(vec!["/etc/shadow".into(), "/etc/passwd".into()]),
+            exceptions: vec![],
+            additional_patterns: vec![],
+            remove_patterns: vec![],
+        });
+
+        let builder = CapabilityBuilder::new(policy, tmp.path().to_path_buf());
+        let (caps, _) = builder.build_with_diagnostics().unwrap();
+
+        // /etc/shadow must NOT have been granted even though /etc might be a system path
+        let has_shadow = caps.fs_capabilities().iter().any(|cap| {
+            cap.resolved.to_string_lossy().contains("shadow")
+        });
+        assert!(
+            !has_shadow,
+            "forbidden paths must not be granted even if they overlap system paths"
+        );
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn test_macos_deny_platform_rules_generated() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let builder = CapabilityBuilder::new(minimal_policy(), tmp.path().to_path_buf());
+        let (caps, _) = builder.build_with_diagnostics().unwrap();
+
+        let rules = caps.platform_rules();
+        // On macOS, deny rules should be generated for forbidden paths that exist
+        // At minimum, if $HOME/.ssh exists it should have deny rules
+        if let Some(home) = dirs::home_dir() {
+            let ssh_dir = home.join(".ssh");
+            if ssh_dir.exists() {
+                let ssh_str = ssh_dir.to_string_lossy().to_string();
+                let has_deny = rules.iter().any(|r| r.contains(&ssh_str) && r.contains("deny"));
+                assert!(
+                    has_deny,
+                    "macOS should generate Seatbelt deny rules for existing forbidden paths like .ssh"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_build_with_diagnostics_emits_content_inspection_warnings() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let builder = CapabilityBuilder::new(minimal_policy(), tmp.path().to_path_buf());
+        let (_, warnings) = builder.build_with_diagnostics().unwrap();
+
+        let info_warnings: Vec<_> = warnings
+            .iter()
+            .filter(|w| w.severity == WarningSeverity::Info)
+            .collect();
+
+        let expected_guards = [
+            "SecretLeakGuard",
+            "PatchIntegrityGuard",
+            "PromptInjectionGuard",
+            "JailbreakGuard",
+        ];
+        for guard_name in &expected_guards {
+            assert!(
+                info_warnings.iter().any(|w| w.guard == *guard_name),
+                "should emit info warning for content-inspection guard: {guard_name}"
+            );
+        }
+
+        // All info warnings should mention "content inspection"
+        for w in &info_warnings {
+            assert!(
+                w.message.contains("Content inspection") || w.message.contains("content inspection"),
+                "info warning for {} should mention content inspection, got: {}",
+                w.guard,
+                w.message
+            );
+        }
+    }
+
+    #[test]
+    fn test_path_allowlist_guard_read_translation() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        // Create a real file inside tmp so the glob can find it
+        let test_file = tmp.path().join("allowed_read.txt");
+        std::fs::write(&test_file, "test").unwrap();
+
+        let mut policy = minimal_policy();
+        policy.guards.path_allowlist = Some(PathAllowlistConfig {
+            enabled: true,
+            file_access_allow: vec![test_file.to_string_lossy().to_string()],
+            file_write_allow: vec![],
+            patch_allow: vec![],
+        });
+
+        let builder = CapabilityBuilder::new(policy, tmp.path().to_path_buf());
+        let (caps, _) = builder.build_with_diagnostics().unwrap();
+
+        let has_file = caps.fs_capabilities().iter().any(|cap| {
+            cap.resolved == test_file.canonicalize().unwrap()
+        });
+        assert!(
+            has_file,
+            "PathAllowlistGuard file_access_allow should grant read access to specified paths"
+        );
+    }
+
+    #[test]
+    fn test_path_allowlist_guard_write_translation() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let test_file = tmp.path().join("allowed_write.txt");
+        std::fs::write(&test_file, "test").unwrap();
+
+        let mut policy = minimal_policy();
+        policy.guards.path_allowlist = Some(PathAllowlistConfig {
+            enabled: true,
+            file_access_allow: vec![],
+            file_write_allow: vec![test_file.to_string_lossy().to_string()],
+            patch_allow: vec![],
+        });
+
+        let builder = CapabilityBuilder::new(policy, tmp.path().to_path_buf());
+        let (caps, _) = builder.build_with_diagnostics().unwrap();
+
+        let has_rw = caps.fs_capabilities().iter().any(|cap| {
+            cap.resolved == test_file.canonicalize().unwrap()
+                && cap.access == AccessMode::ReadWrite
+        });
+        assert!(
+            has_rw,
+            "PathAllowlistGuard file_write_allow should grant ReadWrite access"
+        );
+    }
+
+    #[test]
+    fn test_path_allowlist_guard_disabled() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let test_file = tmp.path().join("should_not_grant.txt");
+        std::fs::write(&test_file, "test").unwrap();
+
+        let mut policy = minimal_policy();
+        policy.guards.path_allowlist = Some(PathAllowlistConfig {
+            enabled: false,
+            file_access_allow: vec![test_file.to_string_lossy().to_string()],
+            file_write_allow: vec![],
+            patch_allow: vec![],
+        });
+
+        let builder = CapabilityBuilder::new(policy, tmp.path().to_path_buf());
+        let (caps, _) = builder.build_with_diagnostics().unwrap();
+
+        let canon = test_file.canonicalize().unwrap();
+        let has_file = caps.fs_capabilities().iter().any(|cap| {
+            cap.resolved == canon && cap.is_file
+        });
+        assert!(
+            !has_file,
+            "disabled PathAllowlistGuard should not contribute capabilities"
+        );
+    }
+
+    #[test]
+    fn test_egress_block_to_proxy_only() {
+        use hush_proxy::policy::PolicyAction;
+
+        let tmp = tempfile::TempDir::new().unwrap();
+        let mut policy = minimal_policy();
+        policy.guards.egress_allowlist = Some(EgressAllowlistConfig {
+            enabled: true,
+            allow: vec![],
+            block: vec![],
+            default_action: Some(PolicyAction::Block),
+            additional_allow: vec![],
+            remove_allow: vec![],
+            additional_block: vec![],
+            remove_block: vec![],
+        });
+
+        let builder = CapabilityBuilder::new(policy, tmp.path().to_path_buf())
+            .with_proxy_port(8080);
+        let (caps, _) = builder.build_with_diagnostics().unwrap();
+
+        assert!(
+            matches!(caps.network_mode(), NetworkMode::ProxyOnly { port: 8080, .. }),
+            "egress Block with proxy port should yield ProxyOnly mode"
+        );
+    }
+
+    #[test]
+    fn test_egress_block_without_proxy_blocks_network() {
+        use hush_proxy::policy::PolicyAction;
+
+        let tmp = tempfile::TempDir::new().unwrap();
+        let mut policy = minimal_policy();
+        policy.guards.egress_allowlist = Some(EgressAllowlistConfig {
+            enabled: true,
+            allow: vec![],
+            block: vec![],
+            default_action: Some(PolicyAction::Block),
+            additional_allow: vec![],
+            remove_allow: vec![],
+            additional_block: vec![],
+            remove_block: vec![],
+        });
+
+        let builder = CapabilityBuilder::new(policy, tmp.path().to_path_buf());
+        let (caps, _) = builder.build_with_diagnostics().unwrap();
+
+        assert!(
+            matches!(caps.network_mode(), NetworkMode::Blocked),
+            "egress Block without proxy should yield Blocked mode"
+        );
+    }
+
+    #[test]
+    fn test_egress_allow_to_allow_all() {
+        use hush_proxy::policy::PolicyAction;
+
+        let tmp = tempfile::TempDir::new().unwrap();
+        let mut policy = minimal_policy();
+        policy.guards.egress_allowlist = Some(EgressAllowlistConfig {
+            enabled: true,
+            allow: vec!["*".into()],
+            block: vec![],
+            default_action: Some(PolicyAction::Allow),
+            additional_allow: vec![],
+            remove_allow: vec![],
+            additional_block: vec![],
+            remove_block: vec![],
+        });
+
+        let builder = CapabilityBuilder::new(policy, tmp.path().to_path_buf());
+        let (caps, _) = builder.build_with_diagnostics().unwrap();
+
+        assert!(
+            matches!(caps.network_mode(), NetworkMode::AllowAll),
+            "egress Allow should yield AllowAll network mode"
+        );
+    }
+
+    #[test]
+    fn test_shell_command_guard_blocks_dangerous_commands() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let mut policy = minimal_policy();
+        policy.guards.shell_command = Some(ShellCommandConfig::default());
+
+        let builder = CapabilityBuilder::new(policy, tmp.path().to_path_buf());
+        let (caps, _) = builder.build_with_diagnostics().unwrap();
+
+        let blocked = caps.blocked_commands();
+        let expected_blocked = ["rm", "rmdir", "dd", "chmod", "chown", "sudo", "kill",
+            "killall", "shutdown", "mkfs", "parted", "systemctl"];
+
+        for cmd in &expected_blocked {
+            assert!(
+                blocked.contains(&cmd.to_string()),
+                "ShellCommandGuard should block command: {cmd}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_shell_command_guard_disabled_no_blocked_commands() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let mut policy = minimal_policy();
+        policy.guards.shell_command = Some(ShellCommandConfig {
+            enabled: false,
+            forbidden_patterns: vec![],
+            enforce_forbidden_paths: false,
+        });
+
+        let builder = CapabilityBuilder::new(policy, tmp.path().to_path_buf());
+        let (caps, _) = builder.build_with_diagnostics().unwrap();
+
+        assert!(
+            caps.blocked_commands().is_empty(),
+            "disabled ShellCommandGuard should not add blocked commands"
+        );
+    }
+
+    #[test]
+    fn test_disabled_forbidden_path_guard_allows_all() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let mut policy = minimal_policy();
+        policy.guards.forbidden_path = Some(ForbiddenPathConfig {
+            enabled: false,
+            patterns: None,
+            exceptions: vec![],
+            additional_patterns: vec![],
+            remove_patterns: vec![],
+        });
+
+        let builder = CapabilityBuilder::new(policy, tmp.path().to_path_buf());
+        let patterns = builder.collect_forbidden_patterns();
+        assert!(
+            patterns.is_empty(),
+            "disabled forbidden_path guard should produce no forbidden patterns"
+        );
+    }
+
+    #[test]
+    fn test_disabled_egress_guard_no_network_effect() {
+        use hush_proxy::policy::PolicyAction;
+
+        let tmp = tempfile::TempDir::new().unwrap();
+        let mut policy = minimal_policy();
+        policy.guards.egress_allowlist = Some(EgressAllowlistConfig {
+            enabled: false,
+            allow: vec![],
+            block: vec![],
+            default_action: Some(PolicyAction::Block),
+            additional_allow: vec![],
+            remove_allow: vec![],
+            additional_block: vec![],
+            remove_block: vec![],
+        });
+
+        // When egress guard is present but disabled, apply_network_mode enters
+        // the `if let Some(ref egress)` branch but the inner `if egress.enabled`
+        // is false -- so no network mode change is applied. The default is AllowAll.
+        let builder = CapabilityBuilder::new(policy, tmp.path().to_path_buf());
+        let (caps, _) = builder.build_with_diagnostics().unwrap();
+
+        assert!(
+            matches!(caps.network_mode(), NetworkMode::AllowAll),
+            "disabled egress guard should leave network mode at default (AllowAll)"
+        );
+    }
+
+    #[test]
+    fn test_no_guards_configured_builds_successfully() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let policy = Policy {
+            guards: crate::policy::GuardConfigs::default(),
+            ..Policy::default()
+        };
+
+        let result = CapabilityBuilder::new(policy, tmp.path().to_path_buf()).build();
+        assert!(
+            result.is_ok(),
+            "policy with no guards configured should build successfully"
+        );
+    }
+
+    #[test]
+    fn test_multiple_guards_combine() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let test_file = tmp.path().join("extra.txt");
+        std::fs::write(&test_file, "data").unwrap();
+
+        let mut policy = minimal_policy();
+        policy.guards.shell_command = Some(ShellCommandConfig::default());
+        policy.guards.path_allowlist = Some(PathAllowlistConfig {
+            enabled: true,
+            file_access_allow: vec![test_file.to_string_lossy().to_string()],
+            file_write_allow: vec![],
+            patch_allow: vec![],
+        });
+
+        let builder = CapabilityBuilder::new(policy, tmp.path().to_path_buf());
+        let (caps, _) = builder.build_with_diagnostics().unwrap();
+
+        // Both guards should contribute
+        assert!(
+            !caps.blocked_commands().is_empty(),
+            "shell command guard should contribute blocked commands"
+        );
+
+        let canon = test_file.canonicalize().unwrap();
+        let has_extra = caps.fs_capabilities().iter().any(|cap| cap.resolved == canon);
+        assert!(
+            has_extra,
+            "path allowlist guard should contribute filesystem capabilities"
         );
     }
 }

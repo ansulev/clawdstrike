@@ -117,4 +117,78 @@ mod tests {
         // No binary check for empty command
         assert!(!result.errors.iter().any(|e| e.contains("Command binary")));
     }
+
+    // --- Phase 2C: Additional preflight tests ---
+
+    #[test]
+    fn test_preflight_passes_with_builder_caps() {
+        use crate::sandbox::capability_builder::CapabilityBuilder;
+        use crate::policy::Policy;
+
+        let tmp = tempfile::TempDir::new().unwrap();
+        let caps = CapabilityBuilder::new(Policy::default(), tmp.path().to_path_buf())
+            .build()
+            .unwrap();
+
+        let result = preflight_check(&caps, &[], tmp.path());
+        assert!(
+            result.is_ok(),
+            "preflight should pass for CapabilityBuilder-produced caps: {:?}",
+            result.errors
+        );
+    }
+
+    #[test]
+    fn test_preflight_fails_working_dir_not_accessible() {
+        // Empty capability set -- nothing is allowed
+        let caps = CapabilitySet::new();
+        let result = preflight_check(&caps, &[], Path::new("/some/nonexistent/workdir"));
+        assert!(
+            !result.is_ok(),
+            "preflight should fail when working directory is not accessible"
+        );
+        assert!(
+            result.errors.iter().any(|e| e.contains("Working directory")),
+            "error message should mention working directory"
+        );
+    }
+
+    #[test]
+    fn test_preflight_detects_inaccessible_command_binary() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        // Grant only the working dir -- no system paths like /usr/bin
+        let caps = CapabilitySet::new()
+            .allow_path(tmp.path(), AccessMode::ReadWrite)
+            .unwrap();
+
+        // Use an absolute path to a binary that exists but is not in our caps
+        let result = preflight_check(
+            &caps,
+            &["/usr/bin/env".into()],
+            tmp.path(),
+        );
+
+        assert!(
+            !result.is_ok(),
+            "preflight should fail when command binary is not accessible"
+        );
+        assert!(
+            result.errors.iter().any(|e| e.contains("Command binary")),
+            "error message should mention command binary"
+        );
+    }
+
+    #[test]
+    fn test_preflight_warnings_start_empty() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let caps = CapabilitySet::new()
+            .allow_path(tmp.path(), AccessMode::ReadWrite)
+            .unwrap();
+
+        let result = preflight_check(&caps, &[], tmp.path());
+        assert!(
+            result.warnings.is_empty(),
+            "preflight should not produce warnings for a clean capability set"
+        );
+    }
 }

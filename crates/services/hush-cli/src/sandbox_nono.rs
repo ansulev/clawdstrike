@@ -8,178 +8,8 @@
 
 use std::collections::HashMap;
 use std::ffi::CString;
-use std::path::{Path, PathBuf};
 
-use nono::query::{QueryContext, QueryResult};
-use nono::{AccessMode, CapabilitySet, Sandbox};
-
-/// Build a capability set for sandboxed execution.
-///
-/// Grants working directory read-write, system paths read-only,
-/// optional network proxy, and blocks specified commands.
-pub fn build_capability_set(
-    working_dir: &Path,
-    command: &[String],
-    proxy_port: Option<u16>,
-    extra_read_paths: &[PathBuf],
-    extra_write_paths: &[PathBuf],
-    blocked_commands: &[String],
-) -> nono::Result<CapabilitySet> {
-    let _ = command; // Used in Phase 2 for command-specific caps
-    let mut caps = CapabilitySet::new();
-
-    // Grant working directory read-write
-    caps = caps.allow_path(working_dir, AccessMode::ReadWrite)?;
-
-    // System paths (read-only)
-    for path in system_read_paths() {
-        if path.exists() {
-            caps = caps.allow_path(&path, AccessMode::Read)?;
-        }
-    }
-
-    // System writable paths (tmp, dev)
-    for path in system_write_paths() {
-        if path.exists() {
-            caps = caps.allow_path(&path, AccessMode::ReadWrite)?;
-        }
-    }
-
-    // Extra paths from policy/CLI
-    for path in extra_read_paths {
-        if path.exists() {
-            caps = caps.allow_path(path, AccessMode::Read)?;
-        }
-    }
-    for path in extra_write_paths {
-        if path.exists() {
-            caps = caps.allow_path(path, AccessMode::ReadWrite)?;
-        }
-    }
-
-    // Network: proxy-only if proxy is active, otherwise block
-    if let Some(port) = proxy_port {
-        caps = caps.proxy_only(port);
-    } else {
-        caps = caps.block_network();
-    }
-
-    // Blocked commands
-    for cmd in blocked_commands {
-        caps = caps.block_command(cmd);
-    }
-
-    Ok(caps)
-}
-
-/// Platform-specific system paths that need read access for execution.
-#[cfg(target_os = "macos")]
-fn system_read_paths() -> Vec<PathBuf> {
-    [
-        "/bin",
-        "/usr",
-        "/sbin",
-        "/System/Library",
-        "/Library",
-        "/private/etc",
-        "/opt/homebrew",
-    ]
-    .iter()
-    .map(PathBuf::from)
-    .collect()
-}
-
-#[cfg(target_os = "linux")]
-fn system_read_paths() -> Vec<PathBuf> {
-    [
-        "/bin", "/lib", "/lib64", "/usr", "/sbin", "/etc", "/proc", "/sys", "/run",
-    ]
-    .iter()
-    .map(PathBuf::from)
-    .collect()
-}
-
-#[cfg(not(any(target_os = "macos", target_os = "linux")))]
-fn system_read_paths() -> Vec<PathBuf> {
-    vec![]
-}
-
-/// Platform-specific system paths that need write access.
-#[cfg(target_os = "macos")]
-fn system_write_paths() -> Vec<PathBuf> {
-    ["/tmp", "/private/tmp", "/dev"]
-        .iter()
-        .map(PathBuf::from)
-        .collect()
-}
-
-#[cfg(target_os = "linux")]
-fn system_write_paths() -> Vec<PathBuf> {
-    ["/tmp", "/dev", "/dev/shm"]
-        .iter()
-        .map(PathBuf::from)
-        .collect()
-}
-
-#[cfg(not(any(target_os = "macos", target_os = "linux")))]
-fn system_write_paths() -> Vec<PathBuf> {
-    vec![]
-}
-
-/// Pre-flight validation of a capability set.
-///
-/// Returns a list of warnings about potential issues (e.g., working
-/// directory or command binary not accessible within the sandbox).
-pub fn validate_capabilities(
-    caps: &CapabilitySet,
-    command: &[String],
-    working_dir: &Path,
-) -> Vec<String> {
-    let ctx = QueryContext::new(caps.clone());
-    let mut warnings = vec![];
-
-    // Verify working directory is accessible
-    if !matches!(
-        ctx.query_path(working_dir, AccessMode::ReadWrite),
-        QueryResult::Allowed(_)
-    ) {
-        warnings.push(format!(
-            "Working directory {} not accessible in sandbox",
-            working_dir.display()
-        ));
-    }
-
-    // Verify command binary is accessible (best-effort lookup)
-    if let Some(bin_path) = find_command_in_path(&command[0]) {
-        if !matches!(
-            ctx.query_path(&bin_path, AccessMode::Read),
-            QueryResult::Allowed(_)
-        ) {
-            warnings.push(format!(
-                "Command binary {} not accessible in sandbox",
-                bin_path.display()
-            ));
-        }
-    }
-
-    warnings
-}
-
-/// Find a command in PATH (simple lookup, no `which` crate needed).
-fn find_command_in_path(cmd: &str) -> Option<PathBuf> {
-    let path = Path::new(cmd);
-    if path.is_absolute() && path.exists() {
-        return Some(path.to_path_buf());
-    }
-    let path_var = std::env::var("PATH").ok()?;
-    for dir in path_var.split(':') {
-        let candidate = Path::new(dir).join(cmd);
-        if candidate.exists() {
-            return Some(candidate);
-        }
-    }
-    None
-}
+use nono::{CapabilitySet, Sandbox};
 
 /// Spawn a child process inside a nono sandbox.
 ///
@@ -332,7 +162,153 @@ fn exit_code_from_status(status: nix::sys::wait::WaitStatus) -> i32 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use nono::NetworkMode;
+    use std::path::{Path, PathBuf};
+
+    use nono::query::{QueryContext, QueryResult};
+    use nono::{AccessMode, NetworkMode};
+
+    /// Build a capability set for testing (Phase 1 API, superseded by CapabilityBuilder).
+    fn build_capability_set(
+        working_dir: &Path,
+        command: &[String],
+        proxy_port: Option<u16>,
+        extra_read_paths: &[PathBuf],
+        extra_write_paths: &[PathBuf],
+        blocked_commands: &[String],
+    ) -> nono::Result<CapabilitySet> {
+        let _ = command;
+        let mut caps = CapabilitySet::new();
+        caps = caps.allow_path(working_dir, AccessMode::ReadWrite)?;
+
+        for path in system_read_paths() {
+            if path.exists() {
+                caps = caps.allow_path(&path, AccessMode::Read)?;
+            }
+        }
+        for path in system_write_paths() {
+            if path.exists() {
+                caps = caps.allow_path(&path, AccessMode::ReadWrite)?;
+            }
+        }
+        for path in extra_read_paths {
+            if path.exists() {
+                caps = caps.allow_path(path, AccessMode::Read)?;
+            }
+        }
+        for path in extra_write_paths {
+            if path.exists() {
+                caps = caps.allow_path(path, AccessMode::ReadWrite)?;
+            }
+        }
+        if let Some(port) = proxy_port {
+            caps = caps.proxy_only(port);
+        } else {
+            caps = caps.block_network();
+        }
+        for cmd in blocked_commands {
+            caps = caps.block_command(cmd);
+        }
+        Ok(caps)
+    }
+
+    fn validate_capabilities(
+        caps: &CapabilitySet,
+        command: &[String],
+        working_dir: &Path,
+    ) -> Vec<String> {
+        let ctx = QueryContext::new(caps.clone());
+        let mut warnings = vec![];
+        if !matches!(
+            ctx.query_path(working_dir, AccessMode::ReadWrite),
+            QueryResult::Allowed(_)
+        ) {
+            warnings.push(format!(
+                "Working directory {} not accessible in sandbox",
+                working_dir.display()
+            ));
+        }
+        if !command.is_empty() {
+            if let Some(bin_path) = find_command_in_path(&command[0]) {
+                if !matches!(
+                    ctx.query_path(&bin_path, AccessMode::Read),
+                    QueryResult::Allowed(_)
+                ) {
+                    warnings.push(format!(
+                        "Command binary {} not accessible in sandbox",
+                        bin_path.display()
+                    ));
+                }
+            }
+        }
+        warnings
+    }
+
+    fn find_command_in_path(cmd: &str) -> Option<PathBuf> {
+        let path = Path::new(cmd);
+        if path.is_absolute() && path.exists() {
+            return Some(path.to_path_buf());
+        }
+        let path_var = std::env::var("PATH").ok()?;
+        for dir in path_var.split(':') {
+            let candidate = Path::new(dir).join(cmd);
+            if candidate.exists() {
+                return Some(candidate);
+            }
+        }
+        None
+    }
+
+    #[cfg(target_os = "macos")]
+    fn system_read_paths() -> Vec<PathBuf> {
+        [
+            "/bin",
+            "/usr",
+            "/sbin",
+            "/System/Library",
+            "/Library",
+            "/private/etc",
+            "/opt/homebrew",
+        ]
+        .iter()
+        .map(PathBuf::from)
+        .collect()
+    }
+
+    #[cfg(target_os = "linux")]
+    fn system_read_paths() -> Vec<PathBuf> {
+        [
+            "/bin", "/lib", "/lib64", "/usr", "/sbin", "/etc", "/proc", "/sys", "/run",
+        ]
+        .iter()
+        .map(PathBuf::from)
+        .collect()
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+    fn system_read_paths() -> Vec<PathBuf> {
+        vec![]
+    }
+
+    #[cfg(target_os = "macos")]
+    fn system_write_paths() -> Vec<PathBuf> {
+        ["/tmp", "/private/tmp", "/dev"]
+            .iter()
+            .map(PathBuf::from)
+            .collect()
+    }
+
+    #[cfg(target_os = "linux")]
+    fn system_write_paths() -> Vec<PathBuf> {
+        ["/tmp", "/dev", "/dev/shm"]
+            .iter()
+            .map(PathBuf::from)
+            .collect()
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+    fn system_write_paths() -> Vec<PathBuf> {
+        vec![]
+    }
 
     #[test]
     fn test_capability_set_allows_working_dir() {
@@ -373,7 +349,6 @@ mod tests {
         let ctx = QueryContext::new(caps);
         if let Some(home) = dirs::home_dir() {
             let ssh_dir = home.join(".ssh");
-            // .ssh should NOT be in the capability set (not explicitly granted)
             assert!(
                 !matches!(
                     ctx.query_path(&ssh_dir, AccessMode::Read),
@@ -460,7 +435,6 @@ mod tests {
         .unwrap();
 
         let warnings = validate_capabilities(&caps, &["ls".into()], tmp.path());
-        // Working dir should be accessible, so no warnings about it
         assert!(
             !warnings.iter().any(|w| w.contains("Working directory")),
             "should not warn about working directory"
@@ -469,10 +443,8 @@ mod tests {
 
     #[test]
     fn test_system_read_paths_exist() {
-        // At least some system paths should exist
         let paths = system_read_paths();
         assert!(!paths.is_empty(), "should have system read paths");
-        // /usr should exist on all Unix systems
         assert!(
             paths.iter().any(|p| p.as_os_str() == "/usr"),
             "/usr should be in system read paths"
@@ -491,14 +463,12 @@ mod tests {
 
     #[test]
     fn test_find_command_in_path() {
-        // ls should be findable on any Unix system
         let result = find_command_in_path("ls");
         assert!(result.is_some(), "ls should be findable in PATH");
     }
 
     #[test]
     fn test_close_inherited_fds_does_not_panic() {
-        // Just verify it doesn't panic -- we can't easily test fd closure
         close_inherited_fds(100);
     }
 

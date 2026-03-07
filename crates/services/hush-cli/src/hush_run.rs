@@ -274,6 +274,7 @@ pub async fn cmd_run(
         }
     };
 
+    let sandbox_policy = loaded.policy.clone();
     let engine = match HushEngine::builder(loaded.policy).build() {
         Ok(engine) => engine,
         Err(e) => {
@@ -380,31 +381,56 @@ pub async fn cmd_run(
         SandboxMode::Nono => {
             let working_dir = std::env::current_dir()
                 .unwrap_or_else(|_| PathBuf::from("."));
-            match sandbox_nono::build_capability_set(
-                &working_dir,
-                &command,
-                env_proxy_url.as_ref().and_then(|url| {
-                    // Extract port from proxy URL like "http://127.0.0.1:PORT"
-                    url.rsplit(':').next().and_then(|p| p.parse::<u16>().ok())
-                }),
-                &[], // extra_read_paths (Phase 2 will populate from policy)
-                &[], // extra_write_paths
-                &[], // blocked_commands (Phase 2 will populate from policy)
-            ) {
-                Ok(caps) => {
+
+            // Extract proxy port from proxy URL
+            let proxy_port = env_proxy_url.as_ref().and_then(|url| {
+                url.rsplit(':').next().and_then(|p| p.parse::<u16>().ok())
+            });
+
+            // Build capability set from policy using CapabilityBuilder
+            let mut builder = clawdstrike::sandbox::CapabilityBuilder::new(
+                sandbox_policy,
+                working_dir.clone(),
+            );
+            if let Some(port) = proxy_port {
+                builder = builder.with_proxy_port(port);
+            }
+
+            match builder.build_with_diagnostics() {
+                Ok((caps, translation_warnings)) => {
+                    // Log translation warnings
+                    for tw in &translation_warnings {
+                        match tw.severity {
+                            clawdstrike::sandbox::WarningSeverity::Warning => {
+                                let _ = writeln!(stderr, "[nono] warning: {}: {}", tw.guard, tw.message);
+                            }
+                            clawdstrike::sandbox::WarningSeverity::Info => {
+                                // Only show info in verbose mode (skip for now)
+                            }
+                        }
+                    }
+
                     // Pre-flight validation
-                    let warnings = sandbox_nono::validate_capabilities(&caps, &command, &working_dir);
-                    for w in &warnings {
+                    let preflight = clawdstrike::sandbox::preflight_check(&caps, &command, &working_dir);
+                    for e in &preflight.errors {
+                        let _ = writeln!(stderr, "[nono] error: {}", e);
+                    }
+                    for w in &preflight.warnings {
                         let _ = writeln!(stderr, "[nono] warning: {}", w);
                     }
 
-                    // Check platform support
-                    if !nono::Sandbox::is_supported() {
-                        let support = nono::Sandbox::support_info();
-                        let _ = writeln!(stderr, "[nono] warning: sandbox not supported: {}", support.details);
-                    }
+                    if !preflight.is_ok() {
+                        let _ = writeln!(stderr, "[nono] sandbox disabled due to pre-flight errors");
+                        (SandboxExecution::None, "disabled".to_string())
+                    } else {
+                        // Check platform support
+                        if !nono::Sandbox::is_supported() {
+                            let support = nono::Sandbox::support_info();
+                            let _ = writeln!(stderr, "[nono] warning: sandbox not supported: {}", support.details);
+                        }
 
-                    (SandboxExecution::Nono { caps: Box::new(caps), working_dir }, "nono".to_string())
+                        (SandboxExecution::Nono { caps: Box::new(caps), working_dir }, "nono".to_string())
+                    }
                 }
                 Err(e) => {
                     let _ = writeln!(stderr, "Warning: failed to build nono sandbox: {}", e);

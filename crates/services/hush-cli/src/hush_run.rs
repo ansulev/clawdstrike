@@ -381,20 +381,21 @@ pub async fn cmd_run(
 
     let (sandbox_execution, sandbox_note) = match sandbox {
         SandboxMode::Nono => {
-            let working_dir = std::env::current_dir()
-                .unwrap_or_else(|_| PathBuf::from("."));
+            let working_dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
 
             // Extract proxy port from proxy URL
-            let proxy_port = env_proxy_url.as_ref().and_then(|url| {
-                url.rsplit(':').next().and_then(|p| p.parse::<u16>().ok())
-            });
+            let proxy_port = env_proxy_url
+                .as_ref()
+                .and_then(|url| url.rsplit(':').next().and_then(|p| p.parse::<u16>().ok()));
 
             // Build capability set from policy using CapabilityBuilder
-            let supervisor_policy = if supervised { Some(sandbox_policy.clone()) } else { None };
-            let mut builder = clawdstrike::sandbox::CapabilityBuilder::new(
-                sandbox_policy,
-                working_dir.clone(),
-            );
+            let supervisor_policy = if supervised {
+                Some(sandbox_policy.clone())
+            } else {
+                None
+            };
+            let mut builder =
+                clawdstrike::sandbox::CapabilityBuilder::new(sandbox_policy, working_dir.clone());
             if let Some(port) = proxy_port {
                 builder = builder.with_proxy_port(port);
             }
@@ -405,7 +406,11 @@ pub async fn cmd_run(
                     for tw in &translation_warnings {
                         match tw.severity {
                             clawdstrike::sandbox::WarningSeverity::Warning => {
-                                let _ = writeln!(stderr, "[nono] warning: {}: {}", tw.guard, tw.message);
+                                let _ = writeln!(
+                                    stderr,
+                                    "[nono] warning: {}: {}",
+                                    tw.guard, tw.message
+                                );
                             }
                             clawdstrike::sandbox::WarningSeverity::Info => {
                                 // Only show info in verbose mode (skip for now)
@@ -414,7 +419,8 @@ pub async fn cmd_run(
                     }
 
                     // Pre-flight validation
-                    let preflight = clawdstrike::sandbox::preflight_check(&caps, &command, &working_dir);
+                    let preflight =
+                        clawdstrike::sandbox::preflight_check(&caps, &command, &working_dir);
                     for e in &preflight.errors {
                         let _ = writeln!(stderr, "[nono] error: {}", e);
                     }
@@ -423,36 +429,61 @@ pub async fn cmd_run(
                     }
 
                     if !preflight.is_ok() {
-                        let _ = writeln!(stderr, "[nono] sandbox disabled due to pre-flight errors");
+                        let _ =
+                            writeln!(stderr, "[nono] sandbox disabled due to pre-flight errors");
                         (SandboxExecution::None, "disabled".to_string())
                     } else {
                         // Check platform support
                         if !nono::Sandbox::is_supported() {
                             let support = nono::Sandbox::support_info();
-                            let _ = writeln!(stderr, "[nono] warning: sandbox not supported: {}", support.details);
+                            let _ = writeln!(
+                                stderr,
+                                "[nono] warning: sandbox not supported: {}",
+                                support.details
+                            );
                         }
 
                         if let Some(ref sp) = supervisor_policy {
                             // Build never-grant list and supervisor context
-                            let never_grant_paths = clawdstrike::sandbox::build_never_grant_list(sp);
+                            let never_grant_paths =
+                                clawdstrike::sandbox::build_never_grant_list(sp);
                             match nono::NeverGrantChecker::new(&never_grant_paths) {
                                 Ok(never_grant) => {
                                     let context = GuardContext::new();
-                                    let _ = writeln!(stderr, "[nono] supervised mode: {} never-grant paths", never_grant.len());
-                                    (SandboxExecution::Supervised(Box::new(SupervisedData {
-                                        caps: Box::new(caps),
-                                        engine: Arc::clone(&engine),
-                                        context,
-                                        never_grant,
-                                    })), "nono+supervised".to_string())
+                                    let _ = writeln!(
+                                        stderr,
+                                        "[nono] supervised mode: {} never-grant paths",
+                                        never_grant.len()
+                                    );
+                                    (
+                                        SandboxExecution::Supervised(Box::new(SupervisedData {
+                                            caps: Box::new(caps),
+                                            engine: Arc::clone(&engine),
+                                            context,
+                                            never_grant,
+                                        })),
+                                        "nono+supervised".to_string(),
+                                    )
                                 }
                                 Err(e) => {
                                     let _ = writeln!(stderr, "[nono] warning: failed to build never-grant list: {}, falling back to static sandbox", e);
-                                    (SandboxExecution::Nono { caps: Box::new(caps), working_dir }, "nono".to_string())
+                                    (
+                                        SandboxExecution::Nono {
+                                            caps: Box::new(caps),
+                                            working_dir,
+                                        },
+                                        "nono".to_string(),
+                                    )
                                 }
                             }
                         } else {
-                            (SandboxExecution::Nono { caps: Box::new(caps), working_dir }, "nono".to_string())
+                            (
+                                SandboxExecution::Nono {
+                                    caps: Box::new(caps),
+                                    working_dir,
+                                },
+                                "nono".to_string(),
+                            )
                         }
                     }
                 }
@@ -462,15 +493,13 @@ pub async fn cmd_run(
                 }
             }
         }
-        SandboxMode::Legacy => {
-            match maybe_prepare_sandbox(true, stderr) {
-                Ok((wrapper, note)) => (SandboxExecution::Legacy(wrapper), note),
-                Err(e) => {
-                    let _ = writeln!(stderr, "Warning: failed to prepare sandbox: {}", e);
-                    (SandboxExecution::None, "disabled".to_string())
-                }
+        SandboxMode::Legacy => match maybe_prepare_sandbox(true, stderr) {
+            Ok((wrapper, note)) => (SandboxExecution::Legacy(wrapper), note),
+            Err(e) => {
+                let _ = writeln!(stderr, "Warning: failed to prepare sandbox: {}", e);
+                (SandboxExecution::None, "disabled".to_string())
             }
-        }
+        },
         SandboxMode::None => (SandboxExecution::None, "disabled".to_string()),
     };
 
@@ -517,7 +546,12 @@ pub async fn cmd_run(
             }
         }
         SandboxExecution::Supervised(data) => {
-            let SupervisedData { caps, engine: sup_engine, context, never_grant } = *data;
+            let SupervisedData {
+                caps,
+                engine: sup_engine,
+                context,
+                never_grant,
+            } = *data;
             let mut env_overrides = HashMap::new();
             env_overrides.insert("HUSH_SESSION_ID".to_string(), session_id.clone());
             if let Some(ref proxy_url) = env_proxy_url {
@@ -526,7 +560,12 @@ pub async fn cmd_run(
             }
             let _ = writeln!(stderr, "Running (supervised): {}", command.join(" "));
             match crate::supervised_exec::spawn_supervised_child(
-                &caps, &command, &env_overrides, sup_engine, context, never_grant,
+                &caps,
+                &command,
+                &env_overrides,
+                sup_engine,
+                context,
+                never_grant,
             ) {
                 Ok(result) => {
                     let _ = writeln!(
@@ -563,7 +602,15 @@ pub async fn cmd_run(
             }
         }
         SandboxExecution::Legacy(wrapper) => {
-            match spawn_and_wait_child(&command, wrapper, env_proxy_url.as_deref(), &session_id, stderr).await {
+            match spawn_and_wait_child(
+                &command,
+                wrapper,
+                env_proxy_url.as_deref(),
+                &session_id,
+                stderr,
+            )
+            .await
+            {
                 Ok(status) => status,
                 Err(e) => {
                     let _ = writeln!(stderr, "Error: {}", e);
@@ -577,7 +624,15 @@ pub async fn cmd_run(
             }
         }
         SandboxExecution::None => {
-            match spawn_and_wait_child(&command, SandboxWrapper::None, env_proxy_url.as_deref(), &session_id, stderr).await {
+            match spawn_and_wait_child(
+                &command,
+                SandboxWrapper::None,
+                env_proxy_url.as_deref(),
+                &session_id,
+                stderr,
+            )
+            .await
+            {
                 Ok(status) => status,
                 Err(e) => {
                     let _ = writeln!(stderr, "Error: {}", e);

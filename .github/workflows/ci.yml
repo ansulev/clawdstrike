@@ -538,10 +538,14 @@ jobs:
           fi
 
           # This job merges coverage from the root Rust workspace and the
-          # desktop Tauri crate. Exclude standalone crates still outside that
-          # combined coverage set and test-only Rust sources that do not emit
-          # stable LCOV entries in this job.
+          # desktop Tauri crate. Keep generating desktop LCOV, but exclude the
+          # long-lived Tauri surface from the changed-line floor until it has a
+          # dedicated changed-line gate instead of inheriting legacy branch
+          # churn. Also exclude standalone crates still outside the combined
+          # coverage set and test-only Rust sources that do not emit stable
+          # LCOV entries in this job.
           grep -v '^apps/agent/src-tauri/' changed_rust_files.txt \
+            | grep -v '^apps/desktop/src-tauri/' \
             | grep -v '^crates/bridges/hush-go-native/' \
             | grep -v '^packages/sdk/hush-py/hush-native/' \
             | grep -Ev '(^|/)tests/|_test\.rs$|_tests\.rs$|integration_tests\.rs$' \

@@ -525,3 +525,187 @@ fn send_fd_post_fork(socket_fd: i32, fd: i32) -> bool {
         libc::sendmsg(socket_fd, &msg, 0) >= 0
     }
 }
+
+#[cfg(all(test, target_os = "linux"))]
+mod tests {
+    use super::*;
+
+    use std::fs::{self, File};
+    use std::io::Read;
+    use std::os::fd::AsRawFd;
+
+    use clawdstrike::sandbox::SupervisorStats;
+    use nono::sandbox::SeccompData;
+
+    fn openat_notif(flags: i32, mode: libc::mode_t) -> SeccompNotif {
+        SeccompNotif {
+            id: 7,
+            pid: std::process::id(),
+            flags: 0,
+            data: SeccompData {
+                nr: libc::SYS_openat as i32,
+                args: [libc::AT_FDCWD as u64, 0, flags as u64, mode as u64, 0, 0],
+                ..Default::default()
+            },
+        }
+    }
+
+    fn openat2_invalid_size_notif() -> SeccompNotif {
+        SeccompNotif {
+            id: 9,
+            pid: std::process::id(),
+            flags: 0,
+            data: SeccompData {
+                nr: SYS_OPENAT2,
+                args: [libc::AT_FDCWD as u64, 0, 0, 1, 0, 0],
+                ..Default::default()
+            },
+        }
+    }
+
+    fn recv_fd(socket_fd: i32) -> i32 {
+        let mut data = [0u8; 1];
+        let mut iov = libc::iovec {
+            iov_base: data.as_mut_ptr().cast(),
+            iov_len: data.len(),
+        };
+        let mut control = [0u8; 64];
+        let mut msg: libc::msghdr = unsafe { std::mem::zeroed() };
+        msg.msg_iov = &mut iov;
+        msg.msg_iovlen = 1;
+        msg.msg_control = control.as_mut_ptr().cast();
+        msg.msg_controllen = control.len();
+
+        let recv_len = unsafe { libc::recvmsg(socket_fd, &mut msg, 0) };
+        assert!(
+            recv_len >= 0,
+            "recvmsg failed: {}",
+            std::io::Error::last_os_error()
+        );
+
+        let cmsg = unsafe { libc::CMSG_FIRSTHDR(&msg) };
+        assert!(!cmsg.is_null(), "expected SCM_RIGHTS control message");
+        assert_eq!(unsafe { (*cmsg).cmsg_level }, libc::SOL_SOCKET);
+        assert_eq!(unsafe { (*cmsg).cmsg_type }, libc::SCM_RIGHTS);
+
+        let mut received = -1i32;
+        unsafe {
+            std::ptr::copy_nonoverlapping(
+                libc::CMSG_DATA(cmsg),
+                (&mut received as *mut i32).cast(),
+                std::mem::size_of::<i32>(),
+            );
+        }
+        received
+    }
+
+    #[test]
+    fn continue_denial_tracks_denials_and_never_grant_blocks() {
+        let mut stats = SupervisorStats::default();
+        let mut denials = Vec::new();
+
+        continue_denial(
+            &mut stats,
+            &mut denials,
+            "/tmp/blocked.txt",
+            "read",
+            "blocked for test".to_string(),
+            true,
+        );
+
+        assert_eq!(stats.requests_denied, 1);
+        assert_eq!(stats.never_grant_blocks, 1);
+        assert_eq!(denials.len(), 1);
+        assert_eq!(denials[0].path, "/tmp/blocked.txt");
+        assert_eq!(denials[0].access, "read");
+        assert_eq!(denials[0].reason, "blocked for test");
+    }
+
+    #[test]
+    fn notif_helpers_classify_openat_access_and_mode() {
+        let notif = openat_notif(libc::O_WRONLY | libc::O_CREAT, 0o640);
+
+        assert_eq!(notif_flags(&notif), libc::O_WRONLY | libc::O_CREAT);
+        assert_eq!(notif_mode(&notif), nono::AccessMode::Write);
+        assert_eq!(notif_create_mode(&notif), 0o640);
+    }
+
+    #[test]
+    fn openat2_helpers_fall_back_when_open_how_size_is_invalid() {
+        let notif = openat2_invalid_size_notif();
+
+        assert_eq!(notif_flags(&notif), libc::O_RDONLY);
+        assert_eq!(notif_mode(&notif), nono::AccessMode::Read);
+        assert_eq!(notif_create_mode(&notif), 0);
+    }
+
+    #[test]
+    fn resolve_requested_path_joins_relative_paths_against_dirfd() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let parent = temp.path().join("existing");
+        fs::create_dir_all(&parent).expect("mkdir");
+        let dir = File::open(&parent).expect("open dir");
+
+        let resolved =
+            resolve_requested_path(std::process::id(), dir.as_raw_fd(), Path::new("child.txt"));
+
+        assert_eq!(resolved, parent.join("child.txt"));
+    }
+
+    #[test]
+    fn open_supervised_path_reads_existing_file_and_creates_new_file() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let existing_path = temp.path().join("existing.txt");
+        fs::write(&existing_path, b"hello").expect("write existing file");
+
+        let existing_fd =
+            open_supervised_path(&existing_path, nono::AccessMode::Read, libc::O_RDONLY, 0)
+                .expect("open existing");
+        let mut existing = File::from(existing_fd);
+        let mut buf = String::new();
+        existing.read_to_string(&mut buf).expect("read existing");
+        assert_eq!(buf, "hello");
+
+        let created_path = temp.path().join("created.txt");
+        let _created_fd = open_supervised_path(
+            &created_path,
+            nono::AccessMode::ReadWrite,
+            libc::O_CREAT | libc::O_RDWR,
+            0o600,
+        )
+        .expect("create file");
+        assert!(created_path.exists());
+    }
+
+    #[test]
+    fn send_fd_post_fork_passes_file_descriptors_over_unix_socket() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let file_path = temp.path().join("fd.txt");
+        fs::write(&file_path, b"fd-pass").expect("write file");
+        let file = File::open(&file_path).expect("open file");
+
+        let mut fds = [0; 2];
+        let rc = unsafe { libc::socketpair(libc::AF_UNIX, libc::SOCK_STREAM, 0, fds.as_mut_ptr()) };
+        assert_eq!(
+            rc,
+            0,
+            "socketpair failed: {}",
+            std::io::Error::last_os_error()
+        );
+
+        assert!(send_fd_post_fork(fds[0], file.as_raw_fd()));
+
+        let received_fd = recv_fd(fds[1]);
+        assert!(received_fd >= 0);
+
+        let mut received = File::from(unsafe { OwnedFd::from_raw_fd(received_fd) });
+        let mut buf = String::new();
+        received.read_to_string(&mut buf).expect("read received");
+        assert_eq!(buf, "fd-pass");
+
+        unsafe {
+            libc::close(fds[0]);
+            libc::close(fds[1]);
+        }
+    }
+}

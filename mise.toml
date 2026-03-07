@@ -29,7 +29,11 @@ run = "cargo fmt --all -- --check"
 
 [tasks.deny]
 description = "Run cargo-deny checks"
-run = "cargo deny check"
+run = """
+cargo deny check
+cargo metadata --manifest-path apps/desktop/src-tauri/Cargo.toml --format-version 1 --locked > /tmp/desktop-tauri-metadata.json
+cargo deny check --metadata-path /tmp/desktop-tauri-metadata.json licenses sources
+"""
 
 [tasks.doc]
 description = "Build documentation"
@@ -48,6 +52,8 @@ description = "App checks for desktop, control console, and Tauri backends"
 run = """
 (cd apps/desktop && bun install --frozen-lockfile)
 (cd apps/desktop && bun run typecheck)
+(cd apps/desktop && bun run test)
+(cd apps/desktop && bun run build)
 npm --prefix apps/control-console ci
 npm --prefix apps/control-console test
 npm --prefix apps/control-console run typecheck
@@ -111,6 +117,10 @@ run = """
 cargo fmt --all -- --check
 cargo clippy --workspace -- -D warnings
 cargo test --workspace
+(cd apps/desktop && bun install --frozen-lockfile)
+(cd apps/desktop && bun run typecheck)
+(cd apps/desktop && bun run test)
+(cd apps/desktop && bun run build)
 cargo check --manifest-path apps/desktop/src-tauri/Cargo.toml
 cargo check --manifest-path apps/agent/src-tauri/Cargo.toml
 bash scripts/path-lint.sh

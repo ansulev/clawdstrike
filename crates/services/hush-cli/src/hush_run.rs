@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use std::future::Future;
 use std::io::Write;
 use std::net::{IpAddr, Ipv6Addr, SocketAddr};
+use std::os::unix::process::ExitStatusExt;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU8, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
@@ -433,7 +434,8 @@ pub async fn cmd_run(
                             stderr,
                             "[nono] aborting: sandbox pre-flight failed (fail-closed)"
                         );
-                        let _ = writer_handle.await;
+                        drop(event_emitter);
+                        await_event_writer(writer_handle, stderr).await;
                         return ExitCode::RuntimeError.as_i32();
                     } else {
                         // Check platform support
@@ -469,14 +471,14 @@ pub async fn cmd_run(
                                     )
                                 }
                                 Err(e) => {
-                                    let _ = writeln!(stderr, "[nono] warning: failed to build never-grant list: {}, falling back to static sandbox", e);
-                                    (
-                                        SandboxExecution::Nono {
-                                            caps: Box::new(caps),
-                                            working_dir,
-                                        },
-                                        "nono".to_string(),
-                                    )
+                                    let _ = writeln!(
+                                        stderr,
+                                        "[nono] error: failed to activate supervised mode: {}",
+                                        e
+                                    );
+                                    drop(event_emitter);
+                                    await_event_writer(writer_handle, stderr).await;
+                                    return ExitCode::RuntimeError.as_i32();
                                 }
                             }
                         } else {
@@ -510,22 +512,7 @@ pub async fn cmd_run(
         SandboxMode::None => (SandboxExecution::None, "disabled".to_string()),
     };
 
-    // Build sandbox attestation metadata before consuming sandbox_execution.
-    // For the Supervised path, this initial attestation lacks supervisor stats
-    // and denials — those are merged after the child exits (see below).
-    let mut sandbox_attestation_json = match &sandbox_execution {
-        SandboxExecution::Nono { caps, .. } => {
-            let attestation = clawdstrike::sandbox::build_attestation(caps, false);
-            serde_json::to_value(&attestation).ok()
-        }
-        SandboxExecution::Supervised(ref data) => {
-            let attestation = clawdstrike::sandbox::build_attestation(&data.caps, true);
-            serde_json::to_value(&attestation).ok()
-        }
-        _ => None,
-    };
-
-    let child_status = match sandbox_execution {
+    let sandbox_run = match sandbox_execution {
         SandboxExecution::Nono { caps, .. } => {
             // Build env overrides for the child
             let mut env_overrides = HashMap::new();
@@ -536,18 +523,27 @@ pub async fn cmd_run(
             }
             let _ = writeln!(stderr, "Running: {}", command.join(" "));
             match sandbox_nono::spawn_sandboxed_child(&caps, &command, &env_overrides) {
-                Ok(exit_code) => {
-                    // Convert i32 to ExitStatus for compatibility
-                    use std::os::unix::process::ExitStatusExt;
-                    std::process::ExitStatus::from_raw(exit_code << 8)
-                }
+                Ok(result) => SandboxRunResult {
+                    child_status: exit_status_from_code(result.exit_code),
+                    sandbox_attestation_json: serde_json::to_value(
+                        clawdstrike::sandbox::build_attestation(
+                            &caps,
+                            clawdstrike::sandbox::SandboxRuntimeState::static_mode(
+                                result.sandbox_applied,
+                                result.sandbox_error.clone(),
+                            ),
+                        ),
+                    )
+                    .ok(),
+                    sandbox_failure: result.sandbox_error,
+                },
                 Err(e) => {
                     let _ = writeln!(stderr, "Error: {}", e);
                     if let Some(h) = proxy_handle {
                         h.abort();
                     }
                     drop(event_emitter);
-                    let _ = writer_handle.await;
+                    await_event_writer(writer_handle, stderr).await;
                     return ExitCode::RuntimeError.as_i32();
                 }
             }
@@ -575,6 +571,20 @@ pub async fn cmd_run(
                 never_grant,
             ) {
                 Ok(result) => {
+                    let mut attestation = clawdstrike::sandbox::build_attestation(
+                        &caps,
+                        clawdstrike::sandbox::SandboxRuntimeState::supervised_mode(
+                            result.sandbox_applied,
+                            result.supervised_active,
+                            result.sandbox_error.clone(),
+                        ),
+                    );
+                    if result.supervised_active {
+                        attestation.supervisor = Some(result.stats.clone());
+                    }
+                    if !result.denials.is_empty() {
+                        attestation.denials = result.denials.clone();
+                    }
                     let _ = writeln!(
                         stderr,
                         "[nono] supervisor stats: {} requests ({} granted, {} denied, {} never-grant)",
@@ -583,19 +593,11 @@ pub async fn cmd_run(
                         result.stats.requests_denied,
                         result.stats.never_grant_blocks,
                     );
-                    // Merge supervisor stats and denials into attestation
-                    if let Some(ref mut att_json) = sandbox_attestation_json {
-                        if let Ok(stats_val) = serde_json::to_value(&result.stats) {
-                            att_json["supervisor"] = stats_val;
-                        }
-                        if !result.denials.is_empty() {
-                            if let Ok(denials_val) = serde_json::to_value(&result.denials) {
-                                att_json["denials"] = denials_val;
-                            }
-                        }
+                    SandboxRunResult {
+                        child_status: exit_status_from_code(result.exit_code),
+                        sandbox_attestation_json: serde_json::to_value(&attestation).ok(),
+                        sandbox_failure: result.sandbox_error,
                     }
-                    use std::os::unix::process::ExitStatusExt;
-                    std::process::ExitStatus::from_raw(result.exit_code << 8)
                 }
                 Err(e) => {
                     let _ = writeln!(stderr, "Error: {}", e);
@@ -603,7 +605,7 @@ pub async fn cmd_run(
                         h.abort();
                     }
                     drop(event_emitter);
-                    let _ = writer_handle.await;
+                    await_event_writer(writer_handle, stderr).await;
                     return ExitCode::RuntimeError.as_i32();
                 }
             }
@@ -618,14 +620,18 @@ pub async fn cmd_run(
             )
             .await
             {
-                Ok(status) => status,
+                Ok(status) => SandboxRunResult {
+                    child_status: status,
+                    sandbox_attestation_json: None,
+                    sandbox_failure: None,
+                },
                 Err(e) => {
                     let _ = writeln!(stderr, "Error: {}", e);
                     if let Some(h) = proxy_handle {
                         h.abort();
                     }
                     drop(event_emitter);
-                    let _ = writer_handle.await;
+                    await_event_writer(writer_handle, stderr).await;
                     return ExitCode::RuntimeError.as_i32();
                 }
             }
@@ -640,19 +646,29 @@ pub async fn cmd_run(
             )
             .await
             {
-                Ok(status) => status,
+                Ok(status) => SandboxRunResult {
+                    child_status: status,
+                    sandbox_attestation_json: None,
+                    sandbox_failure: None,
+                },
                 Err(e) => {
                     let _ = writeln!(stderr, "Error: {}", e);
                     if let Some(h) = proxy_handle {
                         h.abort();
                     }
                     drop(event_emitter);
-                    let _ = writer_handle.await;
+                    await_event_writer(writer_handle, stderr).await;
                     return ExitCode::RuntimeError.as_i32();
                 }
             }
         }
     };
+
+    let SandboxRunResult {
+        child_status,
+        sandbox_attestation_json,
+        sandbox_failure,
+    } = sandbox_run;
 
     let child_exit_code = child_exit_code(child_status);
 
@@ -707,15 +723,7 @@ pub async fn cmd_run(
     }
 
     drop(event_emitter);
-    match writer_handle.await {
-        Ok(Ok(())) => {}
-        Ok(Err(e)) => {
-            let _ = writeln!(stderr, "Warning: failed to write events log: {}", e);
-        }
-        Err(e) => {
-            let _ = writeln!(stderr, "Warning: event writer task failed: {}", e);
-        }
-    }
+    await_event_writer(writer_handle, stderr).await;
     if dropped_events > 0 {
         let _ = writeln!(
             stderr,
@@ -753,6 +761,7 @@ pub async fn cmd_run(
                     "events": events_out,
                     "proxy": env_proxy_url,
                     "sandbox": sandbox_note,
+                    "sandbox_failure": sandbox_failure.clone(),
                     "child_exit_code": child_exit_code,
                     "policy_exit_code": outcome.exit_code(),
                 }
@@ -770,9 +779,13 @@ pub async fn cmd_run(
         receipt
     };
 
-    // Override verdict with the run outcome (warns are pass; blocks are fail).
+    let receipt_verdict = if sandbox_failure.is_some() {
+        Verdict::fail()
+    } else {
+        outcome.verdict()
+    };
     let receipt = Receipt {
-        verdict: outcome.verdict(),
+        verdict: receipt_verdict,
         ..receipt
     };
 
@@ -846,6 +859,25 @@ fn child_exit_code(status: std::process::ExitStatus) -> i32 {
     }
     // On Unix, a signal-terminated process yields None. Use a conventional non-zero value.
     1
+}
+
+fn exit_status_from_code(code: i32) -> std::process::ExitStatus {
+    std::process::ExitStatus::from_raw(code << 8)
+}
+
+async fn await_event_writer(
+    writer_handle: tokio::task::JoinHandle<Result<(), anyhow::Error>>,
+    stderr: &mut dyn Write,
+) {
+    match writer_handle.await {
+        Ok(Ok(())) => {}
+        Ok(Err(e)) => {
+            let _ = writeln!(stderr, "Warning: failed to write events log: {}", e);
+        }
+        Err(e) => {
+            let _ = writeln!(stderr, "Warning: event writer task failed: {}", e);
+        }
+    }
 }
 
 fn default_run_artifact_paths(
@@ -949,6 +981,12 @@ struct SupervisedData {
     engine: Arc<HushEngine>,
     context: GuardContext,
     never_grant: nono::NeverGrantChecker,
+}
+
+struct SandboxRunResult {
+    child_status: std::process::ExitStatus,
+    sandbox_attestation_json: Option<serde_json::Value>,
+    sandbox_failure: Option<String>,
 }
 
 /// Execution mode for the child process sandbox.

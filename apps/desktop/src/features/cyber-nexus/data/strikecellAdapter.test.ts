@@ -101,6 +101,7 @@ const baseSnapshot: StrikecellSourceSnapshot = {
       description: "Enterprise defaults",
       category: "enterprise",
       tags: ["enterprise", "strict"],
+      install_allowed: true,
       signed_bundle: {
         bundle: {
           version: "1",

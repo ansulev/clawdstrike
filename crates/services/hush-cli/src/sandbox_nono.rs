@@ -8,8 +8,19 @@
 
 use std::collections::HashMap;
 use std::ffi::CString;
+use std::os::fd::{AsRawFd, OwnedFd, RawFd};
 
 use nono::{CapabilitySet, Sandbox};
+
+const CHILD_STATUS_SANDBOX_APPLY_FAILED: u8 = 1;
+const CHILD_STATUS_SUPERVISION_SETUP_FAILED: u8 = 2;
+
+/// Result of sandboxed child execution.
+pub struct SandboxedChildResult {
+    pub exit_code: i32,
+    pub sandbox_applied: bool,
+    pub sandbox_error: Option<String>,
+}
 
 /// Spawn a child process inside a nono sandbox.
 ///
@@ -30,7 +41,7 @@ pub fn spawn_sandboxed_child(
     caps: &CapabilitySet,
     command: &[String],
     env_overrides: &HashMap<String, String>,
-) -> anyhow::Result<i32> {
+) -> anyhow::Result<SandboxedChildResult> {
     use nix::unistd::ForkResult;
 
     if command.is_empty() {
@@ -62,6 +73,8 @@ pub fn spawn_sandboxed_child(
     // After fork in a multithreaded process, malloc may deadlock on inherited locks.
     let c_args_ref: Vec<&std::ffi::CStr> = c_args.iter().map(|a| a.as_c_str()).collect();
     let c_env_ref: Vec<&std::ffi::CStr> = c_env.iter().map(|e| e.as_c_str()).collect();
+    let (status_read, status_write) = create_status_pipe()?;
+    let status_write_fd = status_write.as_raw_fd();
 
     // SAFETY: fork() is safe to call. After fork in the child, we only use
     // async-signal-safe operations (no allocation, no panic, no `?`).
@@ -70,11 +83,15 @@ pub fn spawn_sandboxed_child(
             // CHILD: only async-signal-safe operations from here.
             // No ? operator, no panic!, no allocation.
 
-            // Close inherited fds (proxy socket, parent resources)
-            close_inherited_fds(3);
+            drop(status_read);
+
+            // Close inherited fds (proxy socket, parent resources) while preserving
+            // the bootstrap status pipe long enough to report sandbox setup failure.
+            close_inherited_fds_except(3, &[status_write_fd]);
 
             // Apply sandbox (irrevocable)
             if let Err(_e) = Sandbox::apply(caps) {
+                write_child_status(status_write_fd, CHILD_STATUS_SANDBOX_APPLY_FAILED);
                 // SAFETY: write to stderr + _exit are async-signal-safe.
                 // Using a static string to avoid heap allocation post-fork.
                 const MSG: &[u8] = b"nono: sandbox apply failed\n";
@@ -90,13 +107,20 @@ pub fn spawn_sandboxed_child(
             unsafe { libc::_exit(127) };
         }
         ForkResult::Parent { child } => {
+            drop(status_write);
+
             // Install signal forwarding
             install_signal_forwarding(child);
 
             // Wait for child
             let status = nix::sys::wait::waitpid(child, None)
                 .map_err(|e| anyhow::anyhow!("waitpid failed: {}", e))?;
-            Ok(exit_code_from_status(status))
+            let child_status = read_child_status(status_read)?;
+            Ok(SandboxedChildResult {
+                exit_code: exit_code_from_status(status),
+                sandbox_applied: child_status.is_none(),
+                sandbox_error: child_status.and_then(child_status_message),
+            })
         }
     }
 }
@@ -108,7 +132,7 @@ pub fn spawn_sandboxed_child(
 ///
 /// Uses only async-signal-safe operations (libc::close, libc::getrlimit)
 /// since this runs post-fork in a potentially multithreaded process.
-fn close_inherited_fds(from_fd: i32) {
+pub(crate) fn close_inherited_fds_except(from_fd: i32, keep_fds: &[i32]) {
     // Use getrlimit directly via libc to avoid any Rust std allocation.
     let mut rlim = libc::rlimit {
         rlim_cur: 0,
@@ -116,16 +140,86 @@ fn close_inherited_fds(from_fd: i32) {
     };
     // SAFETY: getrlimit is async-signal-safe
     let max_fd = if unsafe { libc::getrlimit(libc::RLIMIT_NOFILE, &mut rlim) } == 0 {
-        rlim.rlim_cur as i32
+        rlim.rlim_cur.min(65_536) as i32
     } else {
         1024
     };
-    // Cap to avoid iterating millions of fds on misconfigured systems
-    let capped = max_fd.min(65536);
-    for fd in from_fd..capped {
+    for fd in from_fd..max_fd {
+        if keep_fds.contains(&fd) {
+            continue;
+        }
         // SAFETY: closing an fd is safe; EBADF for non-open fds is harmless
         unsafe { libc::close(fd) };
     }
+}
+
+pub(crate) fn create_status_pipe() -> anyhow::Result<(OwnedFd, OwnedFd)> {
+    let (read_fd, write_fd) = nix::unistd::pipe()
+        .map_err(|e| anyhow::anyhow!("failed to create child status pipe: {e}"))?;
+    set_cloexec(read_fd.as_raw_fd())?;
+    set_cloexec(write_fd.as_raw_fd())?;
+    Ok((read_fd, write_fd))
+}
+
+pub(crate) fn read_child_status(fd: OwnedFd) -> anyhow::Result<Option<u8>> {
+    let mut buf = [0u8; 1];
+    match nix::unistd::read(&fd, &mut buf) {
+        Ok(0) => Ok(None),
+        Ok(_) => Ok(Some(buf[0])),
+        Err(e) => Err(anyhow::anyhow!(
+            "failed to read child bootstrap status: {e}"
+        )),
+    }
+}
+
+fn child_status_message(code: u8) -> Option<String> {
+    match code {
+        CHILD_STATUS_SANDBOX_APPLY_FAILED => Some("sandbox apply failed".to_string()),
+        CHILD_STATUS_SUPERVISION_SETUP_FAILED => {
+            Some("supervised interception setup failed".to_string())
+        }
+        _ => None,
+    }
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) fn child_status_message_pub(code: u8) -> Option<String> {
+    child_status_message(code)
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) fn supervision_setup_failed_status() -> u8 {
+    CHILD_STATUS_SUPERVISION_SETUP_FAILED
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) fn sandbox_apply_failed_status() -> u8 {
+    CHILD_STATUS_SANDBOX_APPLY_FAILED
+}
+
+pub(crate) fn write_child_status(fd: RawFd, code: u8) {
+    let buf = [code];
+    // SAFETY: write is async-signal-safe, and the pipe fd remains open in the child.
+    unsafe {
+        libc::write(fd, buf.as_ptr().cast(), buf.len());
+    }
+}
+
+fn set_cloexec(fd: RawFd) -> anyhow::Result<()> {
+    let flags = unsafe { libc::fcntl(fd, libc::F_GETFD) };
+    if flags < 0 {
+        return Err(anyhow::anyhow!(
+            "failed to read fd flags for child status pipe: {}",
+            std::io::Error::last_os_error()
+        ));
+    }
+    if unsafe { libc::fcntl(fd, libc::F_SETFD, flags | libc::FD_CLOEXEC) } < 0 {
+        return Err(anyhow::anyhow!(
+            "failed to set CLOEXEC on child status pipe: {}",
+            std::io::Error::last_os_error()
+        ));
+    }
+    Ok(())
 }
 
 /// Resolve a command name to an absolute path via PATH lookup.
@@ -166,11 +260,13 @@ fn resolve_command_path(cmd: &str) -> anyhow::Result<String> {
 }
 
 /// Public wrapper for PATH resolution, used by `supervised_exec`.
+#[cfg(target_os = "linux")]
 pub(crate) fn resolve_command_path_pub(cmd: &str) -> anyhow::Result<String> {
     resolve_command_path(cmd)
 }
 
 /// Public wrapper for signal forwarding, used by `supervised_exec`.
+#[cfg(target_os = "linux")]
 pub(crate) fn install_signal_forwarding_pub(child: nix::unistd::Pid) {
     install_signal_forwarding(child);
 }
@@ -210,7 +306,7 @@ fn install_signal_forwarding(child: nix::unistd::Pid) {
 }
 
 /// Extract exit code from wait status.
-fn exit_code_from_status(status: nix::sys::wait::WaitStatus) -> i32 {
+pub(crate) fn exit_code_from_status(status: nix::sys::wait::WaitStatus) -> i32 {
     use nix::sys::wait::WaitStatus;
     match status {
         WaitStatus::Exited(_, code) => code,
@@ -490,7 +586,7 @@ mod tests {
 
     #[test]
     fn test_close_inherited_fds_does_not_panic() {
-        close_inherited_fds(100);
+        close_inherited_fds_except(100, &[]);
     }
 
     #[test]

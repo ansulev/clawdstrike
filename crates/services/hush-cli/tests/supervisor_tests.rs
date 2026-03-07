@@ -9,7 +9,7 @@
 //! 4. GuardSupervisorBackend correctly routes through ClawdStrike guards
 
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
@@ -149,7 +149,7 @@ fn run_hush_with_receipt(
     }
 }
 
-fn write_policy(dir: &PathBuf) -> PathBuf {
+fn write_policy(dir: &Path) -> PathBuf {
     let policy_path = dir.join("policy.yaml");
     fs::write(
         &policy_path,
@@ -387,7 +387,10 @@ fn attestation_with_supervisor_stats_serializes_correctly() {
         .unwrap()
         .block_network();
 
-    let mut attestation = clawdstrike::sandbox::build_attestation(&caps, true);
+    let mut attestation = clawdstrike::sandbox::build_attestation(
+        &caps,
+        clawdstrike::sandbox::SandboxRuntimeState::supervised_mode(true, true, None),
+    );
     attestation.supervisor = Some(clawdstrike::sandbox::SupervisorStats {
         enabled: true,
         backend: "clawdstrike-guard-supervisor".to_string(),
@@ -444,18 +447,21 @@ fn attestation_without_supervisor_omits_field() {
         .allow_path(tmp.path(), nono::AccessMode::Read)
         .unwrap();
 
-    let attestation = clawdstrike::sandbox::build_attestation(&caps, false);
+    let attestation = clawdstrike::sandbox::build_attestation(
+        &caps,
+        clawdstrike::sandbox::SandboxRuntimeState::static_mode(true, None),
+    );
     let json = serde_json::to_value(&attestation).unwrap();
 
     // supervisor should be null/absent (skip_serializing_if = None)
     assert!(
-        json.get("supervisor").map_or(true, |v| v.is_null()),
+        json.get("supervisor").is_none_or(|v| v.is_null()),
         "supervisor should be absent when not enabled"
     );
     // denials should be absent (skip_serializing_if = empty)
     assert!(
         json.get("denials")
-            .map_or(true, |v| v.as_array().map_or(true, |a| a.is_empty())),
+            .is_none_or(|v| v.as_array().is_none_or(|a| a.is_empty())),
         "denials should be absent or empty when none occurred"
     );
 }
@@ -470,7 +476,10 @@ fn attestation_roundtrip_json() {
         .block_command("rm")
         .block_command("sudo");
 
-    let original = clawdstrike::sandbox::build_attestation(&caps, false);
+    let original = clawdstrike::sandbox::build_attestation(
+        &caps,
+        clawdstrike::sandbox::SandboxRuntimeState::static_mode(true, None),
+    );
     let json_str = serde_json::to_string(&original).unwrap();
     let deserialized: clawdstrike::sandbox::SandboxAttestation =
         serde_json::from_str(&json_str).unwrap();

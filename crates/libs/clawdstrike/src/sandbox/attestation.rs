@@ -12,6 +12,7 @@ pub struct SandboxAttestation {
     pub enforced: bool,
     pub enforcement_level: EnforcementLevel,
     pub platform: PlatformInfo,
+    pub runtime: SandboxRuntimeState,
     pub capabilities: CapabilitySnapshot,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub supervisor: Option<SupervisorStats>,
@@ -60,6 +61,47 @@ pub struct PlatformInfo {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub abi_version: Option<u32>,
     pub details: String,
+}
+
+/// Runtime enforcement state captured after execution completes.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SandboxRuntimeState {
+    pub supported: bool,
+    pub applied: bool,
+    pub supervised_requested: bool,
+    pub supervised_active: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub failure_reason: Option<String>,
+}
+
+impl SandboxRuntimeState {
+    #[must_use]
+    pub fn static_mode(applied: bool, failure_reason: Option<String>) -> Self {
+        let support = nono::Sandbox::support_info();
+        Self {
+            supported: support.is_supported,
+            applied,
+            supervised_requested: false,
+            supervised_active: false,
+            failure_reason,
+        }
+    }
+
+    #[must_use]
+    pub fn supervised_mode(
+        applied: bool,
+        supervised_active: bool,
+        failure_reason: Option<String>,
+    ) -> Self {
+        let support = nono::Sandbox::support_info();
+        Self {
+            supported: support.is_supported,
+            applied,
+            supervised_requested: true,
+            supervised_active,
+            failure_reason,
+        }
+    }
 }
 
 /// Snapshot of filesystem and network capabilities.
@@ -115,10 +157,13 @@ pub struct AuditEntry {
     pub duration_ms: u64,
 }
 
-/// Build a `SandboxAttestation` from a `CapabilitySet`.
+/// Build a `SandboxAttestation` from a `CapabilitySet` and runtime outcome.
 ///
 /// Reads the CapabilitySet's accessors to build a serializable snapshot.
-pub fn build_attestation(caps: &nono::CapabilitySet, supervised: bool) -> SandboxAttestation {
+pub fn build_attestation(
+    caps: &nono::CapabilitySet,
+    runtime: SandboxRuntimeState,
+) -> SandboxAttestation {
     let support = nono::Sandbox::support_info();
 
     let proxy_port = match caps.network_mode() {
@@ -152,20 +197,17 @@ pub fn build_attestation(caps: &nono::CapabilitySet, supervised: bool) -> Sandbo
         "none"
     };
 
-    // Gate enforcement level on platform support: if the kernel sandbox
-    // mechanism is unavailable, enforcement_level must be None regardless
-    // of the supervised flag. This prevents contradictory metadata where
-    // enforced=false but enforcement_level=kernel_supervised.
-    let enforcement_level = if !support.is_supported {
+    let enforced = runtime.applied && (!runtime.supervised_requested || runtime.supervised_active);
+    let enforcement_level = if !enforced {
         EnforcementLevel::None
-    } else if supervised {
+    } else if runtime.supervised_active {
         EnforcementLevel::KernelSupervised
     } else {
         EnforcementLevel::Kernel
     };
 
     SandboxAttestation {
-        enforced: support.is_supported,
+        enforced,
         enforcement_level,
         platform: PlatformInfo {
             name: support.platform.to_string(),
@@ -173,6 +215,7 @@ pub fn build_attestation(caps: &nono::CapabilitySet, supervised: bool) -> Sandbo
             abi_version: None,
             details: support.details,
         },
+        runtime,
         capabilities: cap_snapshot,
         supervisor: None,
         denials: vec![],
@@ -195,11 +238,12 @@ mod tests {
             .unwrap()
             .block_network();
 
-        let attestation = build_attestation(&caps, false);
+        let attestation = build_attestation(&caps, SandboxRuntimeState::static_mode(true, None));
         assert!(!attestation.capabilities.fs.is_empty());
         assert_eq!(attestation.capabilities.network_mode, "blocked");
         assert!(attestation.denials.is_empty());
         assert!(attestation.supervisor.is_none());
+        assert!(attestation.runtime.applied);
     }
 
     #[test]
@@ -209,10 +253,33 @@ mod tests {
             .allow_path(tmp.path(), AccessMode::Read)
             .unwrap();
 
-        let attestation = build_attestation(&caps, true);
+        let attestation = build_attestation(
+            &caps,
+            SandboxRuntimeState::supervised_mode(true, true, None),
+        );
         assert_eq!(
             attestation.enforcement_level,
             EnforcementLevel::KernelSupervised
+        );
+    }
+
+    #[test]
+    fn test_build_attestation_failed_apply_is_not_enforced() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let caps = CapabilitySet::new()
+            .allow_path(tmp.path(), AccessMode::Read)
+            .unwrap();
+
+        let attestation = build_attestation(
+            &caps,
+            SandboxRuntimeState::static_mode(false, Some("sandbox apply failed".to_string())),
+        );
+
+        assert!(!attestation.enforced);
+        assert_eq!(attestation.enforcement_level, EnforcementLevel::None);
+        assert_eq!(
+            attestation.runtime.failure_reason.as_deref(),
+            Some("sandbox apply failed")
         );
     }
 
@@ -225,10 +292,11 @@ mod tests {
             .proxy_only(8080)
             .block_command("rm");
 
-        let attestation = build_attestation(&caps, false);
+        let attestation = build_attestation(&caps, SandboxRuntimeState::static_mode(true, None));
         let json = serde_json::to_value(&attestation).unwrap();
 
         assert!(json["enforced"].is_boolean());
+        assert!(json["runtime"]["applied"].is_boolean());
         assert!(json["capabilities"]["proxy_port"].as_u64().is_some());
         assert_eq!(json["capabilities"]["proxy_port"].as_u64().unwrap(), 8080);
         assert!(!json["capabilities"]["blocked_commands"]
@@ -254,7 +322,7 @@ mod tests {
             .unwrap()
             .block_network();
 
-        let attestation = build_attestation(&caps, false);
+        let attestation = build_attestation(&caps, SandboxRuntimeState::static_mode(true, None));
         let sandbox_json = serde_json::to_value(&attestation).unwrap();
         let meta = serde_json::json!({ "sandbox": sandbox_json });
 

@@ -267,7 +267,11 @@ export interface MarketplacePolicyDto {
   updated_at?: string | null;
   attestation_uid?: string | null;
   notary_url?: string | null;
+  spine_envelope_hash?: string | null;
   bundle_public_key?: string | null;
+  curator_name?: string | null;
+  curator_trust_level?: string | null;
+  install_allowed: boolean;
   signed_bundle: SignedPolicyBundle;
 }
 
@@ -318,7 +322,10 @@ export async function listMarketplacePolicies(
 
 export async function installMarketplacePolicy(
   daemonUrl: string,
-  signedBundle: SignedPolicyBundle,
+  feedId: string,
+  entryId: string,
+  policyHash: string,
+  bundleSignature: string,
 ): Promise<void> {
   if (!isTauri()) {
     throw new Error("Marketplace requires Tauri");
@@ -327,8 +334,31 @@ export async function installMarketplacePolicy(
   const invoke = await getTauriInvoke();
   return invoke("marketplace_install_policy", {
     daemon_url: daemonUrl,
-    signed_bundle: signedBundle,
+    feed_id: feedId,
+    entry_id: entryId,
+    policy_hash: policyHash,
+    bundle_signature: bundleSignature,
   });
+}
+
+export interface MarketplaceProvenanceSettingsPayload {
+  notaryUrl: string | null;
+  proofsApiUrl: string | null;
+  trustedAttesters: string[];
+  requireVerified: boolean;
+  preferSpine: boolean;
+  trustedWitnessKeys: string[];
+}
+
+export async function saveMarketplaceProvenanceConfig(
+  settings: MarketplaceProvenanceSettingsPayload,
+): Promise<void> {
+  if (!isTauri()) {
+    throw new Error("Marketplace requires Tauri");
+  }
+
+  const invoke = await getTauriInvoke();
+  return invoke("marketplace_save_provenance_settings", { settings });
 }
 
 export interface NotaryVerifyResult {
@@ -339,14 +369,13 @@ export interface NotaryVerifyResult {
 }
 
 export async function verifyMarketplaceAttestation(
-  notaryUrl: string,
   uid: string,
 ): Promise<NotaryVerifyResult> {
   if (!isTauri()) {
     throw new Error("Marketplace requires Tauri");
   }
   const invoke = await getTauriInvoke();
-  return invoke("marketplace_verify_attestation", { notary_url: notaryUrl, uid });
+  return invoke("marketplace_verify_attestation", { uid });
 }
 
 // === Marketplace Discovery Commands ===

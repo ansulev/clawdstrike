@@ -220,9 +220,9 @@ enum Commands {
         #[arg(long)]
         hushd_token: Option<String>,
 
-        /// Enable supervised execution with dynamic guard enforcement (experimental).
-        /// The supervisor intercepts file operations and routes them through
-        /// ClawdStrike guards for real-time allow/deny decisions.
+        /// Enable supervised execution with dynamic guard enforcement on
+        /// supported Linux kernels. Fails closed if real-time interception
+        /// cannot be activated.
         #[arg(long)]
         supervised: bool,
 

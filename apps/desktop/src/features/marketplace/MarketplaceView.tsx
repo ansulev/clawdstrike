@@ -21,6 +21,7 @@ import {
   type MarketplaceListResponse,
   type MarketplacePolicyDto,
   type NotaryVerifyResult,
+  saveMarketplaceProvenanceConfig,
   verifyMarketplaceAttestation,
 } from "@/services/tauri";
 
@@ -40,12 +41,17 @@ type AttestationCacheEntry =
   | { status: "done"; result: NotaryVerifyResult }
   | { status: "error"; error: string };
 
+type SelectedPolicy = {
+  feedId: string;
+  policy: MarketplacePolicyDto;
+};
+
 export function MarketplaceView() {
   const { status, daemonUrl } = useConnection();
 
   const [category, setCategory] = useState<PolicyCategory>("all");
   const [search, setSearch] = useState("");
-  const [selectedPolicy, setSelectedPolicy] = useState<MarketplacePolicyDto | null>(null);
+  const [selectedPolicy, setSelectedPolicy] = useState<SelectedPolicy | null>(null);
 
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -66,6 +72,7 @@ export function MarketplaceView() {
   const [attestationCache, setAttestationCache] = useState<Record<string, AttestationCacheEntry>>(
     {},
   );
+  const currentFeedId = data?.feed_id ?? null;
 
   const refresh = useCallback(async () => {
     setIsLoading(true);
@@ -85,6 +92,13 @@ export function MarketplaceView() {
   useEffect(() => {
     refresh();
   }, [refresh]);
+
+  useEffect(() => {
+    if (!isTauri()) return;
+    saveMarketplaceProvenanceConfig(provenanceSettings).catch(() => {
+      // ignore sync failures; local settings remain available for the UI
+    });
+  }, [provenanceSettings]);
 
   useEffect(() => {
     if (!isTauri()) return;
@@ -129,7 +143,7 @@ export function MarketplaceView() {
     const key = toAttestationKey(notaryUrl, uid);
     setAttestationCache((prev) => ({ ...prev, [key]: { status: "pending" } }));
     try {
-      const result = await verifyMarketplaceAttestation(notaryUrl, uid);
+      const result = await verifyMarketplaceAttestation(uid);
       setAttestationCache((prev) => ({ ...prev, [key]: { status: "done", result } }));
     } catch (e) {
       const message = e instanceof Error ? e.message : "Verification failed";
@@ -377,8 +391,7 @@ export function MarketplaceView() {
                   <>
                     <p className="text-sm">No verifiable attestations</p>
                     <p className="text-xs mt-1">
-                      Configure a notary URL in Settings, or use a feed that provides{" "}
-                      <code>notary_url</code>.
+                      Configure a trusted default notary URL in Settings to enable verification.
                     </p>
                   </>
                 ) : pendingAttestationCount > 0 ? (
@@ -423,7 +436,10 @@ export function MarketplaceView() {
                       policy={policy}
                       attestationUid={attestationUid}
                       attestationStatus={cached}
-                      onClick={() => setSelectedPolicy(policy)}
+                      onClick={() => {
+                        if (!currentFeedId) return;
+                        setSelectedPolicy({ feedId: currentFeedId, policy });
+                      }}
                     />
                   );
                 })}
@@ -436,7 +452,8 @@ export function MarketplaceView() {
       {/* Detail panel */}
       {selectedPolicy && (
         <PolicyDetailPanel
-          policy={selectedPolicy}
+          policy={selectedPolicy.policy}
+          feedId={selectedPolicy.feedId}
           daemonUrl={daemonUrl}
           connected={status === "connected"}
           defaultNotaryUrl={defaultNotaryUrl}
@@ -462,6 +479,12 @@ function PolicyCard({ policy, attestationUid, attestationStatus, onClick }: Poli
   const author = policy.author ?? "Unknown";
   const hasSigner = Boolean(policy.bundle_public_key);
   const attestationPill = getAttestationPill(attestationUid, attestationStatus);
+  const curatorTrustPill =
+    policy.install_allowed === false ? (
+      <AttestationPill kind="review" />
+    ) : policy.curator_trust_level === "full" ? (
+      <AttestationPill kind="trusted" />
+    ) : null;
 
   return (
     <GlassCard
@@ -474,6 +497,7 @@ function PolicyCard({ policy, attestationUid, attestationStatus, onClick }: Poli
           <div className="flex items-center gap-1 text-xs text-sdr-text-muted mt-0.5">
             <span>{author}</span>
             {hasSigner && <VerifiedBadge />}
+            {curatorTrustPill}
             {attestationPill}
           </div>
         </div>
@@ -495,6 +519,7 @@ function PolicyCard({ policy, attestationUid, attestationStatus, onClick }: Poli
 
 interface PolicyDetailPanelProps {
   policy: MarketplacePolicyDto;
+  feedId: string | null;
   daemonUrl: string;
   connected: boolean;
   defaultNotaryUrl: string | null;
@@ -506,6 +531,7 @@ interface PolicyDetailPanelProps {
 
 function PolicyDetailPanel({
   policy,
+  feedId,
   daemonUrl,
   connected,
   defaultNotaryUrl,
@@ -521,9 +547,23 @@ function PolicyDetailPanel({
   const handleInstall = async () => {
     setInstallError(null);
     setInstallSuccess(null);
+    if (!policy.install_allowed) {
+      setInstallError("This curator is trusted for review only and cannot be installed.");
+      return;
+    }
+    if (!feedId) {
+      setInstallError("Trusted marketplace entry is unavailable. Refresh the marketplace feed.");
+      return;
+    }
     setIsInstalling(true);
     try {
-      await installMarketplacePolicy(daemonUrl, policy.signed_bundle);
+      await installMarketplacePolicy(
+        daemonUrl,
+        feedId,
+        policy.entry_id,
+        policy.signed_bundle.bundle.policy_hash,
+        policy.signed_bundle.signature,
+      );
       setInstallSuccess("Policy installed successfully");
     } catch (e) {
       setInstallError(e instanceof Error ? e.message : "Install failed");
@@ -536,6 +576,23 @@ function PolicyDetailPanel({
   const policyVersion = policy.signed_bundle.bundle.policy.version;
   const policyHash = policy.signed_bundle.bundle.policy_hash;
   const bundleSigner = policy.bundle_public_key ?? null;
+  const installDisabledReason = !policy.install_allowed
+    ? "review-only"
+    : !connected
+      ? "disconnected"
+      : !feedId
+        ? "missing-feed"
+        : null;
+  const installButtonLabel =
+    isInstalling
+      ? "Installing..."
+      : installDisabledReason === "review-only"
+        ? "Review only"
+        : installDisabledReason === "disconnected"
+          ? "Connect to install"
+          : installDisabledReason === "missing-feed"
+            ? "Refresh marketplace to install"
+            : "Install Policy";
 
   const attestationUid = getAttestationUid(policy);
   const attestationPointer = resolveAttestationPointer(policy, defaultNotaryUrl);
@@ -609,6 +666,12 @@ function PolicyDetailPanel({
           </h3>
           <p>Policy hash: {formatKey(policyHash)}</p>
           <p>Bundle signer: {bundleSigner ? formatKey(bundleSigner) : "missing public_key"}</p>
+          <p>
+            Curator:{" "}
+            {policy.curator_name
+              ? `${policy.curator_name} (${formatCuratorTrustLevel(policy.curator_trust_level)})`
+              : "unknown"}
+          </p>
         </div>
 
         {/* Provenance */}
@@ -620,7 +683,7 @@ function PolicyDetailPanel({
             <div className="space-y-1">
               <p>Attestation UID: {formatKey(attestationUid)}</p>
               <p>
-                Notary:{" "}
+                Configured notary:{" "}
                 {attestationPointer ? attestationPointer.notaryUrl : (defaultNotaryUrl ?? "unset")}
               </p>
               {attestationResult && (
@@ -682,16 +745,22 @@ function PolicyDetailPanel({
             {installSuccess}
           </div>
         )}
+        {!policy.install_allowed && (
+          <div className="p-3 rounded-md border border-amber-500/40 bg-amber-500/10 text-sm text-amber-100">
+            Review only. This curator is configured as <code>audit-only</code>, so installation is
+            disabled.
+          </div>
+        )}
       </div>
 
       {/* Actions */}
       <div className="p-4 border-t border-sdr-border">
         <GlowButton
           onClick={handleInstall}
-          disabled={!connected || isInstalling}
+          disabled={Boolean(installDisabledReason) || isInstalling}
           className="w-full"
         >
-          {!connected ? "Connect to install" : isInstalling ? "Installing..." : "Install Policy"}
+          {installButtonLabel}
         </GlowButton>
       </div>
     </div>
@@ -710,7 +779,11 @@ function VerifiedBadge() {
   );
 }
 
-function AttestationPill({ kind }: { kind: "attested" | "verified" | "invalid" | "error" }) {
+function AttestationPill({
+  kind,
+}: {
+  kind: "attested" | "verified" | "invalid" | "error" | "review" | "trusted";
+}) {
   const className = clsx(
     "px-1.5 py-0.5 rounded border text-[10px] uppercase tracking-wide",
     kind === "verified" &&
@@ -718,9 +791,20 @@ function AttestationPill({ kind }: { kind: "attested" | "verified" | "invalid" |
     kind === "attested" && "border-sdr-border text-sdr-text-muted bg-sdr-bg-tertiary",
     kind === "invalid" && "border-sdr-accent-red/40 text-sdr-accent-red bg-sdr-accent-red/10",
     kind === "error" && "border-sdr-accent-red/40 text-sdr-accent-red bg-sdr-accent-red/10",
+    kind === "review" && "border-amber-500/40 text-amber-200 bg-amber-500/10",
+    kind === "trusted" && "border-sdr-accent-blue/40 text-sdr-accent-blue bg-sdr-accent-blue/10",
   );
 
-  const label = kind === "verified" ? "verified" : kind === "attested" ? "attested" : kind;
+  const label =
+    kind === "verified"
+      ? "verified"
+      : kind === "attested"
+        ? "attested"
+        : kind === "review"
+          ? "review only"
+          : kind === "trusted"
+            ? "trusted"
+            : kind;
 
   return <span className={className}>{label}</span>;
 }
@@ -754,16 +838,14 @@ function getAttestationUid(policy: MarketplacePolicyDto): string | null {
   return fromMetadata?.uid ?? null;
 }
 
-function resolveAttestationPointer(
+export function resolveAttestationPointer(
   policy: MarketplacePolicyDto,
   defaultNotaryUrl: string | null,
 ): AttestationPointer | null {
   const uid = getAttestationUid(policy);
   if (!uid) return null;
 
-  const fromEntryNotary = normalizeString(policy.notary_url);
-  const fromMetadata = extractAttestationPointerFromMetadata(policy.signed_bundle.bundle.metadata);
-  const notaryUrl = fromEntryNotary ?? fromMetadata?.notaryUrl ?? defaultNotaryUrl ?? null;
+  const notaryUrl = normalizeString(defaultNotaryUrl);
   if (!notaryUrl) return null;
 
   return { uid, notaryUrl };
@@ -832,6 +914,10 @@ function formatKey(key: string): string {
   const trimmed = key.trim();
   if (trimmed.length <= 16) return trimmed;
   return `${trimmed.slice(0, 8)}…${trimmed.slice(-8)}`;
+}
+
+function formatCuratorTrustLevel(value: string | null | undefined): string {
+  return value === "full" ? "full trust" : value === "audit-only" ? "audit-only" : "unknown";
 }
 
 function SearchIcon({ className }: { className?: string }) {

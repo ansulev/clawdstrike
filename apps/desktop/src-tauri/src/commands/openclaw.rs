@@ -72,14 +72,66 @@ fn agent_base_url() -> String {
     format!("http://127.0.0.1:{}", read_agent_api_port())
 }
 
-fn is_allowed_agent_path(path: &str) -> bool {
-    path == "/api/v1/openclaw/gateways"
-        || path.starts_with("/api/v1/openclaw/gateways/")
-        || path == "/api/v1/openclaw/active-gateway"
-        || path == "/api/v1/openclaw/discover"
-        || path == "/api/v1/openclaw/probe"
-        || path == "/api/v1/openclaw/request"
-        || path == "/api/v1/openclaw/import-desktop-gateways"
+fn normalize_allowed_agent_path(path: &str) -> Result<String, String> {
+    let trimmed = path.trim();
+    if trimmed.is_empty() {
+        return Err("Missing agent API path".to_string());
+    }
+    if !trimmed.starts_with('/') {
+        return Err("Agent API path must start with '/'".to_string());
+    }
+    if trimmed.contains("://") {
+        return Err("Agent API path must be relative".to_string());
+    }
+    if trimmed.contains('\\') {
+        return Err("Agent API path must not contain backslashes".to_string());
+    }
+    if trimmed.contains('?') || trimmed.contains('#') {
+        return Err("Agent API path must not include query or fragment".to_string());
+    }
+    if trimmed != "/" && trimmed.ends_with('/') {
+        return Err("Agent API path must not end with '/'".to_string());
+    }
+
+    let raw_segments: Vec<&str> = trimmed.trim_start_matches('/').split('/').collect();
+    if raw_segments.is_empty() || raw_segments.iter().any(|segment| segment.is_empty()) {
+        return Err("Agent API path must not contain empty segments".to_string());
+    }
+
+    for segment in &raw_segments {
+        if *segment == "." || *segment == ".." {
+            return Err("Agent API path must not contain dot segments".to_string());
+        }
+
+        let lower = segment.to_ascii_lowercase();
+        if lower.contains("%2e") || lower.contains("%2f") || lower.contains("%5c") {
+            return Err(
+                "Agent API path must not contain encoded dot or separator segments".to_string(),
+            );
+        }
+    }
+
+    if !is_allowed_agent_path_segments(&raw_segments) {
+        return Err(format!("Disallowed agent API path: {trimmed}"));
+    }
+
+    Ok(format!("/{}", raw_segments.join("/")))
+}
+
+fn is_allowed_agent_path_segments(segments: &[&str]) -> bool {
+    match segments {
+        ["api", "v1", "openclaw", "gateways"]
+        | ["api", "v1", "openclaw", "active-gateway"]
+        | ["api", "v1", "openclaw", "discover"]
+        | ["api", "v1", "openclaw", "probe"]
+        | ["api", "v1", "openclaw", "request"]
+        | ["api", "v1", "openclaw", "import-desktop-gateways"] => true,
+        ["api", "v1", "openclaw", "gateways", gateway_id] => !gateway_id.is_empty(),
+        ["api", "v1", "openclaw", "gateways", gateway_id, action] => {
+            !gateway_id.is_empty() && matches!(*action, "connect" | "disconnect")
+        }
+        _ => false,
+    }
 }
 
 fn parse_request_method(method: &str) -> Result<reqwest::Method, String> {
@@ -98,12 +150,9 @@ async fn call_agent_endpoint(
     path: &str,
     body: Option<&Value>,
 ) -> Result<Value, String> {
-    if !is_allowed_agent_path(path) {
-        return Err(format!("Disallowed agent API path: {}", path));
-    }
-
+    let normalized_path = normalize_allowed_agent_path(path)?;
     let token = read_agent_api_token()?;
-    let url = format!("{}{}", agent_base_url(), path);
+    let url = format!("{}{}", agent_base_url(), normalized_path);
 
     let client = reqwest::Client::new();
     let mut request = client
@@ -114,30 +163,41 @@ async fn call_agent_endpoint(
         request = request.json(payload);
     }
 
-    let response = request
-        .send()
-        .await
-        .map_err(|e| format!("Agent OpenClaw request failed for {}: {}", path, e))?;
+    let response = request.send().await.map_err(|e| {
+        format!(
+            "Agent OpenClaw request failed for {}: {}",
+            normalized_path, e
+        )
+    })?;
 
     if !response.status().is_success() {
         let status = response.status();
         let body = response.text().await.unwrap_or_default();
         return Err(format!(
             "Agent OpenClaw endpoint {} returned {}: {}",
-            path, status, body
+            normalized_path, status, body
         ));
     }
 
     response
         .text()
         .await
-        .map_err(|e| format!("Failed to read OpenClaw response for {}: {}", path, e))
+        .map_err(|e| {
+            format!(
+                "Failed to read OpenClaw response for {}: {}",
+                normalized_path, e
+            )
+        })
         .and_then(|raw| {
             if raw.trim().is_empty() {
                 Ok(Value::Null)
             } else {
-                serde_json::from_str::<Value>(&raw)
-                    .map_err(|e| format!("Failed to parse OpenClaw response for {}: {}", path, e))
+                serde_json::from_str::<Value>(&raw).map_err(|e| {
+                    format!(
+                        "Failed to parse OpenClaw response for {}: {}",
+                        normalized_path, e
+                    )
+                })
             }
         })
 }
@@ -311,7 +371,7 @@ pub async fn openclaw_agent_request(
 #[cfg(test)]
 mod tests {
     use super::{
-        extract_json_payload, is_allowed_agent_path, is_expected_agent_unavailable_error,
+        extract_json_payload, is_expected_agent_unavailable_error, normalize_allowed_agent_path,
         parse_request_method,
     };
     use serde_json::json;
@@ -349,15 +409,40 @@ mod tests {
 
     #[test]
     fn allows_only_expected_agent_api_paths() {
-        assert!(is_allowed_agent_path("/api/v1/openclaw/gateways"));
-        assert!(is_allowed_agent_path(
+        assert_eq!(
+            normalize_allowed_agent_path("/api/v1/openclaw/gateways").expect("allowed"),
+            "/api/v1/openclaw/gateways"
+        );
+        assert_eq!(
+            normalize_allowed_agent_path("/api/v1/openclaw/gateways/demo/connect")
+                .expect("allowed"),
             "/api/v1/openclaw/gateways/demo/connect"
-        ));
-        assert!(is_allowed_agent_path("/api/v1/openclaw/request"));
-        assert!(is_allowed_agent_path("/api/v1/openclaw/active-gateway"));
-        assert!(!is_allowed_agent_path("/api/v1/agent/settings"));
-        assert!(!is_allowed_agent_path("/api/v1/agent/health"));
-        assert!(!is_allowed_agent_path("/api/v1/daemon/restart"));
+        );
+        assert_eq!(
+            normalize_allowed_agent_path("/api/v1/openclaw/request").expect("allowed"),
+            "/api/v1/openclaw/request"
+        );
+        assert_eq!(
+            normalize_allowed_agent_path("/api/v1/openclaw/active-gateway").expect("allowed"),
+            "/api/v1/openclaw/active-gateway"
+        );
+        assert!(normalize_allowed_agent_path("/api/v1/agent/settings").is_err());
+        assert!(normalize_allowed_agent_path("/api/v1/agent/health").is_err());
+        assert!(normalize_allowed_agent_path("/api/v1/daemon/restart").is_err());
+    }
+
+    #[test]
+    fn rejects_traversal_and_noncanonical_agent_api_paths() {
+        assert!(
+            normalize_allowed_agent_path("/api/v1/openclaw/gateways/../../agent/settings").is_err()
+        );
+        assert!(normalize_allowed_agent_path("/api/v1/openclaw/gateways/%2e%2e/connect").is_err());
+        assert!(normalize_allowed_agent_path("/api/v1/openclaw/gateways/%2Fetc%2Fpasswd").is_err());
+        assert!(normalize_allowed_agent_path("/api/v1/openclaw/gateways//demo").is_err());
+        assert!(normalize_allowed_agent_path("/api/v1/openclaw/gateways/demo?x=1").is_err());
+        assert!(
+            normalize_allowed_agent_path("http://127.0.0.1:9878/api/v1/openclaw/gateways").is_err()
+        );
     }
 
     #[test]

@@ -1,9 +1,13 @@
 //! Marketplace feed commands (signed feed + signed policy bundles).
 
+use std::collections::HashMap;
+use std::fmt::Write as _;
 use std::path::{Component, Path};
+use std::sync::{LazyLock, Mutex};
 
 use clawdstrike::{
-    ContentIds, CuratorConfigFile, CuratorTrustSet, SignedMarketplaceFeed, SignedPolicyBundle,
+    ContentIds, CuratorConfig, CuratorConfigFile, CuratorTrustSet, SignedMarketplaceFeed,
+    SignedPolicyBundle, TrustLevel, ValidatedCurator,
 };
 use hush_core::{sha256, Hash, MerkleProof, PublicKey};
 use reqwest::header::LOCATION;
@@ -22,12 +26,24 @@ const BUILTIN_FEED_PATH: &str = "resources/marketplace/feed.signed.json";
 const BUILTIN_BUNDLE_PREFIX: &str = "builtin://bundles/";
 const IPFS_PREFIX: &str = "ipfs://";
 const CURATOR_CONFIG_FILENAME: &str = "trusted_curators.toml";
+const PROVENANCE_CONFIG_FILENAME: &str = "marketplace_provenance.json";
 
 const DEFAULT_IPFS_GATEWAYS: &[&str] = &[
     "https://w3s.link",
     "https://cloudflare-ipfs.com",
     "https://ipfs.io",
 ];
+
+#[derive(Clone)]
+struct TrustedInstallEntry {
+    signed_bundle: SignedPolicyBundle,
+    install_allowed: bool,
+}
+
+type TrustedInstallCache = HashMap<String, HashMap<String, TrustedInstallEntry>>;
+
+static TRUSTED_INSTALL_CACHE: LazyLock<Mutex<TrustedInstallCache>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct MarketplacePolicyDto {
@@ -49,6 +65,12 @@ pub struct MarketplacePolicyDto {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub spine_envelope_hash: Option<String>,
     pub bundle_public_key: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub curator_name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub curator_trust_level: Option<String>,
+    #[serde(default)]
+    pub install_allowed: bool,
     pub signed_bundle: SignedPolicyBundle,
 }
 
@@ -63,18 +85,173 @@ pub struct MarketplaceListResponse {
     pub warnings: Vec<String>,
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MarketplaceProvenanceConfig {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub notary_url: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub proofs_api_url: Option<String>,
+    #[serde(default)]
+    pub trusted_attesters: Vec<String>,
+    #[serde(default)]
+    pub require_verified: bool,
+    #[serde(default = "default_prefer_spine")]
+    pub prefer_spine: bool,
+    #[serde(default)]
+    pub trusted_witness_keys: Vec<String>,
+}
+
+impl Default for MarketplaceProvenanceConfig {
+    fn default() -> Self {
+        Self {
+            notary_url: None,
+            proofs_api_url: None,
+            trusted_attesters: Vec::new(),
+            require_verified: false,
+            prefer_spine: true,
+            trusted_witness_keys: Vec::new(),
+        }
+    }
+}
+
+impl MarketplaceProvenanceConfig {
+    fn normalized(self) -> Self {
+        Self {
+            notary_url: normalize_optional_setting_url(self.notary_url),
+            proofs_api_url: normalize_optional_setting_url(self.proofs_api_url),
+            trusted_attesters: normalize_setting_list(self.trusted_attesters, 64),
+            require_verified: self.require_verified,
+            prefer_spine: self.prefer_spine,
+            trusted_witness_keys: normalize_setting_list(self.trusted_witness_keys, 64),
+        }
+    }
+}
+
+fn default_prefer_spine() -> bool {
+    true
+}
+
+fn normalize_marketplace_identifier(value: &str, label: &str) -> Result<String, String> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return Err(format!("Missing {label}"));
+    }
+    if trimmed.len() > 256 {
+        return Err(format!("{label} too long"));
+    }
+    Ok(trimmed.to_string())
+}
+
+fn cache_trusted_install_entries(
+    feed_id: &str,
+    entries: HashMap<String, TrustedInstallEntry>,
+) -> Result<(), String> {
+    let feed_id = normalize_marketplace_identifier(feed_id, "feed ID")?;
+    let mut cache = TRUSTED_INSTALL_CACHE
+        .lock()
+        .map_err(|_| "Trusted marketplace install cache is unavailable".to_string())?;
+    cache.clear();
+    cache.insert(feed_id, entries);
+    Ok(())
+}
+
+fn get_trusted_install_bundle(
+    feed_id: &str,
+    entry_id: &str,
+) -> Result<TrustedInstallEntry, String> {
+    let feed_id = normalize_marketplace_identifier(feed_id, "feed ID")?;
+    let entry_id = normalize_marketplace_identifier(entry_id, "entry ID")?;
+
+    let cache = TRUSTED_INSTALL_CACHE
+        .lock()
+        .map_err(|_| "Trusted marketplace install cache is unavailable".to_string())?;
+
+    cache
+        .get(&feed_id)
+        .and_then(|entries| entries.get(&entry_id))
+        .cloned()
+        .ok_or_else(|| {
+            format!(
+                "Trusted marketplace entry {entry_id} from feed {feed_id} is unavailable. Refresh the marketplace feed and try again."
+            )
+        })
+}
+
+fn ensure_expected_policy_hash_matches(
+    signed_bundle: &SignedPolicyBundle,
+    expected_policy_hash: &str,
+) -> Result<(), String> {
+    let expected_policy_hash =
+        normalize_marketplace_identifier(expected_policy_hash, "policy hash")?;
+    let actual_policy_hash = signed_bundle.bundle.policy_hash.to_hex();
+    if !actual_policy_hash.eq_ignore_ascii_case(&expected_policy_hash) {
+        return Err(
+            "Trusted marketplace entry changed since it was opened. Refresh and review the policy again before installing."
+                .to_string(),
+        );
+    }
+    Ok(())
+}
+
+fn ensure_expected_bundle_signature_matches(
+    signed_bundle: &SignedPolicyBundle,
+    expected_bundle_signature: &str,
+) -> Result<(), String> {
+    let expected_bundle_signature =
+        normalize_marketplace_identifier(expected_bundle_signature, "bundle signature")?;
+    let actual_bundle_signature = signed_bundle.signature.to_hex();
+    if !actual_bundle_signature.eq_ignore_ascii_case(&expected_bundle_signature) {
+        return Err(
+            "Trusted marketplace entry changed since it was opened. Refresh and review the policy again before installing."
+                .to_string(),
+        );
+    }
+    Ok(())
+}
+
+fn build_notary_verify_url(notary_url: &str, uid: &str) -> Result<reqwest::Url, String> {
+    let uid = uid.trim();
+    if uid.is_empty() {
+        return Err("Missing attestation UID".to_string());
+    }
+    if uid.len() > 256 {
+        return Err("Attestation UID too long".to_string());
+    }
+
+    let base = notary_url.trim();
+    if base.is_empty() {
+        return Err("Missing notary URL".to_string());
+    }
+
+    let mut url = reqwest::Url::parse(base).map_err(|e| format!("Invalid notary URL: {e}"))?;
+    if url.query().is_some() || url.fragment().is_some() {
+        return Err("Notary URL must not include query or fragment".to_string());
+    }
+
+    {
+        let mut segments = url
+            .path_segments_mut()
+            .map_err(|_| "Notary URL cannot be a base".to_string())?;
+        segments.pop_if_empty();
+        segments.push("verify");
+        segments.push(uid);
+    }
+
+    Ok(url)
+}
+
 #[tauri::command]
 pub async fn marketplace_list_policies(
     app: AppHandle,
     sources: Option<Vec<String>>,
     state: State<'_, AppState>,
 ) -> Result<MarketplaceListResponse, String> {
-    let trust_set = load_curator_trust_set()?;
-    let trusted = trust_set.keys();
+    let curator_config = load_marketplace_curator_config()?;
     let sources = sources.unwrap_or_else(|| vec!["builtin".to_string()]);
 
     let mut attempts = Vec::new();
-    let mut selected: Option<(SignedMarketplaceFeed, PublicKey)> = None;
+    let mut selected: Option<(SignedMarketplaceFeed, ValidatedCurator)> = None;
 
     for source in sources {
         match load_signed_feed(&app, &state.http_client, &source).await {
@@ -86,9 +263,9 @@ pub async fn marketplace_list_policies(
                         continue;
                     }
                 };
-                match parsed.verify_trusted(trusted) {
-                    Ok(signer) => {
-                        selected = Some((parsed, signer));
+                match parsed.verify_with_config(&curator_config) {
+                    Ok(curator) => {
+                        selected = Some((parsed, curator.clone()));
                         break;
                     }
                     Err(e) => {
@@ -103,7 +280,7 @@ pub async fn marketplace_list_policies(
         }
     }
 
-    let (signed, signer) = selected.ok_or_else(|| {
+    let (signed, curator) = selected.ok_or_else(|| {
         if attempts.is_empty() {
             "No marketplace feed sources configured".to_string()
         } else {
@@ -116,6 +293,12 @@ pub async fn marketplace_list_policies(
 
     let mut warnings = Vec::new();
     let mut policies = Vec::new();
+    let mut trusted_install_entries = HashMap::new();
+    let install_allowed = matches!(curator.trust_level, TrustLevel::Full);
+    let curator_trust_level = Some(match curator.trust_level {
+        TrustLevel::Full => "full".to_string(),
+        TrustLevel::AuditOnly => "audit-only".to_string(),
+    });
 
     for entry in &signed.feed.entries {
         let bundle_bytes = match load_bundle_bytes_with_hints(
@@ -156,6 +339,13 @@ pub async fn marketplace_list_policies(
             warnings.push(format!("{}: bundle signature invalid", entry.entry_id));
             continue;
         }
+        trusted_install_entries.insert(
+            entry.entry_id.clone(),
+            TrustedInstallEntry {
+                signed_bundle: signed_bundle.clone(),
+                install_allowed,
+            },
+        );
 
         let policy = &signed_bundle.bundle.policy;
         let title = entry
@@ -206,15 +396,20 @@ pub async fn marketplace_list_policies(
                 .as_ref()
                 .and_then(|p| p.spine_envelope_hash.clone()),
             bundle_public_key: signed_bundle.public_key.as_ref().map(|k| k.to_hex()),
+            curator_name: Some(curator.name.clone()),
+            curator_trust_level: curator_trust_level.clone(),
+            install_allowed,
             signed_bundle,
         });
     }
+
+    cache_trusted_install_entries(&signed.feed.feed_id, trusted_install_entries)?;
 
     Ok(MarketplaceListResponse {
         feed_id: signed.feed.feed_id,
         published_at: signed.feed.published_at,
         seq: signed.feed.seq,
-        signer_public_key: signer.to_hex(),
+        signer_public_key: curator.public_key.to_hex(),
         policies,
         warnings,
     })
@@ -223,10 +418,23 @@ pub async fn marketplace_list_policies(
 #[tauri::command]
 pub async fn marketplace_install_policy(
     daemon_url: String,
-    signed_bundle: SignedPolicyBundle,
+    feed_id: String,
+    entry_id: String,
+    policy_hash: String,
+    bundle_signature: String,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    let verified = signed_bundle
+    let trusted_entry = get_trusted_install_bundle(&feed_id, &entry_id)?;
+    if !trusted_entry.install_allowed {
+        return Err(
+            "This marketplace entry is trusted for review only (`audit-only`) and cannot be installed."
+                .to_string(),
+        );
+    }
+    ensure_expected_policy_hash_matches(&trusted_entry.signed_bundle, &policy_hash)?;
+    ensure_expected_bundle_signature_matches(&trusted_entry.signed_bundle, &bundle_signature)?;
+    let verified = trusted_entry
+        .signed_bundle
         .verify_embedded()
         .map_err(|e| format!("Bundle verification failed: {e}"))?;
     if !verified {
@@ -239,7 +447,7 @@ pub async fn marketplace_install_policy(
     let resp = state
         .http_client
         .put(&url)
-        .json(&signed_bundle)
+        .json(&trusted_entry.signed_bundle)
         .send()
         .await
         .map_err(|e| format!("Install request failed: {e}"))?;
@@ -266,32 +474,14 @@ pub struct NotaryVerifyResult {
 
 #[tauri::command]
 pub async fn marketplace_verify_attestation(
-    notary_url: String,
     uid: String,
     state: State<'_, AppState>,
 ) -> Result<NotaryVerifyResult, String> {
-    let uid = uid.trim();
-    if uid.is_empty() {
-        return Err("Missing attestation UID".to_string());
-    }
-    if uid.len() > 256 {
-        return Err("Attestation UID too long".to_string());
-    }
-
-    let base = notary_url.trim();
-    if base.is_empty() {
-        return Err("Missing notary URL".to_string());
-    }
-
-    let mut url = reqwest::Url::parse(base).map_err(|e| format!("Invalid notary URL: {e}"))?;
-    {
-        let mut segments = url
-            .path_segments_mut()
-            .map_err(|_| "Notary URL cannot be a base".to_string())?;
-        segments.pop_if_empty();
-        segments.push("verify");
-        segments.push(uid);
-    }
+    let provenance = load_marketplace_provenance_config()?;
+    let notary_url = provenance
+        .notary_url
+        .ok_or_else(|| "Marketplace notary URL is not configured".to_string())?;
+    let url = build_notary_verify_url(&notary_url, &uid)?;
 
     let bytes =
         fetch_http_bytes_limited(&state.http_client, url.as_str(), MAX_NOTARY_BYTES).await?;
@@ -327,14 +517,119 @@ pub async fn marketplace_verify_attestation(
     })
 }
 
+#[tauri::command]
+pub async fn marketplace_save_provenance_settings(
+    settings: MarketplaceProvenanceConfig,
+) -> Result<(), String> {
+    save_marketplace_provenance_config(&settings.normalized())
+}
+
+fn desktop_config_dir() -> Option<std::path::PathBuf> {
+    dirs::config_dir().map(|d| d.join("clawdstrike"))
+}
+
 fn curator_config_path() -> Option<std::path::PathBuf> {
-    dirs::config_dir().map(|d| d.join("clawdstrike").join(CURATOR_CONFIG_FILENAME))
+    desktop_config_dir().map(|d| d.join(CURATOR_CONFIG_FILENAME))
 }
 
 fn load_curator_trust_set() -> Result<CuratorTrustSet, String> {
     let config_path = curator_config_path();
     CuratorTrustSet::load(config_path.as_deref())
         .map_err(|e| format!("Failed to load curator trust set: {e}"))
+}
+
+fn load_marketplace_curator_config() -> Result<CuratorConfig, String> {
+    if let Some(path) = curator_config_path() {
+        if path.exists() {
+            if let Ok(config) = CuratorConfig::load(&path) {
+                return Ok(config);
+            }
+        }
+    }
+
+    let trust_set = load_curator_trust_set()?;
+    curator_config_from_trust_set(&trust_set)
+}
+
+fn curator_config_from_trust_set(trust_set: &CuratorTrustSet) -> Result<CuratorConfig, String> {
+    let mut toml = String::new();
+    for (idx, key) in trust_set.keys().iter().enumerate() {
+        let _ = writeln!(
+            toml,
+            "[[curator]]\nname = \"trusted-{idx}\"\npublic_key = \"{}\"\ntrust_level = \"full\"\n",
+            key.to_hex()
+        );
+    }
+    CuratorConfig::parse(&toml)
+        .map_err(|e| format!("Failed to build curator config from trusted keys: {e}"))
+}
+
+fn provenance_config_path() -> Option<std::path::PathBuf> {
+    desktop_config_dir().map(|d| d.join(PROVENANCE_CONFIG_FILENAME))
+}
+
+fn load_marketplace_provenance_config() -> Result<MarketplaceProvenanceConfig, String> {
+    let Some(path) = provenance_config_path() else {
+        return Err("Cannot determine config directory".to_string());
+    };
+
+    if !path.exists() {
+        return Ok(MarketplaceProvenanceConfig::default());
+    }
+
+    let raw = std::fs::read_to_string(&path)
+        .map_err(|e| format!("Failed to read marketplace provenance config: {e}"))?;
+    let parsed: MarketplaceProvenanceConfig = serde_json::from_str(&raw)
+        .map_err(|e| format!("Invalid marketplace provenance config: {e}"))?;
+    Ok(parsed.normalized())
+}
+
+fn save_marketplace_provenance_config(
+    settings: &MarketplaceProvenanceConfig,
+) -> Result<(), String> {
+    let Some(path) = provenance_config_path() else {
+        return Err("Cannot determine config directory".to_string());
+    };
+
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("Failed to create config directory: {e}"))?;
+    }
+
+    let bytes = serde_json::to_vec_pretty(settings)
+        .map_err(|e| format!("Failed to serialize marketplace provenance config: {e}"))?;
+    std::fs::write(&path, bytes)
+        .map_err(|e| format!("Failed to write marketplace provenance config: {e}"))
+}
+
+fn normalize_optional_setting_url(value: Option<String>) -> Option<String> {
+    value.and_then(|raw| {
+        let trimmed = raw.trim();
+        if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed.chars().take(512).collect())
+        }
+    })
+}
+
+fn normalize_setting_list(values: Vec<String>, max_items: usize) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    for value in values {
+        let trimmed = value.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        let normalized: String = trimmed.chars().take(512).collect();
+        if seen.insert(normalized.clone()) {
+            out.push(normalized);
+        }
+        if out.len() >= max_items {
+            break;
+        }
+    }
+    out
 }
 
 async fn load_signed_feed(
@@ -777,6 +1072,8 @@ fn validate_resource_relpath(rel: &str) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use clawdstrike::{Policy, PolicyBundle};
+    use hush_core::Keypair;
 
     #[test]
     fn validate_fetch_target_rejects_release_localhost_https() {
@@ -799,5 +1096,106 @@ mod tests {
             assert!(!is_allowed_dev_http(&localhost));
             assert!(!is_allowed_dev_http(&remote));
         }
+    }
+
+    #[test]
+    fn trusted_install_cache_only_serves_previously_listed_entries() {
+        let feed_id = "trusted-feed-cache";
+        let entry_id = "policy-1";
+        let bundle = sample_signed_bundle();
+
+        let mut entries = HashMap::new();
+        entries.insert(
+            entry_id.to_string(),
+            TrustedInstallEntry {
+                signed_bundle: bundle.clone(),
+                install_allowed: true,
+            },
+        );
+        cache_trusted_install_entries(feed_id, entries).expect("cache entries");
+
+        let cached = get_trusted_install_bundle(feed_id, entry_id).expect("cached bundle");
+        assert_eq!(
+            cached.signed_bundle.bundle.bundle_id,
+            bundle.bundle.bundle_id
+        );
+        assert!(cached.install_allowed);
+        assert!(get_trusted_install_bundle(feed_id, "missing").is_err());
+        assert!(get_trusted_install_bundle("missing-feed", entry_id).is_err());
+    }
+
+    #[test]
+    fn provenance_config_normalizes_urls_and_lists() {
+        let normalized = MarketplaceProvenanceConfig {
+            notary_url: Some(" https://notary.example/api ".to_string()),
+            proofs_api_url: Some("   ".to_string()),
+            trusted_attesters: vec![
+                "clawdstrike-official".to_string(),
+                " clawdstrike-official ".to_string(),
+                "".to_string(),
+                "backbay-labs".to_string(),
+            ],
+            require_verified: true,
+            prefer_spine: false,
+            trusted_witness_keys: vec![
+                " witness-1 ".to_string(),
+                "witness-1".to_string(),
+                "witness-2".to_string(),
+            ],
+        }
+        .normalized();
+
+        assert_eq!(
+            normalized.notary_url.as_deref(),
+            Some("https://notary.example/api")
+        );
+        assert!(normalized.proofs_api_url.is_none());
+        assert_eq!(
+            normalized.trusted_attesters,
+            vec![
+                "clawdstrike-official".to_string(),
+                "backbay-labs".to_string()
+            ]
+        );
+        assert_eq!(
+            normalized.trusted_witness_keys,
+            vec!["witness-1".to_string(), "witness-2".to_string()]
+        );
+        assert!(normalized.require_verified);
+        assert!(!normalized.prefer_spine);
+    }
+
+    #[test]
+    fn trusted_install_requires_matching_policy_hash() {
+        let bundle = sample_signed_bundle();
+        let policy_hash = bundle.bundle.policy_hash.to_hex();
+        assert!(ensure_expected_policy_hash_matches(&bundle, &policy_hash).is_ok());
+        assert!(ensure_expected_policy_hash_matches(&bundle, "deadbeef").is_err());
+    }
+
+    #[test]
+    fn trusted_install_requires_matching_bundle_signature() {
+        let bundle = sample_signed_bundle();
+        let signature = bundle.signature.to_hex();
+        assert!(ensure_expected_bundle_signature_matches(&bundle, &signature).is_ok());
+        assert!(ensure_expected_bundle_signature_matches(&bundle, "deadbeef").is_err());
+    }
+
+    #[test]
+    fn build_notary_verify_url_rejects_query_and_fragment() {
+        assert!(
+            build_notary_verify_url("https://notary.example/api?source=feed", "uid-123").is_err()
+        );
+        assert!(build_notary_verify_url("https://notary.example/api#fragment", "uid-123").is_err());
+
+        let url =
+            build_notary_verify_url("https://notary.example/api", "uid-123").expect("verify url");
+        assert_eq!(url.as_str(), "https://notary.example/api/verify/uid-123");
+    }
+
+    fn sample_signed_bundle() -> SignedPolicyBundle {
+        let keypair = Keypair::generate();
+        let bundle = PolicyBundle::new(Policy::default()).expect("policy bundle");
+        SignedPolicyBundle::sign_with_public_key(bundle, &keypair).expect("signed policy bundle")
     }
 }

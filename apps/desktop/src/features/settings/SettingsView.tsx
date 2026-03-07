@@ -32,6 +32,7 @@ import {
   getMarketplaceDiscoveryStatus,
   isTauri,
   type MarketplaceDiscoveryStatus,
+  saveMarketplaceProvenanceConfig,
   startMarketplaceDiscovery,
   stopMarketplaceDiscovery,
 } from "@/services/tauri";
@@ -215,28 +216,50 @@ export function SettingsView({ scope = "all" }: SettingsViewProps) {
     setTimeout(() => setDiscoverySaved(null), 2000);
   };
 
-  const handleProvenanceSave = () => {
+  const handleProvenanceSave = async () => {
     const trustedAttesters = parseMarketplaceTrustedAttestersInput(trustedAttestersInput);
     const url = notaryUrl.trim() ? notaryUrl.trim() : null;
 
     const current = loadMarketplaceProvenanceSettings();
-    saveMarketplaceProvenanceSettings({
+    const next = {
       ...current,
       notaryUrl: url,
       trustedAttesters,
       requireVerified: requireVerifiedAttestation,
-    });
+    };
+    saveMarketplaceProvenanceSettings(next);
+
+    if (isTauri()) {
+      try {
+        await saveMarketplaceProvenanceConfig(next);
+      } catch (e) {
+        setProvenanceSaved(e instanceof Error ? e.message : "Failed to save provenance settings");
+        setTimeout(() => setProvenanceSaved(null), 2000);
+        return;
+      }
+    }
 
     setProvenanceSaved("Saved");
     setTimeout(() => setProvenanceSaved(null), 2000);
   };
 
-  const handleProvenanceReset = () => {
+  const handleProvenanceReset = async () => {
     const p = DEFAULT_MARKETPLACE_PROVENANCE_SETTINGS;
     setNotaryUrl(p.notaryUrl ?? "");
     setTrustedAttestersInput(formatMarketplaceTrustedAttestersInput(p.trustedAttesters));
     setRequireVerifiedAttestation(p.requireVerified);
     saveMarketplaceProvenanceSettings(p);
+
+    if (isTauri()) {
+      try {
+        await saveMarketplaceProvenanceConfig(p);
+      } catch (e) {
+        setProvenanceSaved(e instanceof Error ? e.message : "Failed to reset provenance settings");
+        setTimeout(() => setProvenanceSaved(null), 2000);
+        return;
+      }
+    }
+
     setProvenanceSaved("Reset to default");
     setTimeout(() => setProvenanceSaved(null), 2000);
   };

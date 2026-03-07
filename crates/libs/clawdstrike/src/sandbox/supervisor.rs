@@ -2,8 +2,8 @@
 //!
 //! Routes nono [`CapabilityRequest`]s through ClawdStrike's [`HushEngine`]
 //! for real-time guard-based allow/deny decisions. The supervisor runs on a
-//! dedicated OS thread (not in the async runtime) and uses `block_in_place`
-//! to bridge into the tokio runtime for async guard evaluation.
+//! dedicated OS thread and uses a captured Tokio handle to evaluate async
+//! guards from that thread.
 
 use std::sync::Arc;
 
@@ -15,10 +15,11 @@ use crate::guards::{GuardAction, GuardContext};
 
 /// Supervisor backend that routes capability requests through ClawdStrike guards.
 ///
-/// Each [`CapabilityRequest`] from the sandboxed child is translated into a
-/// [`GuardAction::FileAccess`] and evaluated by the [`HushEngine`]. The engine
-/// runs all configured guards (ForbiddenPathGuard, PathAllowlistGuard, etc.)
-/// and returns an aggregated verdict.
+/// Each [`CapabilityRequest`] from the sandboxed child is translated into the
+/// closest matching filesystem guard action and evaluated by the [`HushEngine`].
+/// Read requests stay as [`GuardAction::FileAccess`], while write/read+write
+/// requests use [`GuardAction::FileWrite`] so allowlist and forbidden-path
+/// policies preserve their read-vs-write semantics.
 ///
 /// The `runtime_handle` is captured from the caller's Tokio context before the
 /// supervisor thread is spawned, because `std::thread::spawn` threads do NOT
@@ -46,15 +47,16 @@ impl GuardSupervisorBackend {
 impl ApprovalBackend for GuardSupervisorBackend {
     fn request_capability(&self, request: &CapabilityRequest) -> NonoResult<ApprovalDecision> {
         let path = request.path.to_string_lossy();
+        static EMPTY_WRITE: &[u8] = &[];
 
-        // Bridge from the synchronous supervisor thread into the async tokio
-        // runtime. We use the captured Handle rather than Handle::current()
-        // because this runs on a std::thread::spawn thread which has no
-        // Tokio runtime context.
         let result = self.runtime_handle.block_on(async {
-            self.engine
-                .check_action(&GuardAction::FileAccess(&path), &self.context)
-                .await
+            let action = match request.access {
+                nono::AccessMode::Read => GuardAction::FileAccess(&path),
+                nono::AccessMode::Write | nono::AccessMode::ReadWrite => {
+                    GuardAction::FileWrite(&path, EMPTY_WRITE)
+                }
+            };
+            self.engine.check_action(&action, &self.context).await
         });
 
         match result {

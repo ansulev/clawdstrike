@@ -10,7 +10,7 @@
 //! all command paths must be absolute (e.g. `/bin/echo` not `echo`).
 
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
@@ -62,13 +62,25 @@ fn create_temp_dir(prefix: &str) -> PathBuf {
 }
 
 /// Write a minimal policy YAML and return its path.
-fn write_policy(dir: &PathBuf) -> PathBuf {
+fn write_policy(dir: &Path) -> PathBuf {
     let policy_path = dir.join("policy.yaml");
     fs::write(
         &policy_path,
         "version: \"1.1.0\"\nname: \"sandbox-nono-test\"\n",
     )
     .expect("write policy");
+    policy_path
+}
+
+fn write_allowlist_policy(dir: &Path, allowed_path: &str) -> PathBuf {
+    let policy_path = dir.join("policy-allowlist.yaml");
+    fs::write(
+        &policy_path,
+        format!(
+            "version: \"1.2.0\"\nname: \"sandbox-nono-allowlist\"\nguards:\n  path_allowlist:\n    enabled: true\n    file_access_allow:\n      - \"{allowed_path}\"\n"
+        ),
+    )
+    .expect("write allowlist policy");
     policy_path
 }
 
@@ -337,6 +349,35 @@ fn sandbox_nono_child_exit_code_propagated() {
     assert_ne!(
         result.exit_code, 0,
         "false command should result in non-zero exit; stderr:\n{}",
+        result.stderr
+    );
+}
+
+#[test]
+fn sandbox_nono_preflight_fail_exits_without_deadlock() {
+    let true_bin = match which("true") {
+        Some(p) => p,
+        None => return,
+    };
+
+    let dir = create_temp_dir("hush-sandbox-nono-preflight");
+    let allowed = dir.join("allowed.txt");
+    fs::write(&allowed, "ok").expect("write allowlisted file");
+    let policy = write_allowlist_policy(&dir, allowed.to_str().unwrap());
+
+    let result = run_hush("nono", &policy, &[&true_bin]);
+    let _ = fs::remove_dir_all(&dir);
+
+    assert_eq!(
+        result.exit_code, 4,
+        "preflight failure should exit cleanly instead of hanging; stderr:\n{}",
+        result.stderr
+    );
+    assert!(
+        result
+            .stderr
+            .contains("sandbox pre-flight failed (fail-closed)"),
+        "stderr should explain the fail-closed preflight result; stderr:\n{}",
         result.stderr
     );
 }

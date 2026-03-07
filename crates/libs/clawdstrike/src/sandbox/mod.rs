@@ -9,7 +9,7 @@ pub mod preflight;
 
 pub use attestation::{
     build_attestation, AuditEntry, CapabilitySnapshot, EnforcementLevel, FsCapSnapshot,
-    PlatformInfo, SandboxAttestation, SupervisorStats, TimestampedDenial,
+    PlatformInfo, SandboxAttestation, SandboxRuntimeState, SupervisorStats, TimestampedDenial,
 };
 pub mod never_grant;
 pub mod supervisor;

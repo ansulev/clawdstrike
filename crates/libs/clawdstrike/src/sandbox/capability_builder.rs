@@ -75,7 +75,7 @@ impl CapabilityBuilder {
                 });
                 continue;
             }
-            caps = caps.allow_path(&path, AccessMode::Read)?;
+            caps.add_fs(try_fs_capability(&path, AccessMode::Read)?);
         }
 
         // 3. System write paths -- skip forbidden (including parent dirs of forbidden files)
@@ -95,16 +95,23 @@ impl CapabilityBuilder {
                 });
                 continue;
             }
-            caps = caps.allow_path(&path, AccessMode::ReadWrite)?;
+            caps.add_fs(try_fs_capability(&path, AccessMode::ReadWrite)?);
         }
 
-        // 4. Working directory (ReadWrite)
-        //    On Linux Landlock, this grant is irrevocable — forbidden subpaths
-        //    under working_dir become accessible. The supervisor mode (--supervised)
-        //    handles this via NeverGrantChecker at runtime.
-        //    On macOS, Seatbelt deny rules (step 6) take precedence and block
-        //    forbidden subpaths even when the parent is granted.
+        // 4. Working directory (ReadWrite) when it can be represented faithfully.
+        //
+        // Path-sensitive policies cannot be enforced by first granting the entire
+        // working directory and hoping later guards claw access back. The static
+        // sandbox has to fail closed instead of widening access beyond policy.
         let wd_has_forbidden = self.working_dir_contains_forbidden(&forbidden_patterns);
+        let allowlist_enabled = self
+            .policy
+            .guards
+            .path_allowlist
+            .as_ref()
+            .map(|cfg| cfg.enabled)
+            .unwrap_or(false);
+
         if wd_has_forbidden {
             let is_home = dirs::home_dir()
                 .map(|h| self.working_dir == h)
@@ -135,7 +142,27 @@ impl CapabilityBuilder {
                 });
             }
         }
-        caps = caps.allow_path(&self.working_dir, AccessMode::ReadWrite)?;
+
+        let grant_working_dir =
+            !allowlist_enabled && (!wd_has_forbidden || cfg!(target_os = "macos"));
+        if grant_working_dir {
+            caps = caps.allow_path(&self.working_dir, AccessMode::ReadWrite)?;
+        } else {
+            let reason = if allowlist_enabled {
+                "PathAllowlistGuard is enabled; granting the full working directory would bypass deny-by-default path enforcement"
+            } else {
+                "Working directory contains forbidden subpaths that the static Linux sandbox cannot revoke once granted"
+            };
+            warnings.push(TranslationWarning {
+                guard: "CapabilityBuilder".into(),
+                message: format!(
+                    "Not granting working directory {}. {}. Static translation will fail closed unless the command can run without cwd access or supervised mode is used.",
+                    self.working_dir.display(),
+                    reason
+                ),
+                severity: WarningSeverity::Warning,
+            });
+        }
 
         // 5. PathAllowlistGuard -> direct path grants
         if let Some(ref allowlist) = self.policy.guards.path_allowlist {
@@ -962,6 +989,49 @@ mod tests {
         assert!(
             !has_file,
             "disabled PathAllowlistGuard should not contribute capabilities"
+        );
+    }
+
+    #[test]
+    fn test_path_allowlist_does_not_grant_entire_working_dir() {
+        use nono::query::{QueryContext, QueryResult};
+
+        let tmp = tempfile::TempDir::new().unwrap();
+        let test_file = tmp.path().join("allowed_read.txt");
+        std::fs::write(&test_file, "test").unwrap();
+
+        let mut policy = minimal_policy();
+        policy.guards.path_allowlist = Some(PathAllowlistConfig {
+            enabled: true,
+            file_access_allow: vec![test_file.to_string_lossy().to_string()],
+            file_write_allow: vec![],
+            patch_allow: vec![],
+        });
+
+        let (caps, warnings) = CapabilityBuilder::new(policy, tmp.path().to_path_buf())
+            .build_with_diagnostics()
+            .unwrap();
+        let ctx = QueryContext::new(caps);
+
+        assert!(
+            matches!(
+                ctx.query_path(&test_file, AccessMode::Read),
+                QueryResult::Allowed(_)
+            ),
+            "explicit allowlisted file should remain accessible"
+        );
+        assert!(
+            !matches!(
+                ctx.query_path(tmp.path(), AccessMode::ReadWrite),
+                QueryResult::Allowed(_)
+            ),
+            "builder must not grant the entire working directory when deny-by-default allowlists are enabled"
+        );
+        assert!(
+            warnings
+                .iter()
+                .any(|w| w.message.contains("Not granting working directory")),
+            "builder should explain why cwd was not granted"
         );
     }
 

@@ -26,6 +26,7 @@ fn main() {
             commands::marketplace::marketplace_list_policies,
             commands::marketplace::marketplace_install_policy,
             commands::marketplace::marketplace_verify_attestation,
+            commands::marketplace::marketplace_save_provenance_settings,
             commands::marketplace::marketplace_list_curators,
             commands::marketplace::marketplace_add_curator,
             commands::marketplace::marketplace_remove_curator,

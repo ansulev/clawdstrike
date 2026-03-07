@@ -40,13 +40,13 @@ spine:
   secrets:
     existingSecret: "clawdstrike-helm-spine"
   image:
-    tag: "spine-checkpointer-2ba330f736d108a1ff37e4d17782edc9532eb73e"
+    tag: "spine-checkpointer-2ed7e663e2b668807ab1ab936f5f972ae9fad95c"
   checkpointer:
     streamReplicas: 1
 
 hushd:
   image:
-    tag: "2ba330f736d108a1ff37e4d17782edc9532eb73e"
+    tag: "2ed7e663e2b668807ab1ab936f5f972ae9fad95c"
   auth:
     enabled: true
     existingSecret: "clawdstrike-helm-hushd"
@@ -89,7 +89,7 @@ bridges:
   tetragon:
     enabled: true
     image:
-      tag: "2ba330f736d108a1ff37e4d17782edc9532eb73e"
+      tag: "2ed7e663e2b668807ab1ab936f5f972ae9fad95c"
     grpcEndpoint: "http://localhost:54321"
     adminPort: 22112
     hostNetwork: true
@@ -102,21 +102,21 @@ bridges:
     enabled: true
     replicas: 1
     image:
-      tag: "2ba330f736d108a1ff37e4d17782edc9532eb73e"
+      tag: "2ed7e663e2b668807ab1ab936f5f972ae9fad95c"
     grpcEndpoint: "http://hubble-relay.kube-system.svc.cluster.local:80"
     nodeSelector:
       kubernetes.io/arch: amd64
   auditd:
     enabled: true
     image:
-      tag: "2ba330f736d108a1ff37e4d17782edc9532eb73e"
+      tag: "2ed7e663e2b668807ab1ab936f5f972ae9fad95c"
     nodeSelector:
       kubernetes.io/arch: amd64
   k8sAudit:
     enabled: true
     replicas: 1
     image:
-      tag: "2ba330f736d108a1ff37e4d17782edc9532eb73e"
+      tag: "2ed7e663e2b668807ab1ab936f5f972ae9fad95c"
     nodeSelector:
       kubernetes.io/arch: amd64
 
@@ -128,7 +128,7 @@ easAnchor:
   # registered and their UIDs are provided here.
   enabled: false
   image:
-    tag: "2ba330f736d108a1ff37e4d17782edc9532eb73e"
+    tag: "2ed7e663e2b668807ab1ab936f5f972ae9fad95c"
   chain:
     rpcUrl: "https://sepolia.base.org"
     chainId: 84532

@@ -429,9 +429,12 @@ pub async fn cmd_run(
                     }
 
                     if !preflight.is_ok() {
-                        let _ =
-                            writeln!(stderr, "[nono] sandbox disabled due to pre-flight errors");
-                        (SandboxExecution::None, "disabled".to_string())
+                        let _ = writeln!(
+                            stderr,
+                            "[nono] aborting: sandbox pre-flight failed (fail-closed)"
+                        );
+                        let _ = writer_handle.await;
+                        return ExitCode::RuntimeError.as_i32();
                     } else {
                         // Check platform support
                         if !nono::Sandbox::is_supported() {

@@ -102,17 +102,38 @@ impl CapabilityBuilder {
         //    On Linux Landlock, this grant is irrevocable — forbidden subpaths
         //    under working_dir become accessible. The supervisor mode (--supervised)
         //    handles this via NeverGrantChecker at runtime.
-        if self.working_dir_contains_forbidden(&forbidden_patterns) {
-            warnings.push(TranslationWarning {
-                guard: "ForbiddenPathGuard".into(),
-                message: format!(
-                    "Working directory {} contains forbidden subpaths. \
-                     On Linux (Landlock), the static sandbox cannot deny them once the parent is granted. \
-                     Use --supervised mode for runtime enforcement of forbidden paths within the working directory.",
-                    self.working_dir.display()
-                ),
-                severity: WarningSeverity::Warning,
-            });
+        //    On macOS, Seatbelt deny rules (step 6) take precedence and block
+        //    forbidden subpaths even when the parent is granted.
+        let wd_has_forbidden = self.working_dir_contains_forbidden(&forbidden_patterns);
+        if wd_has_forbidden {
+            let is_home = dirs::home_dir()
+                .map(|h| self.working_dir == h)
+                .unwrap_or(false);
+            if is_home && cfg!(target_os = "linux") {
+                // Granting $HOME on Linux exposes all forbidden paths (.ssh, .aws, etc.)
+                // with no way to revoke. Emit a hard warning — preflight should catch this.
+                warnings.push(TranslationWarning {
+                    guard: "ForbiddenPathGuard".into(),
+                    message: format!(
+                        "Working directory is $HOME ({}). On Linux, granting $HOME \
+                         exposes forbidden subpaths (.ssh, .aws, etc.) irrevocably. \
+                         Run from a project subdirectory or use --supervised mode.",
+                        self.working_dir.display()
+                    ),
+                    severity: WarningSeverity::Warning,
+                });
+            } else {
+                warnings.push(TranslationWarning {
+                    guard: "ForbiddenPathGuard".into(),
+                    message: format!(
+                        "Working directory {} contains forbidden subpaths. \
+                         On Linux (Landlock), the static sandbox cannot deny them once the parent is granted. \
+                         Use --supervised mode for runtime enforcement of forbidden paths within the working directory.",
+                        self.working_dir.display()
+                    ),
+                    severity: WarningSeverity::Warning,
+                });
+            }
         }
         caps = caps.allow_path(&self.working_dir, AccessMode::ReadWrite)?;
 
@@ -424,7 +445,27 @@ fn system_read_paths() -> Vec<PathBuf> {
 #[cfg(target_os = "linux")]
 fn system_read_paths() -> Vec<PathBuf> {
     [
-        "/bin", "/lib", "/lib64", "/usr", "/sbin", "/etc", "/proc", "/sys", "/run",
+        "/bin",
+        "/lib",
+        "/lib64",
+        "/usr",
+        "/sbin",
+        // Grant specific /etc paths needed for DNS and TLS rather than all
+        // of /etc, which would conflict with forbidden files like /etc/shadow.
+        "/etc/resolv.conf",
+        "/etc/hosts",
+        "/etc/nsswitch.conf",
+        "/etc/ssl",
+        "/etc/pki",
+        "/etc/ca-certificates",
+        "/etc/ld.so.cache",
+        "/etc/ld.so.conf",
+        "/etc/ld.so.conf.d",
+        "/etc/alternatives",
+        "/etc/localtime",
+        "/proc",
+        "/sys",
+        "/run",
     ]
     .iter()
     .map(PathBuf::from)

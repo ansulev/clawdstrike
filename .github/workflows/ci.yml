@@ -496,8 +496,7 @@ jobs:
             | grep -Ev '^crates/libs/hunt-(correlate|query|scan)/src/(lib|error)\.rs$' \
             | grep -Ev '^crates/libs/(hush-core|clawdstrike)/src/lib\.rs$' \
             | grep -Ev '^crates/services/hush-cli/src/tests\.rs$' \
-            | grep -Ev '^crates/services/hush-cli/src/supervised_exec\.rs$' \
-            | grep -Ev '^crates/services/hush-cli/src/policy_observe\.rs$' \
+            | grep -Ev '^crates/services/hush-cli/src/(supervised_exec|policy_observe)\.rs$' \
             | grep -Ev '^crates/libs/clawdstrike/src/sandbox/supervisor\.rs$' \
             > changed_rust_files.coverage.txt || true
 

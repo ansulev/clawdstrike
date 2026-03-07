@@ -177,11 +177,17 @@ pub(crate) fn install_signal_forwarding_pub(child: nix::unistd::Pid) {
 
 /// Install signal forwarding so SIGINT/SIGTERM sent to the parent
 /// are forwarded to the child process.
+///
+/// Uses a global `AtomicI32` to communicate the child PID to the signal
+/// handler. This means only ONE sandboxed child may be active at a time.
+/// `hush run` enforces this — it runs a single command per invocation.
+/// If concurrent sandboxed children were needed, each would require its
+/// own process group and the handler would need to forward via `killpg`.
 fn install_signal_forwarding(child: nix::unistd::Pid) {
     use nix::sys::signal::{self, SigHandler, Signal};
 
-    // Store child PID in a static for the signal handler
-    // This is safe because we only set it once before installing handlers
+    // Global child PID for the signal handler. Only one sandboxed child
+    // is active at a time (enforced by hush run's single-command model).
     static CHILD_PID: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(0);
     CHILD_PID.store(child.as_raw(), std::sync::atomic::Ordering::SeqCst);
 

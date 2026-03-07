@@ -710,6 +710,9 @@ mod tests {
             "sandbox": {"enforcement_level": "kernel_static"}
         }));
         let signed = SignedReceipt::sign(receipt, &keypair).unwrap();
-        assert_eq!(signed.enforcement_level(), Some("kernel_static".to_string()));
+        assert_eq!(
+            signed.enforcement_level(),
+            Some("kernel_static".to_string())
+        );
     }
 }

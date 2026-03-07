@@ -152,15 +152,21 @@ pub fn build_attestation(caps: &nono::CapabilitySet, supervised: bool) -> Sandbo
         "none"
     };
 
+    // Gate enforcement level on platform support: if the kernel sandbox
+    // mechanism is unavailable, enforcement_level must be None regardless
+    // of the supervised flag. This prevents contradictory metadata where
+    // enforced=false but enforcement_level=kernel_supervised.
+    let enforcement_level = if !support.is_supported {
+        EnforcementLevel::None
+    } else if supervised {
+        EnforcementLevel::KernelSupervised
+    } else {
+        EnforcementLevel::Kernel
+    };
+
     SandboxAttestation {
         enforced: support.is_supported,
-        enforcement_level: if !support.is_supported {
-            EnforcementLevel::None
-        } else if supervised {
-            EnforcementLevel::KernelSupervised
-        } else {
-            EnforcementLevel::Kernel
-        },
+        enforcement_level,
         platform: PlatformInfo {
             name: support.platform.to_string(),
             mechanism: mechanism.to_string(),

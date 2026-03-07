@@ -251,7 +251,7 @@ pub async fn cmd_run(
         sandbox,
         hushd_url,
         hushd_token,
-        supervised: _supervised,
+        supervised,
         command,
     } = args;
 
@@ -390,6 +390,7 @@ pub async fn cmd_run(
             });
 
             // Build capability set from policy using CapabilityBuilder
+            let supervisor_policy = if supervised { Some(sandbox_policy.clone()) } else { None };
             let mut builder = clawdstrike::sandbox::CapabilityBuilder::new(
                 sandbox_policy,
                 working_dir.clone(),
@@ -431,7 +432,28 @@ pub async fn cmd_run(
                             let _ = writeln!(stderr, "[nono] warning: sandbox not supported: {}", support.details);
                         }
 
-                        (SandboxExecution::Nono { caps: Box::new(caps), working_dir }, "nono".to_string())
+                        if let Some(ref sp) = supervisor_policy {
+                            // Build never-grant list and supervisor context
+                            let never_grant_paths = clawdstrike::sandbox::build_never_grant_list(sp);
+                            match nono::NeverGrantChecker::new(&never_grant_paths) {
+                                Ok(never_grant) => {
+                                    let context = GuardContext::new();
+                                    let _ = writeln!(stderr, "[nono] supervised mode: {} never-grant paths", never_grant.len());
+                                    (SandboxExecution::Supervised(Box::new(SupervisedData {
+                                        caps: Box::new(caps),
+                                        engine: Arc::clone(&engine),
+                                        context,
+                                        never_grant,
+                                    })), "nono+supervised".to_string())
+                                }
+                                Err(e) => {
+                                    let _ = writeln!(stderr, "[nono] warning: failed to build never-grant list: {}, falling back to static sandbox", e);
+                                    (SandboxExecution::Nono { caps: Box::new(caps), working_dir }, "nono".to_string())
+                                }
+                            }
+                        } else {
+                            (SandboxExecution::Nono { caps: Box::new(caps), working_dir }, "nono".to_string())
+                        }
                     }
                 }
                 Err(e) => {
@@ -458,6 +480,10 @@ pub async fn cmd_run(
             let attestation = clawdstrike::sandbox::build_attestation(caps, false);
             serde_json::to_value(&attestation).ok()
         }
+        SandboxExecution::Supervised(ref data) => {
+            let attestation = clawdstrike::sandbox::build_attestation(&data.caps, true);
+            serde_json::to_value(&attestation).ok()
+        }
         _ => None,
     };
 
@@ -476,6 +502,41 @@ pub async fn cmd_run(
                     // Convert i32 to ExitStatus for compatibility
                     use std::os::unix::process::ExitStatusExt;
                     std::process::ExitStatus::from_raw(exit_code << 8)
+                }
+                Err(e) => {
+                    let _ = writeln!(stderr, "Error: {}", e);
+                    if let Some(h) = proxy_handle {
+                        h.abort();
+                    }
+                    drop(event_emitter);
+                    let _ = writer_handle.await;
+                    return ExitCode::RuntimeError.as_i32();
+                }
+            }
+        }
+        SandboxExecution::Supervised(data) => {
+            let SupervisedData { caps, engine: sup_engine, context, never_grant } = *data;
+            let mut env_overrides = HashMap::new();
+            env_overrides.insert("HUSH_SESSION_ID".to_string(), session_id.clone());
+            if let Some(ref proxy_url) = env_proxy_url {
+                env_overrides.insert("HTTPS_PROXY".to_string(), proxy_url.clone());
+                env_overrides.insert("ALL_PROXY".to_string(), proxy_url.clone());
+            }
+            let _ = writeln!(stderr, "Running (supervised): {}", command.join(" "));
+            match crate::supervised_exec::spawn_supervised_child(
+                &caps, &command, &env_overrides, sup_engine, context, never_grant,
+            ) {
+                Ok(result) => {
+                    let _ = writeln!(
+                        stderr,
+                        "[nono] supervisor stats: {} requests ({} granted, {} denied, {} never-grant)",
+                        result.stats.requests_total,
+                        result.stats.requests_granted,
+                        result.stats.requests_denied,
+                        result.stats.never_grant_blocks,
+                    );
+                    use std::os::unix::process::ExitStatusExt;
+                    std::process::ExitStatus::from_raw(result.exit_code << 8)
                 }
                 Err(e) => {
                     let _ = writeln!(stderr, "Error: {}", e);
@@ -807,6 +868,14 @@ enum SandboxWrapper {
     },
 }
 
+/// Data for supervised nono execution, boxed to keep enum variant sizes balanced.
+struct SupervisedData {
+    caps: Box<nono::CapabilitySet>,
+    engine: Arc<HushEngine>,
+    context: GuardContext,
+    never_grant: nono::NeverGrantChecker,
+}
+
 /// Execution mode for the child process sandbox.
 enum SandboxExecution {
     /// Nono kernel-level sandbox
@@ -815,6 +884,8 @@ enum SandboxExecution {
         #[allow(dead_code)] // reserved for Phase 2 diagnostics
         working_dir: PathBuf,
     },
+    /// Nono kernel-level sandbox with supervisor dynamic enforcement
+    Supervised(Box<SupervisedData>),
     /// Legacy sandbox-exec/bwrap wrapper
     Legacy(SandboxWrapper),
     /// No sandboxing
@@ -1872,6 +1943,7 @@ guards:
             sandbox: SandboxMode::None,
             hushd_url: None,
             hushd_token: None,
+            supervised: false,
             command: vec!["echo ~/.ssh".to_string()],
         };
 

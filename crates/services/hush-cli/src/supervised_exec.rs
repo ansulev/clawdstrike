@@ -34,6 +34,8 @@ use crate::sandbox_nono;
 pub struct SupervisedResult {
     pub exit_code: i32,
     pub stats: SupervisorStats,
+    /// Denial records for receipt integration (Phase 4B).
+    #[allow(dead_code)]
     pub denials: Vec<TimestampedDenial>,
 }
 
@@ -166,76 +168,71 @@ fn run_supervisor_loop(
     };
     let mut denials = Vec::new();
 
-    loop {
-        match socket.recv_message() {
-            Ok(msg) => {
-                let nono::supervisor::SupervisorMessage::Request(request) = msg;
-                stats.requests_total = stats.requests_total.saturating_add(1);
+    while let Ok(msg) = socket.recv_message() {
+        let nono::supervisor::SupervisorMessage::Request(request) = msg;
+        stats.requests_total = stats.requests_total.saturating_add(1);
 
-                // Never-grant check BEFORE guard evaluation
-                if never_grant.is_blocked(&request.path) {
-                    stats.requests_denied = stats.requests_denied.saturating_add(1);
-                    stats.never_grant_blocks = stats.never_grant_blocks.saturating_add(1);
-                    denials.push(TimestampedDenial {
-                        path: request.path.to_string_lossy().to_string(),
-                        access: format!("{:?}", request.access),
-                        reason: "Path is in never_grant list".to_string(),
-                        timestamp: chrono::Utc::now().to_rfc3339(),
+        // Never-grant check BEFORE guard evaluation
+        if never_grant.is_blocked(&request.path) {
+            stats.requests_denied = stats.requests_denied.saturating_add(1);
+            stats.never_grant_blocks = stats.never_grant_blocks.saturating_add(1);
+            denials.push(TimestampedDenial {
+                path: request.path.to_string_lossy().to_string(),
+                access: format!("{:?}", request.access),
+                reason: "Path is in never_grant list".to_string(),
+                timestamp: chrono::Utc::now().to_rfc3339(),
+            });
+            let _ = socket.send_response(&nono::supervisor::SupervisorResponse::Decision {
+                request_id: request.request_id.clone(),
+                decision: ApprovalDecision::Denied {
+                    reason: "Path is in never_grant list".into(),
+                },
+            });
+            continue;
+        }
+
+        // Route through guards
+        match backend.request_capability(&request) {
+            Ok(ApprovalDecision::Granted) => {
+                stats.requests_granted = stats.requests_granted.saturating_add(1);
+                let _ =
+                    socket.send_response(&nono::supervisor::SupervisorResponse::Decision {
+                        request_id: request.request_id.clone(),
+                        decision: ApprovalDecision::Granted,
                     });
-                    let _ = socket.send_response(&nono::supervisor::SupervisorResponse::Decision {
+            }
+            Ok(ref decision @ ApprovalDecision::Denied { ref reason }) => {
+                stats.requests_denied = stats.requests_denied.saturating_add(1);
+                denials.push(TimestampedDenial {
+                    path: request.path.to_string_lossy().to_string(),
+                    access: format!("{:?}", request.access),
+                    reason: reason.clone(),
+                    timestamp: chrono::Utc::now().to_rfc3339(),
+                });
+                let _ =
+                    socket.send_response(&nono::supervisor::SupervisorResponse::Decision {
+                        request_id: request.request_id.clone(),
+                        decision: decision.clone(),
+                    });
+            }
+            Ok(decision) => {
+                stats.requests_denied = stats.requests_denied.saturating_add(1);
+                let _ =
+                    socket.send_response(&nono::supervisor::SupervisorResponse::Decision {
+                        request_id: request.request_id.clone(),
+                        decision,
+                    });
+            }
+            Err(_) => {
+                stats.requests_denied = stats.requests_denied.saturating_add(1);
+                let _ =
+                    socket.send_response(&nono::supervisor::SupervisorResponse::Decision {
                         request_id: request.request_id.clone(),
                         decision: ApprovalDecision::Denied {
-                            reason: "Path is in never_grant list".into(),
+                            reason: "Guard evaluation error".into(),
                         },
                     });
-                    continue;
-                }
-
-                // Route through guards
-                match backend.request_capability(&request) {
-                    Ok(ApprovalDecision::Granted) => {
-                        stats.requests_granted = stats.requests_granted.saturating_add(1);
-                        let _ =
-                            socket.send_response(&nono::supervisor::SupervisorResponse::Decision {
-                                request_id: request.request_id.clone(),
-                                decision: ApprovalDecision::Granted,
-                            });
-                    }
-                    Ok(ref decision @ ApprovalDecision::Denied { ref reason }) => {
-                        stats.requests_denied = stats.requests_denied.saturating_add(1);
-                        denials.push(TimestampedDenial {
-                            path: request.path.to_string_lossy().to_string(),
-                            access: format!("{:?}", request.access),
-                            reason: reason.clone(),
-                            timestamp: chrono::Utc::now().to_rfc3339(),
-                        });
-                        let _ =
-                            socket.send_response(&nono::supervisor::SupervisorResponse::Decision {
-                                request_id: request.request_id.clone(),
-                                decision: decision.clone(),
-                            });
-                    }
-                    Ok(decision) => {
-                        stats.requests_denied = stats.requests_denied.saturating_add(1);
-                        let _ =
-                            socket.send_response(&nono::supervisor::SupervisorResponse::Decision {
-                                request_id: request.request_id.clone(),
-                                decision,
-                            });
-                    }
-                    Err(_) => {
-                        stats.requests_denied = stats.requests_denied.saturating_add(1);
-                        let _ =
-                            socket.send_response(&nono::supervisor::SupervisorResponse::Decision {
-                                request_id: request.request_id.clone(),
-                                decision: ApprovalDecision::Denied {
-                                    reason: "Guard evaluation error".into(),
-                                },
-                            });
-                    }
-                }
             }
-            Err(_) => break, // Child exited or socket closed
         }
     }
 

@@ -70,6 +70,7 @@ pub async fn cmd_policy_observe(
             sandbox: crate::SandboxMode::None,
             hushd_url: None,
             hushd_token: None,
+            supervised: false,
             command: args.command,
         },
         remote_extends,

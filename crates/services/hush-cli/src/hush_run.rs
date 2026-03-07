@@ -488,8 +488,12 @@ pub async fn cmd_run(
                     }
                 }
                 Err(e) => {
-                    let _ = writeln!(stderr, "Warning: failed to build nono sandbox: {}", e);
-                    (SandboxExecution::None, "disabled".to_string())
+                    let _ = writeln!(
+                        stderr,
+                        "[nono] FATAL: failed to build sandbox: {}. Aborting -- will not run unsandboxed.",
+                        e
+                    );
+                    return ExitCode::RuntimeError.as_i32();
                 }
             }
         }

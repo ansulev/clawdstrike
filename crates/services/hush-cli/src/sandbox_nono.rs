@@ -105,13 +105,31 @@ pub fn spawn_sandboxed_child(
 /// Prevents the child from inheriting the proxy socket, supervisor
 /// socket, log handles, etc.
 fn close_inherited_fds(from_fd: i32) {
-    // Get the max fd limit
+    // On Linux, enumerate /proc/self/fd for precise fd closing
+    #[cfg(target_os = "linux")]
+    {
+        if let Ok(entries) = std::fs::read_dir("/proc/self/fd") {
+            for entry in entries.flatten() {
+                if let Some(name) = entry.file_name().to_str() {
+                    if let Ok(fd) = name.parse::<i32>() {
+                        if fd >= from_fd {
+                            // SAFETY: closing an fd is safe; EBADF is harmless
+                            unsafe { libc::close(fd) };
+                        }
+                    }
+                }
+            }
+            return;
+        }
+    }
+
+    // Fallback: iterate from from_fd to soft NOFILE limit
     let max_fd = match rlimit::getrlimit(rlimit::Resource::NOFILE) {
         Ok((soft, _hard)) => soft as i32,
         Err(_) => 1024, // Reasonable fallback
     };
-    // Cap to a sane maximum to avoid iterating millions of fds
-    let capped = max_fd.min(4096);
+    // Cap to avoid iterating millions of fds on misconfigured systems
+    let capped = max_fd.min(65536);
     for fd in from_fd..capped {
         // SAFETY: closing an fd is safe; EBADF for non-open fds is harmless
         unsafe { libc::close(fd) };

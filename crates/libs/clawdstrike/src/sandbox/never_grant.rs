@@ -40,9 +40,11 @@ pub fn build_never_grant_list(policy: &Policy) -> Vec<String> {
             // Absolute path -- use directly
             paths.push(pattern.clone());
         } else if let Some(rel) = pattern.strip_prefix("**/") {
-            // Relative glob -- convert to home-relative where applicable
+            // Relative glob -- strip trailing wildcards and convert to home-relative.
+            // NeverGrantChecker uses Path::starts_with() component matching,
+            // so ~/dir blocks ~/dir/anything.
             let rel = rel.trim_end_matches("/**").trim_end_matches("/*");
-            if rel.starts_with('.') {
+            if !rel.is_empty() && !rel.contains('*') {
                 paths.push(format!("~/{rel}"));
             }
         }

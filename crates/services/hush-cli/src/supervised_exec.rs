@@ -32,8 +32,6 @@ use crate::sandbox_nono;
 pub struct SupervisedResult {
     pub exit_code: i32,
     pub stats: SupervisorStats,
-    /// Denial records for receipt integration (Phase 4B).
-    #[allow(dead_code)]
     pub denials: Vec<TimestampedDenial>,
 }
 
@@ -173,7 +171,7 @@ fn run_supervisor_loop(
             stats.never_grant_blocks = stats.never_grant_blocks.saturating_add(1);
             denials.push(TimestampedDenial {
                 path: request.path.to_string_lossy().to_string(),
-                access: format!("{:?}", request.access),
+                access: format!("{}", request.access),
                 reason: "Path is in never_grant list".to_string(),
                 timestamp: chrono::Utc::now().to_rfc3339(),
             });
@@ -199,7 +197,7 @@ fn run_supervisor_loop(
                 stats.requests_denied = stats.requests_denied.saturating_add(1);
                 denials.push(TimestampedDenial {
                     path: request.path.to_string_lossy().to_string(),
-                    access: format!("{:?}", request.access),
+                    access: format!("{}", request.access),
                     reason: reason.clone(),
                     timestamp: chrono::Utc::now().to_rfc3339(),
                 });
@@ -233,11 +231,30 @@ fn run_supervisor_loop(
 /// Close all file descriptors from `from_fd` to the soft NOFILE limit,
 /// except `keep_fd`.
 fn close_inherited_fds_except(from_fd: i32, keep_fd: i32) {
+    // On Linux, enumerate /proc/self/fd for precise fd closing
+    #[cfg(target_os = "linux")]
+    {
+        if let Ok(entries) = std::fs::read_dir("/proc/self/fd") {
+            for entry in entries.flatten() {
+                if let Some(name) = entry.file_name().to_str() {
+                    if let Ok(fd) = name.parse::<i32>() {
+                        if fd >= from_fd && fd != keep_fd {
+                            // SAFETY: closing an fd is safe; EBADF is harmless
+                            unsafe { libc::close(fd) };
+                        }
+                    }
+                }
+            }
+            return;
+        }
+    }
+
+    // Fallback: iterate from from_fd to soft NOFILE limit
     let max_fd = match rlimit::getrlimit(rlimit::Resource::NOFILE) {
         Ok((soft, _)) => soft as i32,
         Err(_) => 1024,
     };
-    let capped = max_fd.min(4096);
+    let capped = max_fd.min(65536);
     for fd in from_fd..capped {
         if fd != keep_fd {
             // SAFETY: closing an fd is safe; EBADF for non-open fds is harmless

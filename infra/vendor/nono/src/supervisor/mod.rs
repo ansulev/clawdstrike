@@ -28,7 +28,7 @@
 //! - All messages are length-prefixed with a 64 KiB cap to prevent memory exhaustion
 //! - Peer authentication via `SO_PEERCRED` (Linux) / `LOCAL_PEERPID` (macOS)
 //! - `never_grant` paths are rejected before the approval backend is consulted
-//! - Path comparison uses [`Path::starts_with()`], never string operations
+//! - Path comparison uses [`std::path::Path::starts_with()`], never string operations
 
 pub mod never_grant;
 pub mod socket;

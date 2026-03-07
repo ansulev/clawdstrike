@@ -23,17 +23,11 @@ pub mod net_filter;
 pub mod query;
 pub mod state;
 
-// Unix-only modules gated behind features
-#[cfg(all(unix, feature = "keystore"))]
-pub mod keystore;
+// Unix-only modules
 #[cfg(unix)]
 pub mod sandbox;
 #[cfg(unix)]
 pub mod supervisor;
-#[cfg(all(unix, feature = "trust"))]
-pub mod trust;
-#[cfg(all(unix, feature = "undo"))]
-pub mod undo;
 
 // Cross-platform re-exports
 pub use capability::{
@@ -45,19 +39,9 @@ pub use net_filter::{FilterResult, HostFilter};
 pub use state::SandboxState;
 
 // Unix-only re-exports
-#[cfg(all(unix, feature = "keystore"))]
-pub use keystore::{
-    is_env_uri, is_op_uri, load_secret_by_ref, load_secrets, redact_op_uri,
-    validate_destination_env_var, validate_env_uri, validate_op_uri, LoadedSecret,
-};
 #[cfg(unix)]
 pub use sandbox::{Sandbox, SupportInfo};
 #[cfg(unix)]
 pub use supervisor::{
     ApprovalBackend, ApprovalDecision, CapabilityRequest, NeverGrantChecker, SupervisorSocket,
-};
-#[cfg(all(unix, feature = "trust"))]
-pub use trust::{
-    Enforcement, InstructionPatterns, Publisher, SignerIdentity, TrustPolicy, VerificationOutcome,
-    VerificationResult,
 };

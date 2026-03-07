@@ -16,11 +16,6 @@ categories = ["os", "api-bindings"]
 default = ["sandbox"]
 # Core sandbox enforcement (Landlock/Seatbelt) — requires Unix
 sandbox = []
-# Stub features — optional deps removed from this vendored copy since
-# clawdstrike only enables "sandbox". Keeps lib.rs cfg gates compiling.
-keystore = []
-trust = []
-undo = []
 
 [dependencies]
 thiserror = "2"

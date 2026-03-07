@@ -155,7 +155,7 @@ pub fn spawn_supervised_child(
 
 /// Supervisor loop -- runs on a dedicated OS thread.
 ///
-/// Receives [`SupervisorMessage`]s from the child, checks the never-grant
+/// Receives `SupervisorMessage`s from the child, checks the never-grant
 /// list first, then routes through the [`GuardSupervisorBackend`].
 fn run_supervisor_loop(
     mut socket: SupervisorSocket,

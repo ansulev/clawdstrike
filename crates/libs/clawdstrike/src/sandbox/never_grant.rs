@@ -1,6 +1,6 @@
 //! Never-grant list builder for nono supervisor.
 //!
-//! Maps ClawdStrike's [`ForbiddenPathConfig`] to nono's [`NeverGrantChecker`].
+//! Maps ClawdStrike's [`ForbiddenPathConfig`] to nono's [`nono::NeverGrantChecker`].
 //! These paths are denied BEFORE guard evaluation -- they are the absolute
 //! security floor that guards cannot override.
 
@@ -13,7 +13,7 @@ use crate::policy::Policy;
 /// Even if a guard would allow access, the never-grant list blocks it.
 ///
 /// The returned strings use `~/` for home-relative paths; nono's
-/// [`NeverGrantChecker::new`] handles tilde expansion internally.
+/// [`nono::NeverGrantChecker::new`] handles tilde expansion internally.
 pub fn build_never_grant_list(policy: &Policy) -> Vec<String> {
     let mut paths: Vec<String> = vec![
         // Critical credential paths (always blocked)

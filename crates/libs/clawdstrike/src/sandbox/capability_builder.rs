@@ -126,12 +126,10 @@ impl CapabilityBuilder {
             for path in &concrete_forbidden {
                 let escaped = escape_seatbelt_path(&path.to_string_lossy());
                 // Deny content reads (allow metadata for stat)
-                let _ = caps.add_platform_rule(format!(
-                    "(deny file-read-data (subpath \"{escaped}\"))"
-                ));
-                let _ = caps.add_platform_rule(format!(
-                    "(deny file-write* (subpath \"{escaped}\"))"
-                ));
+                let _ = caps
+                    .add_platform_rule(format!("(deny file-read-data (subpath \"{escaped}\"))"));
+                let _ =
+                    caps.add_platform_rule(format!("(deny file-write* (subpath \"{escaped}\"))"));
             }
         }
 
@@ -393,7 +391,9 @@ mod tests {
     #![allow(clippy::expect_used, clippy::unwrap_used)]
 
     use super::*;
-    use crate::guards::{EgressAllowlistConfig, ForbiddenPathConfig, PathAllowlistConfig, ShellCommandConfig};
+    use crate::guards::{
+        EgressAllowlistConfig, ForbiddenPathConfig, PathAllowlistConfig, ShellCommandConfig,
+    };
 
     fn minimal_policy() -> Policy {
         Policy::default()
@@ -484,10 +484,7 @@ mod tests {
         // Ensure "/etc/passwd" does not match "/etc/passwdevil" --
         // Path::starts_with does component-level comparison.
         let patterns = vec!["/etc/passwd".to_string()];
-        assert!(!is_path_forbidden(
-            Path::new("/etc/passwdevil"),
-            &patterns
-        ));
+        assert!(!is_path_forbidden(Path::new("/etc/passwdevil"), &patterns));
     }
 
     #[test]
@@ -595,7 +592,10 @@ mod tests {
             "default policy with proxy port should block direct network access"
         );
         assert!(
-            matches!(caps.network_mode(), NetworkMode::ProxyOnly { port: 9090, .. }),
+            matches!(
+                caps.network_mode(),
+                NetworkMode::ProxyOnly { port: 9090, .. }
+            ),
             "network mode should be ProxyOnly with the specified port"
         );
     }
@@ -677,9 +677,10 @@ mod tests {
         let (caps, _) = builder.build_with_diagnostics().unwrap();
 
         // /etc/shadow must NOT have been granted even though /etc might be a system path
-        let has_shadow = caps.fs_capabilities().iter().any(|cap| {
-            cap.resolved.to_string_lossy().contains("shadow")
-        });
+        let has_shadow = caps
+            .fs_capabilities()
+            .iter()
+            .any(|cap| cap.resolved.to_string_lossy().contains("shadow"));
         assert!(
             !has_shadow,
             "forbidden paths must not be granted even if they overlap system paths"
@@ -700,7 +701,9 @@ mod tests {
             let ssh_dir = home.join(".ssh");
             if ssh_dir.exists() {
                 let ssh_str = ssh_dir.to_string_lossy().to_string();
-                let has_deny = rules.iter().any(|r| r.contains(&ssh_str) && r.contains("deny"));
+                let has_deny = rules
+                    .iter()
+                    .any(|r| r.contains(&ssh_str) && r.contains("deny"));
                 assert!(
                     has_deny,
                     "macOS should generate Seatbelt deny rules for existing forbidden paths like .ssh"
@@ -736,7 +739,8 @@ mod tests {
         // All info warnings should mention "content inspection"
         for w in &info_warnings {
             assert!(
-                w.message.contains("Content inspection") || w.message.contains("content inspection"),
+                w.message.contains("Content inspection")
+                    || w.message.contains("content inspection"),
                 "info warning for {} should mention content inspection, got: {}",
                 w.guard,
                 w.message
@@ -762,9 +766,10 @@ mod tests {
         let builder = CapabilityBuilder::new(policy, tmp.path().to_path_buf());
         let (caps, _) = builder.build_with_diagnostics().unwrap();
 
-        let has_file = caps.fs_capabilities().iter().any(|cap| {
-            cap.resolved == test_file.canonicalize().unwrap()
-        });
+        let has_file = caps
+            .fs_capabilities()
+            .iter()
+            .any(|cap| cap.resolved == test_file.canonicalize().unwrap());
         assert!(
             has_file,
             "PathAllowlistGuard file_access_allow should grant read access to specified paths"
@@ -789,8 +794,7 @@ mod tests {
         let (caps, _) = builder.build_with_diagnostics().unwrap();
 
         let has_rw = caps.fs_capabilities().iter().any(|cap| {
-            cap.resolved == test_file.canonicalize().unwrap()
-                && cap.access == AccessMode::ReadWrite
+            cap.resolved == test_file.canonicalize().unwrap() && cap.access == AccessMode::ReadWrite
         });
         assert!(
             has_rw,
@@ -816,9 +820,10 @@ mod tests {
         let (caps, _) = builder.build_with_diagnostics().unwrap();
 
         let canon = test_file.canonicalize().unwrap();
-        let has_file = caps.fs_capabilities().iter().any(|cap| {
-            cap.resolved == canon && cap.is_file
-        });
+        let has_file = caps
+            .fs_capabilities()
+            .iter()
+            .any(|cap| cap.resolved == canon && cap.is_file);
         assert!(
             !has_file,
             "disabled PathAllowlistGuard should not contribute capabilities"
@@ -842,12 +847,15 @@ mod tests {
             remove_block: vec![],
         });
 
-        let builder = CapabilityBuilder::new(policy, tmp.path().to_path_buf())
-            .with_proxy_port(8080);
+        let builder =
+            CapabilityBuilder::new(policy, tmp.path().to_path_buf()).with_proxy_port(8080);
         let (caps, _) = builder.build_with_diagnostics().unwrap();
 
         assert!(
-            matches!(caps.network_mode(), NetworkMode::ProxyOnly { port: 8080, .. }),
+            matches!(
+                caps.network_mode(),
+                NetworkMode::ProxyOnly { port: 8080, .. }
+            ),
             "egress Block with proxy port should yield ProxyOnly mode"
         );
     }
@@ -914,8 +922,20 @@ mod tests {
         let (caps, _) = builder.build_with_diagnostics().unwrap();
 
         let blocked = caps.blocked_commands();
-        let expected_blocked = ["rm", "rmdir", "dd", "chmod", "chown", "sudo", "kill",
-            "killall", "shutdown", "mkfs", "parted", "systemctl"];
+        let expected_blocked = [
+            "rm",
+            "rmdir",
+            "dd",
+            "chmod",
+            "chown",
+            "sudo",
+            "kill",
+            "killall",
+            "shutdown",
+            "mkfs",
+            "parted",
+            "systemctl",
+        ];
 
         for cmd in &expected_blocked {
             assert!(
@@ -1033,7 +1053,10 @@ mod tests {
         );
 
         let canon = test_file.canonicalize().unwrap();
-        let has_extra = caps.fs_capabilities().iter().any(|cap| cap.resolved == canon);
+        let has_extra = caps
+            .fs_capabilities()
+            .iter()
+            .any(|cap| cap.resolved == canon);
         assert!(
             has_extra,
             "path allowlist guard should contribute filesystem capabilities"

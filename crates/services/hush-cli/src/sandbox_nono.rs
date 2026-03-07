@@ -38,8 +38,8 @@ pub fn spawn_sandboxed_child(
     }
 
     // Pre-fork: prepare all C strings
-    let c_program = CString::new(command[0].as_str())
-        .map_err(|e| anyhow::anyhow!("invalid command: {}", e))?;
+    let c_program =
+        CString::new(command[0].as_str()).map_err(|e| anyhow::anyhow!("invalid command: {}", e))?;
     let c_args: Vec<CString> = command
         .iter()
         .map(|a| CString::new(a.as_str()).map_err(|e| anyhow::anyhow!("invalid arg: {}", e)))
@@ -53,16 +53,13 @@ pub fn spawn_sandboxed_child(
     let c_env: Vec<CString> = env_map
         .iter()
         .map(|(k, v)| {
-            CString::new(format!("{}={}", k, v))
-                .map_err(|e| anyhow::anyhow!("invalid env: {}", e))
+            CString::new(format!("{}={}", k, v)).map_err(|e| anyhow::anyhow!("invalid env: {}", e))
         })
         .collect::<Result<_, _>>()?;
 
     // SAFETY: fork() is safe to call. After fork in the child, we only use
     // async-signal-safe operations (no allocation, no panic, no `?`).
-    match unsafe { nix::unistd::fork() }
-        .map_err(|e| anyhow::anyhow!("fork failed: {}", e))?
-    {
+    match unsafe { nix::unistd::fork() }.map_err(|e| anyhow::anyhow!("fork failed: {}", e))? {
         ForkResult::Child => {
             // CHILD: only async-signal-safe operations from here.
             // No ? operator, no panic!, no allocation.
@@ -318,15 +315,7 @@ mod tests {
     #[test]
     fn test_capability_set_allows_working_dir() {
         let tmp = tempfile::TempDir::new().unwrap();
-        let caps = build_capability_set(
-            tmp.path(),
-            &["ls".into()],
-            None,
-            &[],
-            &[],
-            &[],
-        )
-        .unwrap();
+        let caps = build_capability_set(tmp.path(), &["ls".into()], None, &[], &[], &[]).unwrap();
 
         let ctx = QueryContext::new(caps);
         assert!(
@@ -341,15 +330,7 @@ mod tests {
     #[test]
     fn test_capability_set_blocks_ssh() {
         let tmp = tempfile::TempDir::new().unwrap();
-        let caps = build_capability_set(
-            tmp.path(),
-            &["ls".into()],
-            None,
-            &[],
-            &[],
-            &[],
-        )
-        .unwrap();
+        let caps = build_capability_set(tmp.path(), &["ls".into()], None, &[], &[], &[]).unwrap();
 
         let ctx = QueryContext::new(caps);
         if let Some(home) = dirs::home_dir() {
@@ -367,15 +348,8 @@ mod tests {
     #[test]
     fn test_proxy_only_network() {
         let tmp = tempfile::TempDir::new().unwrap();
-        let caps = build_capability_set(
-            tmp.path(),
-            &["ls".into()],
-            Some(8080),
-            &[],
-            &[],
-            &[],
-        )
-        .unwrap();
+        let caps =
+            build_capability_set(tmp.path(), &["ls".into()], Some(8080), &[], &[], &[]).unwrap();
 
         assert!(
             matches!(caps.network_mode(), NetworkMode::ProxyOnly { .. }),
@@ -386,15 +360,7 @@ mod tests {
     #[test]
     fn test_blocked_network() {
         let tmp = tempfile::TempDir::new().unwrap();
-        let caps = build_capability_set(
-            tmp.path(),
-            &["ls".into()],
-            None,
-            &[],
-            &[],
-            &[],
-        )
-        .unwrap();
+        let caps = build_capability_set(tmp.path(), &["ls".into()], None, &[], &[], &[]).unwrap();
 
         assert!(
             matches!(caps.network_mode(), NetworkMode::Blocked),
@@ -429,15 +395,7 @@ mod tests {
     #[test]
     fn test_validate_capabilities_working_dir() {
         let tmp = tempfile::TempDir::new().unwrap();
-        let caps = build_capability_set(
-            tmp.path(),
-            &["ls".into()],
-            None,
-            &[],
-            &[],
-            &[],
-        )
-        .unwrap();
+        let caps = build_capability_set(tmp.path(), &["ls".into()], None, &[], &[], &[]).unwrap();
 
         let warnings = validate_capabilities(&caps, &["ls".into()], tmp.path());
         assert!(

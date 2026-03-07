@@ -24,9 +24,7 @@ use std::sync::Arc;
 use clawdstrike::sandbox::supervisor::GuardSupervisorBackend;
 use clawdstrike::sandbox::{SupervisorStats, TimestampedDenial};
 use clawdstrike::{GuardContext, HushEngine};
-use nono::{
-    ApprovalBackend, ApprovalDecision, CapabilitySet, NeverGrantChecker, SupervisorSocket,
-};
+use nono::{ApprovalBackend, ApprovalDecision, CapabilitySet, NeverGrantChecker, SupervisorSocket};
 
 use crate::sandbox_nono;
 
@@ -67,8 +65,8 @@ pub fn spawn_supervised_child(
         .map_err(|e| anyhow::anyhow!("failed to create supervisor socket: {e}"))?;
 
     // Pre-fork: prepare all C strings (no allocation after fork)
-    let c_program = CString::new(command[0].as_str())
-        .map_err(|e| anyhow::anyhow!("invalid command: {e}"))?;
+    let c_program =
+        CString::new(command[0].as_str()).map_err(|e| anyhow::anyhow!("invalid command: {e}"))?;
     let c_args: Vec<CString> = command
         .iter()
         .map(|a| CString::new(a.as_str()).map_err(|e| anyhow::anyhow!("invalid arg: {e}")))
@@ -81,8 +79,7 @@ pub fn spawn_supervised_child(
     let c_env: Vec<CString> = env_map
         .iter()
         .map(|(k, v)| {
-            CString::new(format!("{k}={v}"))
-                .map_err(|e| anyhow::anyhow!("invalid env: {e}"))
+            CString::new(format!("{k}={v}")).map_err(|e| anyhow::anyhow!("invalid env: {e}"))
         })
         .collect::<Result<_, _>>()?;
 
@@ -90,9 +87,7 @@ pub fn spawn_supervised_child(
 
     // SAFETY: fork() is safe. After fork in the child, we only use
     // async-signal-safe operations (no allocation, no panic, no `?`).
-    match unsafe { nix::unistd::fork() }
-        .map_err(|e| anyhow::anyhow!("fork failed: {e}"))?
-    {
+    match unsafe { nix::unistd::fork() }.map_err(|e| anyhow::anyhow!("fork failed: {e}"))? {
         ForkResult::Child => {
             // CHILD: async-signal-safe only from here.
             // No ? operator, no panic!, no allocation.
@@ -195,11 +190,10 @@ fn run_supervisor_loop(
         match backend.request_capability(&request) {
             Ok(ApprovalDecision::Granted) => {
                 stats.requests_granted = stats.requests_granted.saturating_add(1);
-                let _ =
-                    socket.send_response(&nono::supervisor::SupervisorResponse::Decision {
-                        request_id: request.request_id.clone(),
-                        decision: ApprovalDecision::Granted,
-                    });
+                let _ = socket.send_response(&nono::supervisor::SupervisorResponse::Decision {
+                    request_id: request.request_id.clone(),
+                    decision: ApprovalDecision::Granted,
+                });
             }
             Ok(ref decision @ ApprovalDecision::Denied { ref reason }) => {
                 stats.requests_denied = stats.requests_denied.saturating_add(1);
@@ -209,29 +203,26 @@ fn run_supervisor_loop(
                     reason: reason.clone(),
                     timestamp: chrono::Utc::now().to_rfc3339(),
                 });
-                let _ =
-                    socket.send_response(&nono::supervisor::SupervisorResponse::Decision {
-                        request_id: request.request_id.clone(),
-                        decision: decision.clone(),
-                    });
+                let _ = socket.send_response(&nono::supervisor::SupervisorResponse::Decision {
+                    request_id: request.request_id.clone(),
+                    decision: decision.clone(),
+                });
             }
             Ok(decision) => {
                 stats.requests_denied = stats.requests_denied.saturating_add(1);
-                let _ =
-                    socket.send_response(&nono::supervisor::SupervisorResponse::Decision {
-                        request_id: request.request_id.clone(),
-                        decision,
-                    });
+                let _ = socket.send_response(&nono::supervisor::SupervisorResponse::Decision {
+                    request_id: request.request_id.clone(),
+                    decision,
+                });
             }
             Err(_) => {
                 stats.requests_denied = stats.requests_denied.saturating_add(1);
-                let _ =
-                    socket.send_response(&nono::supervisor::SupervisorResponse::Decision {
-                        request_id: request.request_id.clone(),
-                        decision: ApprovalDecision::Denied {
-                            reason: "Guard evaluation error".into(),
-                        },
-                    });
+                let _ = socket.send_response(&nono::supervisor::SupervisorResponse::Decision {
+                    request_id: request.request_id.clone(),
+                    decision: ApprovalDecision::Denied {
+                        reason: "Guard evaluation error".into(),
+                    },
+                });
             }
         }
     }

@@ -118,10 +118,7 @@ pub struct AuditEntry {
 /// Build a `SandboxAttestation` from a `CapabilitySet`.
 ///
 /// Reads the CapabilitySet's accessors to build a serializable snapshot.
-pub fn build_attestation(
-    caps: &nono::CapabilitySet,
-    supervised: bool,
-) -> SandboxAttestation {
+pub fn build_attestation(caps: &nono::CapabilitySet, supervised: bool) -> SandboxAttestation {
     let support = nono::Sandbox::support_info();
 
     let proxy_port = match caps.network_mode() {

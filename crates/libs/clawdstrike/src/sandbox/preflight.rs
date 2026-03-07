@@ -104,7 +104,10 @@ mod tests {
         let caps = CapabilitySet::new();
         let result = preflight_check(&caps, &[], Path::new("/nonexistent/working/dir"));
         assert!(!result.is_ok());
-        assert!(result.errors.iter().any(|e| e.contains("Working directory")));
+        assert!(result
+            .errors
+            .iter()
+            .any(|e| e.contains("Working directory")));
     }
 
     #[test]
@@ -122,8 +125,8 @@ mod tests {
 
     #[test]
     fn test_preflight_passes_with_builder_caps() {
-        use crate::sandbox::capability_builder::CapabilityBuilder;
         use crate::policy::Policy;
+        use crate::sandbox::capability_builder::CapabilityBuilder;
 
         let tmp = tempfile::TempDir::new().unwrap();
         let caps = CapabilityBuilder::new(Policy::default(), tmp.path().to_path_buf())
@@ -148,7 +151,10 @@ mod tests {
             "preflight should fail when working directory is not accessible"
         );
         assert!(
-            result.errors.iter().any(|e| e.contains("Working directory")),
+            result
+                .errors
+                .iter()
+                .any(|e| e.contains("Working directory")),
             "error message should mention working directory"
         );
     }
@@ -162,11 +168,7 @@ mod tests {
             .unwrap();
 
         // Use an absolute path to a binary that exists but is not in our caps
-        let result = preflight_check(
-            &caps,
-            &["/usr/bin/env".into()],
-            tmp.path(),
-        );
+        let result = preflight_check(&caps, &["/usr/bin/env".into()], tmp.path());
 
         assert!(
             !result.is_ok(),

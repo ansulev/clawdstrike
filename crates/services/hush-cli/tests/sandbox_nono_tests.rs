@@ -56,12 +56,7 @@ fn resolve_hush_binary() -> PathBuf {
 
 fn create_temp_dir(prefix: &str) -> PathBuf {
     let seq = TEMP_SEQ.fetch_add(1, Ordering::Relaxed);
-    let dir = std::env::temp_dir().join(format!(
-        "{}-{}-{}",
-        prefix,
-        std::process::id(),
-        seq
-    ));
+    let dir = std::env::temp_dir().join(format!("{}-{}-{}", prefix, std::process::id(), seq));
     fs::create_dir_all(&dir).expect("create temp dir");
     dir
 }

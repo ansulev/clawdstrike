@@ -479,12 +479,15 @@ printf '%s\n' '{"type":"result","result":"OK","total_cost_usd":0.02,"usage":{"in
     const binDir = path.join(tempDir, "bin")
     const cliPath = path.join(binDir, "claude")
     const captureArgsPath = path.join(tempDir, "claude-args.txt")
+    const workcellDir = path.join(tempDir, "workcell")
     await fs.mkdir(binDir, { recursive: true })
+    await fs.mkdir(workcellDir, { recursive: true })
     await fs.writeFile(
       cliPath,
       `#!/bin/sh
 printf '%s\n' "$@" > "${captureArgsPath}"
 printf '%s\n' '{"type":"result","result":"OK"}'
+exit 0
 `,
       { mode: 0o755 },
     )
@@ -493,7 +496,7 @@ printf '%s\n' '{"type":"result","result":"OK"}'
     process.env.PATH = [binDir, originalPath].filter(Boolean).join(":")
 
     const result = await ClaudeAdapter.execute(
-      { ...mockWorkcell, name: "inplace" },
+      { ...mockWorkcell, name: "inplace", directory: workcellDir },
       mockTask,
       new AbortController().signal,
     )
@@ -518,12 +521,15 @@ printf '%s\n' '{"type":"result","result":"OK"}'
     const binDir = path.join(tempDir, "bin")
     const cliPath = path.join(binDir, "claude")
     const captureArgsPath = path.join(tempDir, "claude-args.txt")
+    const workcellDir = path.join(tempDir, "workcell")
     await fs.mkdir(binDir, { recursive: true })
+    await fs.mkdir(workcellDir, { recursive: true })
     await fs.writeFile(
       cliPath,
       `#!/bin/sh
 printf '%s\n' "$@" > "${captureArgsPath}"
 printf '%s\n' '{"type":"result","result":"OK"}'
+exit 0
 `,
       { mode: 0o755 },
     )
@@ -532,7 +538,7 @@ printf '%s\n' '{"type":"result","result":"OK"}'
     process.env.PATH = [binDir, originalPath].filter(Boolean).join(":")
 
     const result = await ClaudeAdapter.execute(
-      { ...mockWorkcell, name: "wc-isolated" },
+      { ...mockWorkcell, name: "wc-isolated", directory: workcellDir },
       mockTask,
       new AbortController().signal,
     )

@@ -218,7 +218,7 @@ pub async fn replay_all(
 
     let mut all_events = Vec::new();
 
-    for source in &query.effective_sources() {
+    for source in &query.effective_replay_sources() {
         match replay_stream(&js, source, query, verify).await {
             Ok(events) => {
                 all_events.extend(events);
@@ -323,6 +323,7 @@ mod tests {
     fn truncate_to_newest_keeps_most_recent_events() {
         let mut events = vec![
             TimelineEvent {
+                event_id: None,
                 timestamp: Utc.with_ymd_and_hms(2026, 2, 1, 10, 0, 0).unwrap(),
                 source: EventSource::Receipt,
                 kind: timeline::TimelineEventKind::GuardDecision,
@@ -337,6 +338,7 @@ mod tests {
                 raw: None,
             },
             TimelineEvent {
+                event_id: None,
                 timestamp: Utc.with_ymd_and_hms(2026, 2, 1, 11, 0, 0).unwrap(),
                 source: EventSource::Receipt,
                 kind: timeline::TimelineEventKind::GuardDecision,
@@ -351,6 +353,7 @@ mod tests {
                 raw: None,
             },
             TimelineEvent {
+                event_id: None,
                 timestamp: Utc.with_ymd_and_hms(2026, 2, 1, 12, 0, 0).unwrap(),
                 source: EventSource::Receipt,
                 kind: timeline::TimelineEventKind::GuardDecision,
@@ -376,6 +379,7 @@ mod tests {
     fn truncate_to_newest_keeps_most_recent_events_when_unsorted() {
         let mut events = vec![
             TimelineEvent {
+                event_id: None,
                 timestamp: Utc.with_ymd_and_hms(2026, 2, 1, 12, 0, 0).unwrap(),
                 source: EventSource::Receipt,
                 kind: timeline::TimelineEventKind::GuardDecision,
@@ -390,6 +394,7 @@ mod tests {
                 raw: None,
             },
             TimelineEvent {
+                event_id: None,
                 timestamp: Utc.with_ymd_and_hms(2026, 2, 1, 10, 0, 0).unwrap(),
                 source: EventSource::Receipt,
                 kind: timeline::TimelineEventKind::GuardDecision,
@@ -404,6 +409,7 @@ mod tests {
                 raw: None,
             },
             TimelineEvent {
+                event_id: None,
                 timestamp: Utc.with_ymd_and_hms(2026, 2, 1, 11, 0, 0).unwrap(),
                 source: EventSource::Receipt,
                 kind: timeline::TimelineEventKind::GuardDecision,

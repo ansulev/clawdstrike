@@ -1,18 +1,24 @@
 //! Structured query predicates for hunt envelope filtering.
 
 use chrono::{DateTime, Utc};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::timeline::{NormalizedVerdict, TimelineEvent};
 
+const ADAPTIVE_INGRESS_STREAM_NAME: &str = "clawdstrike_adaptive_ingress";
+const ADAPTIVE_INGRESS_SUBJECT_FILTER: &str = "tenant-*.>";
+
 /// Source system for events.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum EventSource {
     Tetragon,
     Hubble,
     Receipt,
     Scan,
+    Response,
+    Directory,
+    Detection,
 }
 
 impl EventSource {
@@ -23,6 +29,9 @@ impl EventSource {
             "hubble" => Some(Self::Hubble),
             "receipt" | "receipts" => Some(Self::Receipt),
             "scan" | "scans" => Some(Self::Scan),
+            "response" => Some(Self::Response),
+            "directory" => Some(Self::Directory),
+            "detection" => Some(Self::Detection),
             _ => None,
         }
     }
@@ -41,6 +50,7 @@ impl EventSource {
             Self::Hubble => "CLAWDSTRIKE_HUBBLE",
             Self::Receipt => "CLAWDSTRIKE_RECEIPTS",
             Self::Scan => "CLAWDSTRIKE_SCANS",
+            Self::Response | Self::Directory | Self::Detection => ADAPTIVE_INGRESS_STREAM_NAME,
         }
     }
 
@@ -51,12 +61,28 @@ impl EventSource {
             Self::Hubble => "clawdstrike.sdr.fact.hubble_flow.>",
             Self::Receipt => "clawdstrike.sdr.fact.receipt.>",
             Self::Scan => "clawdstrike.sdr.fact.scan.>",
+            Self::Response | Self::Directory | Self::Detection => ADAPTIVE_INGRESS_SUBJECT_FILTER,
         }
+    }
+
+    /// JetStream replay identity. Sources that share this tuple can be
+    /// consumed from a single subscription without losing source fidelity,
+    /// because the envelope parser still projects the original event source.
+    pub fn replay_key(&self) -> (&'static str, &'static str) {
+        (self.stream_name(), self.subject_filter())
     }
 
     /// All known sources.
     pub fn all() -> Vec<Self> {
-        vec![Self::Tetragon, Self::Hubble, Self::Receipt, Self::Scan]
+        vec![
+            Self::Tetragon,
+            Self::Hubble,
+            Self::Receipt,
+            Self::Scan,
+            Self::Response,
+            Self::Directory,
+            Self::Detection,
+        ]
     }
 }
 
@@ -67,12 +93,15 @@ impl std::fmt::Display for EventSource {
             Self::Hubble => write!(f, "hubble"),
             Self::Receipt => write!(f, "receipt"),
             Self::Scan => write!(f, "scan"),
+            Self::Response => write!(f, "response"),
+            Self::Directory => write!(f, "directory"),
+            Self::Detection => write!(f, "detection"),
         }
     }
 }
 
 /// Verdict filter for queries.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum QueryVerdict {
     Allow,
@@ -142,6 +171,25 @@ impl HuntQuery {
             }
             deduped
         }
+    }
+
+    /// Returns the distinct replay subscriptions needed to satisfy this query.
+    ///
+    /// Multiple logical sources can share a single JetStream stream/subject
+    /// pair. Replay should consume each pair once and let envelope parsing
+    /// recover the concrete event source for downstream filtering.
+    pub fn effective_replay_sources(&self) -> Vec<EventSource> {
+        let mut deduped = Vec::new();
+        let mut replay_keys = Vec::new();
+        for source in self.effective_sources() {
+            let replay_key = source.replay_key();
+            if replay_keys.contains(&replay_key) {
+                continue;
+            }
+            replay_keys.push(replay_key);
+            deduped.push(source);
+        }
+        deduped
     }
 
     /// Returns true if the event matches ALL active predicates.
@@ -246,6 +294,7 @@ mod tests {
 
     fn make_event() -> TimelineEvent {
         TimelineEvent {
+            event_id: None,
             timestamp: Utc.with_ymd_and_hms(2025, 6, 15, 12, 0, 0).unwrap(),
             source: EventSource::Tetragon,
             kind: TimelineEventKind::ProcessExec,
@@ -269,6 +318,15 @@ mod tests {
         assert_eq!(EventSource::parse("receipts"), Some(EventSource::Receipt));
         assert_eq!(EventSource::parse("scan"), Some(EventSource::Scan));
         assert_eq!(EventSource::parse("scans"), Some(EventSource::Scan));
+        assert_eq!(EventSource::parse("response"), Some(EventSource::Response));
+        assert_eq!(
+            EventSource::parse("directory"),
+            Some(EventSource::Directory)
+        );
+        assert_eq!(
+            EventSource::parse("detection"),
+            Some(EventSource::Detection)
+        );
         assert_eq!(EventSource::parse("unknown"), None);
     }
 
@@ -290,6 +348,10 @@ mod tests {
         assert_eq!(EventSource::Hubble.stream_name(), "CLAWDSTRIKE_HUBBLE");
         assert_eq!(EventSource::Receipt.stream_name(), "CLAWDSTRIKE_RECEIPTS");
         assert_eq!(EventSource::Scan.stream_name(), "CLAWDSTRIKE_SCANS");
+        assert_eq!(
+            EventSource::Response.stream_name(),
+            ADAPTIVE_INGRESS_STREAM_NAME
+        );
     }
 
     #[test]
@@ -302,6 +364,10 @@ mod tests {
             EventSource::Hubble.subject_filter(),
             "clawdstrike.sdr.fact.hubble_flow.>"
         );
+        assert_eq!(
+            EventSource::Directory.subject_filter(),
+            ADAPTIVE_INGRESS_SUBJECT_FILTER
+        );
     }
 
     #[test]
@@ -310,16 +376,22 @@ mod tests {
         assert_eq!(EventSource::Hubble.to_string(), "hubble");
         assert_eq!(EventSource::Receipt.to_string(), "receipt");
         assert_eq!(EventSource::Scan.to_string(), "scan");
+        assert_eq!(EventSource::Response.to_string(), "response");
+        assert_eq!(EventSource::Directory.to_string(), "directory");
+        assert_eq!(EventSource::Detection.to_string(), "detection");
     }
 
     #[test]
     fn event_source_all() {
         let all = EventSource::all();
-        assert_eq!(all.len(), 4);
+        assert_eq!(all.len(), 7);
         assert!(all.contains(&EventSource::Tetragon));
         assert!(all.contains(&EventSource::Hubble));
         assert!(all.contains(&EventSource::Receipt));
         assert!(all.contains(&EventSource::Scan));
+        assert!(all.contains(&EventSource::Response));
+        assert!(all.contains(&EventSource::Directory));
+        assert!(all.contains(&EventSource::Detection));
     }
 
     #[test]
@@ -424,6 +496,38 @@ mod tests {
         assert_eq!(
             q.effective_sources(),
             vec![EventSource::Receipt, EventSource::Hubble]
+        );
+    }
+
+    #[test]
+    fn hunt_query_effective_replay_sources_collapse_shared_streams() {
+        let q = HuntQuery::default();
+        assert_eq!(
+            q.effective_replay_sources(),
+            vec![
+                EventSource::Tetragon,
+                EventSource::Hubble,
+                EventSource::Receipt,
+                EventSource::Scan,
+                EventSource::Response,
+            ]
+        );
+    }
+
+    #[test]
+    fn hunt_query_effective_replay_sources_preserve_first_matching_source() {
+        let q = HuntQuery {
+            sources: vec![
+                EventSource::Detection,
+                EventSource::Response,
+                EventSource::Directory,
+                EventSource::Tetragon,
+            ],
+            ..Default::default()
+        };
+        assert_eq!(
+            q.effective_replay_sources(),
+            vec![EventSource::Detection, EventSource::Tetragon]
         );
     }
 

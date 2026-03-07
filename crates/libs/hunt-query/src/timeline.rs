@@ -1,13 +1,14 @@
 //! Timeline event model and envelope parsing.
 
 use chrono::{DateTime, Utc};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use crate::fleet_projection::{fleet_event_to_timeline_event, looks_like_fleet_event_fact};
 use crate::query::EventSource;
 
 /// Classification of timeline events.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum TimelineEventKind {
     ProcessExec,
@@ -16,6 +17,11 @@ pub enum TimelineEventKind {
     NetworkFlow,
     GuardDecision,
     ScanResult,
+    JoinCompleted,
+    PrincipalStateChanged,
+    ResponseActionCreated,
+    ResponseActionUpdated,
+    DetectionFired,
 }
 
 impl std::fmt::Display for TimelineEventKind {
@@ -27,12 +33,17 @@ impl std::fmt::Display for TimelineEventKind {
             Self::NetworkFlow => write!(f, "network_flow"),
             Self::GuardDecision => write!(f, "guard_decision"),
             Self::ScanResult => write!(f, "scan_result"),
+            Self::JoinCompleted => write!(f, "join_completed"),
+            Self::PrincipalStateChanged => write!(f, "principal_state_changed"),
+            Self::ResponseActionCreated => write!(f, "response_action_created"),
+            Self::ResponseActionUpdated => write!(f, "response_action_updated"),
+            Self::DetectionFired => write!(f, "detection_fired"),
         }
     }
 }
 
 /// Normalized verdict across all event sources.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum NormalizedVerdict {
     Allow,
@@ -59,6 +70,8 @@ impl std::fmt::Display for NormalizedVerdict {
 /// A single event in the reconstructed timeline.
 #[derive(Debug, Clone, Serialize)]
 pub struct TimelineEvent {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub event_id: Option<String>,
     pub timestamp: DateTime<Utc>,
     pub source: EventSource,
     pub kind: TimelineEventKind,
@@ -80,42 +93,84 @@ pub struct TimelineEvent {
     pub raw: Option<Value>,
 }
 
+impl TimelineEventKind {
+    pub fn parse(value: &str) -> Option<Self> {
+        match value.trim().to_lowercase().as_str() {
+            "process_exec" => Some(Self::ProcessExec),
+            "process_exit" => Some(Self::ProcessExit),
+            "process_kprobe" => Some(Self::ProcessKprobe),
+            "network_flow" => Some(Self::NetworkFlow),
+            "guard_decision" => Some(Self::GuardDecision),
+            "scan_result" => Some(Self::ScanResult),
+            "join_completed" => Some(Self::JoinCompleted),
+            "principal_state_changed" => Some(Self::PrincipalStateChanged),
+            "response_action_created" => Some(Self::ResponseActionCreated),
+            "response_action_updated" => Some(Self::ResponseActionUpdated),
+            "detection_fired" => Some(Self::DetectionFired),
+            _ => None,
+        }
+    }
+}
+
+impl NormalizedVerdict {
+    pub fn parse(value: &str) -> Option<Self> {
+        match value.trim().to_lowercase().as_str() {
+            "allow" => Some(Self::Allow),
+            "deny" => Some(Self::Deny),
+            "warn" => Some(Self::Warn),
+            "none" => Some(Self::None),
+            "forwarded" => Some(Self::Forwarded),
+            "dropped" => Some(Self::Dropped),
+            _ => None,
+        }
+    }
+}
+
 /// Parse a spine envelope JSON into a [`TimelineEvent`].
 ///
 /// Dispatches on the `fact.schema` field to determine the event source and
 /// extract source-specific fields.
 pub fn parse_envelope(envelope: &Value, verify: bool) -> Option<TimelineEvent> {
     let fact = envelope.get("fact")?;
-    let schema = fact.get("schema").and_then(|s| s.as_str())?;
 
-    // Parse timestamp from issued_at
-    let issued_at = envelope.get("issued_at").and_then(|v| v.as_str())?;
-    let timestamp = DateTime::parse_from_rfc3339(issued_at)
-        .ok()?
-        .with_timezone(&Utc);
+    if let Some(schema) = fact.get("schema").and_then(|s| s.as_str()) {
+        // Only spine-schema facts participate in spine signature verification.
+        // Fleet events carry their own evidence signature state and are not
+        // spine-signed envelopes.
+        let signature_valid = if verify {
+            Some(spine::verify_envelope(envelope).unwrap_or(false))
+        } else {
+            None
+        };
 
-    // Verify signature if requested
-    let signature_valid = if verify {
-        Some(spine::verify_envelope(envelope).unwrap_or(false))
-    } else {
-        None
-    };
+        // Parse timestamp from issued_at
+        let issued_at = envelope.get("issued_at").and_then(|v| v.as_str())?;
+        let timestamp = DateTime::parse_from_rfc3339(issued_at)
+            .ok()?
+            .with_timezone(&Utc);
 
-    match schema {
-        "clawdstrike.sdr.fact.tetragon_event.v1" => {
-            parse_tetragon(fact, timestamp, signature_valid, envelope.clone())
-        }
-        "clawdstrike.sdr.fact.hubble_flow.v1" => {
-            parse_hubble(fact, timestamp, signature_valid, envelope.clone())
-        }
-        s if s.starts_with("clawdstrike.sdr.fact.receipt") => {
-            parse_receipt(fact, timestamp, signature_valid, envelope.clone())
-        }
-        s if s.starts_with("clawdstrike.sdr.fact.scan") => {
-            parse_scan(fact, timestamp, signature_valid, envelope.clone())
-        }
-        _ => None,
+        return match schema {
+            "clawdstrike.sdr.fact.tetragon_event.v1" => {
+                parse_tetragon(fact, timestamp, signature_valid, envelope.clone())
+            }
+            "clawdstrike.sdr.fact.hubble_flow.v1" => {
+                parse_hubble(fact, timestamp, signature_valid, envelope.clone())
+            }
+            s if s.starts_with("clawdstrike.sdr.fact.receipt") => {
+                parse_receipt(fact, timestamp, signature_valid, envelope.clone())
+            }
+            s if s.starts_with("clawdstrike.sdr.fact.scan") => {
+                parse_scan(fact, timestamp, signature_valid, envelope.clone())
+            }
+            _ => None,
+        };
     }
+
+    if !looks_like_fleet_event_fact(fact) {
+        return None;
+    }
+
+    parse_fleet_event(fact, None, envelope.clone())
 }
 
 /// Parse a Tetragon process event.
@@ -160,6 +215,7 @@ fn parse_tetragon(
     let summary = format!("{} {}", event_type.to_lowercase(), binary.unwrap_or("?"));
 
     Some(TimelineEvent {
+        event_id: None,
         timestamp,
         source: EventSource::Tetragon,
         kind,
@@ -215,6 +271,7 @@ fn parse_hubble(
     let summary = format!("{} {}", direction.to_lowercase(), flow_summary);
 
     Some(TimelineEvent {
+        event_id: None,
         timestamp,
         source: EventSource::Hubble,
         kind: TimelineEventKind::NetworkFlow,
@@ -281,6 +338,7 @@ fn parse_receipt(
     let summary = format!("{} decision={}", guard_name, decision);
 
     Some(TimelineEvent {
+        event_id: None,
         timestamp,
         source: EventSource::Receipt,
         kind: TimelineEventKind::GuardDecision,
@@ -326,6 +384,7 @@ fn parse_scan(
     let summary = format!("scan {} status={}", scan_type, status);
 
     Some(TimelineEvent {
+        event_id: None,
         timestamp,
         source: EventSource::Scan,
         kind: TimelineEventKind::ScanResult,
@@ -339,6 +398,11 @@ fn parse_scan(
         signature_valid: sig,
         raw: Some(raw),
     })
+}
+
+fn parse_fleet_event(fact: &Value, sig: Option<bool>, raw: Value) -> Option<TimelineEvent> {
+    let event = serde_json::from_value(fact.clone()).ok()?;
+    fleet_event_to_timeline_event(event, sig, raw)
 }
 
 /// Merge multiple event lists into a single timeline, sorted by timestamp ascending.
@@ -602,6 +666,87 @@ mod tests {
     }
 
     #[test]
+    fn parse_fleet_control_plane_envelope() {
+        let envelope = json!({
+            "issued_at": "2026-03-06T12:00:30Z",
+            "issuer": "spiffe://tenant/acme",
+            "fact": {
+                "eventId": "evt-1",
+                "tenantId": "00000000-0000-0000-0000-000000000001",
+                "source": "response",
+                "kind": "response_action_created",
+                "occurredAt": "2026-03-06T12:00:00Z",
+                "ingestedAt": "2026-03-06T12:00:01Z",
+                "severity": "medium",
+                "verdict": "warn",
+                "summary": "response action created",
+                "actionType": "set_posture",
+                "evidence": {
+                    "rawRef": "hunt-envelope:evt-1",
+                    "signatureValid": true
+                },
+                "attributes": {
+                    "process": "/usr/bin/curl",
+                    "namespace": "default",
+                    "pod": "agent-1"
+                }
+            }
+        });
+
+        let event = parse_envelope(&envelope, false).unwrap();
+        assert_eq!(event.event_id.as_deref(), Some("evt-1"));
+        assert_eq!(event.source, EventSource::Response);
+        assert_eq!(event.kind, TimelineEventKind::ResponseActionCreated);
+        assert_eq!(event.verdict, NormalizedVerdict::Warn);
+        assert_eq!(event.severity.as_deref(), Some("medium"));
+        assert_eq!(event.action_type.as_deref(), Some("set_posture"));
+        assert_eq!(event.process.as_deref(), Some("/usr/bin/curl"));
+        assert_eq!(event.namespace.as_deref(), Some("default"));
+        assert_eq!(event.pod.as_deref(), Some("agent-1"));
+        assert_eq!(event.signature_valid, Some(true));
+    }
+
+    #[test]
+    fn parse_fleet_control_plane_envelope_preserves_evidence_signature_when_verify_enabled() {
+        let envelope = json!({
+            "issued_at": "2026-03-06T12:00:30Z",
+            "issuer": "spiffe://tenant/acme",
+            "fact": {
+                "eventId": "evt-verify",
+                "tenantId": "00000000-0000-0000-0000-000000000001",
+                "source": "directory",
+                "kind": "principal_state_changed",
+                "occurredAt": "2026-03-06T12:00:00Z",
+                "ingestedAt": "2026-03-06T12:00:01Z",
+                "summary": "principal quarantined",
+                "evidence": {
+                    "rawRef": "hunt-envelope:evt-verify",
+                    "signatureValid": true
+                }
+            }
+        });
+
+        let event = parse_envelope(&envelope, true).unwrap();
+        assert_eq!(event.source, EventSource::Directory);
+        assert_eq!(event.kind, TimelineEventKind::PrincipalStateChanged);
+        assert_eq!(event.signature_valid, Some(true));
+    }
+
+    #[test]
+    fn parse_missing_schema_non_fleet_fact_returns_none() {
+        let envelope = json!({
+            "issued_at": "2026-03-06T12:00:30Z",
+            "fact": {
+                "eventId": "evt-1",
+                "tenantId": "00000000-0000-0000-0000-000000000001",
+                "summary": "missing required fleet fields"
+            }
+        });
+
+        assert!(parse_envelope(&envelope, false).is_none());
+    }
+
+    #[test]
     fn parse_unknown_schema_returns_none() {
         let envelope = json!({
             "issued_at": "2025-06-15T12:00:00Z",
@@ -639,6 +784,7 @@ mod tests {
     fn merge_timeline_sorts_by_timestamp() {
         let events = vec![
             TimelineEvent {
+                event_id: None,
                 timestamp: Utc.with_ymd_and_hms(2025, 6, 15, 14, 0, 0).unwrap(),
                 source: EventSource::Tetragon,
                 kind: TimelineEventKind::ProcessExec,
@@ -653,6 +799,7 @@ mod tests {
                 raw: None,
             },
             TimelineEvent {
+                event_id: None,
                 timestamp: Utc.with_ymd_and_hms(2025, 6, 15, 12, 0, 0).unwrap(),
                 source: EventSource::Hubble,
                 kind: TimelineEventKind::NetworkFlow,
@@ -667,6 +814,7 @@ mod tests {
                 raw: None,
             },
             TimelineEvent {
+                event_id: None,
                 timestamp: Utc.with_ymd_and_hms(2025, 6, 15, 16, 0, 0).unwrap(),
                 source: EventSource::Receipt,
                 kind: TimelineEventKind::GuardDecision,
@@ -698,6 +846,7 @@ mod tests {
     #[test]
     fn timeline_event_serialization_skips_none_fields() {
         let event = TimelineEvent {
+            event_id: None,
             timestamp: Utc.with_ymd_and_hms(2025, 6, 15, 12, 0, 0).unwrap(),
             source: EventSource::Tetragon,
             kind: TimelineEventKind::ProcessExec,

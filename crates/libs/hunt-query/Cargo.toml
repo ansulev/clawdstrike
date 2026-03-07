@@ -7,6 +7,11 @@ license.workspace = true
 repository.workspace = true
 rust-version.workspace = true
 
+[features]
+# Compatibility shim for downstream manifests that still enable `hunt-query/ocsf`.
+# OCSF support is built in unconditionally now, so this feature is intentionally a no-op.
+ocsf = []
+
 [dependencies]
 hunt-scan.workspace = true
 spine.workspace = true
@@ -23,10 +28,8 @@ crossterm.workspace = true
 regex.workspace = true
 dirs.workspace = true
 time = "0.3"
-clawdstrike-ocsf = { workspace = true, optional = true }
-
-[features]
-ocsf = ["dep:clawdstrike-ocsf"]
+uuid.workspace = true
+clawdstrike-ocsf.workspace = true
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }

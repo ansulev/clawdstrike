@@ -96,6 +96,9 @@ fn source_color(source: &EventSource) -> Color {
         EventSource::Hubble => Color::Blue,
         EventSource::Receipt => Color::Magenta,
         EventSource::Scan => Color::White,
+        EventSource::Response => Color::Yellow,
+        EventSource::Directory => Color::Green,
+        EventSource::Detection => Color::Red,
     }
 }
 
@@ -166,6 +169,7 @@ mod tests {
 
     fn make_event() -> TimelineEvent {
         TimelineEvent {
+            event_id: None,
             timestamp: Utc.with_ymd_and_hms(2025, 6, 15, 12, 0, 0).unwrap(),
             source: EventSource::Tetragon,
             kind: TimelineEventKind::ProcessExec,
@@ -183,6 +187,7 @@ mod tests {
 
     fn make_deny_event() -> TimelineEvent {
         TimelineEvent {
+            event_id: None,
             timestamp: Utc.with_ymd_and_hms(2025, 6, 15, 12, 5, 0).unwrap(),
             source: EventSource::Receipt,
             kind: TimelineEventKind::GuardDecision,

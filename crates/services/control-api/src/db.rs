@@ -31,6 +31,46 @@ const EMBEDDED_MIGRATIONS: &[EmbeddedMigration] = &[
         name: "005_adaptive_sdr_approval_outbox.sql",
         sql: include_str!("../migrations/005_adaptive_sdr_approval_outbox.sql"),
     },
+    EmbeddedMigration {
+        name: "006_fleet_directory_core.sql",
+        sql: include_str!("../migrations/006_fleet_directory_core.sql"),
+    },
+    EmbeddedMigration {
+        name: "007_fleet_directory_backfill.sql",
+        sql: include_str!("../migrations/007_fleet_directory_backfill.sql"),
+    },
+    EmbeddedMigration {
+        name: "008_fleet_directory_policy_attachments.sql",
+        sql: include_str!("../migrations/008_fleet_directory_policy_attachments.sql"),
+    },
+    EmbeddedMigration {
+        name: "009_fleet_directory_references.sql",
+        sql: include_str!("../migrations/009_fleet_directory_references.sql"),
+    },
+    EmbeddedMigration {
+        name: "010_detection_core.sql",
+        sql: include_str!("../migrations/010_detection_core.sql"),
+    },
+    EmbeddedMigration {
+        name: "011_response_actions_and_execution_ledger.sql",
+        sql: include_str!("../migrations/011_response_actions_and_execution_ledger.sql"),
+    },
+    EmbeddedMigration {
+        name: "012_hunt_backend.sql",
+        sql: include_str!("../migrations/012_hunt_backend.sql"),
+    },
+    EmbeddedMigration {
+        name: "013_case_evidence_bundles.sql",
+        sql: include_str!("../migrations/013_case_evidence_bundles.sql"),
+    },
+    EmbeddedMigration {
+        name: "014_grants_delegation_graph.sql",
+        sql: include_str!("../migrations/014_grants_delegation_graph.sql"),
+    },
+    EmbeddedMigration {
+        name: "015_response_action_case_links.sql",
+        sql: include_str!("../migrations/015_response_action_case_links.sql"),
+    },
 ];
 
 const MIGRATION_LOCK_KEY: i64 = 0x4353_4D49_4752;

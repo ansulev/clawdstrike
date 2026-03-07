@@ -1,5 +1,9 @@
 pub mod agent;
 pub mod api_key;
 pub mod approval;
+pub mod case_evidence;
+pub mod console;
+pub mod delegation_graph;
+pub mod hunt;
 pub mod tenant;
 pub mod user;

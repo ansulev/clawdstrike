@@ -60,6 +60,8 @@ mod policy_test;
 mod policy_version;
 mod registry_config;
 mod remote_extends;
+#[allow(dead_code)] // Phase 1 foundation: wired in by Phase 1B
+mod sandbox_nono;
 mod tui;
 mod ui;
 

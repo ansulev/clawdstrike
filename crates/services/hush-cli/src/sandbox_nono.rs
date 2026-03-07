@@ -131,13 +131,26 @@ fn close_inherited_fds(from_fd: i32) {
 /// Resolve a command name to an absolute path via PATH lookup.
 ///
 /// `execve` does not search PATH, so we must resolve before fork.
-/// Returns the original string if it's already absolute.
+/// - Absolute paths are returned as-is
+/// - Relative paths containing `/` (e.g. `./script.sh`, `tools/run`) are
+///   canonicalized against the current directory
+/// - Bare names (e.g. `ls`) are searched through PATH
 fn resolve_command_path(cmd: &str) -> anyhow::Result<String> {
     let path = std::path::Path::new(cmd);
     if path.is_absolute() {
         return Ok(cmd.to_string());
     }
-    // Search PATH
+    // Relative path with directory component — resolve against cwd
+    if cmd.contains('/') {
+        let canonical = std::env::current_dir()
+            .map_err(|e| anyhow::anyhow!("cannot resolve relative path {cmd}: {e}"))?
+            .join(cmd);
+        if canonical.exists() {
+            return Ok(canonical.to_string_lossy().into_owned());
+        }
+        anyhow::bail!("relative command not found: {cmd} (resolved to {canonical:?})");
+    }
+    // Bare command name — search PATH
     if let Ok(path_var) = std::env::var("PATH") {
         for dir in path_var.split(':') {
             let candidate = std::path::Path::new(dir).join(cmd);

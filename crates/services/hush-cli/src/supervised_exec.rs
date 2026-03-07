@@ -111,6 +111,17 @@ pub fn spawn_supervised_child(
                 unsafe { libc::write(2, MSG.as_ptr().cast(), MSG.len()) };
                 unsafe { libc::_exit(126) };
             }
+
+            // TODO(phase4): Install seccomp-notify (Linux) or extension
+            // request flow (macOS) to enable dynamic supervisor enforcement.
+            // Currently supervised mode applies the static sandbox only.
+            // Wiring seccomp-notify requires:
+            //   1. Pre-fork pipe for fd passing (send_fd allocates, unsafe post-fork)
+            //   2. Child: install_seccomp_notify() → send notify_fd via pipe
+            //   3. Parent: recv notify_fd → recv_notif() loop in supervisor thread
+            // Without this, the supervisor loop exits immediately (no messages)
+            // and all enforcement is via the static Landlock/Seatbelt sandbox.
+
             let Err(_e) = nix::unistd::execve(&c_program, &c_args_ref, &c_env_ref);
             // SAFETY: write to stderr + _exit are async-signal-safe.
             const EXEC_MSG: &[u8] = b"nono: exec failed\n";

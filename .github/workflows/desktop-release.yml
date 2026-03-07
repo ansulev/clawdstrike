@@ -77,7 +77,7 @@ jobs:
 
           (
             cd "$ARTIFACT_DIR"
-            shasum -a 256 * > SHA256SUMS
+            shasum -a 256 *.dmg *.tar.gz > SHA256SUMS
           )
 
           echo "Artifacts prepared in $ARTIFACT_DIR"

@@ -15,7 +15,7 @@ use uuid::Uuid;
 
 use crate::auth::api_key::hash_api_key;
 use crate::config::Config;
-use crate::db::{create_pool, PgPool};
+use crate::db::{create_pool, run_migrations, PgPool};
 use crate::routes;
 use crate::services::alerter::AlerterService;
 use crate::services::metering::MeteringService;
@@ -119,6 +119,148 @@ async fn policies_deploy_and_enroll_backfills_policy_kv_bucket() {
         .expect("kv get should succeed")
         .expect("policy key should exist");
     assert_eq!(payload.as_ref(), policy_yaml.as_bytes());
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn run_migrations_is_safe_under_concurrent_startup() {
+    if !docker_available() {
+        eprintln!("Skipping integration test: docker is unavailable");
+        return;
+    }
+
+    let pg_port = free_local_port();
+    let postgres = run_container(&[
+        "run",
+        "-d",
+        "--rm",
+        "-e",
+        "POSTGRES_USER=postgres",
+        "-e",
+        "POSTGRES_PASSWORD=postgres",
+        "-e",
+        "POSTGRES_DB=cloud_api",
+        "-p",
+        &format!("{pg_port}:5432"),
+        "postgres:16-alpine",
+    ]);
+
+    let database_url = format!("postgres://postgres:postgres@127.0.0.1:{pg_port}/cloud_api");
+    wait_for_postgres(&database_url).await;
+
+    let pool_a = create_pool(&database_url).await.expect("create pool a");
+    let pool_b = create_pool(&database_url).await.expect("create pool b");
+
+    let (left, right) = tokio::join!(run_migrations(&pool_a), run_migrations(&pool_b));
+    left.expect("first migration runner should succeed");
+    right.expect("second migration runner should succeed");
+
+    let applied: i64 = sqlx::query_scalar::query_scalar("SELECT COUNT(*) FROM schema_migrations")
+        .fetch_one(&pool_a)
+        .await
+        .expect("count applied migrations");
+    assert_eq!(applied, 5);
+
+    drop(postgres);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn run_migrations_backfills_markers_for_legacy_schema() {
+    if !docker_available() {
+        eprintln!("Skipping integration test: docker is unavailable");
+        return;
+    }
+
+    let pg_port = free_local_port();
+    let postgres = run_container(&[
+        "run",
+        "-d",
+        "--rm",
+        "-e",
+        "POSTGRES_USER=postgres",
+        "-e",
+        "POSTGRES_PASSWORD=postgres",
+        "-e",
+        "POSTGRES_DB=cloud_api",
+        "-p",
+        &format!("{pg_port}:5432"),
+        "postgres:16-alpine",
+    ]);
+
+    let database_url = format!("postgres://postgres:postgres@127.0.0.1:{pg_port}/cloud_api");
+    wait_for_postgres(&database_url).await;
+
+    let db = create_pool(&database_url).await.expect("create pool");
+    let mut tx = db.begin().await.expect("begin tx");
+    sqlx::raw_sql::raw_sql(include_str!("../migrations/001_init.sql"))
+        .execute(&mut *tx)
+        .await
+        .expect("apply legacy 001");
+    sqlx::raw_sql::raw_sql(include_str!("../migrations/002_adaptive_sdr_schema.sql"))
+        .execute(&mut *tx)
+        .await
+        .expect("apply legacy 002");
+    sqlx::raw_sql::raw_sql(include_str!(
+        "../migrations/003_adaptive_sdr_token_and_approval_flow.sql"
+    ))
+    .execute(&mut *tx)
+    .await
+    .expect("apply legacy 003");
+    tx.commit().await.expect("commit legacy schema");
+
+    run_migrations(&db)
+        .await
+        .expect("migration runner should backfill legacy markers");
+
+    let applied: Vec<String> =
+        sqlx::query_scalar::query_scalar("SELECT name FROM schema_migrations ORDER BY name")
+            .fetch_all(&db)
+            .await
+            .expect("read applied migrations");
+    assert_eq!(
+        applied,
+        vec![
+            "001_init.sql",
+            "002_adaptive_sdr_schema.sql",
+            "003_adaptive_sdr_token_and_approval_flow.sql",
+            "004_adaptive_sdr_active_policy.sql",
+            "005_adaptive_sdr_approval_outbox.sql",
+        ]
+    );
+
+    let enrollment_token_exists: bool = sqlx::query_scalar::query_scalar(
+        r#"SELECT EXISTS (
+               SELECT 1
+               FROM information_schema.columns
+               WHERE table_schema = 'public'
+                 AND table_name = 'tenants'
+                 AND column_name = 'enrollment_token'
+           )"#,
+    )
+    .fetch_one(&db)
+    .await
+    .expect("check legacy enrollment token column");
+    assert!(
+        !enrollment_token_exists,
+        "legacy tenants.enrollment_token must stay absent after backfill"
+    );
+
+    let active_policy_table_exists: bool = sqlx::query_scalar::query_scalar(
+        "SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'tenant_active_policies')",
+    )
+    .fetch_one(&db)
+    .await
+    .expect("check tenant_active_policies");
+    assert!(active_policy_table_exists);
+
+    let approval_outbox_exists: bool = sqlx::query_scalar::query_scalar(
+        "SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'approval_resolution_outbox')",
+    )
+    .fetch_one(&db)
+    .await
+    .expect("check approval_resolution_outbox");
+    assert!(approval_outbox_exists);
+
+    drop(postgres);
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -344,6 +486,7 @@ async fn create_tenant_rolls_back_when_nats_provisioning_fails() {
             listen_addr: "127.0.0.1:0".parse().expect("listen addr"),
             database_url: "postgres://unused".to_string(),
             nats_url: harness.nats_url.clone(),
+            agent_nats_url: harness.nats_url.clone(),
             nats_provisioning_mode: "external".to_string(),
             nats_provisioner_base_url: Some("http://127.0.0.1:9".to_string()),
             nats_provisioner_api_token: None,
@@ -442,7 +585,7 @@ async fn setup_harness() -> Harness {
     wait_for_nats(&nats_url).await;
 
     let db = create_pool(&database_url).await.expect("create pool");
-    apply_migrations(&db).await;
+    run_migrations(&db).await.expect("apply migrations");
 
     let nats_client = async_nats::connect(&nats_url).await.expect("connect nats");
     let signing_keypair = Arc::new(hush_core::Keypair::generate());
@@ -451,6 +594,7 @@ async fn setup_harness() -> Harness {
         listen_addr: "127.0.0.1:0".parse().expect("listen addr"),
         database_url: database_url.clone(),
         nats_url: nats_url.clone(),
+        agent_nats_url: nats_url.clone(),
         nats_provisioning_mode: "mock".to_string(),
         nats_provisioner_base_url: None,
         nats_provisioner_api_token: None,
@@ -482,7 +626,7 @@ async fn setup_harness() -> Harness {
 
     let provisioner = TenantProvisioner::new(
         db.clone(),
-        nats_url.clone(),
+        config.agent_nats_url.clone(),
         &config.nats_provisioning_mode,
         config.nats_provisioner_base_url.clone(),
         config.nats_provisioner_api_token.clone(),
@@ -536,23 +680,6 @@ async fn setup_harness() -> Harness {
         api_key,
         _postgres: postgres,
         _nats: nats,
-    }
-}
-
-async fn apply_migrations(db: &PgPool) {
-    let mut files =
-        std::fs::read_dir(std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("migrations"))
-            .expect("read migrations")
-            .map(|entry| entry.expect("entry").path())
-            .collect::<Vec<_>>();
-    files.sort();
-
-    for file in files {
-        let sql = std::fs::read_to_string(&file).expect("read migration file");
-        sqlx::raw_sql::raw_sql(&sql)
-            .execute(db)
-            .await
-            .unwrap_or_else(|err| panic!("migration {:?} failed: {}", file, err));
     }
 }
 

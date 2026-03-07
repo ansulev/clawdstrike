@@ -73,6 +73,21 @@ impl CapabilityBuilder {
         }
 
         // 4. Working directory (ReadWrite)
+        //    On Linux Landlock, this grant is irrevocable — forbidden subpaths
+        //    under working_dir become accessible. The supervisor mode (--supervised)
+        //    handles this via NeverGrantChecker at runtime.
+        if self.working_dir_contains_forbidden(&forbidden_patterns) {
+            warnings.push(TranslationWarning {
+                guard: "ForbiddenPathGuard".into(),
+                message: format!(
+                    "Working directory {} contains forbidden subpaths. \
+                     On Linux (Landlock), the static sandbox cannot deny them once the parent is granted. \
+                     Use --supervised mode for runtime enforcement of forbidden paths within the working directory.",
+                    self.working_dir.display()
+                ),
+                severity: WarningSeverity::Warning,
+            });
+        }
         caps = caps.allow_path(&self.working_dir, AccessMode::ReadWrite)?;
 
         // 5. PathAllowlistGuard -> direct path grants
@@ -171,6 +186,28 @@ impl CapabilityBuilder {
         } else {
             ForbiddenPathConfig::default().effective_patterns()
         }
+    }
+
+    /// Check if any forbidden pattern resolves to a path under working_dir.
+    fn working_dir_contains_forbidden(&self, patterns: &[String]) -> bool {
+        let home = dirs::home_dir();
+        for pattern in patterns {
+            if let Some(rel) = pattern.strip_prefix("**/") {
+                let rel = rel.trim_end_matches("/**").trim_end_matches("/*");
+                if let Some(ref home) = home {
+                    let concrete = home.join(rel);
+                    if concrete.starts_with(&self.working_dir) {
+                        return true;
+                    }
+                }
+            } else if pattern.starts_with('/') {
+                let p = std::path::Path::new(pattern);
+                if p.starts_with(&self.working_dir) {
+                    return true;
+                }
+            }
+        }
+        false
     }
 
     /// Resolve forbidden glob patterns to concrete existing paths for macOS deny rules.

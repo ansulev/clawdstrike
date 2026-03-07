@@ -19,14 +19,27 @@ use crate::guards::{GuardAction, GuardContext};
 /// [`GuardAction::FileAccess`] and evaluated by the [`HushEngine`]. The engine
 /// runs all configured guards (ForbiddenPathGuard, PathAllowlistGuard, etc.)
 /// and returns an aggregated verdict.
+///
+/// The `runtime_handle` is captured from the caller's Tokio context before the
+/// supervisor thread is spawned, because `std::thread::spawn` threads do NOT
+/// inherit the Tokio runtime thread-local.
 pub struct GuardSupervisorBackend {
     engine: Arc<HushEngine>,
     context: GuardContext,
+    runtime_handle: tokio::runtime::Handle,
 }
 
 impl GuardSupervisorBackend {
-    pub fn new(engine: Arc<HushEngine>, context: GuardContext) -> Self {
-        Self { engine, context }
+    pub fn new(
+        engine: Arc<HushEngine>,
+        context: GuardContext,
+        runtime_handle: tokio::runtime::Handle,
+    ) -> Self {
+        Self {
+            engine,
+            context,
+            runtime_handle,
+        }
     }
 }
 
@@ -35,15 +48,13 @@ impl ApprovalBackend for GuardSupervisorBackend {
         let path = request.path.to_string_lossy();
 
         // Bridge from the synchronous supervisor thread into the async tokio
-        // runtime. `block_in_place` is safe here because the supervisor loop
-        // runs on a dedicated OS thread spawned via `std::thread::spawn`, not
-        // on a tokio worker thread.
-        let result = tokio::task::block_in_place(|| {
-            tokio::runtime::Handle::current().block_on(async {
-                self.engine
-                    .check_action(&GuardAction::FileAccess(&path), &self.context)
-                    .await
-            })
+        // runtime. We use the captured Handle rather than Handle::current()
+        // because this runs on a std::thread::spawn thread which has no
+        // Tokio runtime context.
+        let result = self.runtime_handle.block_on(async {
+            self.engine
+                .check_action(&GuardAction::FileAccess(&path), &self.context)
+                .await
         });
 
         match result {

@@ -83,6 +83,11 @@ pub fn spawn_supervised_child(
 
     let child_sock_fd = child_sock.as_raw_fd();
 
+    // Pre-fork: build CStr reference slices so the child does no heap allocation.
+    // After fork in a multithreaded process, malloc may deadlock on inherited locks.
+    let c_args_ref: Vec<&std::ffi::CStr> = c_args.iter().map(|a| a.as_c_str()).collect();
+    let c_env_ref: Vec<&std::ffi::CStr> = c_env.iter().map(|e| e.as_c_str()).collect();
+
     // SAFETY: fork() is safe. After fork in the child, we only use
     // async-signal-safe operations (no allocation, no panic, no `?`).
     match unsafe { nix::unistd::fork() }.map_err(|e| anyhow::anyhow!("fork failed: {e}"))? {
@@ -102,10 +107,6 @@ pub fn spawn_supervised_child(
                 // SAFETY: _exit is async-signal-safe
                 unsafe { libc::_exit(126) };
             }
-
-            // Exec -- replaces process image
-            let c_args_ref: Vec<&std::ffi::CStr> = c_args.iter().map(|a| a.as_c_str()).collect();
-            let c_env_ref: Vec<&std::ffi::CStr> = c_env.iter().map(|e| e.as_c_str()).collect();
             let Err(e) = nix::unistd::execve(&c_program, &c_args_ref, &c_env_ref);
             let msg = format!("nono: exec failed: {e}\n");
             // SAFETY: write to stderr is async-signal-safe
@@ -116,7 +117,11 @@ pub fn spawn_supervised_child(
         ForkResult::Parent { child } => {
             drop(child_sock);
 
-            let backend = GuardSupervisorBackend::new(engine, context);
+            // Capture the Tokio runtime handle BEFORE spawning the supervisor
+            // thread. std::thread::spawn threads do not inherit the Tokio
+            // thread-local, so Handle::current() would panic on the new thread.
+            let runtime_handle = tokio::runtime::Handle::current();
+            let backend = GuardSupervisorBackend::new(engine, context, runtime_handle);
 
             // Run supervisor loop on a dedicated OS thread (NOT async --
             // recv_message blocks and must not run on a tokio worker thread)

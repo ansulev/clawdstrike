@@ -57,6 +57,11 @@ pub fn spawn_sandboxed_child(
         })
         .collect::<Result<_, _>>()?;
 
+    // Pre-fork: build CStr reference slices so the child does no heap allocation.
+    // After fork in a multithreaded process, malloc may deadlock on inherited locks.
+    let c_args_ref: Vec<&std::ffi::CStr> = c_args.iter().map(|a| a.as_c_str()).collect();
+    let c_env_ref: Vec<&std::ffi::CStr> = c_env.iter().map(|e| e.as_c_str()).collect();
+
     // SAFETY: fork() is safe to call. After fork in the child, we only use
     // async-signal-safe operations (no allocation, no panic, no `?`).
     match unsafe { nix::unistd::fork() }.map_err(|e| anyhow::anyhow!("fork failed: {}", e))? {
@@ -75,10 +80,6 @@ pub fn spawn_sandboxed_child(
                 // SAFETY: _exit is async-signal-safe, terminates without cleanup
                 unsafe { libc::_exit(126) };
             }
-
-            // Exec -- replaces process image
-            let c_args_ref: Vec<&std::ffi::CStr> = c_args.iter().map(|a| a.as_c_str()).collect();
-            let c_env_ref: Vec<&std::ffi::CStr> = c_env.iter().map(|e| e.as_c_str()).collect();
             // execve returns Result<Infallible> -- on success it never returns,
             // on failure we get an Err.
             let Err(e) = nix::unistd::execve(&c_program, &c_args_ref, &c_env_ref);

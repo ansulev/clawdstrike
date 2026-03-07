@@ -75,6 +75,8 @@ async-trait = "0.1"
 regex = "1.12"
 glob = "0.3"
 globset = "0.4"
+walkdir = "2"
+ignore = "0.4"
 roxmltree = "0.21"
 rust-xmlsec = "1.0.0"
 
@@ -164,9 +166,7 @@ hunt-query = { path = "crates/libs/hunt-query", version = "0.2.5" }
 hunt-correlate = { path = "crates/libs/hunt-correlate", version = "0.2.5" }
 clawdstrike-ocsf = { path = "crates/libs/clawdstrike-ocsf", version = "0.2.5" }
 clawdstrike-policy-event = { path = "crates/libs/clawdstrike-policy-event", version = "0.2.5", default-features = false }
-# nono is a sibling repo in the backbay workspace (standalone/nono alongside standalone/clawdstrike).
-# CI must checkout both repos. See backbay/CLAUDE.md for workspace layout.
-nono = { path = "../nono/crates/nono" }
+nono = { path = "infra/vendor/nono" }
 
 [profile.release]
 lto = true

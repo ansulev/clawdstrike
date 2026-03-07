@@ -123,6 +123,8 @@ mod semver_utils;
 #[cfg(all(feature = "full", feature = "spine"))]
 pub mod spine_bridge;
 #[cfg(feature = "full")]
+pub mod sandbox;
+#[cfg(feature = "full")]
 pub mod watermarking;
 
 #[cfg(feature = "full")]

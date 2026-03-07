@@ -1690,6 +1690,7 @@ dependencies = [
  "hush-proxy",
  "hush-spine",
  "js-sys",
+ "nono",
  "proptest",
  "pubgrub",
  "regex",

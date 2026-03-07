@@ -73,20 +73,19 @@ pub fn spawn_sandboxed_child(
             close_inherited_fds(3);
 
             // Apply sandbox (irrevocable)
-            if let Err(e) = Sandbox::apply(caps) {
-                let msg = format!("nono: sandbox apply failed: {}\n", e);
-                // SAFETY: writing to stderr fd 2 is async-signal-safe
-                unsafe { libc::write(2, msg.as_ptr().cast(), msg.len()) };
-                // SAFETY: _exit is async-signal-safe, terminates without cleanup
+            if let Err(_e) = Sandbox::apply(caps) {
+                // SAFETY: write to stderr + _exit are async-signal-safe.
+                // Using a static string to avoid heap allocation post-fork.
+                const MSG: &[u8] = b"nono: sandbox apply failed\n";
+                unsafe { libc::write(2, MSG.as_ptr().cast(), MSG.len()) };
                 unsafe { libc::_exit(126) };
             }
             // execve returns Result<Infallible> -- on success it never returns,
             // on failure we get an Err.
-            let Err(e) = nix::unistd::execve(&c_program, &c_args_ref, &c_env_ref);
-            let msg = format!("nono: exec failed: {}\n", e);
-            // SAFETY: writing to stderr fd 2 is async-signal-safe
-            unsafe { libc::write(2, msg.as_ptr().cast(), msg.len()) };
-            // SAFETY: _exit is async-signal-safe, terminates without cleanup
+            let Err(_e) = nix::unistd::execve(&c_program, &c_args_ref, &c_env_ref);
+            // SAFETY: write to stderr + _exit are async-signal-safe.
+            const EXEC_MSG: &[u8] = b"nono: exec failed\n";
+            unsafe { libc::write(2, EXEC_MSG.as_ptr().cast(), EXEC_MSG.len()) };
             unsafe { libc::_exit(127) };
         }
         ForkResult::Parent { child } => {
@@ -105,29 +104,20 @@ pub fn spawn_sandboxed_child(
 ///
 /// Prevents the child from inheriting the proxy socket, supervisor
 /// socket, log handles, etc.
+///
+/// Uses only async-signal-safe operations (libc::close, libc::getrlimit)
+/// since this runs post-fork in a potentially multithreaded process.
 fn close_inherited_fds(from_fd: i32) {
-    // On Linux, enumerate /proc/self/fd for precise fd closing
-    #[cfg(target_os = "linux")]
-    {
-        if let Ok(entries) = std::fs::read_dir("/proc/self/fd") {
-            for entry in entries.flatten() {
-                if let Some(name) = entry.file_name().to_str() {
-                    if let Ok(fd) = name.parse::<i32>() {
-                        if fd >= from_fd {
-                            // SAFETY: closing an fd is safe; EBADF is harmless
-                            unsafe { libc::close(fd) };
-                        }
-                    }
-                }
-            }
-            return;
-        }
-    }
-
-    // Fallback: iterate from from_fd to soft NOFILE limit
-    let max_fd = match rlimit::getrlimit(rlimit::Resource::NOFILE) {
-        Ok((soft, _hard)) => soft as i32,
-        Err(_) => 1024, // Reasonable fallback
+    // Use getrlimit directly via libc to avoid any Rust std allocation.
+    let mut rlim = libc::rlimit {
+        rlim_cur: 0,
+        rlim_max: 0,
+    };
+    // SAFETY: getrlimit is async-signal-safe
+    let max_fd = if unsafe { libc::getrlimit(libc::RLIMIT_NOFILE, &mut rlim) } == 0 {
+        rlim.rlim_cur as i32
+    } else {
+        1024
     };
     // Cap to avoid iterating millions of fds on misconfigured systems
     let capped = max_fd.min(65536);

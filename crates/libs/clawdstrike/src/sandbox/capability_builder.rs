@@ -238,20 +238,18 @@ impl CapabilityBuilder {
     }
 
     fn apply_network_mode(&self, caps: &mut CapabilitySet) {
+        // When egress guard is present AND enabled, respect its policy.
+        // Otherwise (absent OR disabled), default to blocking — a disabled
+        // guard must not weaken security vs. an absent guard.
         if let Some(ref egress) = self.policy.guards.egress_allowlist {
-            if egress.enabled {
-                let is_blocking = is_egress_blocking(egress);
-                if is_blocking {
-                    if let Some(port) = self.proxy_port {
-                        *caps = std::mem::take(caps).proxy_only(port);
-                    } else {
-                        *caps = std::mem::take(caps).block_network();
-                    }
-                } else {
-                    caps.set_network_mode_mut(NetworkMode::AllowAll);
-                }
+            if egress.enabled && !is_egress_blocking(egress) {
+                caps.set_network_mode_mut(NetworkMode::AllowAll);
+                return;
             }
-        } else if let Some(port) = self.proxy_port {
+        }
+
+        // Default: block network (or proxy-only if configured)
+        if let Some(port) = self.proxy_port {
             *caps = std::mem::take(caps).proxy_only(port);
         } else {
             *caps = std::mem::take(caps).block_network();
@@ -1022,7 +1020,7 @@ mod tests {
     }
 
     #[test]
-    fn test_disabled_egress_guard_no_network_effect() {
+    fn test_disabled_egress_guard_defaults_to_blocked() {
         use hush_proxy::policy::PolicyAction;
 
         let tmp = tempfile::TempDir::new().unwrap();
@@ -1038,15 +1036,14 @@ mod tests {
             remove_block: vec![],
         });
 
-        // When egress guard is present but disabled, apply_network_mode enters
-        // the `if let Some(ref egress)` branch but the inner `if egress.enabled`
-        // is false -- so no network mode change is applied. The default is AllowAll.
+        // A disabled egress guard must not weaken security vs. an absent guard.
+        // Both cases should default to blocking network access.
         let builder = CapabilityBuilder::new(policy, tmp.path().to_path_buf());
         let (caps, _) = builder.build_with_diagnostics().unwrap();
 
         assert!(
-            matches!(caps.network_mode(), NetworkMode::AllowAll),
-            "disabled egress guard should leave network mode at default (AllowAll)"
+            matches!(caps.network_mode(), NetworkMode::Blocked),
+            "disabled egress guard should default to Blocked (same as absent guard)"
         );
     }
 

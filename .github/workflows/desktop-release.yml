@@ -53,25 +53,27 @@ jobs:
 
           mkdir -p "$ARTIFACT_DIR"
 
-          mapfile -t dmg_files < <(find "$BUNDLE_DIR" -type f -name "*.dmg")
-          if [[ "${#dmg_files[@]}" -eq 0 ]]; then
+          dmg_count=0
+          while IFS= read -r -d '' dmg; do
+            cp "$dmg" "$ARTIFACT_DIR/"
+            dmg_count=$((dmg_count + 1))
+          done < <(find "$BUNDLE_DIR" -type f -name "*.dmg" -print0)
+          if [[ "$dmg_count" -eq 0 ]]; then
             echo "No .dmg artifacts found in $BUNDLE_DIR" >&2
             exit 1
           fi
-          for dmg in "${dmg_files[@]}"; do
-            cp "$dmg" "$ARTIFACT_DIR/"
-          done
 
-          mapfile -t app_dirs < <(find "$BUNDLE_DIR" -type d -name "*.app")
-          if [[ "${#app_dirs[@]}" -eq 0 ]]; then
-            echo "No .app bundles found in $BUNDLE_DIR" >&2
-            exit 1
-          fi
-          for app in "${app_dirs[@]}"; do
+          app_count=0
+          while IFS= read -r -d '' app; do
             app_parent="$(dirname "$app")"
             app_base="$(basename "$app")"
             tar -C "$app_parent" -czf "$ARTIFACT_DIR/${app_base}.tar.gz" "$app_base"
-          done
+            app_count=$((app_count + 1))
+          done < <(find "$BUNDLE_DIR" -type d -name "*.app" -print0)
+          if [[ "$app_count" -eq 0 ]]; then
+            echo "No .app bundles found in $BUNDLE_DIR" >&2
+            exit 1
+          fi
 
           (
             cd "$ARTIFACT_DIR"

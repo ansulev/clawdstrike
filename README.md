@@ -553,7 +553,7 @@ clawdstrike hunt query --source receipt --verdict warn --start 24h --offline --l
 
 `PolicyLab` examples below require package builds that include PolicyLab bindings (`@clawdstrike/sdk` + `@clawdstrike/wasm` with PolicyLab exports, and Python `clawdstrike` native wheel support). If those versions are not yet on your registry mirror, install from a local checkout of this repository.
 
-TypeScript SDK automation (real SDK calls, no subprocess wrapper):
+TypeScript SDK automation:
 
 ```typescript
 import { readFileSync, writeFileSync } from "node:fs";
@@ -576,7 +576,7 @@ console.log("candidate.yaml validated");
 
 `PolicyLab.simulate()` is not available in the TypeScript WASM build. For replay simulation, use Python, Go, Rust, or the CLI.
 
-Python SDK automation (real SDK calls, no subprocess wrapper):
+Python SDK automation:
 
 ```python
 from pathlib import Path

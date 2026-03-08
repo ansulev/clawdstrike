@@ -604,6 +604,8 @@ if blocked > 0:
     raise SystemExit(f"tightening needed: blocked={blocked}")
 ```
 
+See the full workflow in [`docs/src/guides/observe-synth.md`](docs/src/guides/observe-synth.md).
+
 ### Spider-Sense Quick Start
 
 ```bash
@@ -633,8 +635,6 @@ clawdstrike run --policy ./spider-sense.quickstart.yaml -- your-agent-command --
 
 Full Spider-Sense example (threat-intel catalog, behavior profiles, signed manifest chain, and TS/Python/Go runners):
 [`examples/spider-sense-threat-intel/README.md`](examples/spider-sense-threat-intel/README.md)
-
-See the full workflow in [`docs/src/guides/observe-synth.md`](docs/src/guides/observe-synth.md).
 
 ### Additional SDKs & Bindings
 

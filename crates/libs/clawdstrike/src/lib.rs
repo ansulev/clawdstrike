@@ -50,6 +50,7 @@
 pub mod hygiene;
 pub mod instruction_hierarchy;
 pub mod jailbreak;
+pub mod origin;
 pub mod output_sanitizer;
 pub mod spider_sense;
 pub mod text_utils;
@@ -70,6 +71,9 @@ pub use jailbreak::{
     JailbreakCanonicalizationStats, JailbreakCategory, JailbreakDetectionResult, JailbreakDetector,
     JailbreakGuardConfig, JailbreakSeverity, JailbreakSignal, LayerResult, LayerResults,
     LinearModelConfig, SessionAggPersisted, SessionRiskSnapshot,
+};
+pub use origin::{
+    ActorType, OriginContext, OriginProvider, ProvenanceConfidence, SpaceType, Visibility,
 };
 pub use output_sanitizer::{
     AllowlistConfig, DenylistConfig, DetectorType, EntityFinding, EntityRecognizer,
@@ -93,6 +97,8 @@ pub mod curator_config;
 #[cfg(feature = "full")]
 pub mod decision_taxonomy;
 #[cfg(feature = "full")]
+pub mod enclave;
+#[cfg(feature = "full")]
 pub mod engine;
 #[cfg(any(feature = "full", feature = "policy-event"))]
 pub mod error;
@@ -104,6 +110,8 @@ pub mod identity;
 pub mod irm;
 #[cfg(feature = "full")]
 pub mod marketplace_feed;
+#[cfg(feature = "full")]
+pub mod origin_runtime;
 #[cfg(feature = "full")]
 pub mod pipeline;
 #[cfg(feature = "full")]
@@ -132,6 +140,8 @@ pub use curator_config::{
     default_config_path, CuratorConfig, CuratorConfigFile, CuratorEntry, CuratorTrustSet,
     RichCuratorConfigFile, TrustLevel, ValidatedCurator,
 };
+#[cfg(feature = "full")]
+pub use enclave::{EnclaveResolver, ResolvedEnclave};
 #[cfg(feature = "full")]
 pub use engine::{GuardReport, HushEngine, PostureAwareReport};
 #[cfg(any(feature = "full", feature = "policy-event"))]
@@ -199,6 +209,8 @@ pub use irm::{
     HostCallMetadata, IrmEvent, IrmRouter, Monitor, NetOperation, NetworkIrm, Sandbox,
     SandboxConfig, SandboxStats,
 };
+#[cfg(feature = "full")]
+pub use origin_runtime::{OriginFingerprint, OriginRuntimeState};
 
 /// Re-export core types
 pub mod core {

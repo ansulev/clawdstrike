@@ -1,8 +1,9 @@
-use axum::extract::{Path, State};
-use axum::routing::{get, post};
+use axum::extract::{Path, Query, State};
+use axum::routing::{delete, get, post};
 use axum::{Json, Router};
 use chrono::Utc;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
+use serde_json::json;
 use sha2::{Digest, Sha256};
 use sqlx::row::Row;
 use sqlx::transaction::Transaction;
@@ -51,6 +52,7 @@ pub fn router() -> Router<AppState> {
         .route("/agents", post(register_agent))
         .route("/agents", get(list_agents))
         .route("/agents/{id}", get(get_agent))
+        .route("/agents/{id}", delete(delete_agent))
         .route(
             "/agents/{id}/effective-policy",
             get(get_agent_effective_policy),
@@ -68,9 +70,7 @@ async fn register_agent(
     auth: AuthenticatedTenant,
     Json(req): Json<RegisterAgentRequest>,
 ) -> Result<Json<RegisterAgentResponse>, ApiError> {
-    if auth.role == "viewer" {
-        return Err(ApiError::Forbidden);
-    }
+    ensure_write_access(&auth)?;
 
     // Check agent limit
     let count_row = sqlx::query::query(
@@ -171,16 +171,31 @@ async fn register_agent(
     }))
 }
 
+/// Query parameters for listing agents.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ListAgentsQuery {
+    offset: Option<i64>,
+    limit: Option<i64>,
+}
+
 async fn list_agents(
     State(state): State<AppState>,
     auth: AuthenticatedTenant,
+    Query(query): Query<ListAgentsQuery>,
 ) -> Result<Json<Vec<Agent>>, ApiError> {
-    let rows =
-        sqlx::query::query("SELECT * FROM agents WHERE tenant_id = $1 ORDER BY created_at DESC")
-            .bind(auth.tenant_id)
-            .fetch_all(&state.db)
-            .await
-            .map_err(ApiError::Database)?;
+    let offset = query.offset.unwrap_or(0).max(0);
+    let limit = query.limit.unwrap_or(100).clamp(1, 500);
+
+    let rows = sqlx::query::query(
+        "SELECT * FROM agents WHERE tenant_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3",
+    )
+    .bind(auth.tenant_id)
+    .bind(limit)
+    .bind(offset)
+    .fetch_all(&state.db)
+    .await
+    .map_err(ApiError::Database)?;
 
     let agents: Vec<Agent> = rows
         .into_iter()
@@ -206,6 +221,46 @@ async fn get_agent(
 
     let agent = Agent::from_row(row).map_err(ApiError::Database)?;
     Ok(Json(agent))
+}
+
+async fn delete_agent(
+    State(state): State<AppState>,
+    auth: AuthenticatedTenant,
+    Path(id): Path<Uuid>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    ensure_write_access(&auth)?;
+
+    let mut tx = state.db.begin().await.map_err(ApiError::Database)?;
+    let row = sqlx::query::query(
+        r#"SELECT principal_id
+           FROM agents
+           WHERE id = $1
+             AND tenant_id = $2"#,
+    )
+    .bind(id)
+    .bind(auth.tenant_id)
+    .fetch_optional(tx.as_mut())
+    .await
+    .map_err(ApiError::Database)?
+    .ok_or(ApiError::NotFound)?;
+
+    let principal_id = row
+        .try_get::<Option<Uuid>, _>("principal_id")
+        .map_err(ApiError::Database)?;
+
+    sqlx::query::query("DELETE FROM agents WHERE id = $1")
+        .bind(id)
+        .execute(tx.as_mut())
+        .await
+        .map_err(ApiError::Database)?;
+
+    if let Some(principal_id) = principal_id {
+        delete_principal_if_unreferenced(&mut tx, principal_id).await?;
+    }
+
+    tx.commit().await.map_err(ApiError::Database)?;
+
+    Ok(Json(json!({ "deleted": true })))
 }
 
 async fn get_agent_effective_policy(
@@ -945,6 +1000,14 @@ impl PolicyAttachmentRow {
             (None, None) => Ok(None),
         }
     }
+}
+
+/// Allow-list check: member, admin, and owner may write.
+fn ensure_write_access(auth: &AuthenticatedTenant) -> Result<(), ApiError> {
+    if !matches!(auth.role.as_str(), "member" | "admin" | "owner") {
+        return Err(ApiError::Forbidden);
+    }
+    Ok(())
 }
 
 #[cfg(test)]

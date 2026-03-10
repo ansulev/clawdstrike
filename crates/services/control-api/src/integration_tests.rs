@@ -151,6 +151,28 @@ async fn policies_deploy_and_enroll_backfills_policy_kv_bucket() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn api_key_auth_survives_invalid_bearer_header() {
+    if !docker_available() {
+        eprintln!("Skipping integration test: docker is unavailable");
+        return;
+    }
+
+    let harness = setup_harness().await;
+    let list_resp = request_json_dual_auth(
+        &harness.app,
+        Method::GET,
+        "/api/v1/agents".to_string(),
+        Some("not-a-jwt"),
+        Some(&harness.api_key),
+        None,
+    )
+    .await;
+
+    assert_eq!(list_resp.0, StatusCode::OK);
+    assert!(list_resp.1.as_array().is_some());
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn run_migrations_is_safe_under_concurrent_startup() {
     if !docker_available() {
         eprintln!("Skipping integration test: docker is unavailable");
@@ -405,6 +427,90 @@ async fn register_agent_creates_and_links_endpoint_principal() {
     .await;
     assert_eq!(list_resp.0, StatusCode::OK);
     assert_eq!(list_resp.1[0]["principal_id"], principal_id.to_string());
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn delete_agent_removes_linked_endpoint_principal() {
+    if !docker_available() {
+        eprintln!("Skipping integration test: docker is unavailable");
+        return;
+    }
+
+    let harness = setup_harness().await;
+    let keypair = hush_core::Keypair::generate();
+    let register_resp = request_json(
+        &harness.app,
+        Method::POST,
+        "/api/v1/agents".to_string(),
+        Some(&harness.api_key),
+        Some(serde_json::json!({
+            "agent_id": "agent-directory-delete-int-1",
+            "name": "Delete Agent",
+            "public_key": keypair.public_key().to_hex()
+        })),
+    )
+    .await;
+    assert_eq!(register_resp.0, StatusCode::OK);
+
+    let agent_uuid = Uuid::parse_str(
+        register_resp.1["id"]
+            .as_str()
+            .expect("agent id missing from register response"),
+    )
+    .expect("parse agent uuid");
+
+    let agent_row = sqlx::query::query(
+        r#"SELECT principal_id
+           FROM agents
+           WHERE tenant_id = $1
+             AND id = $2"#,
+    )
+    .bind(harness.tenant_id)
+    .bind(agent_uuid)
+    .fetch_one(&harness.db)
+    .await
+    .expect("fetch agent principal");
+    let principal_id: Uuid = agent_row
+        .try_get::<Option<Uuid>, _>("principal_id")
+        .expect("principal_id")
+        .expect("principal should be linked");
+
+    let delete_resp = request_json(
+        &harness.app,
+        Method::DELETE,
+        format!("/api/v1/agents/{agent_uuid}"),
+        Some(&harness.api_key),
+        None,
+    )
+    .await;
+    assert_eq!(delete_resp.0, StatusCode::OK);
+    assert_eq!(delete_resp.1["deleted"], true);
+
+    let deleted_agent = sqlx::query::query(
+        r#"SELECT 1
+           FROM agents
+           WHERE tenant_id = $1
+             AND id = $2"#,
+    )
+    .bind(harness.tenant_id)
+    .bind(agent_uuid)
+    .fetch_optional(&harness.db)
+    .await
+    .expect("query deleted agent");
+    assert!(deleted_agent.is_none());
+
+    let deleted_principal = sqlx::query::query(
+        r#"SELECT 1
+           FROM principals
+           WHERE tenant_id = $1
+             AND id = $2"#,
+    )
+    .bind(harness.tenant_id)
+    .bind(principal_id)
+    .fetch_optional(&harness.db)
+    .await
+    .expect("query deleted principal");
+    assert!(deleted_principal.is_none());
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -1422,6 +1528,8 @@ async fn create_tenant_rolls_back_when_nats_provisioning_fails() {
         alerter: AlerterService::new(harness.db.clone()),
         retention: RetentionService::new(harness.db.clone()),
         signing_keypair: Some(signing_keypair),
+        receipt_store: crate::routes::receipts::ReceiptStore::new(),
+        catalog: crate::services::catalog::CatalogStore::new(),
     };
     let app = routes::router(failing_state);
 
@@ -4852,6 +4960,717 @@ async fn detection_rule_creates_record_api_key_actor_identity() {
     assert_eq!(create_resp.1["created_by"], api_key_id.to_string());
 }
 
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn catalog_routes_enforce_tenant_isolation_and_role_checks() {
+    if !docker_available() {
+        eprintln!("Skipping integration test: docker is unavailable");
+        return;
+    }
+
+    let harness = setup_harness().await;
+    let viewer_key = "cs_it_catalog_viewer_key";
+    let member_key = "cs_it_catalog_member_key";
+    let other_admin_key = "cs_it_catalog_other_admin_key";
+    let other_tenant_id = seed_tenant(&harness.db, "globex-catalog", "Globex Catalog").await;
+
+    insert_api_key_for_tenant(
+        &harness.db,
+        harness.tenant_id,
+        viewer_key,
+        "catalog-viewer",
+        &["viewer"],
+    )
+    .await;
+    insert_api_key_for_tenant(
+        &harness.db,
+        harness.tenant_id,
+        member_key,
+        "catalog-member",
+        &["member"],
+    )
+    .await;
+    insert_api_key_for_tenant(
+        &harness.db,
+        other_tenant_id,
+        other_admin_key,
+        "catalog-admin",
+        &["admin"],
+    )
+    .await;
+
+    let create_payload = serde_json::json!({
+        "name": "Tenant Baseline",
+        "description": "Scoped to the owning tenant",
+        "category": "general",
+        "tags": ["baseline", "linux"],
+        "policy_yaml": "version: \"1.0.0\"\nrules: []\n",
+        "author": "Integration Test",
+        "version": "1.0.0"
+    });
+
+    let create_resp = request_json(
+        &harness.app,
+        Method::POST,
+        "/api/v1/catalog/templates".to_string(),
+        Some(&harness.api_key),
+        Some(create_payload.clone()),
+    )
+    .await;
+    assert_eq!(create_resp.0, StatusCode::OK);
+    let template_id = create_resp.1["id"]
+        .as_str()
+        .expect("template id")
+        .to_string();
+
+    let list_resp = request_json(
+        &harness.app,
+        Method::GET,
+        "/api/v1/catalog/templates?category=general&tag=baseline".to_string(),
+        Some(&harness.api_key),
+        None,
+    )
+    .await;
+    assert_eq!(list_resp.0, StatusCode::OK);
+    assert!(list_resp
+        .1
+        .as_array()
+        .expect("catalog templates")
+        .iter()
+        .any(|template| template["id"] == template_id));
+
+    let get_resp = request_json(
+        &harness.app,
+        Method::GET,
+        format!("/api/v1/catalog/templates/{template_id}"),
+        Some(&harness.api_key),
+        None,
+    )
+    .await;
+    assert_eq!(get_resp.0, StatusCode::OK);
+    assert_eq!(get_resp.1["name"], "Tenant Baseline");
+
+    let update_resp = request_json(
+        &harness.app,
+        Method::PUT,
+        format!("/api/v1/catalog/templates/{template_id}"),
+        Some(&harness.api_key),
+        Some(serde_json::json!({
+            "description": "Updated tenant template",
+            "version": "1.0.1"
+        })),
+    )
+    .await;
+    assert_eq!(update_resp.0, StatusCode::OK);
+    assert_eq!(update_resp.1["description"], "Updated tenant template");
+    assert_eq!(update_resp.1["version"], "1.0.1");
+
+    let fork_resp = request_json(
+        &harness.app,
+        Method::POST,
+        format!("/api/v1/catalog/templates/{template_id}/fork"),
+        Some(&harness.api_key),
+        None,
+    )
+    .await;
+    assert_eq!(fork_resp.0, StatusCode::OK);
+    let fork_id = fork_resp.1["id"].as_str().expect("fork id").to_string();
+    assert_ne!(fork_id, template_id);
+    assert_eq!(fork_resp.1["forked_from"], template_id);
+
+    let categories_resp = request_json(
+        &harness.app,
+        Method::GET,
+        "/api/v1/catalog/categories".to_string(),
+        Some(&harness.api_key),
+        None,
+    )
+    .await;
+    assert_eq!(categories_resp.0, StatusCode::OK);
+    assert!(categories_resp
+        .1
+        .as_array()
+        .expect("catalog categories")
+        .iter()
+        .any(|category| category["id"] == "general"));
+
+    let viewer_create_resp = request_json(
+        &harness.app,
+        Method::POST,
+        "/api/v1/catalog/templates".to_string(),
+        Some(viewer_key),
+        Some(create_payload.clone()),
+    )
+    .await;
+    assert_eq!(viewer_create_resp.0, StatusCode::FORBIDDEN);
+
+    let viewer_fork_resp = request_json(
+        &harness.app,
+        Method::POST,
+        format!("/api/v1/catalog/templates/{template_id}/fork"),
+        Some(viewer_key),
+        None,
+    )
+    .await;
+    assert_eq!(viewer_fork_resp.0, StatusCode::FORBIDDEN);
+
+    let member_delete_resp = request_json(
+        &harness.app,
+        Method::DELETE,
+        format!("/api/v1/catalog/templates/{template_id}"),
+        Some(member_key),
+        None,
+    )
+    .await;
+    assert_eq!(member_delete_resp.0, StatusCode::FORBIDDEN);
+
+    let other_get_resp = request_json(
+        &harness.app,
+        Method::GET,
+        format!("/api/v1/catalog/templates/{template_id}"),
+        Some(other_admin_key),
+        None,
+    )
+    .await;
+    assert_eq!(other_get_resp.0, StatusCode::NOT_FOUND);
+
+    let other_update_resp = request_json(
+        &harness.app,
+        Method::PUT,
+        format!("/api/v1/catalog/templates/{template_id}"),
+        Some(other_admin_key),
+        Some(serde_json::json!({
+            "description": "cross-tenant"
+        })),
+    )
+    .await;
+    assert_eq!(other_update_resp.0, StatusCode::NOT_FOUND);
+
+    let other_fork_resp = request_json(
+        &harness.app,
+        Method::POST,
+        format!("/api/v1/catalog/templates/{template_id}/fork"),
+        Some(other_admin_key),
+        None,
+    )
+    .await;
+    assert_eq!(other_fork_resp.0, StatusCode::NOT_FOUND);
+
+    let delete_resp = request_json(
+        &harness.app,
+        Method::DELETE,
+        format!("/api/v1/catalog/templates/{template_id}"),
+        Some(&harness.api_key),
+        None,
+    )
+    .await;
+    assert_eq!(delete_resp.0, StatusCode::OK);
+    assert_eq!(delete_resp.1["deleted"], true);
+
+    let get_deleted_resp = request_json(
+        &harness.app,
+        Method::GET,
+        format!("/api/v1/catalog/templates/{template_id}"),
+        Some(&harness.api_key),
+        None,
+    )
+    .await;
+    assert_eq!(get_deleted_resp.0, StatusCode::NOT_FOUND);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn hierarchy_routes_support_crud_tree_and_clearable_fields() {
+    if !docker_available() {
+        eprintln!("Skipping integration test: docker is unavailable");
+        return;
+    }
+
+    let harness = setup_harness().await;
+    let policy_id = Uuid::new_v4();
+
+    let root_resp = request_json(
+        &harness.app,
+        Method::POST,
+        "/api/v1/hierarchy/nodes".to_string(),
+        Some(&harness.api_key),
+        Some(serde_json::json!({
+            "name": "Acme Org",
+            "node_type": "org",
+            "metadata": { "tier": "root" }
+        })),
+    )
+    .await;
+    assert_eq!(root_resp.0, StatusCode::OK);
+    let root_id = root_resp.1["id"].as_str().expect("root id").to_string();
+
+    let project_resp = request_json(
+        &harness.app,
+        Method::POST,
+        "/api/v1/hierarchy/nodes".to_string(),
+        Some(&harness.api_key),
+        Some(serde_json::json!({
+            "name": "Project Alpha",
+            "node_type": "project",
+            "parent_id": root_id.clone(),
+            "policy_id": policy_id,
+            "policy_name": "strict",
+            "metadata": { "tier": "prod" }
+        })),
+    )
+    .await;
+    assert_eq!(project_resp.0, StatusCode::OK);
+    let project_id = project_resp.1["id"]
+        .as_str()
+        .expect("project id")
+        .to_string();
+
+    let list_resp = request_json(
+        &harness.app,
+        Method::GET,
+        "/api/v1/hierarchy/nodes".to_string(),
+        Some(&harness.api_key),
+        None,
+    )
+    .await;
+    assert_eq!(list_resp.0, StatusCode::OK);
+    assert_eq!(list_resp.1.as_array().expect("hierarchy nodes").len(), 2);
+
+    let get_resp = request_json(
+        &harness.app,
+        Method::GET,
+        format!("/api/v1/hierarchy/nodes/{project_id}"),
+        Some(&harness.api_key),
+        None,
+    )
+    .await;
+    assert_eq!(get_resp.0, StatusCode::OK);
+    assert_eq!(get_resp.1["policy_name"], "strict");
+
+    let tree_resp = request_json(
+        &harness.app,
+        Method::GET,
+        "/api/v1/hierarchy/tree".to_string(),
+        Some(&harness.api_key),
+        None,
+    )
+    .await;
+    assert_eq!(tree_resp.0, StatusCode::OK);
+    assert_eq!(tree_resp.1["root_id"], root_id);
+    assert!(tree_resp.1["nodes"]
+        .as_array()
+        .expect("tree nodes")
+        .iter()
+        .any(|node| {
+            node["id"] == root_id
+                && node["children"]
+                    .as_array()
+                    .expect("root children")
+                    .iter()
+                    .any(|child| child.as_str() == Some(project_id.as_str()))
+        }));
+
+    // Clear policy_id, policy_name, and metadata while keeping parent_id
+    // (non-org nodes must always have a parent).
+    let update_resp = request_json(
+        &harness.app,
+        Method::PUT,
+        format!("/api/v1/hierarchy/nodes/{project_id}"),
+        Some(&harness.api_key),
+        Some(serde_json::json!({
+            "name": "Project Alpha Renamed",
+            "policy_id": null,
+            "policy_name": null,
+            "metadata": null
+        })),
+    )
+    .await;
+    assert_eq!(update_resp.0, StatusCode::OK);
+    assert_eq!(update_resp.1["name"], "Project Alpha Renamed");
+    // parent_id is omitted from the update, so it stays as the root.
+    assert_eq!(update_resp.1["parent_id"], root_id);
+    assert!(update_resp.1["policy_id"].is_null());
+    assert!(update_resp.1["policy_name"].is_null());
+    assert_eq!(update_resp.1["metadata"], serde_json::json!({}));
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn hierarchy_routes_enforce_permissions_and_delete_modes() {
+    if !docker_available() {
+        eprintln!("Skipping integration test: docker is unavailable");
+        return;
+    }
+
+    let harness = setup_harness().await;
+    let viewer_key = "cs_it_hierarchy_viewer_key";
+
+    insert_api_key_for_tenant(
+        &harness.db,
+        harness.tenant_id,
+        viewer_key,
+        "hierarchy-viewer",
+        &["viewer"],
+    )
+    .await;
+
+    let viewer_create_resp = request_json(
+        &harness.app,
+        Method::POST,
+        "/api/v1/hierarchy/nodes".to_string(),
+        Some(viewer_key),
+        Some(serde_json::json!({
+            "name": "Viewer Org",
+            "node_type": "org"
+        })),
+    )
+    .await;
+    assert_eq!(viewer_create_resp.0, StatusCode::FORBIDDEN);
+
+    let root_resp = request_json(
+        &harness.app,
+        Method::POST,
+        "/api/v1/hierarchy/nodes".to_string(),
+        Some(&harness.api_key),
+        Some(serde_json::json!({
+            "name": "Root Org",
+            "node_type": "org"
+        })),
+    )
+    .await;
+    assert_eq!(root_resp.0, StatusCode::OK);
+    let root_id = root_resp.1["id"].as_str().expect("root id").to_string();
+
+    let orphan_team_resp = request_json(
+        &harness.app,
+        Method::POST,
+        "/api/v1/hierarchy/nodes".to_string(),
+        Some(&harness.api_key),
+        Some(serde_json::json!({
+            "name": "Orphan Team",
+            "node_type": "team"
+        })),
+    )
+    .await;
+    assert_eq!(orphan_team_resp.0, StatusCode::BAD_REQUEST);
+    assert_eq!(
+        orphan_team_resp.1["error"],
+        "team nodes must specify a parent_id"
+    );
+
+    let team_resp = request_json(
+        &harness.app,
+        Method::POST,
+        "/api/v1/hierarchy/nodes".to_string(),
+        Some(&harness.api_key),
+        Some(serde_json::json!({
+            "name": "Team One",
+            "node_type": "team",
+            "parent_id": root_id.clone()
+        })),
+    )
+    .await;
+    assert_eq!(team_resp.0, StatusCode::OK);
+    let team_id = team_resp.1["id"].as_str().expect("team id").to_string();
+
+    let agent_resp = request_json(
+        &harness.app,
+        Method::POST,
+        "/api/v1/hierarchy/nodes".to_string(),
+        Some(&harness.api_key),
+        Some(serde_json::json!({
+            "name": "Agent One",
+            "node_type": "agent",
+            "parent_id": team_id.clone()
+        })),
+    )
+    .await;
+    assert_eq!(agent_resp.0, StatusCode::OK);
+    let agent_id = agent_resp.1["id"].as_str().expect("agent id").to_string();
+
+    let project_resp = request_json(
+        &harness.app,
+        Method::POST,
+        "/api/v1/hierarchy/nodes".to_string(),
+        Some(&harness.api_key),
+        Some(serde_json::json!({
+            "name": "Project One",
+            "node_type": "project",
+            "parent_id": team_id.clone()
+        })),
+    )
+    .await;
+    assert_eq!(project_resp.0, StatusCode::OK);
+    let project_id = project_resp.1["id"]
+        .as_str()
+        .expect("project id")
+        .to_string();
+
+    let cycle_resp = request_json(
+        &harness.app,
+        Method::PUT,
+        format!("/api/v1/hierarchy/nodes/{root_id}"),
+        Some(&harness.api_key),
+        Some(serde_json::json!({
+            "parent_id": team_id.clone()
+        })),
+    )
+    .await;
+    assert_eq!(cycle_resp.0, StatusCode::BAD_REQUEST);
+    assert!(cycle_resp.1["error"]
+        .as_str()
+        .expect("cycle error")
+        .contains("cycle"));
+
+    let detach_team_resp = request_json(
+        &harness.app,
+        Method::PUT,
+        format!("/api/v1/hierarchy/nodes/{team_id}"),
+        Some(&harness.api_key),
+        Some(serde_json::json!({
+            "parent_id": null
+        })),
+    )
+    .await;
+    assert_eq!(detach_team_resp.0, StatusCode::BAD_REQUEST);
+    assert_eq!(
+        detach_team_resp.1["error"],
+        "team nodes must specify a parent_id"
+    );
+
+    let delete_reparent_resp = request_json(
+        &harness.app,
+        Method::DELETE,
+        format!("/api/v1/hierarchy/nodes/{team_id}?reparent=true"),
+        Some(&harness.api_key),
+        None,
+    )
+    .await;
+    assert_eq!(delete_reparent_resp.0, StatusCode::OK);
+    assert_eq!(delete_reparent_resp.1["deleted_count"], 1);
+    assert_eq!(delete_reparent_resp.1["reparented_count"], 2);
+
+    let agent_after_resp = request_json(
+        &harness.app,
+        Method::GET,
+        format!("/api/v1/hierarchy/nodes/{agent_id}"),
+        Some(&harness.api_key),
+        None,
+    )
+    .await;
+    assert_eq!(agent_after_resp.0, StatusCode::OK);
+    assert_eq!(agent_after_resp.1["parent_id"], root_id);
+
+    let project_after_resp = request_json(
+        &harness.app,
+        Method::GET,
+        format!("/api/v1/hierarchy/nodes/{project_id}"),
+        Some(&harness.api_key),
+        None,
+    )
+    .await;
+    assert_eq!(project_after_resp.0, StatusCode::OK);
+    assert_eq!(project_after_resp.1["parent_id"], root_id);
+
+    let temp_team_resp = request_json(
+        &harness.app,
+        Method::POST,
+        "/api/v1/hierarchy/nodes".to_string(),
+        Some(&harness.api_key),
+        Some(serde_json::json!({
+            "name": "Temp Team",
+            "node_type": "team",
+            "parent_id": root_id.clone()
+        })),
+    )
+    .await;
+    assert_eq!(temp_team_resp.0, StatusCode::OK);
+    let temp_team_id = temp_team_resp.1["id"]
+        .as_str()
+        .expect("temp team id")
+        .to_string();
+
+    let temp_leaf_resp = request_json(
+        &harness.app,
+        Method::POST,
+        "/api/v1/hierarchy/nodes".to_string(),
+        Some(&harness.api_key),
+        Some(serde_json::json!({
+            "name": "Temp Agent",
+            "node_type": "agent",
+            "parent_id": temp_team_id.clone()
+        })),
+    )
+    .await;
+    assert_eq!(temp_leaf_resp.0, StatusCode::OK);
+    let temp_leaf_id = temp_leaf_resp.1["id"]
+        .as_str()
+        .expect("temp leaf id")
+        .to_string();
+
+    let delete_cascade_resp = request_json(
+        &harness.app,
+        Method::DELETE,
+        format!("/api/v1/hierarchy/nodes/{temp_team_id}"),
+        Some(&harness.api_key),
+        None,
+    )
+    .await;
+    assert_eq!(delete_cascade_resp.0, StatusCode::OK);
+    assert_eq!(delete_cascade_resp.1["deleted_count"], 2);
+    assert_eq!(delete_cascade_resp.1["reparented_count"], 0);
+
+    let missing_leaf_resp = request_json(
+        &harness.app,
+        Method::GET,
+        format!("/api/v1/hierarchy/nodes/{temp_leaf_id}"),
+        Some(&harness.api_key),
+        None,
+    )
+    .await;
+    assert_eq!(missing_leaf_resp.0, StatusCode::NOT_FOUND);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn hierarchy_tree_prefers_org_root_over_other_top_level_nodes() {
+    if !docker_available() {
+        eprintln!("Skipping integration test: docker is unavailable");
+        return;
+    }
+
+    let harness = setup_harness().await;
+
+    sqlx::query::query(
+        r#"INSERT INTO hierarchy_nodes (tenant_id, name, node_type, metadata)
+           VALUES ($1, $2, $3, $4)"#,
+    )
+    .bind(harness.tenant_id)
+    .bind("Orphan Project")
+    .bind("project")
+    .bind(serde_json::json!({ "source": "integration-test" }))
+    .execute(&harness.db)
+    .await
+    .expect("insert orphan project");
+
+    let root_resp = request_json(
+        &harness.app,
+        Method::POST,
+        "/api/v1/hierarchy/nodes".to_string(),
+        Some(&harness.api_key),
+        Some(serde_json::json!({
+            "name": "Canonical Org",
+            "node_type": "org"
+        })),
+    )
+    .await;
+    assert_eq!(root_resp.0, StatusCode::OK);
+    let root_id = root_resp.1["id"].as_str().expect("root id").to_string();
+
+    let tree_resp = request_json(
+        &harness.app,
+        Method::GET,
+        "/api/v1/hierarchy/tree".to_string(),
+        Some(&harness.api_key),
+        None,
+    )
+    .await;
+    assert_eq!(tree_resp.0, StatusCode::OK);
+    assert_eq!(tree_resp.1["root_id"], root_id);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn receipt_ingest_rejects_viewer_but_allows_member() {
+    if !docker_available() {
+        eprintln!("Skipping integration test: docker is unavailable");
+        return;
+    }
+
+    let harness = setup_harness().await;
+    let viewer_key = "cs_it_receipts_viewer_key";
+    let member_key = "cs_it_receipts_member_key";
+
+    insert_api_key_for_tenant(
+        &harness.db,
+        harness.tenant_id,
+        viewer_key,
+        "receipt-viewer",
+        &["viewer"],
+    )
+    .await;
+    insert_api_key_for_tenant(
+        &harness.db,
+        harness.tenant_id,
+        member_key,
+        "receipt-member",
+        &["write"],
+    )
+    .await;
+
+    let keypair = hush_core::Keypair::generate();
+    let signed_receipt = hush_core::SignedReceipt::sign(
+        hush_core::Receipt::new(hush_core::Hash::zero(), hush_core::Verdict::pass()),
+        &keypair,
+    )
+    .unwrap();
+    let receipt_timestamp = signed_receipt.receipt.timestamp.clone();
+    let receipt_signature = signed_receipt.signatures.signer.to_hex();
+    let signed_receipt_json = serde_json::to_value(&signed_receipt).unwrap();
+    let receipt_payload = serde_json::json!({
+        "timestamp": receipt_timestamp,
+        "verdict": "allow",
+        "guard": "policy_validation",
+        "policy_name": "strict",
+        "signature": receipt_signature,
+        "public_key": keypair.public_key().to_hex(),
+        "signed_receipt": signed_receipt_json,
+        "metadata": {
+            "client_receipt_id": "local-001"
+        }
+    });
+
+    let viewer_store_resp = request_json(
+        &harness.app,
+        Method::POST,
+        "/api/v1/receipts".to_string(),
+        Some(viewer_key),
+        Some(receipt_payload.clone()),
+    )
+    .await;
+    assert_eq!(viewer_store_resp.0, StatusCode::FORBIDDEN);
+
+    let viewer_batch_resp = request_json(
+        &harness.app,
+        Method::POST,
+        "/api/v1/receipts/batch".to_string(),
+        Some(viewer_key),
+        Some(serde_json::json!({
+            "receipts": [receipt_payload.clone()]
+        })),
+    )
+    .await;
+    assert_eq!(viewer_batch_resp.0, StatusCode::FORBIDDEN);
+
+    let member_store_resp = request_json(
+        &harness.app,
+        Method::POST,
+        "/api/v1/receipts".to_string(),
+        Some(member_key),
+        Some(receipt_payload.clone()),
+    )
+    .await;
+    assert_eq!(member_store_resp.0, StatusCode::OK);
+
+    let member_batch_resp = request_json(
+        &harness.app,
+        Method::POST,
+        "/api/v1/receipts/batch".to_string(),
+        Some(member_key),
+        Some(serde_json::json!({
+            "receipts": [receipt_payload]
+        })),
+    )
+    .await;
+    assert_eq!(member_batch_resp.0, StatusCode::OK);
+    assert_eq!(member_batch_resp.1["count"], 1);
+}
+
 async fn setup_harness() -> Harness {
     let postgres = run_container(&[
         "run",
@@ -4943,6 +5762,8 @@ async fn setup_harness() -> Harness {
         alerter: AlerterService::new(db.clone()),
         retention: RetentionService::new(db.clone()),
         signing_keypair: Some(signing_keypair.clone()),
+        receipt_store: crate::routes::receipts::ReceiptStore::new(),
+        catalog: crate::services::catalog::CatalogStore::new(),
     };
     let app = routes::router(state);
 
@@ -6149,6 +6970,43 @@ async fn request_json_bearer(
     }
     if let Some(key) = api_key {
         builder = builder.header("authorization", format!("Bearer {key}"));
+    }
+    let request = builder.body(body).expect("build request");
+
+    let response = app.clone().oneshot(request).await.expect("router request");
+    let status = response.status();
+    let bytes = to_bytes(response.into_body(), 2 * 1024 * 1024)
+        .await
+        .expect("read response body");
+    let body = if bytes.is_empty() {
+        serde_json::json!({})
+    } else {
+        serde_json::from_slice::<Value>(&bytes).expect("response json")
+    };
+    (status, body)
+}
+
+async fn request_json_dual_auth(
+    app: &axum::Router,
+    method: Method,
+    path: String,
+    bearer: Option<&str>,
+    api_key: Option<&str>,
+    json_body: Option<Value>,
+) -> (StatusCode, Value) {
+    let body = match &json_body {
+        Some(value) => Body::from(serde_json::to_vec(value).expect("serialize body")),
+        None => Body::empty(),
+    };
+    let mut builder = Request::builder().method(method).uri(path);
+    if json_body.is_some() {
+        builder = builder.header("content-type", "application/json");
+    }
+    if let Some(token) = bearer {
+        builder = builder.header("authorization", format!("Bearer {token}"));
+    }
+    if let Some(key) = api_key {
+        builder = builder.header("x-api-key", key);
     }
     let request = builder.body(body).expect("build request");
 

@@ -1,30 +1,52 @@
-import { useCallback } from "react";
 import { IconAlertTriangle, IconRestore, IconX } from "@tabler/icons-react";
-import { useWorkbench } from "@/lib/workbench/multi-policy-store";
 import type { AutosaveEntry } from "@/lib/workbench/use-auto-save";
 
 interface CrashRecoveryBannerProps {
-  entry: AutosaveEntry;
+  entries: AutosaveEntry[];
+  onRestore: () => void;
   onDismiss: () => void;
 }
 
 export function CrashRecoveryBanner({
-  entry,
+  entries,
+  onRestore,
   onDismiss,
 }: CrashRecoveryBannerProps) {
-  const { dispatch } = useWorkbench();
+  if (entries.length === 0) {
+    return null;
+  }
 
-  const formattedTime = formatTimestamp(entry.timestamp);
+  const latestTimestamp = Math.max(...entries.map((entry) => entry.timestamp));
+  const normalizedPolicyName = (name: string) => name.trim();
+  const policyNames = Array.from(
+    new Set(
+      entries
+        .map((entry) => normalizedPolicyName(entry.policyName))
+        .filter((name) => name.length > 0),
+    ),
+  );
+  const allEntriesNamed = entries.every(
+    (entry) => normalizedPolicyName(entry.policyName).length > 0,
+  );
+  const listedPolicyNames =
+    policyNames.slice(0, 3).join(", ") + (policyNames.length > 3 ? ", ..." : "");
+  const summaryLabel =
+    entries.length === 1
+      ? policyNames[0] || "an unnamed tab"
+      : `${entries.length} tabs`;
+  const policySummary =
+    entries.length > 1 && policyNames.length > 0
+      ? allEntriesNamed
+        ? policyNames.length === 1
+          ? `all named ${policyNames[0]}`
+          : `named ${listedPolicyNames}`
+        : `including ${listedPolicyNames}`
+      : null;
+  const omittedSensitiveFields = entries.some(
+    (entry) => entry.sensitiveFieldsStripped,
+  );
 
-  const handleRestore = useCallback(() => {
-    dispatch({ type: "SET_YAML", yaml: entry.yaml });
-    if (entry.filePath) {
-      dispatch({ type: "SET_FILE_PATH", path: entry.filePath });
-    }
-    onDismiss();
-  }, [dispatch, entry, onDismiss]);
-
-  const handleDiscard = onDismiss;
+  const formattedTime = formatTimestamp(latestTimestamp);
 
   return (
     <div className="shrink-0 flex items-center gap-3 px-4 py-2 bg-[#0f1118] border-b border-[#2d3240]">
@@ -33,15 +55,26 @@ export function CrashRecoveryBanner({
 
       {/* Message */}
       <span className="text-xs text-[#6f7f9a] leading-tight min-w-0">
-        Recovered unsaved changes
-        {entry.policyName ? (
+        Recovered unsaved changes from{" "}
+        <span className="text-[#ece7dc] font-medium">{summaryLabel}</span>
+        {policySummary ? (
           <>
-            {" "}from{" "}
-            <span className="text-[#ece7dc] font-medium">{entry.policyName}</span>
+            {" "}
+            <span className="text-[#6f7f9a]/70">
+              ({policySummary})
+            </span>
           </>
         ) : null}
         {" "}
         <span className="text-[#6f7f9a]/70">({formattedTime})</span>
+        {omittedSensitiveFields ? (
+          <>
+            {" "}
+            <span className="text-[#d4a84b]/80">
+              Sensitive fields were omitted from recovery and must be re-entered.
+            </span>
+          </>
+        ) : null}
       </span>
 
       {/* Spacer */}
@@ -49,7 +82,7 @@ export function CrashRecoveryBanner({
 
       {/* Restore */}
       <button
-        onClick={handleRestore}
+        onClick={onRestore}
         className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-[#d4a84b]/15 text-[#d4a84b] hover:bg-[#d4a84b]/25 transition-colors"
       >
         <IconRestore size={13} stroke={2} />
@@ -58,7 +91,7 @@ export function CrashRecoveryBanner({
 
       {/* Discard */}
       <button
-        onClick={handleDiscard}
+        onClick={onDismiss}
         className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs text-[#6f7f9a] hover:text-[#ece7dc] hover:bg-[#1a1d2a] transition-colors"
       >
         <IconX size={13} stroke={2} />

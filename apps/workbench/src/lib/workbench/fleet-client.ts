@@ -24,22 +24,126 @@ const DEV = import.meta.env.DEV;
 // URL validation (Finding 3: SSRF prevention)
 // ---------------------------------------------------------------------------
 
-/** Private/loopback IP patterns that should be blocked in production. */
-const PRIVATE_IP_PATTERNS = [
-  /^127\./,
-  /^10\./,
-  /^172\.(1[6-9]|2\d|3[01])\./,
-  /^192\.168\./,
-  /^169\.254\./,
-  /^0\.0\.0\.0$/,
-  /^\[::1\]$/,
-  /^::1$/,
-];
+function parseIpv4Bytes(hostname: string): number[] | null {
+  if (!/^\d{1,3}(?:\.\d{1,3}){3}$/.test(hostname)) return null;
+  const octets = hostname.split(".").map((part) => Number.parseInt(part, 10));
+  if (octets.some((part) => Number.isNaN(part) || part < 0 || part > 255)) return null;
+  return octets;
+}
+
+function isPrivateOrLoopbackIpv4(octets: number[]): boolean {
+  const [a, b, c, d] = octets;
+  if ([a, b, c, d].some((part) => part === undefined)) return false;
+
+  return (
+    a === 127 ||
+    a === 10 ||
+    (a === 172 && b >= 16 && b <= 31) ||
+    (a === 192 && b === 168) ||
+    (a === 169 && b === 254) ||
+    (a === 0 && b === 0 && c === 0 && d === 0)
+  );
+}
+
+function parseIpv6Bytes(hostname: string): number[] | null {
+  let normalized = hostname.toLowerCase();
+  if (normalized.startsWith("[") && normalized.endsWith("]")) {
+    normalized = normalized.slice(1, -1);
+  }
+
+  const zoneIndex = normalized.indexOf("%");
+  if (zoneIndex >= 0) {
+    normalized = normalized.slice(0, zoneIndex);
+  }
+
+  if (!normalized.includes(":")) return null;
+
+  const lastColon = normalized.lastIndexOf(":");
+  const maybeIpv4 = lastColon >= 0 ? normalized.slice(lastColon + 1) : "";
+  if (maybeIpv4.includes(".")) {
+    const ipv4Bytes = parseIpv4Bytes(maybeIpv4);
+    if (!ipv4Bytes) return null;
+    const high = ((ipv4Bytes[0] << 8) | ipv4Bytes[1]).toString(16);
+    const low = ((ipv4Bytes[2] << 8) | ipv4Bytes[3]).toString(16);
+    normalized = `${normalized.slice(0, lastColon)}:${high}:${low}`;
+  }
+
+  if ((normalized.match(/::/g) || []).length > 1) return null;
+
+  const hasCompression = normalized.includes("::");
+  const [leftRaw, rightRaw = ""] = normalized.split("::");
+  const leftParts = leftRaw ? leftRaw.split(":").filter(Boolean) : [];
+  const rightParts = rightRaw ? rightRaw.split(":").filter(Boolean) : [];
+  const parts = [...leftParts, ...rightParts];
+
+  if (parts.some((part) => !/^[0-9a-f]{1,4}$/i.test(part))) {
+    return null;
+  }
+
+  const missing = 8 - parts.length;
+  if ((!hasCompression && parts.length !== 8) || (hasCompression && missing < 0)) {
+    return null;
+  }
+
+  const hextets = hasCompression
+    ? [...leftParts, ...Array.from({ length: missing }, () => "0"), ...rightParts]
+    : parts;
+
+  if (hextets.length !== 8) return null;
+
+  return hextets.flatMap((part) => {
+    const value = Number.parseInt(part, 16);
+    return [(value >> 8) & 0xff, value & 0xff];
+  });
+}
+
+export function isPrivateOrLoopbackFleetHostname(hostname: string): boolean {
+  const ipv4Bytes = parseIpv4Bytes(hostname);
+  if (ipv4Bytes) {
+    return isPrivateOrLoopbackIpv4(ipv4Bytes);
+  }
+
+  const ipv6Bytes = parseIpv6Bytes(hostname);
+  if (!ipv6Bytes) return false;
+
+  const isAllZero = ipv6Bytes.every((part) => part === 0);
+  if (isAllZero) return true;
+
+  const isLoopback =
+    ipv6Bytes.slice(0, 15).every((part) => part === 0) && ipv6Bytes[15] === 1;
+  if (isLoopback) return true;
+
+  const isUniqueLocal = (ipv6Bytes[0] & 0xfe) === 0xfc;
+  if (isUniqueLocal) return true;
+
+  const isLinkLocal = ipv6Bytes[0] === 0xfe && (ipv6Bytes[1] & 0xc0) === 0x80;
+  if (isLinkLocal) return true;
+
+  const isIpv4Mapped =
+    ipv6Bytes.slice(0, 10).every((part) => part === 0) &&
+    ipv6Bytes[10] === 0xff &&
+    ipv6Bytes[11] === 0xff;
+  const isIpv4Compatible = ipv6Bytes.slice(0, 12).every((part) => part === 0);
+  if (isIpv4Mapped || isIpv4Compatible) {
+    return isPrivateOrLoopbackIpv4(ipv6Bytes.slice(12));
+  }
+
+  return false;
+}
+
+function normalizeFleetUrlInput(url: string): string {
+  return url.trim();
+}
 
 export function validateFleetUrl(url: string): { valid: true; tlsWarning?: string } | { valid: false; reason: string } {
+  const normalizedUrl = normalizeFleetUrlInput(url);
+  if (!normalizedUrl) {
+    return { valid: false, reason: "URL must not be empty" };
+  }
+
   let parsed: URL;
   try {
-    parsed = new URL(url);
+    parsed = new URL(normalizedUrl);
   } catch {
     return { valid: false, reason: "Invalid URL format" };
   }
@@ -49,6 +153,10 @@ export function validateFleetUrl(url: string): { valid: true; tlsWarning?: strin
     return { valid: false, reason: `Unsupported URL scheme "${parsed.protocol}" — only http: and https: are allowed` };
   }
 
+  if (parsed.username || parsed.password) {
+    return { valid: false, reason: "URLs must not include embedded credentials" };
+  }
+
   const hostname = parsed.hostname.toLowerCase();
 
   // In production, reject private/loopback addresses (SSRF prevention)
@@ -56,10 +164,8 @@ export function validateFleetUrl(url: string): { valid: true; tlsWarning?: strin
     if (hostname === "localhost") {
       return { valid: false, reason: "localhost URLs are not allowed in production" };
     }
-    for (const pattern of PRIVATE_IP_PATTERNS) {
-      if (pattern.test(hostname)) {
-        return { valid: false, reason: `Private/loopback IP addresses are not allowed in production` };
-      }
+    if (isPrivateOrLoopbackFleetHostname(hostname)) {
+      return { valid: false, reason: "Private/loopback IP addresses are not allowed in production" };
     }
   }
 
@@ -72,7 +178,7 @@ export function validateFleetUrl(url: string): { valid: true; tlsWarning?: strin
 }
 
 function normalizedValidatedFleetUrl(url: string, fieldName: string): string {
-  const normalized = stripTrailingSlash(url.trim());
+  const normalized = stripTrailingSlash(normalizeFleetUrlInput(url));
   const validation = validateFleetUrl(normalized);
   if (!validation.valid) {
     throw new Error(`Invalid ${fieldName}: ${validation.reason}`);
@@ -93,21 +199,22 @@ function sanitizeStoredFleetUrl(url: string | null | undefined, fieldName: strin
 
 /** Rewrite absolute URLs to Vite dev proxy paths; passthrough in production. */
 function proxyUrl(absoluteUrl: string, kind: "hushd" | "control"): string {
-  if (!DEV) return absoluteUrl;
+  const normalizedUrl = normalizeFleetUrlInput(absoluteUrl);
+  if (!DEV) return normalizedUrl;
 
   // Validate URL before proxy rewrite (Finding 3)
-  const validation = validateFleetUrl(absoluteUrl);
+  const validation = validateFleetUrl(normalizedUrl);
   if (!validation.valid) {
     throw new Error(`[fleet-client] Invalid fleet URL: ${validation.reason}`);
   }
 
   try {
-    const u = new URL(absoluteUrl);
+    const u = new URL(normalizedUrl);
     return `/_proxy/${kind}${u.pathname}${u.search}`;
   } catch {
     // Don't log the raw URL to avoid credential leakage (Finding M3)
     console.warn("[fleet-client] Invalid URL format for proxy rewrite");
-    return absoluteUrl;
+    return normalizedUrl;
   }
 }
 
@@ -308,6 +415,8 @@ export function loadSavedConnection(): Partial<FleetConnection> {
  * Falls back to localStorage values if Stronghold is unavailable.
  */
 export async function loadSavedConnectionAsync(): Promise<Partial<FleetConnection>> {
+  const bootstrap = loadSavedConnection();
+
   try {
     const [hushdUrl, controlApiUrl, apiKey, controlApiToken] = await Promise.all([
       secureStore.get(SS_HUSHD_URL),
@@ -317,10 +426,14 @@ export async function loadSavedConnectionAsync(): Promise<Partial<FleetConnectio
     ]);
 
     // If Stronghold had values, use them. Otherwise fall back to localStorage.
-    if (hushdUrl || apiKey) {
+    if (hushdUrl || controlApiUrl || apiKey || controlApiToken) {
       return {
-        hushdUrl: sanitizeStoredFleetUrl(hushdUrl, "hushd URL"),
-        controlApiUrl: sanitizeStoredFleetUrl(controlApiUrl, "control API URL"),
+        hushdUrl:
+          sanitizeStoredFleetUrl(hushdUrl, "hushd URL") || bootstrap.hushdUrl || "",
+        controlApiUrl:
+          sanitizeStoredFleetUrl(controlApiUrl, "control API URL") ||
+          bootstrap.controlApiUrl ||
+          "",
         apiKey: apiKey ?? "",
         controlApiToken: controlApiToken ?? "",
       };
@@ -329,7 +442,7 @@ export async function loadSavedConnectionAsync(): Promise<Partial<FleetConnectio
     console.warn("[fleet-client] secureStore read failed, using localStorage:", e);
   }
 
-  return loadSavedConnection();
+  return bootstrap;
 }
 
 /**
@@ -723,13 +836,8 @@ export async function testConnection(
   hushdUrl: string,
   apiKey: string,
 ): Promise<HealthResponse & { tlsWarning?: string }> {
-  // Finding 3: validate URL before making any fetch
-  const validation = validateFleetUrl(hushdUrl);
-  if (!validation.valid) {
-    throw new Error(`Invalid fleet URL: ${validation.reason}`);
-  }
-
-  const url = stripTrailingSlash(hushdUrl);
+  const url = normalizedValidatedFleetUrl(hushdUrl, "fleet URL");
+  const validation = validateFleetUrl(url);
   const health = await jsonFetch<HealthResponse>(proxyUrl(`${url}/health`, "hushd"), {
     headers: hushdHeaders(apiKey),
   });

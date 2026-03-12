@@ -61,6 +61,55 @@ class TestPolicy:
         assert restored.version == original.version
         assert restored.name == original.name
 
+    def test_policy_accepts_shell_command_blocked_patterns_alias(self) -> None:
+        policy = Policy.from_yaml(
+            """\
+version: "1.2.0"
+name: shell-alias
+guards:
+  shell_command:
+    blocked_patterns:
+      - 'rm\\s+-rf'
+settings:
+  fail_fast: false
+"""
+        )
+        assert policy.guards.shell_command is not None
+        assert policy.guards.shell_command.forbidden_patterns == [r"rm\s+-rf"]
+
+    def test_shell_command_blocked_patterns_alias_merges_with_extends(
+        self, tmp_path
+    ) -> None:
+        base = tmp_path / "shell-base.yaml"
+        base.write_text(
+            """\
+version: "1.2.0"
+name: base
+guards:
+  shell_command:
+    forbidden_patterns:
+      - 'curl\\s+.*\\|\\s*sh'
+"""
+        )
+        policy = Policy.from_yaml_with_extends(
+            f"""\
+version: "1.2.0"
+name: child
+extends: {base.name}
+guards:
+  shell_command:
+    blocked_patterns:
+      - 'rm\\s+-rf'
+""",
+            base_path=tmp_path,
+        )
+
+        assert policy.guards.shell_command is not None
+        assert policy.guards.shell_command.forbidden_patterns == [
+            r"curl\s+.*\|\s*sh",
+            r"rm\s+-rf",
+        ]
+
     def test_policy_rejects_invalid_semver_version(self) -> None:
         with pytest.raises(PolicyError):
             Policy.from_yaml('version: "1.0"\nname: test\n')
@@ -173,6 +222,55 @@ extends: nonexistent_ruleset
 """
         with pytest.raises(PolicyError, match="Unknown ruleset"):
             Policy.from_yaml_with_extends(yaml_str)
+
+    def test_extends_path_must_stay_within_base_directory(self, tmp_path) -> None:
+        base_dir = tmp_path / "base"
+        base_dir.mkdir()
+        sibling_dir = tmp_path / "base_evil"
+        sibling_dir.mkdir()
+        outside_policy = sibling_dir / "outside.yaml"
+        outside_policy.write_text('version: "1.2.0"\nname: outside\n')
+
+        with pytest.raises(
+            PolicyError,
+            match="Policy extends path escapes base directory",
+        ):
+            Policy.from_yaml_with_extends(
+                'version: "1.2.0"\nname: child\nextends: ../base_evil/outside.yaml\n',
+                base_path=base_dir,
+            )
+
+    def test_extends_from_yaml_file_allows_parent_relative_policy(self, tmp_path) -> None:
+        repo_root = tmp_path / "repo"
+        services_dir = repo_root / "services"
+        services_dir.mkdir(parents=True)
+
+        base = repo_root / "base.yaml"
+        base.write_text(
+            'version: "1.2.0"\n'
+            'name: base\n'
+            "guards:\n"
+            "  forbidden_path:\n"
+            "    patterns:\n"
+            '      - "**/.ssh/**"\n'
+        )
+
+        child = services_dir / "child.yaml"
+        child.write_text(
+            'version: "1.2.0"\n'
+            "name: child\n"
+            "extends: ../base.yaml\n"
+            "guards:\n"
+            "  shell_command:\n"
+            "    forbidden_patterns:\n"
+            '      - "rm -rf"\n'
+        )
+
+        policy = Policy.from_yaml_file_with_extends(child)
+
+        assert policy.name == "child"
+        assert policy.guards.forbidden_path is not None
+        assert policy.guards.shell_command is not None
 
     def test_from_yaml_file_with_path_object(self, tmp_path) -> None:
         p = tmp_path / "policy.yaml"

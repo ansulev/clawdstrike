@@ -71,6 +71,10 @@ export function useFleetConnection(): FleetConnectionHook {
 const HEALTH_POLL_MS = 30_000;
 const AGENT_POLL_MS = 60_000;
 
+function normalizeFleetUrl(url: string): string {
+  return url.trim().replace(/\/+$/, "");
+}
+
 function assertValidFleetUrl(url: string, fieldName: string) {
   const validation = validateFleetUrl(url);
   if (!validation.valid) {
@@ -136,8 +140,8 @@ export function FleetConnectionProvider({ children }: { children: ReactNode }) {
       const list = await apiFetchAgentList(conn);
       setAgents(list);
       setConnection((prev) => ({ ...prev, agentCount: list.length }));
-    } catch {
-      // silently continue — stale data is better than no data
+    } catch (err) {
+      console.warn("[fleet] agent poll failed:", err);
     }
   }, []);
 
@@ -231,7 +235,10 @@ export function FleetConnectionProvider({ children }: { children: ReactNode }) {
     }
 
     attemptReconnect();
-    return () => { isMounted = false; };
+    return () => {
+      isMounted = false;
+      reconnectLockRef.current = false;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -243,14 +250,17 @@ export function FleetConnectionProvider({ children }: { children: ReactNode }) {
       setError(null);
 
       try {
-        assertValidFleetUrl(hushdUrl, "hushd URL");
-        if (controlApiUrl) {
-          assertValidFleetUrl(controlApiUrl, "control API URL");
+        const normalizedHushdUrl = normalizeFleetUrl(hushdUrl);
+        const normalizedControlApiUrl = normalizeFleetUrl(controlApiUrl);
+
+        assertValidFleetUrl(normalizedHushdUrl, "hushd URL");
+        if (normalizedControlApiUrl) {
+          assertValidFleetUrl(normalizedControlApiUrl, "control API URL");
         }
-        const health = await apiTestConnection(hushdUrl, apiKey);
+        const health = await apiTestConnection(normalizedHushdUrl, apiKey);
         const conn: FleetConnection = {
-          hushdUrl,
-          controlApiUrl,
+          hushdUrl: normalizedHushdUrl,
+          controlApiUrl: normalizedControlApiUrl,
           apiKey,
           controlApiToken: controlApiToken ?? "",
           connected: true,
@@ -258,7 +268,12 @@ export function FleetConnectionProvider({ children }: { children: ReactNode }) {
           agentCount: 0,
         };
 
-        await saveConnectionConfig({ hushdUrl, controlApiUrl, apiKey, controlApiToken: controlApiToken ?? "" });
+        await saveConnectionConfig({
+          hushdUrl: normalizedHushdUrl,
+          controlApiUrl: normalizedControlApiUrl,
+          apiKey,
+          controlApiToken: controlApiToken ?? "",
+        });
         setConnection(conn);
         startPolling(conn);
         setIsConnecting(false);

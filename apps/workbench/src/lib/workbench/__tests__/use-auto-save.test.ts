@@ -1,5 +1,15 @@
+import React from "react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { readAutosave, clearAutosave, type AutosaveEntry } from "../use-auto-save";
+import YAML from "yaml";
+import { MultiPolicyProvider, useMultiPolicy } from "../multi-policy-store";
+import {
+  clearAutosave,
+  readAutosave,
+  readAutosaves,
+  type AutosaveEntry,
+  useAutoSave,
+} from "../use-auto-save";
 
 // ---------------------------------------------------------------------------
 // We test the exported utility functions (readAutosave, clearAutosave,
@@ -12,6 +22,7 @@ const AUTOSAVE_KEY = "clawdstrike_workbench_autosave";
 
 function makeEntry(overrides?: Partial<AutosaveEntry>): AutosaveEntry {
   return {
+    tabId: "tab-1",
     yaml: 'version: "1.2.0"\nname: "test"\nguards: {}',
     filePath: "/tmp/test.yaml",
     timestamp: 1741478400000,
@@ -45,8 +56,53 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.unstubAllGlobals();
 });
+
+function AutosaveHarness() {
+  useAutoSave();
+  const { multiDispatch, tabs } = useMultiPolicy();
+
+  return React.createElement(
+    "div",
+    null,
+    React.createElement(
+      "button",
+      {
+        type: "button",
+        onClick: () => multiDispatch({ type: "UPDATE_META", name: `dirty-${tabs.length}` }),
+      },
+      "dirty-active",
+    ),
+    React.createElement(
+      "button",
+      {
+        type: "button",
+        onClick: () => multiDispatch({ type: "NEW_TAB" }),
+      },
+      "new-tab",
+    ),
+    React.createElement(
+      "button",
+      {
+        type: "button",
+        onClick: () =>
+          multiDispatch({
+            type: "SET_YAML",
+            yaml: `version: "1.4.0"
+name: "spider"
+guards:
+  spider_sense:
+    enabled: true
+    embedding_api_key: "super-secret"
+`,
+          }),
+      },
+      "dirty-sensitive",
+    ),
+  );
+}
 
 // ---------------------------------------------------------------------------
 // readAutosave
@@ -119,6 +175,54 @@ describe("readAutosave", () => {
     localStorage.setItem(AUTOSAVE_KEY, "[]");
     expect(readAutosave()).toBeNull();
   });
+
+  it("reads a multi-tab autosave payload", () => {
+    const first = makeEntry({ tabId: "tab-1", policyName: "first" });
+    const second = makeEntry({ tabId: "tab-2", policyName: "second", timestamp: first.timestamp + 1000 });
+    localStorage.setItem(
+      AUTOSAVE_KEY,
+      JSON.stringify({ entries: [first, second] }),
+    );
+
+    expect(readAutosaves()).toEqual([second, first]);
+    expect(readAutosave()).toEqual(second);
+  });
+
+  it("scrubs multiline sensitive YAML blocks from legacy autosaves before restore", () => {
+    const entry = makeEntry({
+      yaml: `version: "1.4.0"
+name: "Sensitive Policy"
+guards:
+  spider_sense:
+    enabled: true
+    embedding_api_key: |
+      line-one
+      line-two
+
+    threshold: 0.8
+`,
+      filePath: "/tmp/sensitive.yaml",
+    });
+    localStorage.setItem(AUTOSAVE_KEY, JSON.stringify(entry));
+
+    const result = readAutosave();
+
+    expect(result).not.toBeNull();
+    expect(result!.yaml).not.toContain("embedding_api_key");
+    expect(result!.yaml).not.toContain("line-one");
+    expect(result!.filePath).toBeNull();
+    expect(result!.sensitiveFieldsStripped).toBe(true);
+    expect(YAML.parse(result!.yaml)).toEqual({
+      version: "1.4.0",
+      name: "Sensitive Policy",
+      guards: {
+        spider_sense: {
+          enabled: true,
+          threshold: 0.8,
+        },
+      },
+    });
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -189,5 +293,56 @@ describe("write + read roundtrip", () => {
     localStorage.setItem(AUTOSAVE_KEY, JSON.stringify(entry));
     const result = readAutosave();
     expect(result!.yaml).toBe(yaml);
+  });
+});
+
+describe("useAutoSave", () => {
+  it("persists dirty background tabs instead of only the active tab", () => {
+    vi.useFakeTimers();
+
+    render(
+      React.createElement(
+        MultiPolicyProvider,
+        null,
+        React.createElement(AutosaveHarness),
+      ),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "dirty-active" }));
+    fireEvent.click(screen.getByRole("button", { name: "new-tab" }));
+    fireEvent.click(screen.getByRole("button", { name: "dirty-active" }));
+
+    act(() => {
+      vi.advanceTimersByTime(2_100);
+    });
+
+    const autosaves = readAutosaves();
+    expect(autosaves).toHaveLength(2);
+    expect(autosaves.map((entry) => entry.policyName).sort()).toEqual(["dirty-1", "dirty-2"]);
+  });
+
+  it("strips sensitive spider_sense credentials before autosave persistence", () => {
+    vi.useFakeTimers();
+
+    render(
+      React.createElement(
+        MultiPolicyProvider,
+        null,
+        React.createElement(AutosaveHarness),
+      ),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "dirty-sensitive" }));
+
+    act(() => {
+      vi.advanceTimersByTime(2_100);
+    });
+
+    const autosave = readAutosave();
+    expect(autosave).not.toBeNull();
+    expect(autosave!.yaml).not.toContain("embedding_api_key");
+    expect(autosave!.yaml).not.toContain("super-secret");
+    expect(autosave!.filePath).toBeNull();
+    expect(autosave!.sensitiveFieldsStripped).toBe(true);
   });
 });

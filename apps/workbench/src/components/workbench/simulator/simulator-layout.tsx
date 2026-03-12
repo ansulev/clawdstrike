@@ -13,6 +13,10 @@ import {
   type TauriSimulationResponse,
   type TauriPostureSimulationResponse,
 } from "@/lib/tauri-commands";
+import {
+  verdictFromNativeGuardResult,
+  verdictFromNativeSimulation,
+} from "@/lib/workbench/native-simulation";
 import { generateBatchReport, downloadReport, type BatchTestReport } from "@/lib/workbench/report-generator";
 import { generateScenariosFromPolicy } from "@/lib/workbench/scenario-generator";
 import { analyzeCoverage, type CoverageReport } from "@/lib/workbench/coverage-analyzer";
@@ -25,6 +29,7 @@ import { ObserveSynthPanel } from "./observe-synth-panel";
 import { ThreatMatrix } from "./threat-matrix";
 import { FleetTestingPanel } from "./fleet-testing-panel";
 import { RedTeamPanel } from "./redteam-panel";
+import { TrustprintLab } from "./trustprint-lab";
 import { useFleetConnection } from "@/lib/workbench/use-fleet-connection";
 import {
   IconFileReport,
@@ -37,6 +42,7 @@ import {
   IconCircle,
   IconRadar,
   IconFlask,
+  IconFingerprint,
 } from "@tabler/icons-react";
 import { cn } from "@/lib/utils";
 import { ClaudeCodeHint } from "@/components/workbench/shared/claude-code-hint";
@@ -45,7 +51,7 @@ import { ClaudeCodeHint } from "@/components/workbench/shared/claude-code-hint";
 // Types
 // ---------------------------------------------------------------------------
 
-type SimulatorTab = "scenarios" | "observe-synth" | "threat-matrix" | "fleet-testing" | "red-team";
+type SimulatorTab = "scenarios" | "observe-synth" | "threat-matrix" | "fleet-testing" | "red-team" | "trustprint-lab";
 
 // ---------------------------------------------------------------------------
 // Helpers to map between the workbench TestScenario format and the Rust
@@ -114,7 +120,7 @@ function fromRustSimulation(
   const guardResults: GuardSimResult[] = resp.results.map((r) => ({
     guardId: r.guard as GuardSimResult["guardId"],
     guardName: r.guard,
-    verdict: (r.allowed ? "allow" : "deny") as Verdict,
+    verdict: verdictFromNativeGuardResult(r),
     message: r.message,
     evidence: r.details ? (r.details as Record<string, unknown>) : undefined,
     engine: "native" as const,
@@ -132,7 +138,7 @@ function fromRustSimulation(
 
   return {
     scenarioId,
-    overallVerdict: resp.allowed ? "allow" : "deny",
+    overallVerdict: verdictFromNativeSimulation(resp),
     guardResults,
     executedAt: new Date().toISOString(),
     evaluationPath,
@@ -147,7 +153,7 @@ function fromRustPostureSimulation(
   const guardResults: GuardSimResult[] = resp.results.map((r) => ({
     guardId: r.guard as GuardSimResult["guardId"],
     guardName: r.guard,
-    verdict: (r.allowed ? "allow" : "deny") as Verdict,
+    verdict: verdictFromNativeGuardResult(r),
     message: r.message,
     evidence: r.details ? (r.details as Record<string, unknown>) : undefined,
     engine: "native" as const,
@@ -155,7 +161,7 @@ function fromRustPostureSimulation(
 
   const result: SimulationResult = {
     scenarioId,
-    overallVerdict: resp.allowed ? "allow" : "deny",
+    overallVerdict: verdictFromNativeSimulation(resp),
     guardResults,
     executedAt: new Date().toISOString(),
   };
@@ -253,6 +259,7 @@ function SimulatorHeader({
 }) {
   const tabs: { id: SimulatorTab; label: string; icon: typeof IconTestPipe; badge?: string }[] = [
     { id: "scenarios", label: "Scenarios", icon: IconTestPipe },
+    { id: "trustprint-lab", label: "Trustprint Lab", icon: IconFingerprint },
     { id: "observe-synth", label: "Observe & Synth", icon: IconEye },
     { id: "threat-matrix", label: "Threat Matrix", icon: IconGrid3x3 },
     { id: "red-team", label: "Red Team", icon: IconFlask },
@@ -899,6 +906,10 @@ export function SimulatorLayout() {
               />
             </div>
           </div>
+        )}
+
+        {activeTab === "trustprint-lab" && (
+          <TrustprintLab />
         )}
 
         {activeTab === "observe-synth" && (

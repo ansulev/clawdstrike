@@ -399,6 +399,7 @@ export interface TauriMcpStatusResponse {
   url: string;
   token: string;
   running: boolean;
+  error?: string;
 }
 
 /**
@@ -412,6 +413,20 @@ export async function getMcpStatus(): Promise<TauriMcpStatusResponse | null> {
     return await tauriInvoke<TauriMcpStatusResponse>("get_mcp_status");
   } catch (err) {
     console.error("[tauri-commands] get_mcp_status failed:", err);
+    return null;
+  }
+}
+
+/**
+ * Stop the embedded MCP sidecar server.
+ * Returns null when not running inside Tauri.
+ */
+export async function stopMcpServer(): Promise<TauriMcpStatusResponse | null> {
+  if (!isDesktop()) return null;
+  try {
+    return await tauriInvoke<TauriMcpStatusResponse>("stop_mcp_server");
+  } catch (err) {
+    console.error("[tauri-commands] stop_mcp_server failed:", err);
     return null;
   }
 }

@@ -45,8 +45,11 @@ import {
   verifyReceiptRemote,
   fleetClient,
   loadSavedConnection,
+  loadSavedConnectionAsync,
   saveConnectionConfig,
   clearConnectionConfig,
+  isPrivateOrLoopbackFleetHostname,
+  validateFleetUrl,
   type FleetConnection,
   type FleetReceipt,
 } from "../fleet-client";
@@ -1256,6 +1259,18 @@ describe("persistence helpers", () => {
     expect(sessionStorage.getItem("clawdstrike_api_key")).toBe("my-key");
   });
 
+  it("saveConnectionConfig trims surrounding whitespace from URLs before persisting", async () => {
+    await saveConnectionConfig({
+      hushdUrl: "  http://localhost:9876///  ",
+      controlApiUrl: "  http://localhost:9877///  ",
+      apiKey: "my-key",
+      controlApiToken: "my-token",
+    });
+
+    expect(localStorage.getItem("clawdstrike_hushd_url")).toBe("http://localhost:9876");
+    expect(localStorage.getItem("clawdstrike_control_api_url")).toBe("http://localhost:9877");
+  });
+
   it("loadSavedConnection reads only URLs from localStorage", () => {
     localStorage.setItem("clawdstrike_hushd_url", "http://saved:9876");
     localStorage.setItem("clawdstrike_api_key", "saved-key");
@@ -1281,6 +1296,34 @@ describe("persistence helpers", () => {
     expect(saved.controlApiUrl).toBe("");
   });
 
+  it("loadSavedConnection drops stored URLs with embedded credentials", () => {
+    localStorage.setItem("clawdstrike_hushd_url", "https://user:pass@example.com");
+
+    const saved = loadSavedConnection();
+    expect(saved.hushdUrl).toBe("");
+  });
+
+  it("loadSavedConnectionAsync preserves secureStore-only control-api values", async () => {
+    sessionStorage.setItem("clawdstrike_control_api_url", "http://localhost:9877");
+    sessionStorage.setItem("clawdstrike_control_api_token", "secure-token");
+
+    const saved = await loadSavedConnectionAsync();
+    expect(saved.controlApiUrl).toBe("http://localhost:9877");
+    expect(saved.controlApiToken).toBe("secure-token");
+  });
+
+  it("loadSavedConnectionAsync backfills missing secure-store URLs from local bootstrap storage", async () => {
+    localStorage.setItem("clawdstrike_hushd_url", "http://localhost:9876");
+    sessionStorage.setItem("clawdstrike_control_api_url", "http://localhost:9877");
+    sessionStorage.setItem("clawdstrike_control_api_token", "secure-token");
+
+    const saved = await loadSavedConnectionAsync();
+
+    expect(saved.hushdUrl).toBe("http://localhost:9876");
+    expect(saved.controlApiUrl).toBe("http://localhost:9877");
+    expect(saved.controlApiToken).toBe("secure-token");
+  });
+
   it("saveConnectionConfig rejects invalid control API URLs", async () => {
     await expect(
       saveConnectionConfig({
@@ -1290,6 +1333,17 @@ describe("persistence helpers", () => {
         controlApiToken: "token",
       }),
     ).rejects.toThrow(/Invalid control API URL/);
+  });
+
+  it("saveConnectionConfig rejects URLs with embedded credentials", async () => {
+    await expect(
+      saveConnectionConfig({
+        hushdUrl: "https://user:pass@example.com",
+        controlApiUrl: "http://localhost:9877",
+        apiKey: "key",
+        controlApiToken: "token",
+      }),
+    ).rejects.toThrow(/embedded credentials/);
   });
 
   it("clearConnectionConfig removes all keys", async () => {
@@ -1306,5 +1360,32 @@ describe("persistence helpers", () => {
     // Legacy keys should also be cleaned up
     expect(localStorage.getItem("clawdstrike_api_key")).toBeNull();
     expect(localStorage.getItem("clawdstrike_control_api_token")).toBeNull();
+  });
+});
+
+describe("validateFleetUrl", () => {
+  it("rejects URLs with embedded credentials", () => {
+    expect(validateFleetUrl("https://user:pass@example.com")).toEqual({
+      valid: false,
+      reason: "URLs must not include embedded credentials",
+    });
+  });
+});
+
+describe("isPrivateOrLoopbackFleetHostname", () => {
+  it("detects IPv6 loopback, unique-local, and link-local hosts", () => {
+    expect(isPrivateOrLoopbackFleetHostname("[::1]")).toBe(true);
+    expect(isPrivateOrLoopbackFleetHostname("[fd00::1]")).toBe(true);
+    expect(isPrivateOrLoopbackFleetHostname("[fe80::1]")).toBe(true);
+  });
+
+  it("detects IPv4-mapped private and loopback IPv6 hosts", () => {
+    expect(isPrivateOrLoopbackFleetHostname("[::ffff:127.0.0.1]")).toBe(true);
+    expect(isPrivateOrLoopbackFleetHostname("[::ffff:7f00:1]")).toBe(true);
+    expect(isPrivateOrLoopbackFleetHostname("[::ffff:192.168.1.10]")).toBe(true);
+  });
+
+  it("does not flag public IPv6 hosts", () => {
+    expect(isPrivateOrLoopbackFleetHostname("[2606:4700:4700::1111]")).toBe(false);
   });
 });

@@ -1,4 +1,9 @@
 import type { WorkbenchPolicy } from "./types";
+import {
+  sanitizeObjectForStorageWithMetadata,
+  sanitizeYamlForStorageWithMetadata,
+} from "./storage-sanitizer";
+import { yamlToPolicy } from "./yaml-utils";
 
 // ---- Types ----
 
@@ -13,8 +18,14 @@ export interface PolicyVersion {
   tags: string[];
   parentId: string | null;
   hash: string;
+  sensitiveFieldsStripped?: boolean;
 }
 
+/**
+ * A tag attached to a specific policy version.
+ * Tag names should be unique per policy — adding a tag that already exists
+ * on the same policy will move/reassign it rather than create a duplicate.
+ */
 export interface VersionTag {
   name: string;
   versionId: string;
@@ -147,7 +158,17 @@ export class VersionStore {
     message?: string,
   ): Promise<PolicyVersion> {
     const db = this.ensureDB();
-    const hash = await sha256Hex(yaml);
+    const sanitized = sanitizeYamlForStorageWithMetadata(yaml);
+    const sanitizedPolicy = sanitizeObjectForStorageWithMetadata(policy);
+    const [parsedPolicy, errors] = yamlToPolicy(sanitized.yaml);
+    const storedYaml = sanitized.yaml;
+    const sensitiveFieldsStripped =
+      sanitized.sensitiveFieldsStripped || sanitizedPolicy.sensitiveFieldsStripped;
+    const storedPolicy =
+      sensitiveFieldsStripped && parsedPolicy && errors.length === 0
+        ? parsedPolicy
+        : sanitizedPolicy.value;
+    const hash = await sha256Hex(storedYaml);
 
     // Single readwrite transaction: dedup-check + insert atomically
     const tx = db.transaction(VERSIONS_STORE, "readwrite");
@@ -176,13 +197,14 @@ export class VersionStore {
       id: crypto.randomUUID(),
       policyId,
       version: nextVersion,
-      yaml,
-      policy,
+      yaml: storedYaml,
+      policy: storedPolicy,
       createdAt: now,
       message: message || undefined,
       tags: [],
       parentId: latest?.id ?? null,
       hash,
+      sensitiveFieldsStripped: sensitiveFieldsStripped || undefined,
     };
 
     try {
@@ -344,6 +366,11 @@ export class VersionStore {
     return versions;
   }
 
+  /**
+   * Find a version by tag name. Tags are unique per policy — if multiple
+   * versions share a tag name, only the first match is returned.
+   * Consider using getVersionsForPolicy() and filtering if you need all matches.
+   */
   async findByTag(tag: string): Promise<PolicyVersion | null> {
     const db = this.ensureDB();
     const tx = db.transaction([TAGS_STORE, VERSIONS_STORE], "readonly");
@@ -470,4 +497,8 @@ export function getVersionStore(): VersionStore {
     _instance = new VersionStore();
   }
   return _instance;
+}
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('beforeunload', () => { _instance?.close(); });
 }

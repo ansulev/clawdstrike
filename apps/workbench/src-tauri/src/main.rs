@@ -53,13 +53,16 @@ fn main() {
                 match mcp_sidecar::spawn_mcp_server(&app_handle, &mcp_state).await {
                     Ok(info) => {
                         eprintln!(
-                            "[workbench] MCP sidecar started at {} (token: {}...)",
+                            "[workbench] MCP sidecar started at {} (token: [redacted])",
                             info.url,
-                            &info.token[..std::cmp::min(12, info.token.len())]
                         );
                     }
                     Err(e) => {
-                        eprintln!("[workbench] MCP sidecar failed to start: {e}");
+                        eprintln!("[workbench] ============================================");
+                        eprintln!("[workbench] WARNING: MCP sidecar failed to start!");
+                        eprintln!("[workbench] MCP features will be unavailable: {e}");
+                        eprintln!("[workbench] ============================================");
+                        // last_error is set internally by spawn_mcp_server
                     }
                 }
             });
@@ -86,6 +89,7 @@ fn main() {
             stronghold_cmds::get_signing_public_key,
             stronghold_cmds::sign_with_persistent_key,
             mcp_sidecar::get_mcp_status,
+            mcp_sidecar::stop_mcp_server,
             mcp_sidecar::restart_mcp_server,
         ])
         .build(tauri::generate_context!())

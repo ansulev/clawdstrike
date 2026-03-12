@@ -9,6 +9,7 @@
  *     `MCP_AUTH_TOKEN`.
  */
 
+import { createHash, timingSafeEqual } from "node:crypto";
 import { pathToFileURL } from "node:url";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 
@@ -1937,13 +1938,37 @@ function wantsSse(): boolean {
   return false;
 }
 
+/** Constant-time string comparison to prevent timing attacks on bearer tokens.
+ *
+ * Hashes both inputs with SHA-256 so the comparison is always over fixed 32-byte
+ * digests — no length leaking, no truncation risk regardless of input size.
+ */
+function secureTokenCompare(a: string, b: string): boolean {
+  const hashA = createHash("sha256").update(a).digest();
+  const hashB = createHash("sha256").update(b).digest();
+  return timingSafeEqual(hashA, hashB);
+}
+
+function hasConfiguredSseAuthToken(authToken: string): boolean {
+  return authToken.trim().length > 0;
+}
+
 if (isMainModule()) {
   if (wantsSse()) {
     // -----------------------------------------------------------------------
     // SSE transport — HTTP server with bearer-token auth
     // -----------------------------------------------------------------------
     const port = Number(process.env.MCP_PORT) || 9877;
-    const authToken = process.env.MCP_AUTH_TOKEN ?? "";
+    const authToken = (process.env.MCP_AUTH_TOKEN ?? "").trim();
+
+    if (!hasConfiguredSseAuthToken(authToken)) {
+      console.error(
+        "[mcp-server] ERROR: MCP_AUTH_TOKEN is required for SSE mode. " +
+        "Refusing to start an unauthenticated SSE endpoint.",
+      );
+      process.exit(1);
+    }
+    const expectedAuthorization = `Bearer ${authToken}`;
 
     // The MCP SDK only supports one active transport per McpServer instance.
     // Keep SSE single-session so we never route POSTs to a transport before
@@ -1963,13 +1988,13 @@ if (isMainModule()) {
       }
 
       // ---- Bearer token check for all other endpoints ----
-      if (authToken) {
-        const authorization = req.headers.authorization ?? "";
-        if (authorization !== `Bearer ${authToken}`) {
-          res.writeHead(401, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ error: "unauthorized" }));
-          return;
-        }
+      const authorization = req.headers.authorization ?? "";
+      // Startup already rejected blank/whitespace tokens, so every non-health
+      // endpoint must present the exact configured bearer value.
+      if (!secureTokenCompare(authorization, expectedAuthorization)) {
+        res.writeHead(401, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "unauthorized" }));
+        return;
       }
 
       // ---- SSE connection (GET /sse) ----

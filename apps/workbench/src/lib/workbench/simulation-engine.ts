@@ -24,6 +24,26 @@ import { gradeSimulationResult } from "./redteam/grading";
 import type { RedTeamGradingResult } from "./redteam/types";
 
 // ---------------------------------------------------------------------------
+// Regex cache (module-scoped)
+// ---------------------------------------------------------------------------
+
+const regexCache = new Map<string, RegExp>();
+function cachedRegex(pattern: string, flags?: string): RegExp {
+  const key = `${pattern}::${flags ?? ''}`;
+  let re = regexCache.get(key);
+  if (!re) {
+    re = new RegExp(pattern, flags);
+    regexCache.set(key, re);
+    // Cap cache at 500 entries to prevent unbounded growth
+    if (regexCache.size > 500) {
+      const firstKey = regexCache.keys().next().value;
+      if (firstKey !== undefined) regexCache.delete(firstKey);
+    }
+  }
+  return re;
+}
+
+// ---------------------------------------------------------------------------
 // Regex safety helper
 // ---------------------------------------------------------------------------
 
@@ -77,7 +97,7 @@ function isSafeRegex(pattern: string): boolean {
  * can be tested against absolute glob patterns.
  */
 function normalizePath(p: string): string {
-  if (!p) return p;
+  if (!p || p.trim() === "") return "/";
 
   // Collapse multiple slashes
   let cleaned = p.replace(/\/\/+/g, "/");
@@ -146,7 +166,7 @@ function globToRegex(pattern: string): RegExp {
   }
 
   // Case-sensitive to match Rust glob::Pattern::matches() semantics
-  return new RegExp(re + "$");
+  return cachedRegex(re + "$");
 }
 
 /** Wildcard domain match (e.g. *.openai.com matches api.openai.com). */
@@ -246,7 +266,12 @@ function simulateEgressAllowlist(
   }
 
   // Default action
-  const verdict: Verdict = defaultAction === "allow" ? "allow" : "deny";
+  const verdict: Verdict =
+    defaultAction === "allow"
+      ? "allow"
+      : defaultAction === "log"
+      ? "warn"
+      : "deny";
   return {
     guardId: "egress_allowlist",
     guardName: "Egress Control",
@@ -254,6 +279,21 @@ function simulateEgressAllowlist(
     message: `Host "${host}" not matched; default action: ${defaultAction}`,
     evidence: { host, defaultAction },
   };
+}
+
+function secretSeverityRank(severity: string): number {
+  switch (severity) {
+    case "info":
+      return 0;
+    case "warning":
+      return 1;
+    case "error":
+      return 2;
+    case "critical":
+      return 3;
+    default:
+      return -1;
+  }
 }
 
 function simulateSecretLeak(
@@ -266,6 +306,8 @@ function simulateSecretLeak(
   const path = normalizePath((scenario.payload.path as string) || "");
   const patterns = config.patterns || [];
   const skipPaths = config.skip_paths || [];
+  const shouldRedact = config.redact !== false;
+  const severityThreshold = config.severity_threshold || "error";
 
   // Content size cap: skip regex testing and deny if content exceeds 1 MB
   if (content.length > MAX_REGEX_CONTENT_BYTES) {
@@ -291,16 +333,33 @@ function simulateSecretLeak(
     }
   }
 
-  const matches: Array<{ name: string; pattern: string; severity: string }> = [];
+  const matches: Array<{
+    name: string;
+    pattern: string;
+    severity: string;
+    matchLength: number;
+  }> = [];
+  const skippedPatterns: Array<{ name: string; pattern: string; reason: string }> = [];
   for (const sp of patterns) {
     if (!isSafeRegex(sp.pattern)) {
-      matches.push({ name: sp.name, pattern: sp.pattern, severity: "skipped_unsafe_regex" });
+      skippedPatterns.push({
+        name: sp.name,
+        pattern: sp.pattern,
+        reason: "skipped_unsafe_regex",
+      });
       continue;
     }
     try {
-      const re = new RegExp(sp.pattern);
-      if (re.test(content)) {
-        matches.push({ name: sp.name, pattern: sp.pattern, severity: sp.severity });
+      const re = cachedRegex(sp.pattern);
+      const match = re.exec(content);
+      if (match) {
+        const matchedValue = match[0] ?? "";
+        matches.push({
+          name: sp.name,
+          pattern: sp.pattern,
+          severity: sp.severity,
+          matchLength: matchedValue.length,
+        });
       }
     } catch (e) {
       // Fail closed: invalid regex patterns deny access
@@ -315,34 +374,42 @@ function simulateSecretLeak(
   }
 
   if (matches.length > 0) {
-    // Filter out "info" severity matches — they should not elevate the verdict
-    const actionableMatches = matches.filter((m) => m.severity !== "info");
-    if (actionableMatches.length === 0) {
-      // Only "info" severity matches remain — treat as allow
-      return {
-        guardId: "secret_leak",
-        guardName: "Secret Leak",
-        verdict: "allow",
-        message: `Detected ${matches.length} info-only match(es) — no actionable secrets: ${matches.map((m) => m.name).join(", ")}`,
-        evidence: { path, matches },
-      };
-    }
-    const hasCritical = actionableMatches.some((m) => m.severity === "critical" || m.severity === "error");
+    const maxSeverity = matches.reduce<string>(
+      (currentMax, match) =>
+        secretSeverityRank(match.severity) > secretSeverityRank(currentMax)
+          ? match.severity
+          : currentMax,
+      matches[0].severity,
+    );
+    const shouldBlock =
+      secretSeverityRank(maxSeverity) >= secretSeverityRank(severityThreshold);
+
     return {
       guardId: "secret_leak",
       guardName: "Secret Leak",
-      verdict: hasCritical ? "deny" : "warn",
-      message: `Detected ${actionableMatches.length} secret(s): ${actionableMatches.map((m) => m.name).join(", ")}`,
-      evidence: { path, matches },
+      verdict: shouldBlock ? "deny" : "warn",
+      message: shouldBlock
+        ? `Detected ${matches.length} secret(s): ${matches.map((m) => m.name).join(", ")}`
+        : `Detected ${matches.length} secret(s) below block threshold ${severityThreshold}: ${matches.map((m) => m.name).join(", ")}`,
+      evidence: {
+        path,
+        redactionRequested: shouldRedact,
+        severityThreshold,
+        matches,
+        skippedPatterns,
+      },
     };
   }
 
   return {
     guardId: "secret_leak",
     guardName: "Secret Leak",
-    verdict: "allow",
-    message: "No secrets detected in content",
-    evidence: { path },
+    verdict: skippedPatterns.length > 0 ? "warn" : "allow",
+    message:
+      skippedPatterns.length > 0
+        ? "Skipped one or more unsafe secret detection patterns"
+        : "No secrets detected in content",
+    evidence: { path, skippedPatterns },
   };
 }
 
@@ -404,7 +471,7 @@ function simulatePatchIntegrity(
       };
     }
     try {
-      const re = new RegExp(pat);
+      const re = cachedRegex(pat);
       if (re.test(content)) {
         return {
           guardId: "patch_integrity",
@@ -490,7 +557,7 @@ function simulateShellCommand(
       };
     }
     try {
-      const re = new RegExp(pat, "i");
+      const re = cachedRegex(pat, "i");
       if (re.test(command)) {
         return {
           guardId: "shell_command",
@@ -713,8 +780,8 @@ function simulateJailbreak(
 
   const text = ((scenario.payload.text as string) || "").toLowerCase();
   const detector = config.detector || {};
-  const blockThreshold = detector.block_threshold ?? 50;
-  const warnThreshold = detector.warn_threshold ?? 20;
+  const blockThreshold = detector.block_threshold ?? 70;
+  const warnThreshold = detector.warn_threshold ?? 30;
 
   let score = 0;
   const matched: string[] = [];
@@ -818,16 +885,104 @@ function stubPathAllowlist(
   };
 }
 
+/** Obvious threat keywords for the Spider Sense heuristic fallback. */
+const SPIDER_SENSE_THREAT_KEYWORDS = [
+  "ignore previous",
+  "ignore all instructions",
+  "jailbreak",
+  "system prompt",
+  "override",
+  "unlimited mode",
+  "no restrictions",
+  "bypass safety",
+  "bypass security",
+  "reveal your instructions",
+  "act as root",
+  "sudo rm",
+  "exfiltrate",
+  "data exfiltration",
+  "reverse shell",
+  "disable firewall",
+  "drop table",
+  "eval(atob(",
+];
+
+/** Ambiguous / lower-confidence patterns for the Spider Sense heuristic fallback. */
+const SPIDER_SENSE_AMBIGUOUS_KEYWORDS = [
+  "pretend",
+  "hypothetical",
+  "for educational purposes",
+  "roleplay",
+  "developer mode",
+  "act as",
+  "simulate",
+];
+
 function stubSpiderSense(
   _config: SpiderSenseConfig,
-  _scenario: TestScenario,
+  scenario: TestScenario,
 ): GuardSimResult {
+  // Extract text from the scenario payload for keyword screening
+  const text = (
+    (scenario.payload.text as string) ||
+    (scenario.payload.command as string) ||
+    (scenario.payload.content as string) ||
+    ""
+  ).toLowerCase();
+
+  if (!text) {
+    return {
+      guardId: "spider_sense",
+      guardName: "Spider Sense",
+      verdict: "allow",
+      message: "No text content to screen (heuristic fallback — run in desktop mode for full embedding-based evaluation)",
+      evidence: { note: "Heuristic keyword fallback; embedding-based cosine similarity requires runtime" },
+      engine: "stubbed",
+    };
+  }
+
+  const matchedThreats: string[] = [];
+  for (const kw of SPIDER_SENSE_THREAT_KEYWORDS) {
+    if (text.includes(kw)) {
+      matchedThreats.push(kw);
+    }
+  }
+
+  const matchedAmbiguous: string[] = [];
+  for (const kw of SPIDER_SENSE_AMBIGUOUS_KEYWORDS) {
+    if (text.includes(kw)) {
+      matchedAmbiguous.push(kw);
+    }
+  }
+
+  if (matchedThreats.length > 0) {
+    return {
+      guardId: "spider_sense",
+      guardName: "Spider Sense",
+      verdict: "deny",
+      message: `Heuristic: ${matchedThreats.length} threat keyword(s) detected — "${matchedThreats.join('", "')}" (heuristic fallback; run in desktop mode for full evaluation)`,
+      evidence: { matchedThreats, matchedAmbiguous, engine: "heuristic_keyword_fallback" },
+      engine: "stubbed",
+    };
+  }
+
+  if (matchedAmbiguous.length > 0) {
+    return {
+      guardId: "spider_sense",
+      guardName: "Spider Sense",
+      verdict: "warn",
+      message: `Heuristic: ${matchedAmbiguous.length} ambiguous keyword(s) detected — "${matchedAmbiguous.join('", "')}" (heuristic fallback; run in desktop mode for full evaluation)`,
+      evidence: { matchedThreats, matchedAmbiguous, engine: "heuristic_keyword_fallback" },
+      engine: "stubbed",
+    };
+  }
+
   return {
     guardId: "spider_sense",
     guardName: "Spider Sense",
-    verdict: "warn",
-    message: "Spider Sense requires embedding API — run in desktop mode for full evaluation",
-    evidence: { note: "Embedding-based cosine similarity cannot run client-side" },
+    verdict: "allow",
+    message: "No threat keywords detected (heuristic fallback — run in desktop mode for full embedding-based evaluation)",
+    evidence: { matchedThreats: [], matchedAmbiguous: [], engine: "heuristic_keyword_fallback" },
     engine: "stubbed",
   };
 }

@@ -23,6 +23,7 @@ import {
   clearConnectionConfig,
   validateFleetUrl,
 } from "./fleet-client";
+import { secureStore } from "./secure-store";
 
 // ---- Types ----
 
@@ -37,6 +38,10 @@ export interface FleetConnectionState {
   connection: FleetConnection;
   isConnecting: boolean;
   error: string | null;
+  /** Warning surfaced after 3+ consecutive poll failures. */
+  pollError: string | null;
+  /** True when credentials are stored in browser session only (not Stronghold). */
+  secureStorageWarning: boolean;
   agents: AgentInfo[];
   remotePolicyInfo: RemotePolicyInfo | null;
 }
@@ -69,7 +74,7 @@ export function useFleetConnection(): FleetConnectionHook {
 // ---- Constants ----
 
 const HEALTH_POLL_MS = 30_000;
-const AGENT_POLL_MS = 60_000;
+export const AGENT_POLL_MS = 60_000;
 
 function normalizeFleetUrl(url: string): string {
   return url.trim().replace(/\/+$/, "");
@@ -106,8 +111,12 @@ export function FleetConnectionProvider({ children }: { children: ReactNode }) {
   const [agents, setAgents] = useState<AgentInfo[]>([]);
   const [remotePolicyInfo, setRemotePolicyInfo] = useState<RemotePolicyInfo | null>(null);
 
+  const [pollError, setPollError] = useState<string | null>(null);
+  const [secureStorageWarning, setSecureStorageWarning] = useState(false);
+
   const healthTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const agentTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const consecutivePollFailuresRef = useRef(0);
 
   // Finding L8: Use a ref to hold the current connection state so interval
   // callbacks always read the latest value instead of a stale closure capture.
@@ -140,8 +149,27 @@ export function FleetConnectionProvider({ children }: { children: ReactNode }) {
       const list = await apiFetchAgentList(conn);
       setAgents(list);
       setConnection((prev) => ({ ...prev, agentCount: list.length }));
+      consecutivePollFailuresRef.current = 0;
+      setPollError(null);
     } catch (err) {
-      console.warn("[fleet] agent poll failed:", err);
+      const message = err instanceof Error ? err.message : String(err);
+
+      // Auth failures are non-transient — surface immediately
+      if (/\b(401|403)\b/.test(message) || /unauthorized|forbidden/i.test(message)) {
+        setConnection((prev) => ({ ...prev, connected: false }));
+        setError(`Authentication failed: ${message}`);
+        setPollError(`Authentication failed: ${message}`);
+        consecutivePollFailuresRef.current = 0;
+        return;
+      }
+
+      // Track consecutive failures for transient errors
+      consecutivePollFailuresRef.current += 1;
+      if (consecutivePollFailuresRef.current >= 3) {
+        setPollError(`Agent polling failing repeatedly: ${message}`);
+        console.warn(`[fleet-connection] pollAgents: ${consecutivePollFailuresRef.current} consecutive failures — ${message}`);
+      }
+      // First 1-2 failures: silently continue (stale data is better than no data)
     }
   }, []);
 
@@ -160,6 +188,10 @@ export function FleetConnectionProvider({ children }: { children: ReactNode }) {
   const startPolling = useCallback(
     (conn: FleetConnection) => {
       stopPolling();
+
+      // Sync the ref immediately so both the initial fetches and
+      // subsequent interval callbacks read the same connection state.
+      connectionRef.current = conn;
 
       // Initial fetches
       pollHealth(conn);
@@ -224,13 +256,26 @@ export function FleetConnectionProvider({ children }: { children: ReactNode }) {
           const connected: FleetConnection = { ...conn, connected: true, hushdHealth: health };
           setConnection(connected);
           startPolling(connected);
+
+          // Check secure storage backend on auto-reconnect
+          secureStore.isSecure().then((secure) => {
+            if (isMounted) setSecureStorageWarning(!secure);
+          }).catch(() => {
+            if (isMounted) setSecureStorageWarning(true);
+          });
         } catch {
           if (!isMounted) return;
           // Saved creds are stale — show as disconnected but keep the URLs
           setConnection(conn);
         }
       } finally {
-        reconnectLockRef.current = false;
+        // Only release the lock if the component is still mounted.
+        // If unmounted, leave the lock set to prevent zombie reconnects
+        // (e.g. React Strict Mode double-renders triggering a second attempt
+        // after the first unmounts).
+        if (isMounted) {
+          reconnectLockRef.current = false;
+        }
       }
     }
 
@@ -276,6 +321,14 @@ export function FleetConnectionProvider({ children }: { children: ReactNode }) {
         });
         setConnection(conn);
         startPolling(conn);
+
+        // Check if credentials are stored securely (Stronghold) or in browser session
+        secureStore.isSecure().then((secure) => {
+          setSecureStorageWarning(!secure);
+        }).catch(() => {
+          setSecureStorageWarning(true);
+        });
+
         setIsConnecting(false);
         return true;
       } catch (err) {
@@ -312,17 +365,19 @@ export function FleetConnectionProvider({ children }: { children: ReactNode }) {
   );
 
   const refreshAgents = useCallback(async () => {
-    await pollAgents(connection);
-  }, [pollAgents, connection]);
+    await pollAgents(connectionRef.current);
+  }, [pollAgents]);
 
   const refreshRemotePolicy = useCallback(async () => {
-    await fetchRemoteInfo(connection);
-  }, [fetchRemoteInfo, connection]);
+    await fetchRemoteInfo(connectionRef.current);
+  }, [fetchRemoteInfo]);
 
   const value: FleetConnectionHook = {
     connection,
     isConnecting,
     error,
+    pollError,
+    secureStorageWarning,
     agents,
     remotePolicyInfo,
     connect,

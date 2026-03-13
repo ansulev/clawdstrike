@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, fireEvent, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import * as hierarchyEngine from "@/lib/workbench/hierarchy-engine";
@@ -60,7 +60,7 @@ vi.mock("@/lib/workbench/use-fleet-connection", async () => {
   };
 });
 
-import { HierarchyPage } from "../hierarchy-page";
+import { HierarchyPage, resolvePendingHierarchyParentId } from "../hierarchy-page";
 
 describe("HierarchyPage", () => {
   let localStorageState: Record<string, string>;
@@ -704,6 +704,144 @@ describe("HierarchyPage", () => {
       expect(afterPush.nodes[localRootId]).toBeUndefined();
       expect(afterPush.nodes["server-engineering"]?.parentId).toBe("server-acme-corp");
       expect(afterPush.nodes["server-agent-coder-01"]?.parentId).toBe("server-engineering");
+    });
+  });
+
+  it("waits for pending parent ids to resolve before using them", async () => {
+    let resolveParentId!: (value: string | null) => void;
+    const pendingParentId = new Promise<string | null>((resolve) => {
+      resolveParentId = resolve;
+    });
+
+    const resolvedParentIdPromise = resolvePendingHierarchyParentId(
+      "local-endpoint",
+      new Map([["local-endpoint", pendingParentId]]),
+    );
+
+    let settled = false;
+    resolvedParentIdPromise.then(() => {
+      settled = true;
+    });
+
+    await Promise.resolve();
+    expect(settled).toBe(false);
+
+    resolveParentId("remote-endpoint");
+
+    await expect(resolvedParentIdPromise).resolves.toBe("remote-endpoint");
+  });
+
+  it("returns null for pending parent ids that never got a fleet id", async () => {
+    await expect(
+      resolvePendingHierarchyParentId(
+        "local-endpoint",
+        new Map([["local-endpoint", Promise.resolve(null)]]),
+      ),
+    ).resolves.toBeNull();
+  });
+
+  it("waits for pending backend ids before syncing drag-drop moves", async () => {
+    const user = userEvent.setup();
+    let resolveCreate!: (value: { success: boolean; id?: string }) => void;
+    const pendingCreate = new Promise<{ success: boolean; id?: string }>((resolve) => {
+      resolveCreate = resolve;
+    });
+
+    fleetClientMocks.fetchHierarchyTree.mockResolvedValue({
+      root_id: "root-1",
+      nodes: [
+        {
+          id: "root-1",
+          name: "Fleet Fixture Org",
+          node_type: "org",
+          parent_id: null,
+          policy_id: null,
+          policy_name: null,
+          metadata: {},
+          children: ["team-1"],
+        },
+        {
+          id: "team-1",
+          name: "Platform Team",
+          node_type: "team",
+          parent_id: "root-1",
+          policy_id: null,
+          policy_name: null,
+          metadata: {},
+          children: ["endpoint-1"],
+        },
+        {
+          id: "endpoint-1",
+          name: "Builder Host",
+          node_type: "endpoint",
+          parent_id: "team-1",
+          policy_id: null,
+          policy_name: null,
+          metadata: {},
+          children: ["runtime-1"],
+        },
+        {
+          id: "runtime-1",
+          name: "Claude Runtime",
+          node_type: "runtime",
+          parent_id: "endpoint-1",
+          policy_id: null,
+          policy_name: null,
+          metadata: {},
+          children: [],
+        },
+      ],
+    });
+
+    renderWithProviders(<HierarchyPage />);
+
+    await user.click(screen.getByRole("button", { name: "DEMO" }));
+    await user.click(screen.getByRole("button", { name: "Pull from Fleet" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Fleet Snapshot")).toBeInTheDocument();
+    });
+
+    fleetClientMocks.createHierarchyNode.mockReset();
+    fleetClientMocks.createHierarchyNode.mockImplementationOnce(() => pendingCreate);
+
+    const teamRow = screen
+      .getAllByText("Platform Team")[0]
+      .closest("[draggable='true']") as HTMLElement | null;
+    expect(teamRow).not.toBeNull();
+
+    await user.hover(teamRow!);
+    await waitFor(() => {
+      expect(within(teamRow!).getByTitle("Add Endpoint")).toBeInTheDocument();
+    });
+    fireEvent.click(within(teamRow!).getByTitle("Add Endpoint"));
+    await user.click(await screen.findByRole("button", { name: "Cancel" }));
+
+    const runtimeRow = screen
+      .getAllByText("Claude Runtime")[0]
+      .closest("[draggable='true']") as HTMLElement | null;
+    const newEndpointRow = screen
+      .getAllByText(/endpoint-/)
+      .find((element) => element.textContent?.startsWith("endpoint-"))
+      ?.closest("[draggable='true']") as HTMLElement | null;
+
+    expect(runtimeRow).not.toBeNull();
+    expect(newEndpointRow).not.toBeNull();
+
+    fireEvent.dragStart(runtimeRow!);
+    fireEvent.dragOver(newEndpointRow!);
+    fireEvent.drop(newEndpointRow!);
+
+    expect(fleetClientMocks.updateHierarchyNode).not.toHaveBeenCalled();
+
+    resolveCreate({ success: true, id: "remote-endpoint-2" });
+
+    await waitFor(() => {
+      expect(fleetClientMocks.updateHierarchyNode).toHaveBeenCalledWith(
+        expect.objectContaining({ controlApiUrl: "http://localhost:9877" }),
+        "runtime-1",
+        { parent_id: "remote-endpoint-2" },
+      );
     });
   });
 

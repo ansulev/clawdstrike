@@ -120,6 +120,22 @@ interface TreeNodeProps {
   dragOverId: string | null;
 }
 
+export async function resolvePendingHierarchyParentId(
+  parentId: string | null,
+  pendingCreateIds: ReadonlyMap<string, Promise<string | null>>,
+): Promise<string | null> {
+  if (!parentId) {
+    return null;
+  }
+
+  const pendingParentId = pendingCreateIds.get(parentId);
+  if (pendingParentId) {
+    return await pendingParentId;
+  }
+
+  return parentId;
+}
+
 function TreeNode({
   node,
   hierarchy,
@@ -983,6 +999,12 @@ interface RenameDialogProps {
   onClose: () => void;
 }
 
+type HierarchySyncResult = {
+  success: boolean;
+  error?: string;
+  id?: string;
+};
+
 function RenameDialog({ node, onRename, onClose }: RenameDialogProps) {
   const [name, setName] = useState(node.name);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -1109,6 +1131,7 @@ export function HierarchyPage() {
   }>({ type: "idle" });
   const syncStatusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const syncInProgressRef = useRef(false);
+  const pendingCreateIdsRef = useRef(new Map<string, Promise<string | null>>());
 
   /** Show a transient sync status message that auto-clears after a delay. */
   const showSyncStatus = useCallback(
@@ -1123,12 +1146,17 @@ export function HierarchyPage() {
     [],
   );
 
+  const clearPendingCreateIds = useCallback(() => {
+    pendingCreateIdsRef.current.clear();
+  }, []);
+
   // Clear sync status timer on unmount
   useEffect(() => {
     return () => {
       if (syncStatusTimerRef.current) clearTimeout(syncStatusTimerRef.current);
+      clearPendingCreateIds();
     };
-  }, []);
+  }, [clearPendingCreateIds]);
 
   // Turn off live mode if fleet disconnects
   useEffect(() => {
@@ -1188,12 +1216,12 @@ export function HierarchyPage() {
   const syncToBackend = useCallback(
     (
       label: string,
-      fn: () => Promise<{ success: boolean; error?: string; id?: string }>,
+      fn: () => Promise<HierarchySyncResult>,
       prevHierarchy: PolicyHierarchy,
     ) => {
       if (!isLiveMode || !fleetConnected) return;
       const capturedVersion = hierarchyVersionRef.current;
-      return fn().then((result) => {
+      return fn().then((result): HierarchySyncResult => {
         if (!result.success) {
           console.warn(`[hierarchy-sync] ${label} failed:`, result.error);
           const reverted = hierarchyVersionRef.current === capturedVersion;
@@ -1208,7 +1236,7 @@ export function HierarchyPage() {
           );
         }
         return result;
-      }).catch((err) => {
+      }).catch((err): HierarchySyncResult => {
         console.warn(`[hierarchy-sync] ${label} error:`, err);
         const reverted = hierarchyVersionRef.current === capturedVersion;
         if (reverted) {
@@ -1302,27 +1330,67 @@ export function HierarchyPage() {
         const newNode = updated.nodes[newId];
         if (newNode) {
           const localId = newId;
-          const resultPromise = syncToBackend("create node", () =>
-            createHierarchyNode(connection, {
-              name: newNode.name,
-              node_type: newNode.type,
-              external_id: newNode.externalId ?? null,
-              parent_id: newNode.parentId,
-              metadata: newNode.metadata,
-            }),
+          let resolveCreatedId!: (value: string | null) => void;
+          const pendingCreatedId = new Promise<string | null>((resolve) => {
+            resolveCreatedId = resolve;
+          });
+          pendingCreateIdsRef.current.set(localId, pendingCreatedId);
+
+          const resultPromise = syncToBackend(
+            "create node",
+            async (): Promise<HierarchySyncResult> => {
+              const parentId = await resolvePendingHierarchyParentId(
+                newNode.parentId,
+                pendingCreateIdsRef.current,
+              );
+              if (newNode.parentId && !parentId) {
+                const parentName = updated.nodes[newNode.parentId]?.name ?? newNode.parentId;
+                return {
+                  success: false,
+                  error: `Parent node "${parentName}" is missing a fleet id`,
+                };
+              }
+
+              return createHierarchyNode(connection, {
+                name: newNode.name,
+                node_type: newNode.type,
+                external_id: newNode.externalId ?? null,
+                parent_id: parentId,
+                metadata: newNode.metadata,
+              });
+            },
             prevHierarchy,
           );
-          if (resultPromise) {
-            resultPromise.then((result) => {
-              if (result.success && "id" in result && result.id && result.id !== localId) {
-                const serverId = result.id;
-                const remapped = remapNodeId(hierarchyRef.current, localId, serverId);
-                applyHierarchyChange(remapped);
-                // Update selected and rename targets if they reference the old ID
-                setSelectedId((prev) => (prev === localId ? serverId : prev));
-                setRenameTarget((prev) => (prev === localId ? serverId : prev));
-              }
-            });
+          if (!resultPromise) {
+            resolveCreatedId(null);
+            pendingCreateIdsRef.current.delete(localId);
+          } else {
+            resultPromise
+              .then((result) => {
+                resolveCreatedId(result.success && result.id ? result.id : null);
+                if (result.success && result.id && result.id !== localId) {
+                  const serverId = result.id;
+                  const remapped = remapNodeId(hierarchyRef.current, localId, serverId);
+                  applyHierarchyChange(remapped);
+                  setSelectedId((prev) => (prev === localId ? serverId : prev));
+                  setRenameTarget((prev) => (prev === localId ? serverId : prev));
+                  setExpandedIds((prev) => {
+                    if (!prev.has(localId)) {
+                      return prev;
+                    }
+                    const next = new Set(prev);
+                    next.delete(localId);
+                    next.add(serverId);
+                    return next;
+                  });
+                }
+              })
+              .catch(() => {
+                resolveCreatedId(null);
+              })
+              .finally(() => {
+                pendingCreateIdsRef.current.delete(localId);
+              });
           }
         }
       }
@@ -1454,10 +1522,27 @@ export function HierarchyPage() {
 
             // LIVE mode: update parent_id on backend
             const movedId = dragSourceId;
-            syncToBackend("move node", () =>
-              updateHierarchyNode(connection, movedId, {
-                parent_id: targetId,
-              }),
+            syncToBackend("move node", async (): Promise<HierarchySyncResult> => {
+              const [resolvedMovedId, resolvedTargetId] = await Promise.all([
+                resolvePendingHierarchyParentId(movedId, pendingCreateIdsRef.current),
+                resolvePendingHierarchyParentId(targetId, pendingCreateIdsRef.current),
+              ]);
+              if (!resolvedMovedId) {
+                return {
+                  success: false,
+                  error: `Node "${sourceNode.name}" is missing a fleet id`,
+                };
+              }
+              if (!resolvedTargetId) {
+                return {
+                  success: false,
+                  error: `Parent node "${targetNode.name}" is missing a fleet id`,
+                };
+              }
+              return updateHierarchyNode(connection, resolvedMovedId, {
+                parent_id: resolvedTargetId,
+              });
+            },
               prevHierarchy,
             );
           }
@@ -1471,6 +1556,7 @@ export function HierarchyPage() {
 
   const handleResetToDemo = useCallback(() => {
     if (!window.confirm("Reset hierarchy to demo data? All current changes will be lost.")) return;
+    clearPendingCreateIds();
     clearHierarchy();
     const demo = createDefaultHierarchy();
     applyHierarchyChange(demo);
@@ -1485,7 +1571,7 @@ export function HierarchyPage() {
       }
       return ids;
     });
-  }, [applyHierarchyChange]);
+  }, [applyHierarchyChange, clearPendingCreateIds]);
 
   const handleExport = useCallback(() => {
     const json = JSON.stringify(hierarchy, null, 2);
@@ -1798,6 +1884,7 @@ export function HierarchyPage() {
         }
 
         const newHierarchy: PolicyHierarchy = normalizeHierarchy({ nodes, rootId });
+        clearPendingCreateIds();
         applyHierarchyChange(newHierarchy);
         setSelectedId(rootId);
 
@@ -1910,6 +1997,7 @@ export function HierarchyPage() {
       }
 
       const newHierarchy: PolicyHierarchy = normalizeHierarchy({ nodes, rootId });
+      clearPendingCreateIds();
       applyHierarchyChange(newHierarchy);
       setSelectedId(rootId);
 
@@ -1942,6 +2030,7 @@ export function HierarchyPage() {
     showSyncStatus,
     flattenTreeNode,
     mapNodeType,
+    clearPendingCreateIds,
     applyHierarchyChange,
   ]);
 

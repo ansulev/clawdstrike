@@ -91,6 +91,18 @@ const HomePage = lazy(() =>
   })),
 );
 
+const HuntLayout = lazy(() =>
+  import("@/components/workbench/hunt/hunt-layout").then((m) => ({
+    default: m.HuntLayout,
+  })),
+);
+
+const GuardsPage = lazy(() =>
+  import("@/components/workbench/guards/guards-page").then((m) => ({
+    default: m.GuardsPage,
+  })),
+);
+
 // ---------------------------------------------------------------------------
 // Loading fallback — dark-themed to prevent white flash in Tauri shell
 // ---------------------------------------------------------------------------
@@ -278,6 +290,7 @@ export function App() {
                         <Route path="home" element={<HomePage />} />
                         <Route path="editor" element={<PolicyEditor />} />
                         <Route path="simulator" element={<SimulatorLayout />} />
+                        <Route path="hunt" element={<HuntLayout />} />
                         <Route path="compare" element={<CompareLayout />} />
                         <Route path="compliance" element={<ComplianceDashboard />} />
                         <Route path="receipts" element={<ReceiptInspector />} />
@@ -286,6 +299,7 @@ export function App() {
                         <Route path="hierarchy" element={<HierarchyPage />} />
                         <Route path="fleet" element={<FleetDashboard />} />
                         <Route path="audit" element={<AuditLog />} />
+                        <Route path="guards" element={<GuardsPage />} />
                         <Route path="library" element={<LibraryGallery />} />
                         <Route path="settings" element={<SettingsPage />} />
 

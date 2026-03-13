@@ -16,8 +16,11 @@ vi.mock("@/lib/tauri-bridge", () => ({
 const NAV_ITEMS = [
   { label: "Home", href: "/home" },
   { label: "Editor", href: "/editor" },
-  { label: "Threat Lab", href: "/simulator" },
+  { label: "Library", href: "/library" },
+  { label: "Guards", href: "/guards" },
   { label: "Compare", href: "/compare" },
+  { label: "Threat Lab", href: "/simulator" },
+  { label: "Hunt Lab", href: "/hunt" },
   { label: "Compliance", href: "/compliance" },
   { label: "Receipts", href: "/receipts" },
   { label: "Audit", href: "/audit" },
@@ -25,7 +28,6 @@ const NAV_ITEMS = [
   { label: "Approvals", href: "/approvals" },
   { label: "Hierarchy", href: "/hierarchy" },
   { label: "Fleet", href: "/fleet" },
-  { label: "Library", href: "/library" },
 ] as const;
 
 describe("DesktopSidebar", () => {
@@ -92,6 +94,28 @@ describe("DesktopSidebar", () => {
 
     // When expanded, the collapse button shows "Collapse" text
     expect(screen.getByText("Collapse")).toBeInTheDocument();
+  });
+
+  it("renders section group headers", () => {
+    renderWithProviders(<DesktopSidebar />);
+
+    for (const title of ["Policy", "Ops", "Governance", "Infrastructure"]) {
+      expect(screen.getByText(title)).toBeInTheDocument();
+    }
+  });
+
+  it("hides section headers when collapsed and shows divider lines instead", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<DesktopSidebar />);
+
+    const collapseBtn = screen.getByText("Collapse").closest("button")!;
+    await user.click(collapseBtn);
+
+    // Section headers should be hidden
+    expect(screen.queryByText("Policy")).not.toBeInTheDocument();
+    expect(screen.queryByText("Ops")).not.toBeInTheDocument();
+    expect(screen.queryByText("Governance")).not.toBeInTheDocument();
+    expect(screen.queryByText("Infrastructure")).not.toBeInTheDocument();
   });
 
   it("toggles sidebar collapsed state when collapse button is clicked", async () => {

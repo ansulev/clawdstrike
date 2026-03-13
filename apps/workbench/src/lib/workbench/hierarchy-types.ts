@@ -2,13 +2,15 @@
 // Org/Team/Agent hierarchy types for policy inheritance visualization
 // ---------------------------------------------------------------------------
 
-export type OrgNodeType = "org" | "team" | "agent";
+export type OrgNodeType = "org" | "team" | "agent" | "endpoint" | "runtime";
 
 export interface OrgNode {
   id: string;
   name: string;
   type: OrgNodeType;
   parentId: string | null;
+  /** Stable backend link, when the live hierarchy node is associated with a fleet object. */
+  externalId?: string;
   /** ID of a SavedPolicy linked to this node. */
   policyId?: string;
   /** Display name of the linked policy (cached for quick display). */

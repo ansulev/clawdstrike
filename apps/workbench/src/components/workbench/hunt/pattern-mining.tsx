@@ -8,11 +8,16 @@ import type {
   AgentEvent,
 } from "@/lib/workbench/hunt-types";
 import { discoverPatterns } from "@/lib/workbench/hunt-engine";
+import { useCoverageGaps } from "@/lib/workbench/detection-workflow/use-coverage-gaps";
+import type { CoverageGapInput, DocumentCoverageEntry } from "@/lib/workbench/detection-workflow/coverage-gap-engine";
+import type { CoverageGapCandidate } from "@/lib/workbench/detection-workflow/shared-types";
+import { CoverageGapCard } from "@/components/workbench/coverage/coverage-gap-card";
 import {
   IconArrowDown,
   IconFingerprint,
   IconTestPipe,
   IconSparkles,
+  IconShieldPlus,
   IconFile,
   IconFileText,
   IconWorld,
@@ -25,6 +30,7 @@ import {
   IconUser,
   IconHash,
   IconCalendar,
+  IconTarget,
 } from "@tabler/icons-react";
 
 
@@ -546,12 +552,18 @@ function PatternDetail({
   onUpdatePattern,
   onPromoteToTrustprint,
   onCreateScenario,
+  onDraftDetection,
+  openDocumentCoverage,
+  publishedCoverage,
 }: {
   pattern: HuntPattern;
   events: AgentEvent[];
   onUpdatePattern: (id: string, updates: Partial<HuntPattern>) => void;
   onPromoteToTrustprint: (patternId: string) => void;
   onCreateScenario: (patternId: string) => void;
+  onDraftDetection?: (pattern: HuntPattern, selectedGap?: CoverageGapCandidate) => void;
+  openDocumentCoverage?: DocumentCoverageEntry[];
+  publishedCoverage?: DocumentCoverageEntry[];
 }) {
   const status = STATUS_CONFIG[pattern.status];
 
@@ -617,6 +629,31 @@ function PatternDetail({
           Actions
         </div>
         <div className="space-y-2.5">
+          {/* Draft Detection Rule */}
+          {onDraftDetection && (
+            <button
+              data-testid="pattern-draft-detection"
+              onClick={() => onDraftDetection(pattern)}
+              className="w-full flex items-center gap-3 px-4 py-3 rounded-lg border transition-all duration-150 text-left bg-[#7c9aef]/5 border-[#7c9aef]/20 hover:border-[#7c9aef]/40 hover:bg-[#7c9aef]/10 active:scale-[0.99]"
+            >
+              <div className="w-8 h-8 rounded-lg bg-[#7c9aef]/10 border border-[#7c9aef]/20 flex items-center justify-center shrink-0">
+                <IconShieldPlus
+                  size={16}
+                  stroke={1.5}
+                  className="text-[#7c9aef]"
+                />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="text-[12px] font-semibold text-[#7c9aef]">
+                  Draft Detection
+                </div>
+                <div className="text-[10px] text-[#6f7f9a]/60 leading-relaxed">
+                  Creates a detection rule draft from the pattern sequence and evidence
+                </div>
+              </div>
+            </button>
+          )}
+
           {/* Promote to Trustprint */}
           <button
             onClick={() => onPromoteToTrustprint(pattern.id)}
@@ -705,6 +742,67 @@ function PatternDetail({
           </div>
         </div>
       </div>
+
+      {/* Section 5: Coverage Gaps */}
+      <PatternCoverageGaps
+        pattern={pattern}
+        onDraftDetection={onDraftDetection}
+        openDocumentCoverage={openDocumentCoverage}
+        publishedCoverage={publishedCoverage}
+      />
+    </div>
+  );
+}
+
+
+function PatternCoverageGaps({
+  pattern,
+  onDraftDetection,
+  openDocumentCoverage,
+  publishedCoverage,
+}: {
+  pattern: HuntPattern;
+  onDraftDetection?: (pattern: HuntPattern, selectedGap?: CoverageGapCandidate) => void;
+  openDocumentCoverage?: DocumentCoverageEntry[];
+  publishedCoverage?: DocumentCoverageEntry[];
+}) {
+  const gapInput = useMemo<CoverageGapInput>(
+    () => ({
+      patterns: [pattern],
+      openDocumentCoverage,
+      publishedCoverage,
+    }),
+    [openDocumentCoverage, pattern, publishedCoverage],
+  );
+
+  const { gaps, dismiss, draftFromGap } = useCoverageGaps(gapInput, {
+    onDraftFromGap: onDraftDetection
+      ? (gap) => onDraftDetection(pattern, gap)
+      : undefined,
+    persistenceKey: `clawdstrike_gap_dismissals_pattern_${pattern.id}`,
+  });
+
+  if (gaps.length === 0) return null;
+
+  return (
+    <div>
+      <div className="flex items-center gap-2 mb-3">
+        <IconTarget size={12} stroke={1.5} className="text-[#d4a84b]/60" />
+        <span className="text-[9px] font-mono text-[#6f7f9a] uppercase tracking-wider">
+          Coverage Gaps ({gaps.length})
+        </span>
+      </div>
+      <div className="space-y-2">
+        {gaps.map((gap) => (
+          <CoverageGapCard
+            key={gap.id}
+            gap={gap}
+            compact
+            onDraft={() => draftFromGap(gap)}
+            onDismiss={() => dismiss(gap.id)}
+          />
+        ))}
+      </div>
     </div>
   );
 }
@@ -739,12 +837,18 @@ interface PatternMiningProps {
   patterns: HuntPattern[];
   events: AgentEvent[];
   onPatternsChange: (patterns: HuntPattern[]) => void;
+  onDraftDetection?: (pattern: HuntPattern, selectedGap?: CoverageGapCandidate) => void;
+  openDocumentCoverage?: DocumentCoverageEntry[];
+  publishedCoverage?: DocumentCoverageEntry[];
 }
 
 export function PatternMining({
   patterns,
   events,
   onPatternsChange,
+  onDraftDetection,
+  openDocumentCoverage,
+  publishedCoverage,
 }: PatternMiningProps) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
@@ -923,6 +1027,9 @@ export function PatternMining({
               onUpdatePattern={handleUpdatePattern}
               onPromoteToTrustprint={handlePromoteToTrustprint}
               onCreateScenario={handleCreateScenario}
+              onDraftDetection={onDraftDetection}
+              openDocumentCoverage={openDocumentCoverage}
+              publishedCoverage={publishedCoverage}
             />
           ) : (
             <EmptyDetail onDiscover={handleDiscoverPatterns} />

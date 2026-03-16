@@ -1,4 +1,5 @@
 pub mod capability;
+pub mod detection;
 pub mod mcp_sidecar;
 pub mod repo_roots;
 pub mod stronghold;

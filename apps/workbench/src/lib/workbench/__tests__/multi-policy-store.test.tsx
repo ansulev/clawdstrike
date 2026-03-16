@@ -7,20 +7,9 @@ import {
   useMultiPolicy,
   useWorkbench,
 } from "../multi-policy-store";
-import type { WorkbenchPolicy } from "../types";
 
 const TABS_STORAGE_KEY = "clawdstrike_workbench_tabs";
 const SAVED_POLICIES_KEY = "clawdstrike_workbench_policies";
-
-function makePolicy(name: string): WorkbenchPolicy {
-  return {
-    version: "1.2.0",
-    name,
-    description: "",
-    guards: {},
-    settings: {},
-  };
-}
 
 function ReopenHarness() {
   const { multiDispatch } = useMultiPolicy();
@@ -51,10 +40,11 @@ function ReopenHarness() {
         type: "button",
         onClick: () =>
           multiDispatch({
-            type: "NEW_TAB_OR_SWITCH",
-            policy: makePolicy("Reloaded Policy"),
+            type: "OPEN_TAB_OR_SWITCH",
             filePath: "/tmp/policy.yaml",
-            fallbackYaml: '# from disk\nversion: "1.2.0"\nname: "Reloaded Policy"\n',
+            fileType: "clawdstrike_policy",
+            yaml: '# from disk\nversion: "1.2.0"\nname: "Reloaded Policy"\n',
+            name: "Reloaded Policy",
           }),
       },
       "reopen",
@@ -83,6 +73,79 @@ function PersistedSuiteHarness() {
     "span",
     { "data-testid": "persisted-suite" },
     activeTab?.testSuiteYaml ?? "",
+  );
+}
+
+function PersistedFileTypeHarness() {
+  const { activeTab } = useMultiPolicy();
+
+  return React.createElement(
+    "span",
+    { "data-testid": "persisted-file-type" },
+    activeTab?.fileType ?? "",
+  );
+}
+
+function SigmaTabHarness() {
+  const { multiDispatch, activeTab, tabs } = useMultiPolicy();
+  const { state } = useWorkbench();
+
+  return React.createElement(
+    "div",
+    null,
+    React.createElement(
+      "button",
+      {
+        type: "button",
+        onClick: () =>
+          multiDispatch({
+            type: "NEW_TAB",
+            fileType: "sigma_rule",
+            yaml: `title: Demo Sigma
+id: 11111111-1111-1111-1111-111111111111
+status: experimental
+logsource:
+  category: process_creation
+detection:
+  selection:
+    CommandLine|contains:
+      - calc
+  condition: selection
+level: medium
+`,
+          }),
+      },
+      "new-sigma",
+    ),
+    React.createElement(
+      "button",
+      {
+        type: "button",
+        onClick: () => multiDispatch({ type: "UPDATE_META", name: "Should Not Rewrite" }),
+      },
+      "update-meta",
+    ),
+    React.createElement(
+      "button",
+      {
+        type: "button",
+        onClick: () =>
+          multiDispatch({
+            type: "OPEN_TAB_OR_SWITCH",
+            filePath: "/tmp/demo-rule.yar",
+            fileType: "yara_rule",
+            yaml: `rule demo_rule {
+    condition:
+        true
+}
+`,
+          }),
+      },
+      "open-yara",
+    ),
+    React.createElement("span", { "data-testid": "active-file-type" }, activeTab?.fileType ?? ""),
+    React.createElement("span", { "data-testid": "tab-count" }, String(tabs.length)),
+    React.createElement("pre", { "data-testid": "active-yaml" }, state.yaml),
   );
 }
 
@@ -136,6 +199,174 @@ guards:
         onClick: () => saveCurrentPolicy(),
       },
       "save-policy",
+    ),
+  );
+}
+
+function YaraValidationHarness() {
+  const { multiDispatch } = useMultiPolicy();
+  const { state } = useWorkbench();
+
+  return React.createElement(
+    "div",
+    null,
+    React.createElement(
+      "button",
+      {
+        type: "button",
+        onClick: () =>
+          multiDispatch({
+            type: "NEW_TAB",
+            fileType: "yara_rule",
+            yaml: `rule regex_quantifier {
+  strings:
+    $re = /a{2,3}/
+  condition:
+    $re
+}
+`,
+          }),
+      },
+      "new-yara-regex",
+    ),
+    React.createElement(
+      "button",
+      {
+        type: "button",
+        onClick: () =>
+          multiDispatch({
+            type: "NEW_TAB",
+            fileType: "yara_rule",
+            yaml: `rule multiline_hex {
+  strings:
+    $hex = {
+      AA BB
+      CC DD
+    }
+  condition:
+    $hex
+}
+`,
+          }),
+      },
+      "new-yara-hex",
+    ),
+    React.createElement(
+      "button",
+      {
+        type: "button",
+        onClick: () =>
+          multiDispatch({
+            type: "NEW_TAB",
+            fileType: "yara_rule",
+            yaml: `rule commented_braces {
+  /*
+    this stray brace should not close the rule }
+  */
+  condition:
+    true
+}
+`,
+          }),
+      },
+      "new-yara-comment",
+    ),
+    React.createElement(
+      "button",
+      {
+        type: "button",
+        onClick: () =>
+          multiDispatch({
+            type: "NEW_TAB",
+            fileType: "yara_rule",
+            yaml: `/*
+rule ignored_comment {
+  condition:
+    true
+}
+*/
+rule actual_rule {
+  condition:
+    true
+}
+`,
+          }),
+      },
+      "new-yara-commented-rule",
+    ),
+    React.createElement(
+      "button",
+      {
+        type: "button",
+        onClick: () =>
+          multiDispatch({
+            type: "NEW_TAB",
+            fileType: "yara_rule",
+            yaml: `/* banner */ rule inline_comment {
+  condition:
+    true
+}
+`,
+          }),
+      },
+      "new-yara-inline-comment-prefix",
+    ),
+    React.createElement("span", { "data-testid": "yara-valid" }, String(state.validation.valid)),
+    React.createElement(
+      "pre",
+      { "data-testid": "yara-errors" },
+      state.validation.errors.map((issue) => issue.message).join("\n"),
+    ),
+  );
+}
+
+function StructuredValidationHarness() {
+  const { multiDispatch } = useMultiPolicy();
+  const { state } = useWorkbench();
+
+  return React.createElement(
+    "div",
+    null,
+    React.createElement(
+      "button",
+      {
+        type: "button",
+        onClick: () =>
+          multiDispatch({
+            type: "NEW_TAB",
+            fileType: "sigma_rule",
+            yaml: `title: Broken Sigma
+id: 11111111-1111-1111-1111-111111111111
+status: experimental
+logsource:
+  category: process_creation
+detection:
+  selection: foo
+  condition: selection
+level: medium
+`,
+          }),
+      },
+      "new-sigma-bad-selector",
+    ),
+    React.createElement(
+      "button",
+      {
+        type: "button",
+        onClick: () =>
+          multiDispatch({
+            type: "NEW_TAB",
+            fileType: "ocsf_event",
+            yaml: '{"class_uid":1001,"activity_id":"x","severity_id":"high","metadata":{}}',
+          }),
+      },
+      "new-ocsf-bad-types",
+    ),
+    React.createElement("span", { "data-testid": "structured-valid" }, String(state.validation.valid)),
+    React.createElement(
+      "pre",
+      { "data-testid": "structured-errors" },
+      state.validation.errors.map((issue) => issue.message).join("\n"),
     ),
   );
 }
@@ -245,6 +476,34 @@ guards:
     }
   });
 
+  it("coerces invalid persisted file types back to a safe default", () => {
+    localStorage.setItem(
+      TABS_STORAGE_KEY,
+      JSON.stringify({
+        tabs: [
+          {
+            id: "tab-invalid-type",
+            name: "Recovered Policy",
+            fileType: "mystery_type",
+            filePath: null,
+            yaml: 'version: "1.2.0"\nname: "Recovered Policy"\n',
+          },
+        ],
+        activeTabId: "tab-invalid-type",
+      }),
+    );
+
+    render(
+      React.createElement(
+        MultiPolicyProvider,
+        null,
+        React.createElement(PersistedFileTypeHarness),
+      ),
+    );
+
+    expect(screen.getByTestId("persisted-file-type").textContent).toBe("clawdstrike_policy");
+  });
+
   it("sanitizes saved policies before persisting them to localStorage", async () => {
     render(
       React.createElement(
@@ -284,5 +543,194 @@ guards:
     expect(raw).not.toBeNull();
     expect(raw).not.toContain("embedding_api_key");
     expect(raw).not.toContain("super-secret");
+  });
+
+  it("does not rewrite non-policy tabs through UPDATE_META actions", () => {
+    render(
+      React.createElement(
+        MultiPolicyProvider,
+        null,
+        React.createElement(SigmaTabHarness),
+      ),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "new-sigma" }));
+    const before = screen.getByTestId("active-yaml").textContent;
+
+    fireEvent.click(screen.getByRole("button", { name: "update-meta" }));
+
+    expect(screen.getByTestId("active-file-type").textContent).toBe("sigma_rule");
+    expect(screen.getByTestId("active-yaml").textContent).toBe(before);
+    expect(screen.getByTestId("active-yaml").textContent).toContain("title: Demo Sigma");
+  });
+
+  it("opens typed detection files in new tabs without clobbering the current tab", () => {
+    render(
+      React.createElement(
+        MultiPolicyProvider,
+        null,
+        React.createElement(SigmaTabHarness),
+      ),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "new-sigma" }));
+    fireEvent.click(screen.getByRole("button", { name: "open-yara" }));
+
+    expect(screen.getByTestId("tab-count").textContent).toBe("3");
+    expect(screen.getByTestId("active-file-type").textContent).toBe("yara_rule");
+    expect(screen.getByTestId("active-yaml").textContent).toContain("rule demo_rule");
+  });
+
+  it("restores persisted Sigma tabs without coercing them into policies", () => {
+    localStorage.setItem(
+      TABS_STORAGE_KEY,
+      JSON.stringify({
+        tabs: [
+          {
+            id: "tab-sigma",
+            name: "Persisted Sigma",
+            filePath: "/tmp/persisted-sigma.yml",
+            fileType: "sigma_rule",
+            yaml: `title: Persisted Sigma
+id: 22222222-2222-2222-2222-222222222222
+status: experimental
+logsource:
+  category: process_creation
+detection:
+  selection:
+    CommandLine|contains:
+      - whoami
+  condition: selection
+level: medium
+`,
+          },
+        ],
+        activeTabId: "tab-sigma",
+      }),
+    );
+
+    render(
+      React.createElement(
+        MultiPolicyProvider,
+        null,
+        React.createElement(SigmaTabHarness),
+      ),
+    );
+
+    expect(screen.getByTestId("active-file-type").textContent).toBe("sigma_rule");
+    expect(screen.getByTestId("active-yaml").textContent).toContain("title: Persisted Sigma");
+    expect(screen.getByTestId("active-yaml").textContent).not.toContain("guards:");
+  });
+
+  it("does not miscount braces inside YARA regex literals", () => {
+    render(
+      React.createElement(
+        MultiPolicyProvider,
+        null,
+        React.createElement(YaraValidationHarness),
+      ),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "new-yara-regex" }));
+
+    expect(screen.getByTestId("yara-valid").textContent).toBe("true");
+    expect(screen.getByTestId("yara-errors").textContent).toBe("");
+  });
+
+  it("keeps multi-line YARA hex strings out of structural brace counting", () => {
+    render(
+      React.createElement(
+        MultiPolicyProvider,
+        null,
+        React.createElement(YaraValidationHarness),
+      ),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "new-yara-hex" }));
+
+    expect(screen.getByTestId("yara-valid").textContent).toBe("true");
+    expect(screen.getByTestId("yara-errors").textContent).toBe("");
+  });
+
+  it("ignores braces inside YARA block comments", () => {
+    render(
+      React.createElement(
+        MultiPolicyProvider,
+        null,
+        React.createElement(YaraValidationHarness),
+      ),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "new-yara-comment" }));
+
+    expect(screen.getByTestId("yara-valid").textContent).toBe("true");
+    expect(screen.getByTestId("yara-errors").textContent).toBe("");
+  });
+
+  it("ignores rule declarations that appear only inside multiline comments", () => {
+    render(
+      React.createElement(
+        MultiPolicyProvider,
+        null,
+        React.createElement(YaraValidationHarness),
+      ),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "new-yara-commented-rule" }));
+
+    expect(screen.getByTestId("yara-valid").textContent).toBe("true");
+    expect(screen.getByTestId("yara-errors").textContent).toBe("");
+  });
+
+  it("detects rule declarations that follow an inline block-comment prefix", () => {
+    render(
+      React.createElement(
+        MultiPolicyProvider,
+        null,
+        React.createElement(YaraValidationHarness),
+      ),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "new-yara-inline-comment-prefix" }));
+
+    expect(screen.getByTestId("yara-valid").textContent).toBe("true");
+    expect(screen.getByTestId("yara-errors").textContent).toBe("");
+  });
+
+  it("rejects Sigma sources without object-valued detection selectors", () => {
+    render(
+      React.createElement(
+        MultiPolicyProvider,
+        null,
+        React.createElement(StructuredValidationHarness),
+      ),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "new-sigma-bad-selector" }));
+
+    expect(screen.getByTestId("structured-valid").textContent).toBe("false");
+    expect(screen.getByTestId("structured-errors").textContent).toContain(
+      "object-valued detection selector",
+    );
+  });
+
+  it("rejects OCSF sources with invalid required field types", () => {
+    render(
+      React.createElement(
+        MultiPolicyProvider,
+        null,
+        React.createElement(StructuredValidationHarness),
+      ),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "new-ocsf-bad-types" }));
+
+    expect(screen.getByTestId("structured-valid").textContent).toBe("false");
+    expect(screen.getByTestId("structured-errors").textContent).toContain(
+      "Invalid type for OCSF field activity_id",
+    );
+    expect(screen.getByTestId("structured-errors").textContent).toContain(
+      "Invalid type for OCSF field severity_id",
+    );
   });
 });

@@ -99,6 +99,13 @@ export interface TauriExportResponse {
   message: string;
 }
 
+export interface TauriDetectionDiagnostic {
+  severity: "error" | "warning" | "info";
+  message: string;
+  line?: number | null;
+  column?: number | null;
+}
+
 export interface TauriImportResponse {
   valid: boolean;
   yaml: string;
@@ -106,6 +113,30 @@ export interface TauriImportResponse {
   version: string | null;
   errors: TauriValidationError[];
   parse_error: string | null;
+}
+
+export interface TauriDetectionImportResponse {
+  content: string;
+  file_type: string;
+}
+
+export interface TauriSigmaValidationResponse {
+  valid: boolean;
+  diagnostics: TauriDetectionDiagnostic[];
+  compiled_preview: string | null;
+}
+
+export interface TauriYaraValidationResponse {
+  valid: boolean;
+  diagnostics: TauriDetectionDiagnostic[];
+  rule_count: number;
+}
+
+export interface TauriOcsfValidationResponse {
+  valid: boolean;
+  diagnostics: TauriDetectionDiagnostic[];
+  class_uid: number | null;
+  event_class: string | null;
 }
 
 export interface TauriChainReceiptInput {
@@ -156,6 +187,42 @@ export async function validatePolicyNative(yaml: string): Promise<TauriValidatio
     return await tauriInvoke<TauriValidationResponse>("validate_policy", { yaml });
   } catch (err) {
     console.error("[tauri-commands] validate_policy failed:", err);
+    return null;
+  }
+}
+
+export async function validateSigmaRuleNative(
+  source: string,
+): Promise<TauriSigmaValidationResponse | null> {
+  if (!isDesktop()) return null;
+  try {
+    return await tauriInvoke<TauriSigmaValidationResponse>("validate_sigma_rule", { source });
+  } catch (err) {
+    console.error("[tauri-commands] validate_sigma_rule failed:", err);
+    return null;
+  }
+}
+
+export async function validateYaraRuleNative(
+  source: string,
+): Promise<TauriYaraValidationResponse | null> {
+  if (!isDesktop()) return null;
+  try {
+    return await tauriInvoke<TauriYaraValidationResponse>("validate_yara_rule", { source });
+  } catch (err) {
+    console.error("[tauri-commands] validate_yara_rule failed:", err);
+    return null;
+  }
+}
+
+export async function validateOcsfEventNative(
+  json: string,
+): Promise<TauriOcsfValidationResponse | null> {
+  if (!isDesktop()) return null;
+  try {
+    return await tauriInvoke<TauriOcsfValidationResponse>("validate_ocsf_event", { json });
+  } catch (err) {
+    console.error("[tauri-commands] validate_ocsf_event failed:", err);
     return null;
   }
 }
@@ -297,6 +364,36 @@ export async function importPolicyFileNative(
   }
 }
 
+export async function importDetectionFileNative(
+  path: string,
+): Promise<TauriDetectionImportResponse | null> {
+  if (!isDesktop()) return null;
+  try {
+    return await tauriInvoke<TauriDetectionImportResponse>("import_detection_file", { path });
+  } catch (err) {
+    console.error("[tauri-commands] import_detection_file failed:", err);
+    return null;
+  }
+}
+
+export async function exportDetectionFileNative(
+  content: string,
+  path: string,
+  fileType: string,
+): Promise<TauriExportResponse | null> {
+  if (!isDesktop()) return null;
+  try {
+    return await tauriInvoke<TauriExportResponse>("export_detection_file", {
+      content,
+      path,
+      fileType,
+    });
+  } catch (err) {
+    console.error("[tauri-commands] export_detection_file failed:", err);
+    return null;
+  }
+}
+
 /**
  * Verify a chain of receipts using the Rust Ed25519 crypto layer.
  * Checks signature validity, timestamp ordering, and computes chain hash.
@@ -375,6 +472,116 @@ export async function signReceiptPersistentNative(
     });
   } catch (err) {
     console.error("[tauri-commands] sign_receipt_persistent failed:", err);
+    return null;
+  }
+}
+
+
+// ---- Detection Lab Command Types ----
+
+export interface TauriSigmaTestResponse {
+  matched: boolean;
+  findings: Array<{
+    title: string;
+    severity: string;
+    evidence_refs: string[];
+    event_index: number | null;
+  }>;
+  events_tested: number;
+  events_matched: number;
+}
+
+export interface TauriSigmaCompileResponse {
+  valid: boolean;
+  title: string | null;
+  compiled_artifact: string | null;
+  diagnostics: TauriDetectionDiagnostic[];
+}
+
+export interface TauriOcsfNormalizeResponse {
+  valid: boolean;
+  class_uid: number | null;
+  event_class: string | null;
+  missing_fields: string[];
+  invalid_fields: Array<{ field: string; error: string }>;
+  diagnostics: TauriDetectionDiagnostic[];
+}
+
+export interface TauriSigmaConvertResponse {
+  success: boolean;
+  target_format: string;
+  output: string | null;
+  diagnostics: TauriDetectionDiagnostic[];
+  converter_version: string;
+}
+
+// ---- Detection Lab Command Wrappers ----
+
+/**
+ * Test a Sigma rule against a set of events via the Rust backend.
+ * Returns null when not running inside Tauri.
+ */
+export async function testSigmaRuleNative(
+  source: string,
+  eventsJson: string,
+): Promise<TauriSigmaTestResponse | null> {
+  if (!isDesktop()) return null;
+  try {
+    return await tauriInvoke<TauriSigmaTestResponse>("test_sigma_rule", { source, eventsJson });
+  } catch (err) {
+    console.warn("[tauri-commands] test_sigma_rule failed:", err);
+    return null;
+  }
+}
+
+/**
+ * Compile a Sigma rule and return diagnostics via the Rust backend.
+ * Returns null when not running inside Tauri.
+ */
+export async function compileSigmaRuleNative(
+  source: string,
+): Promise<TauriSigmaCompileResponse | null> {
+  if (!isDesktop()) return null;
+  try {
+    return await tauriInvoke<TauriSigmaCompileResponse>("compile_sigma_rule", { source });
+  } catch (err) {
+    console.warn("[tauri-commands] compile_sigma_rule failed:", err);
+    return null;
+  }
+}
+
+/**
+ * Normalize and validate an OCSF event via the Rust backend.
+ * Returns null when not running inside Tauri.
+ */
+export async function normalizeOcsfEventNative(
+  json: string,
+): Promise<TauriOcsfNormalizeResponse | null> {
+  if (!isDesktop()) return null;
+  try {
+    return await tauriInvoke<TauriOcsfNormalizeResponse>("normalize_ocsf_event", { json });
+  } catch (err) {
+    console.warn("[tauri-commands] normalize_ocsf_event failed:", err);
+    return null;
+  }
+}
+
+/**
+ * Convert a Sigma rule to a target format (e.g. SPL, KQL) via the Rust backend.
+ * Returns null when not running inside Tauri.
+ */
+export async function convertSigmaRuleNative(
+  source: string,
+  targetFormat: string,
+): Promise<TauriSigmaConvertResponse | null> {
+  if (!isDesktop()) return null;
+  try {
+    return await tauriInvoke<TauriSigmaConvertResponse>("convert_sigma_rule", {
+      source,
+      targetFormat,
+    });
+  } catch (err) {
+    console.warn("[tauri-commands] convert_sigma_rule failed:", err);
     return null;
   }
 }

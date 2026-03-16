@@ -104,7 +104,7 @@ fn reset_sign_rate_limit() {
 }
 
 /// Check a normalized, lowercased path string against the sensitive patterns.
-fn check_sensitive_path(check_str: &str) -> Result<(), String> {
+pub(crate) fn check_sensitive_path(check_str: &str) -> Result<(), String> {
     // Check sensitive prefixes.
     for pattern in SENSITIVE_PATTERNS {
         if check_str.contains(pattern) {
@@ -126,7 +126,7 @@ fn check_sensitive_path(check_str: &str) -> Result<(), String> {
 ///
 /// Rejects paths with `..` segments after normalization and paths that target
 /// sensitive directories or files.
-fn validate_file_path(path: &str) -> Result<PathBuf, String> {
+pub(crate) fn validate_file_path(path: &str) -> Result<PathBuf, String> {
     if path.is_empty() {
         return Err("Empty file path".into());
     }
@@ -217,7 +217,7 @@ fn open_file_write_no_follow(path: &Path) -> Result<std::fs::File, String> {
     })
 }
 
-async fn read_text_file_secure(path: PathBuf) -> Result<String, String> {
+pub(crate) async fn read_text_file_secure(path: PathBuf) -> Result<String, String> {
     tokio::task::spawn_blocking(move || {
         let mut file = open_file_read_no_follow(&path)?;
         let mut yaml = String::new();
@@ -234,7 +234,7 @@ async fn read_text_file_secure(path: PathBuf) -> Result<String, String> {
     })?
 }
 
-async fn write_text_file_secure(path: PathBuf, output: String) -> Result<(), String> {
+pub(crate) async fn write_text_file_secure(path: PathBuf, output: String) -> Result<(), String> {
     let bytes = output.into_bytes();
     tokio::task::spawn_blocking(move || {
         let mut file = open_file_write_no_follow(&path)?;
@@ -1153,7 +1153,7 @@ pub async fn sign_receipt_persistent(
 /// existing chain hashes stable.
 #[tauri::command]
 pub async fn verify_receipt_chain(
-    receipts: Vec<ChainReceiptInput>,
+    mut receipts: Vec<ChainReceiptInput>,
 ) -> Result<ChainVerificationResponse, String> {
     if receipts.len() > MAX_CHAIN_LENGTH {
         return Err(format!(
@@ -1175,25 +1175,25 @@ pub async fn verify_receipt_chain(
         });
     }
 
-    // Sort by timestamp (stable sort preserves original order for equal timestamps).
-    let mut sorted = receipts.clone();
-    sorted.sort_by(|a, b| a.timestamp.cmp(&b.timestamp));
-
     // Validate that all timestamps conform to ISO 8601 with Z suffix so that
     // lexicographic comparison is correct (Fix #19).
-    let non_conforming_timestamps: Vec<&str> = sorted
+    let non_conforming_timestamps = receipts
         .iter()
         .filter(|r| !is_valid_utc_timestamp(&r.timestamp))
-        .map(|r| r.timestamp.as_str())
-        .collect();
+        .count();
 
-    let mut per_receipt: Vec<ChainReceiptVerification> = Vec::with_capacity(sorted.len());
+    let input_was_sorted = receipts
+        .windows(2)
+        .all(|pair| pair[0].timestamp <= pair[1].timestamp);
+    receipts.sort_by(|a, b| a.timestamp.cmp(&b.timestamp));
+
+    let mut per_receipt: Vec<ChainReceiptVerification> = Vec::with_capacity(receipts.len());
     let mut any_sig_failed = false;
     let mut any_sig_verified = false;
     let mut timestamps_ordered = true;
     let mut chain_hash_input = Vec::new();
 
-    for (i, r) in sorted.iter().enumerate() {
+    for (i, r) in receipts.iter().enumerate() {
         // Chain-level canonical format: "id:timestamp:verdict:guard:policy_name".
         // This is used for the chain hash (always) and as the *first* signature
         // verification attempt.
@@ -1208,7 +1208,7 @@ pub async fn verify_receipt_chain(
         let (ts_valid, ts_note) = if i == 0 {
             (true, "First receipt in chain.".to_string())
         } else {
-            let prev = &sorted[i - 1];
+            let prev = &receipts[i - 1];
             if r.timestamp >= prev.timestamp {
                 (true, "Timestamp >= previous.".to_string())
             } else {
@@ -1275,19 +1275,19 @@ pub async fn verify_receipt_chain(
     // ordered, and at least one signature was positively verified (or the chain
     // is empty). Unparseable signatures alone no longer count as "valid". (#20)
     let chain_intact =
-        !any_sig_failed && timestamps_ordered && (any_sig_verified || sorted.is_empty());
+        !any_sig_failed && timestamps_ordered && (any_sig_verified || receipts.is_empty());
 
     let mut summary = if chain_intact {
         format!(
             "Chain of {} receipt(s) verified successfully.",
-            sorted.len()
+            receipts.len()
         )
     } else {
         let mut issues = Vec::new();
         if any_sig_failed {
             issues.push("signature verification failure(s)");
         }
-        if !any_sig_verified && !sorted.is_empty() {
+        if !any_sig_verified && !receipts.is_empty() {
             issues.push("no signatures could be positively verified");
         }
         if !timestamps_ordered {
@@ -1295,18 +1295,21 @@ pub async fn verify_receipt_chain(
         }
         format!(
             "Chain of {} receipt(s) has issues: {}.",
-            sorted.len(),
+            receipts.len(),
             issues.join(", ")
         )
     };
 
     // Append a warning if any timestamps don't conform to the expected format.
-    if !non_conforming_timestamps.is_empty() {
+    if non_conforming_timestamps > 0 {
         summary.push_str(&format!(
             " Warning: {} timestamp(s) do not conform to ISO 8601 UTC format (expected *T*Z); \
              lexicographic ordering may be unreliable.",
-            non_conforming_timestamps.len()
+            non_conforming_timestamps
         ));
+    }
+    if !input_was_sorted {
+        summary.push_str(" Input receipts were normalized by timestamp before verification.");
     }
 
     Ok(ChainVerificationResponse {
@@ -1315,7 +1318,7 @@ pub async fn verify_receipt_chain(
         all_signatures_valid: !any_sig_failed,
         timestamps_ordered,
         chain_intact,
-        chain_length: sorted.len(),
+        chain_length: receipts.len(),
         summary,
     })
 }
@@ -2356,9 +2359,7 @@ posture:
     }
 
     #[tokio::test]
-    async fn verify_chain_unordered_input_is_sorted_before_verification() {
-        // Input arrives out of order; verify_receipt_chain sorts by timestamp
-        // before checking ordering, so the result should be ordered.
+    async fn verify_chain_unordered_input_is_normalized_before_verification() {
         let chain = vec![
             make_chain_receipt("r1", "2026-03-01T00:02:00Z", "allow"),
             make_chain_receipt("r2", "2026-03-01T00:00:00Z", "deny"),
@@ -2367,6 +2368,18 @@ posture:
         let res = verify_receipt_chain(chain).await.unwrap();
         assert!(res.timestamps_ordered);
         assert_eq!(res.chain_length, 3);
+        assert_eq!(
+            res.receipts
+                .iter()
+                .map(|r| r.id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["r2", "r3", "r1"]
+        );
+        assert!(res
+            .receipts
+            .iter()
+            .all(|receipt| receipt.timestamp_order_valid));
+        assert!(res.summary.contains("normalized by timestamp"));
     }
 
     #[tokio::test]
@@ -2462,6 +2475,24 @@ posture:
             res1.chain_hash, res2.chain_hash,
             "chain hash should be deterministic"
         );
+    }
+
+    #[tokio::test]
+    async fn verify_chain_hash_is_order_independent_after_normalization() {
+        let ordered = vec![
+            make_chain_receipt("r1", "2026-03-01T00:00:00Z", "allow"),
+            make_chain_receipt("r2", "2026-03-01T00:01:00Z", "deny"),
+        ];
+        let reordered = vec![
+            make_chain_receipt("r2", "2026-03-01T00:01:00Z", "deny"),
+            make_chain_receipt("r1", "2026-03-01T00:00:00Z", "allow"),
+        ];
+
+        let ordered_res = verify_receipt_chain(ordered).await.unwrap();
+        let reordered_res = verify_receipt_chain(reordered).await.unwrap();
+
+        assert_eq!(ordered_res.chain_hash, reordered_res.chain_hash);
+        assert!(reordered_res.timestamps_ordered);
     }
 
     /// P1-4: Receipts signed over the exact canonical hush-core payload should

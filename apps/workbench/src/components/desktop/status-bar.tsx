@@ -4,6 +4,7 @@ import { useWorkbench, useMultiPolicy } from "@/lib/workbench/multi-policy-store
 import { useFleetConnection } from "@/lib/workbench/use-fleet-connection";
 import { useMcpStatus } from "@/lib/workbench/use-mcp-status";
 import { isDesktop } from "@/lib/tauri-bridge";
+import { FILE_TYPE_REGISTRY } from "@/lib/workbench/file-type-registry";
 import { GUARD_REGISTRY } from "@/lib/workbench/guard-registry";
 import type { GuardId } from "@/lib/workbench/types";
 import { cn } from "@/lib/utils";
@@ -19,18 +20,35 @@ export function StatusBar() {
   const { tabs, activeTab: currentTab } = useMultiPolicy();
   const { connection } = useFleetConnection();
   const navigate = useNavigate();
-  const { activePolicy, validation, filePath } = state;
+  const { activePolicy, validation, filePath, nativeValidation } = state;
   const desktop = isDesktop();
+  const rawFileType = currentTab?.fileType ?? "clawdstrike_policy";
+  const fileDescriptor = FILE_TYPE_REGISTRY[rawFileType as keyof typeof FILE_TYPE_REGISTRY];
+  const policyTab = fileDescriptor?.id === "clawdstrike_policy";
 
   // ---- Validation status ----
-  const errorCount = validation.errors.length;
-  const warningCount = validation.warnings.length;
+  const prefersNativeDetectionValidation = desktop && !policyTab;
+  const nativeValidationPending = prefersNativeDetectionValidation && nativeValidation.loading;
+  const useNativeDetectionValidation =
+    prefersNativeDetectionValidation && !nativeValidationPending && nativeValidation.valid !== null;
+  const nativeErrorCount = nativeValidation.topLevelErrors.length
+    + Object.values(nativeValidation.guardErrors).reduce((count, issues) => count + issues.length, 0);
+  const errorCount = useNativeDetectionValidation
+    ? nativeErrorCount
+    : validation.errors.length;
+  const warningCount = useNativeDetectionValidation
+    ? nativeValidation.topLevelWarnings.length
+    : validation.warnings.length;
 
   let statusIcon: string;
   let statusText: string;
   let statusColor: string;
 
-  if (errorCount > 0) {
+  if (nativeValidationPending) {
+    statusIcon = "\u2026";
+    statusText = "Validating...";
+    statusColor = "#6f7f9a";
+  } else if (errorCount > 0) {
     statusIcon = "\u2718"; // heavy ballot X
     statusText = `${errorCount} error${errorCount !== 1 ? "s" : ""}`;
     statusColor = "#c45c5c";
@@ -64,21 +82,25 @@ export function StatusBar() {
         {/* Separator */}
         <span className="w-px h-3 bg-[#2d3240]/60" />
 
-        {/* Guard count */}
-        <span className="text-[#6f7f9a]/80">
-          {enabledGuards}/{totalGuards} guards
-        </span>
-
-        {/* Separator */}
-        <span className="w-px h-3 bg-[#2d3240]/60" />
-
-        {/* Schema version */}
-        <span className="text-[#6f7f9a]/80">
-          v{activePolicy.version}
-        </span>
-
-        {/* Separator */}
-        <span className="w-px h-3 bg-[#2d3240]/60" />
+        {policyTab ? (
+          <>
+            <span className="text-[#6f7f9a]/80">
+              {enabledGuards}/{totalGuards} guards
+            </span>
+            <span className="w-px h-3 bg-[#2d3240]/60" />
+            <span className="text-[#6f7f9a]/80">
+              v{activePolicy.version}
+            </span>
+            <span className="w-px h-3 bg-[#2d3240]/60" />
+          </>
+        ) : (
+          <>
+            <span className="text-[#6f7f9a]/80">
+              {fileDescriptor?.label ?? rawFileType}
+            </span>
+            <span className="w-px h-3 bg-[#2d3240]/60" />
+          </>
+        )}
 
         {/* Fleet connection status */}
         <button

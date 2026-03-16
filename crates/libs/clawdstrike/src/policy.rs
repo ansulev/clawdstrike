@@ -787,6 +787,20 @@ impl Policy {
         Ok(policy)
     }
 
+    /// Parse from YAML string, auto-detecting HushSpec or Clawdstrike format.
+    ///
+    /// If the document contains a top-level `hushspec:` key, it is parsed and compiled via
+    /// [`compile_hushspec`](crate::hushspec_compiler::compile_hushspec).
+    /// Otherwise falls through to
+    /// [`from_yaml`](Self::from_yaml).
+    pub fn from_yaml_auto(yaml: &str) -> Result<Self> {
+        if crate::hushspec_compiler::is_hushspec(yaml) {
+            crate::hushspec_compiler::compile_hushspec(yaml)
+        } else {
+            Self::from_yaml(yaml)
+        }
+    }
+
     fn from_yaml_unvalidated(yaml: &str) -> Result<Self> {
         let policy: Self = serde_yaml::from_str(yaml)?;
         #[cfg(feature = "full")]

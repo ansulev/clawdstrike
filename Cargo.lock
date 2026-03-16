@@ -1678,6 +1678,7 @@ dependencies = [
  "hush-core",
  "hush-proxy",
  "hush-spine",
+ "hushspec",
  "js-sys",
  "nono",
  "proptest",
@@ -3902,6 +3903,16 @@ dependencies = [
  "tracing-subscriber",
  "url",
  "uuid",
+]
+
+[[package]]
+name = "hushspec"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "thiserror 2.0.18",
 ]
 
 [[package]]

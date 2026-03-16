@@ -53,9 +53,11 @@ for crate in \
     hush-core \
     hush-proxy \
     clawdstrike \
+    clawdstrike-broker-protocol \
     hush-certification \
     spine \
     bridge-runtime \
+    hush-multi-agent \
     hunt-scan \
     hunt-query \
     hunt-correlate \
@@ -68,15 +70,35 @@ done
 # Update package.json files across published npm packages
 echo "  Updating packages/**/package.json versions..."
 if command -v node &> /dev/null; then
+    INTERNAL_PACKAGE_NAMES=()
+    while IFS= read -r INTERNAL_PKG_JSON; do
+        INTERNAL_PACKAGE_NAMES+=("$(node -p "JSON.parse(require('fs').readFileSync(process.argv[1], 'utf8')).name" "$INTERNAL_PKG_JSON")")
+    done < <(find_package_json_files)
+
+    if [[ -f "crates/libs/hush-wasm/package.json" ]]; then
+        INTERNAL_PACKAGE_NAMES+=("$(node -p "JSON.parse(require('fs').readFileSync(process.argv[1], 'utf8')).name" crates/libs/hush-wasm/package.json)")
+    fi
+
     while IFS= read -r PKG_JSON; do
         node -e "
             const fs = require('fs');
             const path = process.argv[1];
             const version = process.argv[2];
+            const internalPackageNames = new Set(process.argv.slice(3));
             const pkg = JSON.parse(fs.readFileSync(path, 'utf8'));
             pkg.version = version;
+            for (const field of ['dependencies', 'devDependencies', 'peerDependencies', 'optionalDependencies']) {
+                const deps = pkg[field];
+                if (!deps) continue;
+                for (const [name, current] of Object.entries(deps)) {
+                    if (!internalPackageNames.has(name) || typeof current !== 'string') continue;
+                    const match = current.match(/^([~^]?)([0-9]+\.[0-9]+\.[0-9]+)$/);
+                    if (!match) continue;
+                    deps[name] = match[1] + version;
+                }
+            }
             fs.writeFileSync(path, JSON.stringify(pkg, null, 2) + '\\n');
-        " "$PKG_JSON" "$VERSION"
+        " "$PKG_JSON" "$VERSION" "${INTERNAL_PACKAGE_NAMES[@]}"
     done < <(find_package_json_files)
 
     if [[ -f "crates/libs/hush-wasm/package.json" ]]; then

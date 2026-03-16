@@ -175,7 +175,7 @@ clawdstrike daemon start
 
 # Verify it's running
 clawdstrike daemon status
-# → Status: healthy | Version: 0.2.5 | Uptime: 2s
+# → Status: healthy | Version: 0.2.6 | Uptime: 2s
 
 # Stop when done
 clawdstrike daemon stop

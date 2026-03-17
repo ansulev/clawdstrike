@@ -300,6 +300,24 @@ jobs:
         if: steps.detect.outputs.none_missing == 'false'
         run: npm ci --ignore-scripts
 
+      - name: Setup Rust target for local WASM npm tests
+        if: steps.detect.outputs.none_missing == 'false'
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Install wasm-pack for local WASM npm tests
+        if: steps.detect.outputs.none_missing == 'false'
+        run: cargo install wasm-pack --locked --version 0.14.0
+
+      - name: Build local @clawdstrike/wasm package for dependent npm tests
+        if: steps.detect.outputs.none_missing == 'false'
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd crates/libs/hush-wasm
+          wasm-pack build --target nodejs --release --out-dir pkg-node
+
       - name: Publish missing npm packages in dependency order
         if: steps.detect.outputs.none_missing == 'false'
         env:

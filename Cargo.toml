@@ -169,7 +169,7 @@ hunt-query = { path = "crates/libs/hunt-query", version = "0.2.6" }
 hunt-correlate = { path = "crates/libs/hunt-correlate", version = "0.2.6" }
 clawdstrike-ocsf = { path = "crates/libs/clawdstrike-ocsf", version = "0.2.6" }
 clawdstrike-policy-event = { path = "crates/libs/clawdstrike-policy-event", version = "0.2.6", default-features = false }
-nono = { path = "infra/vendor/nono", version = "0.11.0", default-features = false, features = ["sandbox"] }
+nono = { path = "infra/vendor/nono", version = "0.11.0", default-features = false }
 
 [profile.release]
 lto = true

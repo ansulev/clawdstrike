@@ -270,16 +270,26 @@ jobs:
         run: cargo test -p formal-diff-tests --release --no-run
 
       - name: Run 100M differential tests
+        shell: bash
         run: |
+          set -euo pipefail
           echo "=== Nightly Differential Test Run ==="
           echo "PROPTEST_CASES=${PROPTEST_CASES}"
           echo "Start: $(date -u '+%Y-%m-%dT%H:%M:%SZ')"
           start_ts=$(date +%s)
-          cargo test -p formal-diff-tests --release -- --nocapture 2>&1 | tee /tmp/diff-test-output.txt
+          if cargo test -p formal-diff-tests --release -- --nocapture 2>&1 | tee /tmp/diff-test-output.txt; then
+            test_status=0
+          else
+            test_status=$?
+          fi
           end_ts=$(date +%s)
           elapsed=$(( end_ts - start_ts ))
           echo "End: $(date -u '+%Y-%m-%dT%H:%M:%SZ')"
           echo "Elapsed: ${elapsed}s"
+
+          if [[ "$test_status" -ne 0 ]]; then
+            exit "$test_status"
+          fi
 
           # Parse test count from output
           total_tests=$(grep -oP '\d+ passed' /tmp/diff-test-output.txt | tail -1 | grep -oP '\d+' || echo "?")

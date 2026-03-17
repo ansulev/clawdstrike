@@ -14,12 +14,12 @@ impl GuardFormulas for McpToolConfig {
             return vec![];
         }
 
-        let prohibitions = self.block.iter().map(|tool| {
+        let prohibitions = self.effective_block_tools().into_iter().map(|tool| {
             let atom = ActionAtom::mcp(tool);
             Formula::prohibition(agent.clone(), atom.to_formula())
         });
 
-        let permissions = self.allow.iter().map(|tool| {
+        let permissions = self.effective_allow_tools().into_iter().map(|tool| {
             let atom = ActionAtom::mcp(tool);
             Formula::permission(agent.clone(), atom.to_formula())
         });
@@ -114,5 +114,32 @@ mod tests {
         assert_eq!(formulas.len(), 1);
         let rendered = format!("{}", formulas[0]);
         assert_eq!(rendered, "F_test-agent(mcp(*))");
+    }
+
+    #[test]
+    fn modifiers_contribute_to_formulas_when_lists_are_implicit() {
+        let cfg = McpToolConfig {
+            enabled: true,
+            allow: vec![],
+            block: vec![],
+            require_confirmation: vec![],
+            default_action: Some(McpDefaultAction::Block),
+            max_args_size: None,
+            additional_allow: vec!["file_read".to_string()],
+            remove_allow: vec![],
+            additional_block: vec!["shell_exec".to_string()],
+            remove_block: vec![],
+        };
+        let formulas = cfg.to_formulas(&test_agent());
+
+        let rendered: Vec<String> = formulas.iter().map(|f| format!("{f}")).collect();
+        assert_eq!(
+            rendered,
+            vec![
+                "F_test-agent(mcp(shell_exec))".to_string(),
+                "P_test-agent(mcp(file_read))".to_string(),
+                "F_test-agent(mcp(*))".to_string(),
+            ]
+        );
     }
 }

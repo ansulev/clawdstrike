@@ -15,12 +15,12 @@ impl GuardFormulas for EgressAllowlistConfig {
             return vec![];
         }
 
-        let permissions = self.allow.iter().map(|domain| {
+        let permissions = self.effective_allow_patterns().into_iter().map(|domain| {
             let atom = ActionAtom::egress(domain);
             Formula::permission(agent.clone(), atom.to_formula())
         });
 
-        let prohibitions = self.block.iter().map(|domain| {
+        let prohibitions = self.effective_block_patterns().into_iter().map(|domain| {
             let atom = ActionAtom::egress(domain);
             Formula::prohibition(agent.clone(), atom.to_formula())
         });
@@ -110,5 +110,30 @@ mod tests {
         assert_eq!(formulas.len(), 1);
         let rendered = format!("{}", formulas[0]);
         assert_eq!(rendered, "P_test-agent(egress(*))");
+    }
+
+    #[test]
+    fn modifiers_contribute_to_formulas_when_lists_are_implicit() {
+        let cfg = EgressAllowlistConfig {
+            enabled: true,
+            allow: vec![],
+            block: vec![],
+            default_action: Some(PolicyAction::Block),
+            additional_allow: vec!["api.example.com".to_string()],
+            remove_allow: vec![],
+            additional_block: vec!["evil.example.com".to_string()],
+            remove_block: vec![],
+        };
+        let formulas = cfg.to_formulas(&test_agent());
+
+        let rendered: Vec<String> = formulas.iter().map(|f| format!("{f}")).collect();
+        assert_eq!(
+            rendered,
+            vec![
+                "P_test-agent(egress(api.example.com))".to_string(),
+                "F_test-agent(egress(evil.example.com))".to_string(),
+                "F_test-agent(egress(*))".to_string(),
+            ]
+        );
     }
 }

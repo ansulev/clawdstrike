@@ -48,6 +48,50 @@ fn default_enabled() -> bool {
 }
 
 impl EgressAllowlistConfig {
+    fn resolve_lists(
+        base_allow: &[String],
+        base_block: &[String],
+        overlay: &Self,
+    ) -> (Vec<String>, Vec<String>) {
+        let mut allow = base_allow.to_vec();
+        let mut block = base_block.to_vec();
+
+        for domain in &overlay.additional_allow {
+            if !allow.contains(domain) {
+                allow.push(domain.clone());
+            }
+        }
+        for domain in &overlay.additional_block {
+            if !block.contains(domain) {
+                block.push(domain.clone());
+            }
+        }
+
+        allow.retain(|domain| !overlay.remove_allow.contains(domain));
+        block.retain(|domain| !overlay.remove_block.contains(domain));
+
+        if !overlay.allow.is_empty() {
+            allow = overlay.allow.clone();
+        }
+        if !overlay.block.is_empty() {
+            block = overlay.block.clone();
+        }
+
+        (allow, block)
+    }
+
+    /// Return the standalone allow patterns after applying merge-time modifiers.
+    pub fn effective_allow_patterns(&self) -> Vec<String> {
+        let (allow, _) = Self::resolve_lists(&[], &[], self);
+        allow
+    }
+
+    /// Return the standalone block patterns after applying merge-time modifiers.
+    pub fn effective_block_patterns(&self) -> Vec<String> {
+        let (_, block) = Self::resolve_lists(&[], &[], self);
+        block
+    }
+
     /// Create default config with common allowed domains
     pub fn with_defaults() -> Self {
         Self {
@@ -76,32 +120,7 @@ impl EgressAllowlistConfig {
 
     /// Merge this config with a child config
     pub fn merge_with(&self, child: &Self) -> Self {
-        let mut allow = self.allow.clone();
-        let mut block = self.block.clone();
-
-        // Add additional domains
-        for d in &child.additional_allow {
-            if !allow.contains(d) {
-                allow.push(d.clone());
-            }
-        }
-        for d in &child.additional_block {
-            if !block.contains(d) {
-                block.push(d.clone());
-            }
-        }
-
-        // Remove specified domains
-        allow.retain(|d| !child.remove_allow.contains(d));
-        block.retain(|d| !child.remove_block.contains(d));
-
-        // Use child's allow/block if non-empty
-        if !child.allow.is_empty() {
-            allow = child.allow.clone();
-        }
-        if !child.block.is_empty() {
-            block = child.block.clone();
-        }
+        let (allow, block) = Self::resolve_lists(&self.allow, &self.block, child);
 
         Self {
             enabled: child.enabled,
@@ -138,17 +157,20 @@ impl EgressAllowlistConfig {
             (true, true) => {}
         }
 
-        let allow = match (self.allow.is_empty(), other.allow.is_empty()) {
-            (false, false) => intersect_allow_patterns(&self.allow, &other.allow),
-            (false, true) => self.allow.clone(),
-            (true, false) => other.allow.clone(),
+        let self_allow = self.effective_allow_patterns();
+        let other_allow = other.effective_allow_patterns();
+
+        let allow = match (self_allow.is_empty(), other_allow.is_empty()) {
+            (false, false) => intersect_allow_patterns(&self_allow, &other_allow),
+            (false, true) => self_allow,
+            (true, false) => other_allow,
             (true, true) => Vec::new(),
         };
 
-        let mut block = self.block.clone();
-        for pattern in &other.block {
-            if !block.contains(pattern) {
-                block.push(pattern.clone());
+        let mut block = self.effective_block_patterns();
+        for pattern in other.effective_block_patterns() {
+            if !block.contains(&pattern) {
+                block.push(pattern);
             }
         }
 
@@ -308,8 +330,8 @@ fn intersect_allow_patterns(left: &[String], right: &[String]) -> Vec<String> {
 fn domain_policy_from_config(config: &EgressAllowlistConfig) -> DomainPolicy {
     let mut policy = DomainPolicy::new();
     policy.set_default_action(config.default_action.clone().unwrap_or_default());
-    policy.extend_allow(config.allow.clone());
-    policy.extend_block(config.block.clone());
+    policy.extend_allow(config.effective_allow_patterns());
+    policy.extend_block(config.effective_block_patterns());
     policy
 }
 
@@ -502,6 +524,57 @@ mod tests {
         assert!(guard.is_allowed("api.mycompany.com"));
         assert!(!guard.is_allowed("blocked.mycompany.com")); // block takes precedence
         assert!(!guard.is_allowed("other.com"));
+    }
+
+    #[test]
+    fn standalone_effective_lists_apply_merge_time_modifiers_without_explicit_override() {
+        let config = EgressAllowlistConfig {
+            enabled: true,
+            allow: vec![],
+            block: vec![],
+            default_action: Some(PolicyAction::Block),
+            additional_allow: vec!["api.example.com".to_string()],
+            remove_allow: vec![],
+            additional_block: vec!["evil.example.com".to_string()],
+            remove_block: vec![],
+        };
+
+        assert_eq!(
+            config.effective_allow_patterns(),
+            vec!["api.example.com".to_string()]
+        );
+        assert_eq!(
+            config.effective_block_patterns(),
+            vec!["evil.example.com".to_string()]
+        );
+
+        let guard = EgressAllowlistGuard::with_config(config);
+        assert!(guard.is_allowed("api.example.com"));
+        assert!(!guard.is_allowed("evil.example.com"));
+        assert!(!guard.is_allowed("other.example.com"));
+    }
+
+    #[test]
+    fn explicit_lists_override_standalone_modifiers() {
+        let config = EgressAllowlistConfig {
+            enabled: true,
+            allow: vec!["api.example.com".to_string()],
+            block: vec!["evil.example.com".to_string()],
+            default_action: Some(PolicyAction::Block),
+            additional_allow: vec!["ignored.example.com".to_string()],
+            remove_allow: vec!["api.example.com".to_string()],
+            additional_block: vec!["also-ignored.example.com".to_string()],
+            remove_block: vec!["evil.example.com".to_string()],
+        };
+
+        assert_eq!(
+            config.effective_allow_patterns(),
+            vec!["api.example.com".to_string()]
+        );
+        assert_eq!(
+            config.effective_block_patterns(),
+            vec!["evil.example.com".to_string()]
+        );
     }
 
     #[test]

@@ -403,11 +403,22 @@ jobs:
             ${{ runner.os }}-cargo-aeneas-
 
       - name: Install Charon
+        env:
+          CHARON_RELEASE_TAG: build-2026.03.13.163309-923e13bfe090916ec9384508e1c1b73bb3b7f4ed
+          CHARON_LINUX_X86_64_SHA256: 6c8790a41d9736c2ccf0b46430db0602c171526d989f32b4ae268888d6e86a48
         run: |
           if command -v charon &>/dev/null; then
             echo "Charon already available"
           else
-            cargo +nightly-2026-03-01 install --git https://github.com/AeneasVerif/charon --locked charon
+            curl -fsSL \
+              "https://github.com/AeneasVerif/charon/releases/download/${CHARON_RELEASE_TAG}/charon-linux-x86_64.tar.gz" \
+              -o /tmp/charon.tar.gz
+            echo "${CHARON_LINUX_X86_64_SHA256}  /tmp/charon.tar.gz" | sha256sum -c -
+            rm -rf /tmp/charon-bin
+            mkdir -p /tmp/charon-bin
+            tar -xzf /tmp/charon.tar.gz -C /tmp/charon-bin
+            chmod +x /tmp/charon-bin/charon /tmp/charon-bin/charon-driver
+            echo "/tmp/charon-bin" >> "$GITHUB_PATH"
           fi
 
       - name: Install Aeneas

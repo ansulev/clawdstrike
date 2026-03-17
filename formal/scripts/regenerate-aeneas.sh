@@ -7,7 +7,8 @@
 #   (no flag): regenerate in-place, overwriting committed Impl/ files
 #
 # Prerequisites (install once):
-#   - Charon: cargo +nightly-2026-03-01 install --git https://github.com/AeneasVerif/charon --locked charon
+#   - Charon: install a pinned prerelease from
+#       https://github.com/AeneasVerif/charon/releases/tag/build-2026.03.13.163309-923e13bfe090916ec9384508e1c1b73bb3b7f4ed
 #   - Aeneas: see https://github.com/AeneasVerif/aeneas#installation
 #
 # The script is idempotent and safe to run multiple times.
@@ -17,6 +18,8 @@ REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 IMPL_DIR="$REPO_ROOT/formal/lean4/ClawdStrike/ClawdStrike/Impl"
 CRATE_DIR="$REPO_ROOT/crates/libs/clawdstrike"
 WORK_DIR="$(mktemp -d)"
+CHARON_RELEASE_TAG="build-2026.03.13.163309-923e13bfe090916ec9384508e1c1b73bb3b7f4ed"
+CHARON_RELEASE_URL="https://github.com/AeneasVerif/charon/releases/tag/${CHARON_RELEASE_TAG}"
 trap 'rm -rf "$WORK_DIR"' EXIT
 
 CHECK_MODE=false
@@ -49,8 +52,8 @@ find_binary() {
 CHARON=$(find_binary charon "$HOME/.cargo/bin/charon") || {
     echo "error: charon not found in PATH or ~/.cargo/bin/charon"
     echo ""
-    echo "Install with:"
-    echo "  cargo +nightly-2026-03-01 install --git https://github.com/AeneasVerif/charon --locked charon"
+    echo "Install a pinned prerelease from:"
+    echo "  ${CHARON_RELEASE_URL}"
     exit 1
 }
 

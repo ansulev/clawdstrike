@@ -1512,10 +1512,13 @@ fn literal_path_suffix(pattern: &str) -> Vec<String> {
 
 fn literal_segment(pattern: &str) -> String {
     let literal = render_literal_segment(pattern, 'x');
+    let literal_matches_pattern = Pattern::new(pattern)
+        .map(|compiled| compiled.matches(&literal))
+        .unwrap_or(false);
 
     if literal.is_empty() {
         "x".to_string()
-    } else if literal.starts_with('.') && !literal.contains('.') {
+    } else if literal.starts_with('.') && !literal_matches_pattern {
         format!("x{literal}")
     } else if literal.ends_with('.') {
         format!("{literal}x")
@@ -1671,28 +1674,73 @@ fn consume_char_class_literal(
     chars: &mut std::iter::Peekable<std::str::Chars<'_>>,
     fallback: char,
 ) -> char {
-    let mut saw_literal = None;
     let mut escaped = false;
+    let mut pattern = String::from("[");
+    let mut at_start = true;
+    let mut has_member = false;
+    let mut negated = false;
 
     for inner in chars.by_ref() {
         if escaped {
-            if saw_literal.is_none() {
-                saw_literal = Some(inner);
-            }
+            pattern.push('\\');
+            pattern.push(inner);
             escaped = false;
+            at_start = false;
+            has_member = true;
             continue;
         }
 
         match inner {
-            ']' => break,
+            ']' if has_member => {
+                pattern.push(']');
+                break;
+            }
             '\\' => escaped = true,
-            '^' | '!' if saw_literal.is_none() => {}
-            _ if saw_literal.is_none() => saw_literal = Some(inner),
-            _ => {}
+            '^' | '!' if at_start => {
+                negated = true;
+                at_start = false;
+            }
+            _ => {
+                pattern.push(inner);
+                at_start = false;
+                has_member = true;
+            }
         }
     }
 
-    saw_literal.unwrap_or(fallback)
+    if negated {
+        pattern.insert(1, '!');
+    }
+
+    representative_char_for_class(&pattern, fallback)
+}
+
+fn representative_char_for_class(pattern: &str, fallback: char) -> char {
+    let Ok(compiled) = Pattern::new(pattern) else {
+        return fallback;
+    };
+
+    representative_char_candidates(fallback)
+        .into_iter()
+        .find(|candidate| compiled.matches(&candidate.to_string()))
+        .unwrap_or(fallback)
+}
+
+fn representative_char_candidates(fallback: char) -> Vec<char> {
+    let mut candidates = Vec::new();
+    for candidate in [
+        fallback, 'x', 'a', 'b', 'c', '1', '0', '_', '-', '.', 'A', 'Z',
+    ] {
+        if !candidates.contains(&candidate) {
+            candidates.push(candidate);
+        }
+    }
+    for candidate in (33u8..=126).map(char::from) {
+        if !candidates.contains(&candidate) {
+            candidates.push(candidate);
+        }
+    }
+    candidates
 }
 
 fn consume_brace_first_alternative(
@@ -2724,6 +2772,43 @@ mod tests {
     fn brace_alternatives_are_fully_consumed_when_generating_tokens() {
         assert_eq!(representative_token("{alice,bob}.txt"), "alice.txt");
         assert_eq!(literal_segment("{alice,bob}.txt"), "alice.txt");
+    }
+
+    #[test]
+    fn dot_prefixed_segments_stay_valid_representatives() {
+        let wildcard_dot = literal_segment("*.env");
+        let wildcard_qmark = literal_segment("?.config");
+        assert_eq!(wildcard_dot, ".env");
+        assert_eq!(wildcard_qmark, "x.config");
+        assert!(Pattern::new("*.env")
+            .expect("valid glob")
+            .matches(&wildcard_dot));
+        assert!(Pattern::new("?.config")
+            .expect("valid glob")
+            .matches(&wildcard_qmark));
+        assert_eq!(literal_segment(".env"), ".env");
+    }
+
+    #[test]
+    fn negated_char_class_probe_still_matches_pattern() {
+        let probe = representative_token("[!0]");
+        assert_ne!(probe, "0");
+        assert!(Pattern::new("[!0]").expect("valid glob").matches(&probe));
+    }
+
+    #[test]
+    fn negated_char_class_can_exclude_closing_bracket() {
+        let probe = representative_token("[!]]");
+        assert_ne!(probe, "]");
+        assert!(Pattern::new("[!]]").expect("valid glob").matches(&probe));
+    }
+
+    #[test]
+    fn negated_char_class_witness_finds_real_overlap() {
+        let witness =
+            path_intersection_witness("/tmp/[!0]", "/tmp/*").expect("expected overlapping witness");
+        assert!(path_pattern_matches("/tmp/[!0]", &witness));
+        assert!(path_pattern_matches("/tmp/*", &witness));
     }
 
     #[test]

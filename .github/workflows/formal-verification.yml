@@ -78,7 +78,7 @@ jobs:
             git diff --name-only "origin/${GITHUB_BASE_REF}...HEAD" -- 'crates/libs/clawdstrike/src/core/**' > changed_core_files.txt
           elif [ "${{ github.event_name }}" = "push" ]; then
             if [ -z "${GITHUB_EVENT_BEFORE}" ] || [ "${GITHUB_EVENT_BEFORE}" = "0000000000000000000000000000000000000000" ]; then
-              git ls-files 'crates/libs/clawdstrike/src/core/**' > changed_core_files.txt
+              git ls-files -- crates/libs/clawdstrike/src/core > changed_core_files.txt
             else
               git diff --name-only "${GITHUB_EVENT_BEFORE}...${GITHUB_SHA}" -- 'crates/libs/clawdstrike/src/core/**' > changed_core_files.txt
             fi

@@ -12,7 +12,7 @@ default = []
 z3 = ["dep:logos-z3"]
 
 [dependencies]
-clawdstrike = { path = "../clawdstrike", default-features = false, features = ["full"] }
+clawdstrike = { workspace = true, default-features = false, features = ["full"] }
 hush-core.workspace = true
 hush-proxy.workspace = true
 logos-ffi.workspace = true

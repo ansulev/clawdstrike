@@ -205,8 +205,8 @@ class QLemma:
         else:
             return False
 
-    def __ne__():
-        if not self.__eq__(self, qlemma2):
+    def __ne__(self, qlemma2):
+        if not self.__eq__(qlemma2):
             return True
         else:
             return False

@@ -9,55 +9,34 @@
 
 ## 1. Overview
 
-This document designs the integration between the Logos formal reasoning stack (`platform/crates/logos-*`) and ClawdStrike's policy engine (`crates/libs/clawdstrike`). The goal is to enable static, pre-deployment verification of ClawdStrike security policies by translating them into Logos normative formulas and checking critical properties via Z3 SMT solving.
+This document designs the integration between the Logos formal reasoning stack (`platform/crates/logos-*`) and ClawdStrike's policy engine. The goal: static, pre-deployment verification of security policies by translating them into normative formulas and checking properties via Z3 SMT solving.
 
-**Key insight:** ClawdStrike policies are declarative YAML documents that define finite sets of permissions, prohibitions, and obligations. They are not Turing-complete programs. This makes them ideal candidates for automated verification -- the policy space is bounded and the normative semantics map directly onto Logos Layer 3 operators.
+### 1.1 What This Enables
 
-### 1.1 What This Buys Us
+With Logos integration, policy authors can prove (over all possible inputs, not just tested ones):
 
-Without formal verification, a policy author can only test their policy by feeding it example actions. With Logos integration, they can prove:
+- **Consistency**: No action is simultaneously permitted and forbidden.
+- **Completeness**: Every action type is handled by at least one guard.
+- **Monotonicity**: Extending a parent policy never weakens its denials.
+- **Fail-closed**: Config errors always produce denial.
 
-- The policy never simultaneously permits and forbids the same action (consistency).
-- Every possible action type is handled by at least one guard (completeness).
-- Extending a strict parent policy never weakens its denials (monotonicity).
-- Config errors always produce denial (fail-closed).
+### 1.2 The Logos Stack
 
-These are properties over _all possible inputs_, not just tested ones.
+See [Landscape Survey, Section 3.3](./landscape-survey.md) for full details. Key points for this integration:
 
-### 1.2 The Logos Stack (Existing)
+- **logos-ffi**: Layer 3 normative operators (Obligation, Permission, Prohibition) with `AgentId`. `RoutingSpec` already has `verify_completeness()` and `verify_consistency()` as precedent.
+- **logos-z3**: Layer 0 propositional SAT implemented (enumeration, up to 10 atoms). Layers 1-3 return `Unknown` (stubs). `check_normative()` at `lib.rs:220` is the integration point.
 
-The Logos crates, located in `platform/crates/`, implement a 4-layer modal-temporal logic:
+### 1.3 Policy Engine Types (Quick Reference)
 
-**logos-ffi** (`platform/crates/logos-ffi/src/formula.rs`):
-- **Layer 0 -- Core TM:** Boolean connectives (Not, And, Or, Implies, Iff) + Modal (Necessity, Possibility) + Temporal (AlwaysFuture, Eventually, AlwaysPast, SometimePast, Perpetual, Sometimes)
-- **Layer 1 -- Explanatory:** Counterfactual (WouldCounterfactual, MightCounterfactual), Grounding, Essence, PropIdentity, Causation
-- **Layer 2 -- Epistemic:** Belief(AgentId, Formula), Knowledge(AgentId, Formula), ProbabilityAtLeast(Formula, f64), EpistemicPossibility, EpistemicNecessity, IndicativeConditional
-- **Layer 3 -- Normative:** Obligation(AgentId, Formula), Permission(AgentId, Formula), Prohibition(AgentId, Formula), Preference, AgentPreference
-- `ProofReceipt` with formula hashing (SHA-256), step-level justification, optional Lean proof terms, Z3 validity flag
-- `RoutingSpec` with `verify_completeness()` and `verify_consistency()` as precedent for the pattern we adopt here
+Key types for the translation (see [Verification Targets](./verification-targets.md) for details):
 
-**logos-z3** (`platform/crates/logos-z3/src/lib.rs`):
-- `Z3Checker` with configurable `timeout_ms` (default 5000), `max_worlds` (4), `max_times` (8)
-- Layer 0 propositional SAT fully implemented via exhaustive enumeration (up to 10 atoms) with counterexample extraction
-- Layers 1--3 return `ProofResult::Unknown` (stubs)
-- `collect_atoms()` traversal over the full formula AST
-- `evaluate_propositional()` for truth-value evaluation under assignment
-
-### 1.3 ClawdStrike Policy Engine (Existing)
-
-The policy engine lives in `crates/libs/clawdstrike/src/` with these key types:
-
-- **`Policy`** (`policy.rs`): YAML-deserialized struct with `version`, `extends`, `merge_strategy`, `guards: GuardConfigs`, `settings: PolicySettings`, `posture: Option<PostureConfig>`, `origins`, `broker`
-- **`GuardConfigs`** (`policy.rs`): 13 optional guard config fields (forbidden_path, path_allowlist, egress_allowlist, secret_leak, patch_integrity, shell_command, mcp_tool, prompt_injection, jailbreak, computer_use, remote_desktop_side_channel, input_injection_capability, spider_sense) plus `custom: Vec<CustomGuardSpec>`
-- **`GuardAction<'a>`** (`guards/mod.rs`): FileAccess, FileWrite, NetworkEgress, ShellCommand, McpTool, Patch, Custom
-- **`GuardResult`** (`guards/mod.rs`): `allowed: bool`, `guard: String`, `severity: Severity`, `message: String`, `details: Option<Value>`
-- **`Guard` trait**: `name()`, `handles(&GuardAction) -> bool`, `check(&GuardAction, &GuardContext) -> GuardResult`
-- **`HushEngine`** (`engine.rs`): Orchestrates guards, calls `aggregate_overall()` which implements deny-wins semantics
-- **`aggregate_overall()`** (`engine.rs`): Iterates results left-to-right, tracking the "worst" result. A blocking (`allowed: false`) result always beats a non-blocking result. Among results with the same blocking status, higher severity wins. Among non-blocking results with equal severity, a sanitized result beats a non-sanitized one.
-- **`GuardConfigs::merge_with()`** (`policy.rs`): Per-guard merge logic:
-  - **Deep-merge guards** (forbidden_path, egress_allowlist, mcp_tool, secret_leak): Use additive/subtractive fields (`additional_patterns`/`remove_patterns`, `additional_allow`/`remove_allow`, etc.). Not a simple union -- child can add to and remove from base.
-  - **Deep-merge with present-field tracking** (spider_sense under `full` feature, path_allowlist): Specialized merge methods.
-  - **Child-overrides-base guards** (patch_integrity, shell_command, prompt_injection, jailbreak, computer_use, remote_desktop_side_channel, input_injection_capability): `child.or_else(|| base)`.
+- **`Policy`**: `version`, `extends`, `merge_strategy`, `guards: GuardConfigs`, `settings`, `posture`, `origins`, `broker`
+- **`GuardConfigs`**: 13 optional guard configs + `custom: Vec<CustomGuardSpec>`
+- **`GuardAction<'a>`**: FileAccess, FileWrite, NetworkEgress, ShellCommand, McpTool, Patch, Custom
+- **`GuardResult`**: `allowed: bool`, `guard`, `severity: Severity`, `message`, `details`
+- **`aggregate_overall()`**: Deny-wins left-to-right scan (blocked > allowed > severity > sanitize tiebreaker)
+- **`GuardConfigs::merge_with()`**: Deep-merge (additive/subtractive) for 4 guards, child-overrides-base for 7 guards
 
 ---
 
@@ -236,7 +215,7 @@ We verify the _structural_ property (the guard is enabled and configured) rather
 
 ### 2.3 Guard Aggregation Formula
 
-The `aggregate_overall()` function in `engine.rs` implements deny-wins semantics via a left-to-right scan tracking the "worst" result. This is captured as a universal formula:
+Deny-wins aggregation as a universal formula:
 
 ```
 -- Deny monotonicity: if any guard forbids, the overall verdict forbids
@@ -253,9 +232,9 @@ fn aggregation_monotonicity(agent: &AgentId) -> Formula {
 }
 ```
 
-The `Necessity` (Box) operator makes this hold across all possible worlds -- i.e., for all possible policy configurations and action inputs.
+The `Necessity` (Box) operator makes this hold across all possible worlds.
 
-**Important caveat:** The aggregation function is NOT fully commutative. When two results tie on both blocking status and severity, the function selects based on position (left-to-right scan) and a sanitize tiebreaker. The deny-wins property still holds regardless of order, but the _specific result selected_ may differ by order when multiple equally-severe denials exist. The commutativity of `allowed` (the boolean verdict) is the security-relevant property; the commutativity of the full `GuardResult` (including `guard` name and `message`) is not.
+**Caveat:** The aggregation is NOT fully commutative -- ties are broken by position and sanitize status. The `allowed` boolean is order-independent (the security-relevant property); the specific `GuardResult` selected may vary by order.
 
 ### 2.4 Posture State Formulas
 
@@ -299,7 +278,7 @@ not exists action a, agent ag:
 
 **Z3 encoding:** Assert the negation (i.e., assert that such an action exists) and check for unsatisfiability. If UNSAT, the policy is consistent. If SAT, the satisfying assignment is a counterexample showing the conflicting action.
 
-**Important:** ClawdStrike resolves such conflicts via deny-wins at runtime, so a consistency violation does not cause a security failure. However, it signals a policy authoring error -- the author likely did not intend for the same action to be both explicitly permitted and explicitly forbidden.
+**Note:** Deny-wins resolves conflicts at runtime, so consistency violations are not security failures -- but they signal policy authoring errors.
 
 ### 3.2 Completeness
 
@@ -350,7 +329,7 @@ This is subtle because `GuardConfigs::merge_with()` uses different strategies pe
 
 **Z3 encoding:** For each deep-merge guard, verify that any pattern responsible for a denial in the child's config also appears in the merged config. For child-overrides guards, the property holds trivially since the child config is preserved verbatim when present.
 
-The concerning case is a child that _omits_ a guard (e.g., no `jailbreak` config) and inherits the parent's config. A child that _includes_ a guard replaces the parent's. This is by design but must be documented as an explicit semantic choice.
+A child that omits a guard inherits the parent's config; a child that includes a guard replaces the parent's. This is by design.
 
 ### 3.5 Fail-Closed on Config Error
 
@@ -792,7 +771,7 @@ The key difference is that routing rules use Layer 0 (propositional) formulas, w
 
 ### 9.2 GOAP Integration (Future)
 
-The `logos-goap` crate verifies GOAP plans. An AI agent's execution plan is a sequence of actions. A formally verified policy can be combined with a verified plan to produce a _compositional proof_: the plan achieves its goal AND every action in the plan is policy-compliant. This is future work but the architecture supports it.
+`logos-goap` could combine verified policies with verified plans for compositional proofs (plan achieves goal AND every action is policy-compliant). Future work.
 
 ---
 
@@ -808,7 +787,7 @@ The `logos-goap` crate verifies GOAP plans. An AI agent's execution plan is a se
 | **Phase 6** | Posture BMC encoding | 1 week |
 | **Phase 7** | Lean 4 backend (when `lean-runtime` is available) | TBD |
 
-Phases 1--5 are the minimal viable integration. Phase 6 adds stateful verification. Phase 7 upgrades from SMT checking (sound but potentially incomplete) to full theorem proving.
+Phases 1--5 are the minimal viable integration. Phase 6 adds stateful verification. Phase 7 upgrades from SMT checking (sound but incomplete for some properties) to full theorem proving.
 
 ---
 

@@ -2,9 +2,9 @@
 
 ## Vision
 
-ClawdStrike aims to be the first runtime AI security system with formally verified policy enforcement. By proving that the policy engine's core invariants hold mathematically -- deny means deny, fail-closed means fail-closed, inheritance never silently weakens security -- we move beyond testing-level confidence to machine-checked guarantees.
+Machine-checked proofs that "deny means deny," fail-closed means fail-closed, and inheritance never silently weakens security.
 
-Two assets give this initiative a realistic timeline: (1) the existing Logos modal-temporal logic stack in `platform/crates/`, which already has normative operators mapping to policy semantics, and (2) a policy evaluation model that is bounded and non-Turing-complete, making it amenable to automated verification.
+Two assets make this tractable: (1) the Logos modal-temporal logic stack in `platform/crates/`, whose normative operators map directly to policy semantics, and (2) a policy evaluation model that is bounded and non-Turing-complete.
 
 ## Document Map
 
@@ -21,18 +21,16 @@ Two assets give this initiative a realistic timeline: (1) the existing Logos mod
 
 ## Architecture Context
 
-The policy engine under verification lives in `crates/libs/clawdstrike/src/`. File sizes confirmed against the codebase as of 2026-03-16:
+The policy engine lives in `crates/libs/clawdstrike/src/`. The verifiable target is the **pure decision-making core**: ~400-800 lines of logic embedded in ~10K+ lines of production code. See [Verification Targets](./verification-targets.md) for the exact function inventory.
 
-| Module | LOC | Role | Verification relevance |
-|--------|-----|------|----------------------|
-| `engine.rs` | 4623 | Guard orchestration, verdict aggregation (`aggregate_overall` at line 1785) | **Critical** -- deny-wins, fail-closed |
-| `policy.rs` | 3735 | YAML parse, schema validation, `extends` resolution, merge, cycle detection | **High** -- merge semantics and monotonicity |
-| `guards/mod.rs` | -- | Guard trait, `GuardResult`, severity ordering | **High** -- result lattice, severity total order |
-| `pipeline.rs` | -- | Staged evaluation (fast/std/deep path) | Medium -- ordering invariants |
-| `posture.rs` | -- | State machine transitions, budget counters | Medium -- state machine safety |
-| `origin.rs` + `enclave.rs` | -- | Origin resolution, bridge policies | Medium -- default-deny on unknown origin |
-
-The verifiable target is the **pure decision-making core**: approximately 400-800 lines of logic embedded in these larger files. See [Verification Targets](./verification-targets.md) for the exact function inventory.
+| Module | LOC | Verification relevance |
+|--------|-----|----------------------|
+| `engine.rs` | 4623 | **Critical** -- deny-wins (`aggregate_overall` at line 1785), fail-closed |
+| `policy.rs` | 3735 | **High** -- merge semantics, monotonicity, cycle detection |
+| `guards/mod.rs` | -- | **High** -- result lattice, severity total order |
+| `pipeline.rs` | -- | Medium -- ordering invariants |
+| `posture.rs` | -- | Medium -- state machine safety |
+| `origin.rs` + `enclave.rs` | -- | Medium -- default-deny on unknown origin |
 
 ## Core Properties to Verify
 
@@ -86,21 +84,14 @@ mise run verify-all         # All of the above
 
 ## Relationship to Logos
 
-The Logos stack in `platform/crates/` provides:
+ClawdStrike's policy semantics map to Logos Layer 3 normative operators:
 
-- A 4-layer modal-temporal logic AST (`logos-ffi/src/formula.rs`) with normative operators (Obligation, Permission, Prohibition)
-- A Z3-backed propositional checker (`logos-z3`) with Layer 0 implemented, Layers 1-3 stubbed
-- Proof receipts with Ed25519 signing and formula hashing (`logos-ffi/src/proof.rs`)
-- Agent-indexed operators (`AgentId`) for multi-agent normative reasoning
+| ClawdStrike concept | Logos formula |
+|---------------------|-------------|
+| Forbidden path `/etc/shadow` | `F_agent(access("/etc/shadow"))` (Prohibition) |
+| Allowed egress to `api.openai.com` | `P_agent(egress("api.openai.com"))` (Permission) |
+| Required secret scan on write | `O_agent(scan_before_write)` (Obligation) |
+| Merge monotonicity | `F_base(phi) => F_merge(base, child)(phi)` |
+| Deny-wins aggregation | `F_agent(phi) AND P_agent(phi) => F_agent(phi)` |
 
-ClawdStrike's policy semantics map to Logos Layer 3:
-
-| ClawdStrike concept | Logos operator | Formula |
-|---------------------|---------------|---------|
-| Forbidden path `/etc/shadow` | `F_agent(access("/etc/shadow"))` | Prohibition |
-| Allowed egress to `api.openai.com` | `P_agent(egress("api.openai.com"))` | Permission |
-| Required secret scan on write | `O_agent(scan_before_write)` | Obligation |
-| Merge monotonicity | `F_base(phi) => F_merge(base, child)(phi)` | Base prohibition preserved in merge |
-| Deny-wins aggregation | `F_agent(phi) AND P_agent(phi) => F_agent(phi)` | Prohibition overrides permission |
-
-The shortest path to formal policy verification is to extend `logos-z3`'s `check_normative()` (currently returning `Unknown`) to encode these rules and verify them via SMT. See [Logos Integration](./logos-integration.md) for the full design.
+See [Logos Integration](./logos-integration.md) for the full design.

@@ -20,10 +20,6 @@ use crate::remote_extends::RemoteExtendsConfig;
 use crate::ui;
 use crate::{CliJsonError, ExitCode, PolicySource, CLI_JSON_VERSION};
 
-// ---------------------------------------------------------------------------
-// CLI command struct
-// ---------------------------------------------------------------------------
-
 #[derive(Clone, Debug)]
 pub struct PolicyVerifyCommand {
     pub policy_ref: String,
@@ -32,10 +28,6 @@ pub struct PolicyVerifyCommand {
     pub attestation_level: bool,
     pub verbose: bool,
 }
-
-// ---------------------------------------------------------------------------
-// JSON output type
-// ---------------------------------------------------------------------------
 
 #[derive(Clone, Debug, serde::Serialize)]
 pub struct PolicyVerifyJsonOutput {
@@ -52,10 +44,6 @@ pub struct PolicyVerifyJsonOutput {
     pub error: Option<CliJsonError>,
 }
 
-// ---------------------------------------------------------------------------
-// Entry point
-// ---------------------------------------------------------------------------
-
 pub fn cmd_policy_verify(
     command: PolicyVerifyCommand,
     remote_extends: &RemoteExtendsConfig,
@@ -70,7 +58,6 @@ pub fn cmd_policy_verify(
         verbose,
     } = command;
 
-    // Load the policy.
     let loaded =
         match crate::policy_diff::load_policy_from_arg(&policy_ref, resolve, remote_extends) {
             Ok(v) => v,
@@ -95,18 +82,15 @@ pub fn cmd_policy_verify(
         }
     };
 
-    // Compile to formulas.
     let agent = AgentId::new("clawdstrike-agent");
     let compiler = DefaultPolicyCompiler::new(agent.clone());
     let formulas = compiler.compile_policy(policy);
 
-    // If the policy extends a base, compile the base too for inheritance check.
     let base_formulas = base_policy.as_ref().map(|parent| {
         let base_compiler = DefaultPolicyCompiler::new(agent);
         base_compiler.compile_policy(parent)
     });
 
-    // Run verification.
     let verifier = PolicyVerifier::new();
     let report = verifier.verify(&formulas, base_formulas.as_deref());
 
@@ -137,7 +121,6 @@ pub fn cmd_policy_verify(
         return code;
     }
 
-    // Human-readable output.
     let _ = writeln!(stdout);
     let _ = writeln!(stdout, "Policy Verification Report");
     let _ = writeln!(stdout, "==========================");
@@ -153,7 +136,6 @@ pub fn cmd_policy_verify(
     let _ = writeln!(stdout, "Action atoms:      {}", report.atom_count);
     let _ = writeln!(stdout);
 
-    // Consistency
     let consistency_label = outcome_label(&report.consistency.outcome);
     let _ = writeln!(
         stdout,
@@ -168,7 +150,6 @@ pub fn cmd_policy_verify(
         );
     }
 
-    // Completeness
     let completeness_label = outcome_label(&report.completeness.outcome);
     let covered = report.completeness.covered.len();
     let total = covered + report.completeness.missing.len();
@@ -181,7 +162,6 @@ pub fn cmd_policy_verify(
         let _ = writeln!(stdout, "  ! Missing action type: {}", missing);
     }
 
-    // Inheritance
     let inheritance_label = outcome_label(&report.inheritance.outcome);
     match report.inheritance.outcome {
         CheckOutcome::Skipped => {
@@ -216,7 +196,6 @@ pub fn cmd_policy_verify(
         report.verification_time_ms
     );
 
-    // Attestation level
     if show_attestation_level {
         let _ = writeln!(stdout);
         let _ = writeln!(
@@ -254,7 +233,6 @@ pub fn cmd_policy_verify(
         );
     }
 
-    // Verbose formula listing
     if verbose {
         let _ = writeln!(stdout);
         let _ = writeln!(stdout, "Compiled Formulas ({}):", formulas.len());
@@ -280,10 +258,6 @@ pub fn cmd_policy_verify(
 
     code
 }
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 fn outcome_label(outcome: &CheckOutcome) -> String {
     match outcome {

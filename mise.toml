@@ -157,8 +157,26 @@ description = "Run differential tests (spec vs impl) with configurable case coun
 env = { PROPTEST_CASES = "10000" }
 run = """
 echo "Running differential tests with PROPTEST_CASES=${PROPTEST_CASES}"
-cargo test -p formal-diff-tests -- --nocapture
+cargo test -p formal-diff-tests --release -- --nocapture
 """
+
+[tasks."diff-test-nightly"]
+description = "Run 100M differential tests in release mode (nightly Cedar-style)"
+env = { PROPTEST_CASES = "100000000" }
+run = """
+echo "=== Nightly Differential Test Run (100M cases) ==="
+echo "Start: $(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+time cargo test -p formal-diff-tests --release -- --nocapture
+echo "End: $(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+"""
+
+[tasks.regenerate-aeneas]
+description = "Regenerate Aeneas Lean output from Rust source"
+run = "./formal/scripts/regenerate-aeneas.sh"
+
+[tasks.check-aeneas]
+description = "Check that Aeneas Lean output matches committed Impl/ files"
+run = "./formal/scripts/regenerate-aeneas.sh --check"
 
 [tasks.verify-all]
 description = "Run all formal verification checks (policies + diff tests + Lean build)"

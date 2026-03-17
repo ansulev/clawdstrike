@@ -1,8 +1,7 @@
 //! Formula translation for [`ShellCommandConfig`].
 //!
-//! Each forbidden regex pattern becomes a `Prohibition` formula. Since Z3 cannot
-//! directly reason about regex matching, the translation is necessarily an
-//! over-approximation: the pattern string itself is used as the atom parameter.
+//! The pattern string is used as the atom parameter (over-approximation since
+//! Z3 cannot reason about regex matching directly).
 
 use clawdstrike::guards::ShellCommandConfig;
 use logos_ffi::{AgentId, Formula};
@@ -11,10 +10,7 @@ use super::GuardFormulas;
 use crate::atoms::ActionAtom;
 
 impl GuardFormulas for ShellCommandConfig {
-    /// Translate shell-command configuration into normative formulas.
-    ///
-    /// For each forbidden pattern `pat`:
-    ///   `F_agent(exec(pat))` -- Prohibition on executing commands matching pat
+    /// `F_agent(exec(pat))` per forbidden pattern.
     fn to_formulas(&self, agent: &AgentId) -> Vec<Formula> {
         if !self.enabled {
             return vec![];

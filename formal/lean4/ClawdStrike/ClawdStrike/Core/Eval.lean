@@ -1,28 +1,6 @@
 /-
-  ClawdStrike Core: Guard Evaluation Functions
-
-  This module defines the per-guard evaluation functions and the full policy
-  evaluation pipeline. Each guard is modeled as a total function from
-  (config, action, context) to GuardResult.
-
-  The key insight (from the formal spec document, section 1.1) is that policy
-  evaluation is **simpler than IMP**: no loops, no recursion, no state mutation
-  during evaluation. Guards are pure functions of (action, config, context).
-
-  Content-dependent guards (jailbreak, prompt injection, spider sense, etc.)
-  are axiomatized as opaque total functions -- their verdicts depend on runtime
-  content analysis, not structural policy properties.
-
-  Axiomatized operations:
-    - `globMatch`: glob pattern matching (provided by the `glob` crate in Rust)
-    - `regexMatch`: regex pattern matching (provided by the `regex` crate in Rust)
-    - `evalContentGuard`: content-dependent guard evaluation (opaque)
-    - `defaultForbiddenPatterns`: the default forbidden path list (from Merge.lean)
-
-  Rust source references:
-    - Guard evaluation: crates/libs/clawdstrike/src/guards/ (per-guard files)
-    - Engine pipeline: crates/libs/clawdstrike/src/engine.rs
-    - Aggregation: crates/libs/clawdstrike/src/core/aggregate.rs
+  Per-guard evaluation functions and full policy evaluation pipeline.
+  Mirrors: guards/*.rs, engine.rs
 -/
 
 import ClawdStrike.Core.Verdict
@@ -35,43 +13,19 @@ namespace ClawdStrike.Core
 
 noncomputable section
 
--- ============================================================================
--- Axiomatized Pattern Matching
--- ============================================================================
+-- Axiomatized pattern matching (glob crate, regex crate)
 
-/-- Axiom: glob pattern matching is decidable.
-    In the Rust implementation, this is provided by the `glob` crate.
-    We axiomatize it because verifying glob semantics is out of scope. -/
 axiom globMatch : GlobPattern → Path → Bool
 
-/-- Check if any pattern in a list matches the given path. -/
 def matchesAny (patterns : List GlobPattern) (path : Path) : Bool :=
   patterns.any (fun p => globMatch p path)
 
-/-- Axiom: regex pattern matching is decidable.
-    In the Rust implementation, this is provided by the `regex` crate.
-    Shell command guard uses regex patterns, not glob patterns. -/
 axiom regexMatch : String → Command → Bool
 
-/-- Axiom: content-dependent guard evaluation is an opaque total function.
-    Used for guards like secret_leak, patch_integrity, prompt_injection,
-    jailbreak, computer_use, remote_desktop_side_channel,
-    input_injection_capability, and spider_sense. -/
+/-- Opaque evaluation for content-dependent guards. -/
 axiom evalContentGuard : String → Action → Context → GuardResult
 
--- ============================================================================
--- Per-Guard Evaluation Functions
--- ============================================================================
-
-/-- Evaluate the ForbiddenPathGuard.
-    Mirrors the `check()` method in guards/forbidden_path.rs.
-
-    Applies to: FileAccess, FileWrite, Patch actions.
-    - Computes effective patterns from the config.
-    - If the path matches any forbidden pattern AND does not match any exception,
-      the action is blocked.
-    - Otherwise, the action is allowed.
-    - Non-path actions always pass. -/
+/-- Mirrors: guards/forbidden_path.rs check() -/
 def evalForbiddenPath (cfg : ForbiddenPathConfig) (action : Action) (_ : Context) : GuardResult :=
   if !cfg.enabled then GuardResult.allow "forbidden_path"
   else match action with
@@ -83,11 +37,7 @@ def evalForbiddenPath (cfg : ForbiddenPathConfig) (action : Action) (_ : Context
       GuardResult.allow "forbidden_path"
   | _ => GuardResult.allow "forbidden_path"
 
-/-- Evaluate the PathAllowlistGuard.
-    Mirrors the `check()` method in guards/path_allowlist.rs.
-
-    When enabled, the guard denies access to any path NOT in the allowlist.
-    Uses separate allowlists for file_access, file_write, and patch actions. -/
+/-- Mirrors: guards/path_allowlist.rs check() -/
 def evalPathAllowlist (cfg : PathAllowlistConfig) (action : Action) (_ : Context) : GuardResult :=
   if !cfg.enabled then GuardResult.allow "path_allowlist"
   else match action with
@@ -102,7 +52,6 @@ def evalPathAllowlist (cfg : PathAllowlistConfig) (action : Action) (_ : Context
     else
       GuardResult.block "path_allowlist" .error s!"Write to {path} is not in allowlist"
   | .patch path _ =>
-    -- Patch falls back to fileWriteAllow when patchAllow is empty
     let patterns := if cfg.patchAllow.isEmpty then cfg.fileWriteAllow else cfg.patchAllow
     if matchesAny patterns path then
       GuardResult.allow "path_allowlist"
@@ -110,17 +59,8 @@ def evalPathAllowlist (cfg : PathAllowlistConfig) (action : Action) (_ : Context
       GuardResult.block "path_allowlist" .error s!"Patch to {path} is not in allowlist"
   | _ => GuardResult.allow "path_allowlist"
 
-/-- Evaluate the EgressAllowlistGuard.
-    Mirrors the `check()` method in guards/egress_allowlist.rs.
-
-    Evaluation order follows block > allow > default precedence:
-    1. If domain is in the block list, deny.
-    2. If domain is in the allow list, allow.
-    3. Otherwise, apply the default action (block by default).
-
-    Note: In the real implementation, domain matching uses glob-style wildcards
-    (e.g., "*.openai.com"). For the spec, we use exact string matching via
-    `List.elem`. The axiomatized `globMatch` could be used for a richer model. -/
+/-- Mirrors: guards/egress_allowlist.rs check()
+    Uses exact string matching (real impl uses glob wildcards). -/
 def evalEgressAllowlist (cfg : EgressAllowlistConfig) (action : Action) (_ : Context)
     : GuardResult :=
   if !cfg.enabled then GuardResult.allow "egress_allowlist"
@@ -132,19 +72,14 @@ def evalEgressAllowlist (cfg : EgressAllowlistConfig) (action : Action) (_ : Con
     else if cfg.allow.contains domain then
       GuardResult.allow "egress_allowlist"
     else
-      -- Neither explicitly allowed nor blocked: apply default
       match cfg.defaultAction with
       | some .block => GuardResult.block "egress_allowlist" .error
           s!"Egress to {domain} is not in allowlist (default: block)"
       | _ => GuardResult.allow "egress_allowlist"
   | _ => GuardResult.allow "egress_allowlist"
 
-/-- Evaluate the ShellCommandGuard.
-    Mirrors the `check()` method in guards/shell_command.rs.
-
-    Uses regex matching (axiomatized) against forbidden patterns.
-    Note: the real guard also extracts path tokens from commands and checks
-    them against ForbiddenPathGuard. This interaction is simplified here. -/
+/-- Mirrors: guards/shell_command.rs check()
+    Path-token extraction from commands is simplified away. -/
 def evalShellCommand (cfg : ShellCommandConfig) (action : Action) (_ : Context) : GuardResult :=
   if !cfg.enabled then GuardResult.allow "shell_command"
   else match action with
@@ -155,13 +90,7 @@ def evalShellCommand (cfg : ShellCommandConfig) (action : Action) (_ : Context) 
       GuardResult.allow "shell_command"
   | _ => GuardResult.allow "shell_command"
 
-/-- Evaluate the McpToolGuard.
-    Mirrors the `check()` method in guards/mcp_tool.rs.
-
-    Evaluation order: block > allow > default.
-    1. If tool is in the block list, deny.
-    2. If tool is in the allow list, allow.
-    3. Otherwise, apply the default action (allow by default). -/
+/-- Mirrors: guards/mcp_tool.rs check() -/
 def evalMcpTool (cfg : McpToolConfig) (action : Action) (_ : Context) : GuardResult :=
   if !cfg.enabled then GuardResult.allow "mcp_tool"
   else match action with
@@ -169,27 +98,15 @@ def evalMcpTool (cfg : McpToolConfig) (action : Action) (_ : Context) : GuardRes
     if cfg.block.contains tool then
       GuardResult.block "mcp_tool" .error s!"MCP tool '{tool}' is blocked"
     else if cfg.allow.isEmpty || cfg.allow.contains tool then
-      -- If allow list is empty, all non-blocked tools pass (when default is allow)
-      -- If allow list is non-empty and tool is in it, allow
       GuardResult.allow "mcp_tool"
     else
-      -- Tool not in allow list and allow list is non-empty
       match cfg.defaultAction with
       | some .block => GuardResult.block "mcp_tool" .error
           s!"MCP tool '{tool}' is not in allowlist (default: block)"
       | _ => GuardResult.allow "mcp_tool"
   | _ => GuardResult.allow "mcp_tool"
 
--- ============================================================================
--- Unified Guard Dispatch
--- ============================================================================
-
-/-- Evaluate all configured guards against an action.
-    Mirrors the guard evaluation pipeline in engine.rs.
-
-    Returns a list of GuardResults -- one per enabled guard.
-    Guards that are `none` (not configured) are skipped.
-    Content-dependent guards check their `enabled` flag. -/
+/-- Mirrors: guard evaluation pipeline in engine.rs -/
 def evalGuards (cfg : GuardConfigs) (action : Action) (ctx : Context) : List GuardResult :=
   let results : List (Option GuardResult) := [
     cfg.forbiddenPath.map (fun c => evalForbiddenPath c action ctx),
@@ -212,30 +129,11 @@ def evalGuards (cfg : GuardConfigs) (action : Action) (ctx : Context) : List Gua
   ]
   results.filterMap id
 
--- ============================================================================
--- Config Error Check
--- ============================================================================
-
-/-- Check if a policy has a configuration error (unsupported version).
-    Mirrors the version check in the Rust engine initialization. -/
+/-- Mirrors: version check in Rust engine initialization. -/
 def hasConfigError (policy : Policy) : Bool :=
   !supportedVersions.contains policy.version
 
--- ============================================================================
--- Full Policy Evaluation
--- ============================================================================
-
-/-- Full policy evaluation. Top-level function that the implementation must
-    agree with.
-
-    Mirrors the evaluation pipeline in engine.rs:
-    1. Check for config errors (unsupported version → fail closed)
-    2. Evaluate all guards against the action
-    3. If fail-fast is enabled, short-circuit on first denial
-    4. Aggregate results via worseResult fold
-
-    Returns `Except.error` on config error, `Except.ok` with the aggregate
-    verdict otherwise. -/
+/-- Full policy evaluation. Mirrors: engine.rs evaluation pipeline. -/
 def evalPolicy (policy : Policy) (action : Action) (ctx : Context)
     : Except String GuardResult :=
   if hasConfigError policy then

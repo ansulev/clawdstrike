@@ -1,24 +1,14 @@
-//! Pure aggregation logic for guard verdicts.
-//!
-//! This module contains the `aggregate_overall` function that combines
-//! multiple per-guard verdicts into a single overall verdict. It has
-//! **no** external dependencies (no serde, no async, no I/O).
+//! Aggregation logic for guard verdicts (no serde, no I/O).
 
 use super::verdict::{severity_ord, CoreSeverity, CoreVerdict};
 
-/// Select the index of the "winning" verdict from a non-empty slice.
+/// Select the index of the "winning" (worst) verdict from a non-empty slice.
 ///
-/// Selection rules (in priority order):
-/// 1. A blocking result always beats a non-blocking result.
-/// 2. Among results with the same blocking status, higher severity wins.
-/// 3. Among results with the same blocking status and severity, a sanitized
-///    result is preferred over a plain one (preserves sanitize payloads).
+/// Priority: blocking > non-blocking, then higher severity, then sanitized
+/// over plain (among allowed results at equal severity).
 ///
-/// Returns `None` if the input slice is empty.
-///
-/// This is the most primitive aggregation entry point — callers that carry
-/// richer per-element data (e.g. `GuardResult` with serde details) can use
-/// the returned index to pick the winner from their own array.
+/// Returns `None` if the input slice is empty. Callers with richer types
+/// (e.g. `GuardResult`) can use the index to pick the winner from their array.
 #[must_use]
 pub fn aggregate_index(
     results: &[(bool, CoreSeverity, bool)], // (allowed, severity, sanitized)
@@ -63,10 +53,7 @@ pub fn aggregate_index(
     Some(best_idx)
 }
 
-/// Aggregate a slice of per-guard verdicts into a single overall verdict.
-///
-/// This is a convenience wrapper around [`aggregate_index`] that operates on
-/// [`CoreVerdict`] values directly.
+/// Aggregate verdicts into a single overall verdict.
 ///
 /// Returns `CoreVerdict::allow("engine")` if the input slice is empty.
 #[must_use]
@@ -81,10 +68,6 @@ pub fn aggregate_overall(results: &[CoreVerdict]) -> CoreVerdict {
         None => CoreVerdict::allow("engine"),
     }
 }
-
-// =========================================================================
-// Tests
-// =========================================================================
 
 #[cfg(test)]
 mod tests {

@@ -1,8 +1,4 @@
 //! Formula translation for [`EgressAllowlistConfig`].
-//!
-//! Allowed domains become `Permission` formulas. Blocked domains (which take
-//! precedence) become `Prohibition` formulas. The default action produces a
-//! synthetic prohibition or permission for an `egress(*)` wildcard atom.
 
 use clawdstrike::guards::EgressAllowlistConfig;
 use hush_proxy::policy::PolicyAction;
@@ -12,17 +8,8 @@ use super::GuardFormulas;
 use crate::atoms::ActionAtom;
 
 impl GuardFormulas for EgressAllowlistConfig {
-    /// Translate egress-allowlist configuration into normative formulas.
-    ///
-    /// For each allowed domain `d`:
-    ///   `P_agent(egress(d))`
-    ///
-    /// For each blocked domain `d`:
-    ///   `F_agent(egress(d))`
-    ///
-    /// For the default action (when no pattern matches):
-    ///   - `Block` => `F_agent(egress(*))`
-    ///   - `Allow` (or absent) => `P_agent(egress(*))`
+    /// `P_agent(egress(d))` per allow, `F_agent(egress(d))` per block,
+    /// plus a wildcard default (`egress(*)`).
     fn to_formulas(&self, agent: &AgentId) -> Vec<Formula> {
         if !self.enabled {
             return vec![];

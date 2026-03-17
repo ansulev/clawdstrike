@@ -17,7 +17,7 @@ But "by design" is not "by proof." The core invariants are enforced by conventio
 - **Merge monotonicity**: `GuardConfigs::merge_with()` (`policy.rs:280`) implements per-guard merge logic across 13 guard config fields plus custom guards. A bug in any branch can cause a child policy to silently drop a parent's restrictions.
 - **Cycle detection**: `from_yaml_with_extends_internal_resolver` (`policy.rs:1420`) uses a `HashSet<String>` visited set bounded by `MAX_POLICY_EXTENDS_DEPTH = 32` (`policy.rs:32`). An off-by-one or key collision silently permits infinite recursion or rejects valid chains.
 
-Formal verification provides mathematical proof that these invariants hold for all inputs, not just the inputs covered by tests. For a security system, this is the difference between "we tested it" and "we proved it."
+Formal verification provides mathematical proof that these invariants hold for all inputs, not just the inputs covered by tests. For a security system, this is the difference between "tested" and "proved."
 
 ### What We Are NOT Verifying
 
@@ -94,28 +94,9 @@ Aeneas takes safe Rust code (via LLBC, the Low-Level Borrow Calculus extracted f
 | Macros (proc or declarative) | Partial | Expanded by rustc before Charon extraction |
 | Serde derives | No | Must work on already-deserialized types |
 
-#### Applicability to ClawdStrike
-
-Aeneas can handle the **pure decision-making core**:
-
-- `aggregate_overall()` -- pure function over `&[GuardResult]`
-- `severity_ord()` -- pure enum-to-integer mapping
-- `GuardConfigs::merge_with()` -- pure function over two `GuardConfigs`
-- Cycle detection logic (visited set operations)
-- `MergeStrategy` dispatch
-
-It CANNOT handle:
-
-- Async guard execution (the `check` method on `HushEngine`)
-- Serde deserialization (policy loading from YAML)
-- Crypto operations (Ed25519 signing in `hush-core`)
-- Dynamic dispatch (`Box<dyn Guard>` pipeline)
-
-This means Aeneas gives us verification of the aggregation and merge logic but not the end-to-end pipeline. This is still very valuable -- these are exactly the functions where a subtle bug would silently weaken security.
-
 #### Industrial Precedent
 
-Microsoft used Aeneas (together with hax) to verify SymCrypt's ML-KEM (post-quantum cryptography) implementation. This is the strongest industrial validation of the Aeneas ecosystem to date, but the verified code was also pure algorithmic logic extracted from a larger system -- the same pattern we would follow.
+Microsoft used Aeneas (with hax) to verify SymCrypt's ML-KEM (post-quantum cryptography) implementation -- pure algorithmic logic extracted from a larger system, the same pattern we follow.
 
 ---
 
@@ -138,27 +119,17 @@ Leanstral is an agentic Lean 4 prover. It reads a Lean project, understands the 
 | FLTEval (pass@16) | 32.0% | -- | -- | Still 68% failure |
 | miniCodeProps | Not benchmarked | Near-zero on medium/hard | Near-zero on medium/hard | Software verification |
 
-#### Critical Assessment
+#### Assessment
 
-Leanstral is promising for **automating routine lemmas** (the kind that are tedious but not intellectually difficult, like "this function preserves this invariant under these conditions"). It is not ready to discover deep properties or handle the creative part of verification.
+Leanstral can automate routine lemmas (case splits, `simp`/`omega` chains, structural induction with clear structure). It cannot discover deep properties or handle creative proof design.
 
-Key weaknesses for our use case:
+Key weaknesses:
 
-1. **No documented software verification capability.** All published benchmarks are on mathematical theorems, not on verifying code properties. The miniCodeProps benchmark (which tests exactly the kind of proofs we need -- properties of programs) shows all current LLM provers fail on nearly all medium and hard problems.
+1. **No software verification benchmarks.** All published results are on mathematical theorems. miniCodeProps (which tests code property proofs) shows all current LLM provers fail on nearly all medium and hard problems.
+2. **Requires existing Lean context.** The formalization (types, definitions, theorem statements) must exist before Leanstral can help fill in proof bodies.
+3. **68% failure rate at pass@16** on research math. Software verification should expect higher failure rates.
 
-2. **Requires well-typed Lean context.** Leanstral works within an existing Lean project with fully elaborated type signatures. We need to first set up the Lean formalization (types, function definitions, theorem statements) before Leanstral can help fill in proof bodies.
-
-3. **68% failure rate at pass@16.** This is on research math, where common proof patterns recur. Software verification involves more mechanical bookkeeping and less pattern-matching against known proof strategies, so we should expect higher failure rates.
-
-#### Near-Term Role
-
-Leanstral's practical role in our pipeline is **proof assistant, not proof engineer**:
-
-- Generate first-draft proofs for Aeneas-produced verification conditions
-- Automate `simp`, `omega`, `decide` tactic chains on routine lemmas
-- Fill in cases for structural induction proofs where the structure is clear
-
-The human (or a more capable model) still needs to design the formalization, state the theorems, and handle the hard cases. See [Aeneas Pipeline, Section 4](./aeneas-pipeline.md#step-4-leanstral-assisted-proof-automation-future) for realistic success rate estimates by proof category.
+**Role in our pipeline: proof assistant, not proof engineer.** The human designs the formalization, states theorems, and handles hard cases. See [Aeneas Pipeline, Section 4](./aeneas-pipeline.md#step-4-leanstral-assisted-proof-automation-future) for success rate estimates by proof category.
 
 ---
 
@@ -166,7 +137,7 @@ The human (or a more capable model) still needs to design the formalization, sta
 
 **Location**: `platform/crates/logos-ffi`, `platform/crates/logos-z3`, `platform/crates/logos-goap`
 
-The Logos stack is our unfair advantage. It already exists in the monorepo, implements a 4-layer modal-temporal logic, and has operators that map directly to policy semantics.
+The Logos stack exists in the monorepo, implements a 4-layer modal-temporal logic, and has operators that map directly to policy semantics.
 
 #### Current State
 
@@ -342,11 +313,7 @@ Weeks 17+:    Path 3 (Leanstral)  -- automation layer on top of Path 2
 
 See [ROADMAP](./ROADMAP.md) for the detailed week-by-week plan.
 
-Path 1 and Path 2 are **complementary, not competing**:
-
-- **Path 1** verifies _policy-level_ properties: is this policy consistent? does this merge weaken security? It operates on the formula translation of the policy, not on the Rust code.
-- **Path 2** verifies _implementation-level_ properties: does the Rust code correctly compute the aggregate verdict? It operates on the actual Rust functions translated to Lean 4.
-- Together they cover the full stack from policy semantics to code correctness.
+Path 1 and Path 2 are **complementary**: Path 1 verifies _policy-level_ properties (formula translation), Path 2 verifies _implementation-level_ properties (actual Rust code via Lean 4). Together they cover the full stack.
 
 ---
 
@@ -364,19 +331,13 @@ Path 1 and Path 2 are **complementary, not competing**:
 
 ### Why This Matters
 
-1. **Cedar proved it is achievable.** Amazon demonstrated that policy systems can be formally verified in practice, not just in theory. The techniques are known; the tools exist. The question is execution, not feasibility.
+1. **Cedar proved it is achievable.** The techniques are known; the tools exist. The question is execution.
 
-2. **AI agent security demands higher assurance.** Authorization policies gate human-initiated requests. ClawdStrike gates autonomous agent actions -- an agent operating with a silently weakened policy can exfiltrate data, execute arbitrary code, or bypass network controls without any human in the loop. The blast radius of a policy engine bug is categorically larger.
+2. **AI agent security demands higher assurance.** Authorization policies gate human-initiated requests. ClawdStrike gates autonomous agent actions -- an agent with a silently weakened policy can exfiltrate data or execute arbitrary code without a human in the loop. The blast radius of a policy engine bug is categorically larger.
 
-3. **No competitor in AI agent security has formal verification.** OPA/Rego is the closest competitor in policy enforcement, and it has no formal semantics at all. Rego is deliberately Turing-complete, which makes formal verification fundamentally harder. ClawdStrike's bounded, non-Turing-complete policy evaluation is an architectural advantage for verification.
+3. **No competitor has formal verification.** OPA/Rego has no formal semantics. Rego is Turing-complete, making verification fundamentally harder. ClawdStrike's bounded evaluation is an architectural advantage.
 
-4. **The Logos stack reduces integration cost.** No other AI security system has an in-house modal-temporal logic framework with normative operators. Connecting Logos Layer 3 to ClawdStrike policy semantics is a bridge crate, not a multi-year framework build.
-
-### Positioning Statement (Aspirational -- Achievable After Phase 3)
-
-> ClawdStrike is the only runtime AI security system where "deny means deny" is not a claim -- it is a theorem. The policy engine's core invariants are verified by the Logos formal reasoning system (Z3-backed SMT) and independently checked by Lean 4 proofs of the actual Rust implementation via the Aeneas pipeline. Every policy merge, every verdict aggregation, every inheritance chain is covered by machine-checked guarantees that testing alone cannot provide.
-
-**Note**: This statement becomes accurate when Phases 1--3 of the [ROADMAP](./ROADMAP.md) are complete. Until then, ClawdStrike's assurance level is testing + property-based testing + code review.
+4. **The Logos stack reduces integration cost.** Connecting Logos Layer 3 to policy semantics is a bridge crate, not a multi-year framework build.
 
 ---
 

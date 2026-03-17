@@ -33,18 +33,14 @@ pub mod compiler;
 pub mod guards;
 pub mod verifier;
 
-/// Re-export logos-ffi types for downstream consumers.
 pub use logos_ffi;
 
 use thiserror::Error;
 
-/// Errors that can occur during policy-to-formula compilation.
 #[derive(Debug, Error)]
 pub enum CompileError {
-    /// A guard configuration contains an invalid pattern.
     #[error("invalid pattern in guard `{guard}`: {detail}")]
     InvalidPattern { guard: String, detail: String },
 }
 
-/// Result type for compilation operations.
 pub type Result<T> = std::result::Result<T, CompileError>;

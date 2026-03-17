@@ -1,17 +1,10 @@
-//! Reference specification — an independent, obviously-correct reimplementation
-//! of the core decision logic.
+//! Reference specification: independent reimplementation of core decision logic.
 //!
-//! This module mirrors the Lean formal specification. Every function is written
-//! for *clarity* over performance. It does **not** call into the production
-//! `clawdstrike::core` module — it is a completely separate implementation.
+//! Mirrors the Lean formal spec. Does **not** call into `clawdstrike::core`.
 
 use std::collections::{HashMap, HashSet};
 
-// ---------------------------------------------------------------------------
-// Severity
-// ---------------------------------------------------------------------------
-
-/// Severity levels, matching `CoreSeverity`.
+/// Mirrors `CoreSeverity`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum SpecSeverity {
     Info,
@@ -20,7 +13,7 @@ pub enum SpecSeverity {
     Critical,
 }
 
-/// Total ordering on severity: Info < Warning < Error < Critical.
+/// `Info(0) < Warning(1) < Error(2) < Critical(3)`.
 #[must_use]
 pub fn severity_ord_spec(s: SpecSeverity) -> u8 {
     match s {
@@ -31,11 +24,7 @@ pub fn severity_ord_spec(s: SpecSeverity) -> u8 {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Verdict
-// ---------------------------------------------------------------------------
-
-/// Minimal verdict, matching `CoreVerdict`.
+/// Mirrors `CoreVerdict`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SpecVerdict {
     pub allowed: bool,
@@ -46,7 +35,6 @@ pub struct SpecVerdict {
 }
 
 impl SpecVerdict {
-    /// Default "allow" verdict (used when no results exist).
     #[must_use]
     pub fn default_allow() -> Self {
         Self {
@@ -59,19 +47,8 @@ impl SpecVerdict {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Worse-result comparator
-// ---------------------------------------------------------------------------
-
-/// Determine whether `candidate` should replace `current_best` as the
-/// "winning" (worst) verdict.
-///
-/// Rules (in priority order):
-/// 1. A blocking result always beats a non-blocking result.
-/// 2. Among results with the same blocking status, higher severity wins.
-/// 3. Among *allowed* results with equal severity, sanitized beats plain.
-///
 /// Returns `true` if `candidate` is strictly worse than `current_best`.
+/// Blocking > non-blocking, then higher severity, then sanitized (among allowed).
 #[must_use]
 pub fn is_worse_spec(current_best: &SpecVerdict, candidate: &SpecVerdict) -> bool {
     let best_blocks = !current_best.allowed;
@@ -108,16 +85,7 @@ pub fn is_worse_spec(current_best: &SpecVerdict, candidate: &SpecVerdict) -> boo
     false
 }
 
-// ---------------------------------------------------------------------------
-// Aggregate
-// ---------------------------------------------------------------------------
-
-/// Aggregate a slice of verdicts into a single overall verdict.
-///
-/// Selection: iterate left-to-right, keeping the "worst" verdict according
-/// to `is_worse_spec`. On a complete tie the first element wins (stability).
-///
-/// Empty input returns `SpecVerdict::default_allow()`.
+/// Aggregate verdicts; empty input returns `SpecVerdict::default_allow()`.
 #[must_use]
 pub fn aggregate_spec(results: &[SpecVerdict]) -> SpecVerdict {
     if results.is_empty() {
@@ -135,11 +103,6 @@ pub fn aggregate_spec(results: &[SpecVerdict]) -> SpecVerdict {
     best.clone()
 }
 
-// ---------------------------------------------------------------------------
-// Merge combinators
-// ---------------------------------------------------------------------------
-
-/// Child-overrides-base for `Option<T>`.
 #[must_use]
 pub fn child_overrides_spec<T: Clone>(base: &Option<T>, child: &Option<T>) -> Option<T> {
     match child {
@@ -148,7 +111,6 @@ pub fn child_overrides_spec<T: Clone>(base: &Option<T>, child: &Option<T>) -> Op
     }
 }
 
-/// Child-overrides-base for non-empty strings.
 #[must_use]
 pub fn child_overrides_str_spec(base: &str, child: &str) -> String {
     if child.is_empty() {
@@ -158,8 +120,6 @@ pub fn child_overrides_str_spec(base: &str, child: &str) -> String {
     }
 }
 
-/// Merge two keyed vectors: child entries replace base entries with the same key,
-/// new entries are appended. Empty child returns base; empty base returns child.
 pub fn merge_keyed_vec_spec<T: Clone, K: Eq + std::hash::Hash>(
     base: &[T],
     child: &[T],
@@ -198,14 +158,9 @@ pub fn merge_keyed_vec_spec<T: Clone, K: Eq + std::hash::Hash>(
     out
 }
 
-// ---------------------------------------------------------------------------
-// Cycle detection
-// ---------------------------------------------------------------------------
-
-/// Maximum extends depth (must match production constant).
+/// Must match `core::cycle::MAX_POLICY_EXTENDS_DEPTH`.
 pub const MAX_DEPTH_SPEC: usize = 32;
 
-/// Outcome of cycle/depth check.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CycleCheckSpec {
     Ok,
@@ -213,11 +168,6 @@ pub enum CycleCheckSpec {
     CycleDetected { key: String },
 }
 
-/// Check whether adding `key` at `depth` to the visited set would be safe.
-///
-/// - If `depth > MAX_DEPTH_SPEC`, returns `DepthExceeded`.
-/// - If `key` is already in `visited`, returns `CycleDetected`.
-/// - Otherwise returns `Ok`.
 #[must_use]
 pub fn check_extends_cycle_spec(
     key: &str,
@@ -239,10 +189,6 @@ pub fn check_extends_cycle_spec(
 
     CycleCheckSpec::Ok
 }
-
-// ---------------------------------------------------------------------------
-// Unit tests for the spec itself (sanity checks)
-// ---------------------------------------------------------------------------
 
 #[cfg(test)]
 mod tests {

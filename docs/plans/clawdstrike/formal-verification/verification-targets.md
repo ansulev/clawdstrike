@@ -19,7 +19,7 @@ Each verification target is scored on two axes:
 
 Scores of 20+ are immediate targets. Scores of 12-19 are near-term. Scores below 12 are deferred or addressed through testing.
 
-Note: this is a coarse prioritization tool, not a precise risk metric. Scores near boundaries (e.g., 11-12, 19-20) should be evaluated on their merits rather than mechanically sorted.
+Scores near boundaries should be evaluated on their merits rather than mechanically sorted.
 
 ---
 
@@ -29,9 +29,7 @@ Note: this is a coarse prioritization tool, not a precise risk metric. Scores ne
 
 ### Component Description
 
-`aggregate_overall` in `crates/libs/clawdstrike/src/engine.rs:1785-1818` is the function that combines individual guard verdicts into a single overall decision. It iterates over a `&[GuardResult]` and selects the "worst" result: blocking results take priority over allowing results, and among results of equal blocking status, higher severity wins.
-
-This is the single most security-critical pure function in ClawdStrike. If it contains a bug -- for example, if a deny result could be overridden by a subsequent allow -- the entire security model collapses.
+`aggregate_overall` (`engine.rs:1785-1818`) combines individual guard verdicts into a single decision. Blocking results beat allowing results; among equal blocking status, higher severity wins. A bug here (e.g., deny overridden by allow) collapses the entire security model.
 
 ### Correctness Properties
 
@@ -51,23 +49,14 @@ This is the single most security-critical pure function in ClawdStrike. If it co
 - **External deps**: `GuardResult` and `Severity` types (both simple structs/enums). Note: `aggregate_overall` calls `r.is_sanitized()` which inspects a `serde_json::Value` field; the core extraction must replace this with a plain `bool`.
 - **Control flow**: Single loop with three conditional branches
 
-### Recommended Verification Tool
+### Recommended Tool
 
-**Primary**: Aeneas/Lean 4. This function is an ideal Aeneas target -- pure, small, no dependencies. The generated Lean 4 code will be nearly identical to the Rust source. Proofs are straightforward induction on the list.
+**Primary**: Aeneas/Lean 4 -- pure, small, no dependencies. Proofs are straightforward induction on the list.
+**Secondary**: Logos/Z3 for deny-wins as normative formula.
 
-**Secondary**: Logos/Z3 for the deny-wins property, encoding it as a normative formula: `F_agent(phi) AND P_agent(phi) => F_agent(phi)` (Prohibition overrides Permission).
+### Estimated Effort: 2-3 days
 
-### Estimated Effort
-
-- Core module extraction: 0.5 day
-- Aeneas extraction + Lean generation: 0.5 day
-- Proof of P1.1 (deny monotonicity): 1 day
-- Proofs of P1.2-P1.5: 1 day
-- **Total: 2-3 days**
-
-### Supporting Evidence from Codebase
-
-The function and its helper as they exist today:
+### Current Implementation
 
 ```rust
 fn severity_ord(s: &Severity) -> u8 {
@@ -484,7 +473,7 @@ The intersection of glob-based domain patterns is inherently approximate. The co
 
 ### Component Description
 
-The posture system in `crates/libs/clawdstrike/src/posture.rs` defines a state machine with named states, transitions triggered by events (violations, approvals, budget exhaustion), capabilities per state, and budget counters. The runtime evaluates the posture state on each action, potentially transitioning states and adjusting available capabilities.
+The posture system in `crates/libs/clawdstrike/src/posture.rs` defines a state machine with named states, transitions triggered by events (violations, approvals, budget exhaustion), capabilities per state, and budget counters. The runtime evaluates the posture state on each action, transitioning states and adjusting available capabilities as warranted.
 
 ### Correctness Properties
 
@@ -653,54 +642,15 @@ This is a foundational security property: a misconfigured engine must never sile
 
 ## Recommended Order of Attack
 
-The following sequence optimizes for early wins (building confidence and infrastructure) before tackling harder targets.
+Sequence optimizes for early wins (building pipeline confidence) before harder targets.
 
-### Wave 1: Quick Wins (Weeks 1-2)
-
-**1. Guard aggregation** -- Priority 25, effort 2-3 days.
-Start here. This is the simplest possible Aeneas target and validates the entire pipeline (core module extraction, Charon, Aeneas, Lean 4 proof). If this takes longer than 1 week, reassess the entire initiative.
-
-**2. Severity ordering** -- Free with Target 1.
-`severity_ord` is 8 lines. Proving total order is a warm-up exercise for the proof engineer.
-
-**3. Fail-closed on config error** -- Priority 20, effort 1 day.
-Trivial structural property: `config_error.is_some()` implies `Err`. Validates that the engine never silently allows actions when misconfigured. Free confidence win.
-
-**4. Policy cycle detection** -- Priority 20, effort 3-5 days.
-Small function, clean recursion, well-founded termination argument. Classic verification target.
-
-### Wave 2: Core Crypto Properties (Weeks 3-5)
-
-**5. Merkle tree inclusion proofs** -- Priority 20, effort 1-2 weeks.
-Classic verification target with extensive prior art. This builds credibility for the formal verification effort ("we proved our Merkle tree correct").
-
-**6. Ed25519 signing interface** -- Priority 20, effort 1 week.
-Establishes the axiomatic crypto framework that all subsequent signing proofs depend on. Must be done before receipt signing coverage.
-
-### Wave 3: Policy Integrity (Weeks 6-10)
-
-**7. Receipt canonical JSON** -- Priority 20, effort 1-2 weeks.
-Depends on the axiomatic crypto framework established for Ed25519 (Target 4). Proves that receipt signatures are stable.
-
-**8. Policy merge** -- Priority 15, effort 2-3 weeks.
-The highest-security-value target that is still feasible. Proving forbidden path monotonicity through the merge system is the most impactful result for customers.
-
-### Wave 4: Defense in Depth (Weeks 11-15)
-
-**9. ForbiddenPath symlink safety** -- Priority 15, effort 2 weeks.
-Requires abstracting the filesystem. Proves the guard is safe against symlink attacks.
-
-**10. Egress allowlist intersection** -- Priority 12, effort 2 weeks.
-Z3-based verification of set-theoretic properties.
-
-**11. Posture state machine** -- Priority 12, effort 1.5-2 weeks.
-TLA+ model checking for state reachability, deadlock freedom, and capability restriction. Now scored as near-term given the security impact of capability escalation bugs.
-
-### Wave 5: Testing-Based Assurance (Ongoing)
-
-**12. Shell command path extraction** -- Fuzzing campaign.
-
-**13. Async runtime, Origin context** -- Integration testing only.
+| Wave | Targets | Calendar | Rationale |
+|------|---------|----------|-----------|
+| **1: Quick Wins** | Aggregation (P25), severity (free), fail-closed (P20), cycle detection (P20) | Weeks 1-2 | Validates the full pipeline. If aggregation takes >1 week, reassess the initiative. |
+| **2: Crypto** | Merkle tree (P20), Ed25519 interface (P20) | Weeks 3-5 | Classic targets with prior art. Establishes axiomatic crypto framework. |
+| **3: Policy** | Canonical JSON (P20), policy merge (P15) | Weeks 6-10 | Merge monotonicity is the highest-impact result for users. |
+| **4: Defense in Depth** | Symlink safety (P15), egress intersection (P12), posture TLA+ (P12) | Weeks 11-15 | Abstract filesystem, set-theoretic properties, state machine checking. |
+| **5: Testing** | Shell command fuzzing, async/origin integration tests | Ongoing | Not amenable to formal verification. |
 
 ---
 
@@ -715,13 +665,4 @@ TLA+ model checking for state reachability, deadlock freedom, and capability res
 | Wave 5 | Shell fuzzing, testing | Ongoing | 1+ |
 | **Total** | | **~15 weeks** | **~17 person-weeks** |
 
-This represents approximately one senior engineer working full-time for one quarter, or two engineers working half-time. The first meaningful result (proven deny monotonicity) arrives in week 1.
-
----
-
-## Cross-References
-
-- [Aeneas Pipeline](./aeneas-pipeline.md): Detailed pipeline design for Targets 1-7, 13 (Aeneas/Lean 4 path). Uses `formal/lean4/ClawdStrike/` for Lean code and `formal/llbc/` for LLBC output.
-- [Logos Integration](./logos-integration.md): Normative logic encoding for Targets 1, 6, 8 (Logos/Z3 path).
-- [ROADMAP](./ROADMAP.md): Phased implementation plan incorporating these targets. Refers to properties P1-P7 which map to targets as follows: P1=Target 1, P2=Target 13, P3=Target 1 (severity), P4=Target 6, P5=Target 3, P6=Target 3, P7=Target 2.
-- [INDEX](./INDEX.md): Documentation index for the formal verification initiative.
+Approximately one senior engineer full-time for one quarter. The first meaningful result (proven deny monotonicity) arrives in week 1.

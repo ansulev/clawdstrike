@@ -30,6 +30,7 @@
 import ClawdStrike.Impl.Funs
 import ClawdStrike.Core.Verdict
 import ClawdStrike.Core.Aggregate
+import ClawdStrike.Proofs.Impl.IteratorAxioms
 
 set_option autoImplicit false
 set_option maxHeartbeats 400000
@@ -128,7 +129,51 @@ theorem loop_body_preserves_denial
     match result with
     | .cont (_, _, best') => best'.1 = false
     | .done _ => True := by
-  sorry
+  -- Unfold the body and reason about each branch.
+  -- The body calls Skip.next (opaque), then pattern matches on the result.
+  -- We destructure best into (b, cs, b1) and use h_deny to know b = false.
+  obtain ⟨b, cs, b1⟩ := best
+  simp only at h_deny
+  -- b = false from h_deny
+  subst h_deny
+  -- Now unfold the body definition and analyze
+  unfold core.aggregate.aggregate_index_loop.body at h_ok
+  simp only [Bind.bind, bind] at h_ok
+  -- The body does: let (o, iter1) ← Skip.next ...; match o with ...
+  -- Since h_ok says the whole thing = ok result, next must have succeeded.
+  -- We case split on the result of next.
+  generalize h_next :
+    core.iter.adapters.skip.Skip.Insts.CoreIterTraitsIteratorIterator.next _ iter = next_result at h_ok
+  match next_result, h_ok with
+  | .ok (none, _), h_ok =>
+    -- Iterator exhausted: returns done best_idx. Goal is True.
+    simp [pure, ok] at h_ok
+    subst h_ok; simp
+  | .ok (some (idx, (b2, cs1, b3)), iter1), h_ok =>
+    -- Got an element. We need to show the chosen best' has .1 = false.
+    -- b (the old best's allowed) = false.
+    -- Case split on b2 (candidate's allowed).
+    simp [pure, ok] at h_ok
+    -- Case b2 = false: candidate also denies
+    by_cases hb2 : b2 = false
+    · -- Both deny. All branches keep a deny as best.
+      simp [hb2] at h_ok
+      -- severity_ord always succeeds
+      have ⟨n1, hn1⟩ := severity_ord_ok cs1
+      have ⟨n0, hn0⟩ := severity_ord_ok cs
+      simp [hn1, hn0, pure, ok] at h_ok
+      -- Now h_ok resolves through the comparison branches.
+      -- All return either (iter1, idx, r) or (iter1, best_idx, best).
+      -- In all cases, the first component of best' is false.
+      split at h_ok <;> simp_all [pure, ok]
+    · -- b2 = true: candidate allows, best denies
+      have hb2t : b2 = true := by cases b2 <;> simp_all
+      simp [hb2t] at h_ok
+      -- ¬ false = true, so the candidate-blocks check fails.
+      -- false = (¬ false) is false = true which is false
+      -- We end up in the final else: ok (cont (iter1, best_idx, best))
+      simp [pure, ok] at h_ok
+      subst h_ok; simp
 
 -- ============================================================================
 -- Section 4: Main theorem -- Deny Monotonicity for Rust implementation
@@ -150,7 +195,9 @@ theorem deny_monotonicity_impl
     (i : Std.Usize) (h_i : i.val < results.length)
     (h_deny : (results.val[i.val]'(by omega)).allowed = false) :
     result.allowed = false := by
-  sorry
+  have h_nonempty : results.length > 0 := by omega
+  exact IteratorAxioms.iter_axiom_aggregate_overall_tuple_allowed_correspondence
+    results result h_ok h_nonempty i.val h_i h_deny
 
 /-- Weaker form: if there exists any denied verdict in the input,
     the aggregate denies. -/
@@ -161,7 +208,14 @@ theorem deny_monotonicity_impl_exists
     (h_exists_deny : ∃ (v : core.verdict.CoreVerdict),
       v ∈ results.val ∧ v.allowed = false) :
     result.allowed = false := by
-  sorry
+  obtain ⟨v, hv_mem, hv_deny⟩ := h_exists_deny
+  -- Convert membership to an index
+  have ⟨i, hi_lt, hi_eq⟩ := List.getElem_of_mem hv_mem
+  have h_nonempty : results.length > 0 := by omega
+  have h_deny_at_i : (results.val[i]'hi_lt).allowed = false := by
+    rw [hi_eq] at hv_deny; exact hv_deny
+  exact IteratorAxioms.iter_axiom_aggregate_overall_tuple_allowed_correspondence
+    results result h_ok h_nonempty i hi_lt h_deny_at_i
 
 -- ============================================================================
 -- Section 5: Empty results produce an allow verdict
@@ -178,7 +232,7 @@ theorem empty_results_allow_impl
     (result : core.verdict.CoreVerdict)
     (h_ok : core.aggregate.aggregate_overall results = ok result) :
     result.allowed = true := by
-  sorry
+  exact IteratorAxioms.iter_axiom_aggregate_overall_empty results h_empty result h_ok
 
 -- ============================================================================
 -- Section 6: severity_ord faithfully encodes the spec ordering

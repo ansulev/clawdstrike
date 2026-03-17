@@ -19,27 +19,18 @@
 use logos_ffi::Formula;
 use std::fmt;
 
-/// The kind of action being modeled.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum ActionKind {
-    /// File access (read).
     Access,
-    /// File write.
     Write,
-    /// Network egress to a domain.
     Egress,
-    /// Shell command execution.
     Exec,
-    /// MCP tool invocation.
     Mcp,
-    /// Patch application.
     Patch,
-    /// Custom action type.
     Custom,
 }
 
 impl ActionKind {
-    /// Return the string prefix used in atom names.
     fn prefix(&self) -> &'static str {
         match self {
             Self::Access => "access",
@@ -52,7 +43,6 @@ impl ActionKind {
         }
     }
 
-    /// Return all seven standard action kinds.
     pub fn all() -> Vec<ActionKind> {
         vec![
             Self::Access,
@@ -65,14 +55,11 @@ impl ActionKind {
         ]
     }
 
-    /// Return the four core action kinds commonly required for agent security
-    /// policies: `access`, `egress`, `exec`, and `mcp`.
+    /// The four action kinds every non-trivial policy should cover.
     pub fn core() -> Vec<ActionKind> {
         vec![Self::Access, Self::Egress, Self::Exec, Self::Mcp]
     }
 
-    /// Parse an [`ActionKind`] from an atom name prefix (the part before the
-    /// opening parenthesis).
     pub fn from_prefix(prefix: &str) -> Option<ActionKind> {
         match prefix {
             "access" => Some(Self::Access),
@@ -93,19 +80,14 @@ impl fmt::Display for ActionKind {
     }
 }
 
-/// An action atom: a typed, parameterized proposition for use in Logos formulas.
-///
-/// The atom name follows the convention `kind(param)`, e.g. `access(/etc/shadow)`.
+/// A typed proposition for Logos formulas: `kind(param)`, e.g. `access(/etc/shadow)`.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct ActionAtom {
-    /// The kind of action.
     pub kind: ActionKind,
-    /// The parameter (path, domain, tool name, pattern, etc.).
     pub param: String,
 }
 
 impl ActionAtom {
-    /// Create a new action atom.
     pub fn new(kind: ActionKind, param: impl Into<String>) -> Self {
         Self {
             kind,
@@ -113,48 +95,39 @@ impl ActionAtom {
         }
     }
 
-    /// File access atom.
     pub fn access(path: impl Into<String>) -> Self {
         Self::new(ActionKind::Access, path)
     }
 
-    /// File write atom.
     pub fn write(path: impl Into<String>) -> Self {
         Self::new(ActionKind::Write, path)
     }
 
-    /// Network egress atom.
     pub fn egress(domain: impl Into<String>) -> Self {
         Self::new(ActionKind::Egress, domain)
     }
 
-    /// Shell command execution atom.
     pub fn exec(pattern: impl Into<String>) -> Self {
         Self::new(ActionKind::Exec, pattern)
     }
 
-    /// MCP tool invocation atom.
     pub fn mcp(tool: impl Into<String>) -> Self {
         Self::new(ActionKind::Mcp, tool)
     }
 
-    /// Patch application atom.
     pub fn patch(path: impl Into<String>) -> Self {
         Self::new(ActionKind::Patch, path)
     }
 
-    /// Custom action atom.
     pub fn custom(action_type: impl Into<String>) -> Self {
         Self::new(ActionKind::Custom, action_type)
     }
 
-    /// Return the canonical atom name: `kind(param)`.
     #[must_use]
     pub fn atom_name(&self) -> String {
         format!("{}({})", self.kind.prefix(), self.param)
     }
 
-    /// Convert this atom into a Logos [`Formula::Atom`].
     #[must_use]
     pub fn to_formula(&self) -> Formula {
         Formula::atom(self.atom_name())
@@ -167,7 +140,7 @@ impl fmt::Display for ActionAtom {
     }
 }
 
-/// Convenience function: produce a [`Formula::Atom`] from an action type and parameter.
+/// Produce a [`Formula::Atom`] from an action type string and parameter.
 #[must_use]
 pub fn action_atom(action_type: &str, param: &str) -> Formula {
     Formula::atom(format!("{action_type}({param})"))

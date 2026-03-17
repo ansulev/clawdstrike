@@ -1,7 +1,4 @@
 //! Formula translation for [`PathAllowlistConfig`].
-//!
-//! The allowlist defines the complete set of permitted paths. Each allowed glob
-//! becomes a `Permission` formula.
 
 use clawdstrike::guards::PathAllowlistConfig;
 use logos_ffi::{AgentId, Formula};
@@ -10,16 +7,7 @@ use super::GuardFormulas;
 use crate::atoms::ActionAtom;
 
 impl GuardFormulas for PathAllowlistConfig {
-    /// Translate path-allowlist configuration into normative formulas.
-    ///
-    /// For each allowed file-access glob `g`:
-    ///   `P_agent(access(g))` -- Permission to access paths matching g
-    ///
-    /// For each allowed file-write glob `g`:
-    ///   `P_agent(write(g))` -- Permission to write paths matching g
-    ///
-    /// For each allowed patch glob `g`:
-    ///   `P_agent(patch(g))` -- Permission to patch paths matching g
+    /// `P_agent(access(g))`, `P_agent(write(g))`, `P_agent(patch(g))` per glob.
     fn to_formulas(&self, agent: &AgentId) -> Vec<Formula> {
         if !self.enabled {
             return vec![];

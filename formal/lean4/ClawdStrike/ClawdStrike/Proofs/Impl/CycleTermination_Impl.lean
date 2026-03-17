@@ -22,6 +22,7 @@
 import ClawdStrike.Impl.Funs
 import ClawdStrike.Core.Cycle
 import ClawdStrike.Core.Merge
+import ClawdStrike.Proofs.Impl.IteratorAxioms
 
 set_option autoImplicit false
 set_option maxHeartbeats 400000
@@ -39,9 +40,10 @@ open clawdstrike
     maxExtendsDepth (32). -/
 theorem max_depth_matches_spec :
     core.cycle.MAX_POLICY_EXTENDS_DEPTH.val = ClawdStrike.Core.maxExtendsDepth := by
-  -- MAX_POLICY_EXTENDS_DEPTH is defined as 32#usize in the Aeneas output
+  -- MAX_POLICY_EXTENDS_DEPTH is defined as 32#usize in the Aeneas output (irreducible)
   -- maxExtendsDepth is defined as 32 in the spec
-  sorry
+  unfold core.cycle.MAX_POLICY_EXTENDS_DEPTH ClawdStrike.Core.maxExtendsDepth
+  rfl
 
 -- ============================================================================
 -- Section 2: CycleCheckResult type correspondence
@@ -114,7 +116,8 @@ theorem cycle_detected_impl
         ok (.CycleDetected s) := by
   unfold core.cycle.check_extends_cycle
   simp [h_not_deep, h_contains]
-  sorry
+  obtain ⟨s, hs⟩ := IteratorAxioms.iter_axiom_to_string_str key
+  exact ⟨s, by simp [hs]⟩
 
 /-- If the visited set does NOT contain the key and depth is within limit,
     check_extends_cycle returns Ok. -/

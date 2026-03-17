@@ -1,12 +1,8 @@
 # Formal Verification
 
-ClawdStrike provides formally verified policy enforcement -- mathematical proof that your security policies behave correctly. This goes beyond testing: instead of checking a finite number of inputs, we prove properties hold for *all possible* inputs.
+ClawdStrike provides formally verified policy enforcement -- mathematical proof that security policies behave correctly for *all possible* inputs, not just tested ones.
 
-## Why it matters
-
-Policy engines make security decisions. A bug in the aggregation logic could silently allow an action that should be blocked. Traditional testing can miss edge cases. Formal verification eliminates entire classes of bugs by proving the logic correct at a mathematical level.
-
-Concretely, ClawdStrike's formal verification guarantees:
+## Guarantees
 
 - **Deny always wins.** If any guard blocks an action, the final verdict is always "deny" -- no combination of other guards can override it.
 - **Inheritance never weakens security.** When a child policy extends a parent, the child cannot silently remove prohibitions.
@@ -56,7 +52,7 @@ hush policy verify clawdstrike:ai-agent
 
 ## Attestation levels
 
-Every ClawdStrike receipt includes a verification attestation level indicating the depth of assurance behind the policy decision.
+Every receipt includes a verification attestation level:
 
 | Level | Name | What it means | How to achieve |
 |-------|------|---------------|----------------|
@@ -65,11 +61,9 @@ Every ClawdStrike receipt includes a verification attestation level indicating t
 | 2 | Lean-Proved | Core properties proved about the spec | Lean 4 spec builds cleanly |
 | 3 | Impl-Verified | Properties proved about the actual Rust code | Aeneas proofs complete |
 
-Most users will operate at Level 1 (Z3-Verified). This is the level you get by running `hush policy verify` in CI. Levels 2 and 3 are provided by the project's own build infrastructure and give assurance about the engine itself, not your specific policy.
+Most users operate at Level 1. Levels 2 and 3 provide assurance about the engine itself, not your specific policy.
 
 ## Verification in CI
-
-Add policy verification to your CI pipeline to catch problems before deployment.
 
 ### GitHub Actions
 
@@ -118,9 +112,9 @@ jobs:
 
 ### Core properties (Lean 4 specification)
 
-The following properties are stated and proved in the Lean 4 formal specification at `formal/lean4/ClawdStrike/`. These are machine-checked -- Lean's type checker guarantees the proofs are valid.
+Machine-checked proofs in `formal/lean4/ClawdStrike/`. Lean's type checker guarantees validity.
 
-**P1: Deny monotonicity.** If any guard in the result list has `allowed = false`, then the aggregate verdict has `allowed = false`. This is the critical safety property. Without it, a single guard's denial could be silently overridden.
+**P1: Deny monotonicity.** If any guard has `allowed = false`, the aggregate verdict has `allowed = false`.
 
 **P2: Allow requires unanimity.** The contrapositive of P1 -- if the aggregate allows, then *every* guard allowed. No guard's denial was dropped.
 
@@ -150,8 +144,6 @@ These are checked at the policy level (your specific YAML), not the engine level
 
 ### What we do not prove
 
-Formal verification has a scope. Here is what falls outside it:
-
 - **Guard heuristic accuracy.** Pattern matching quality (regex, glob) is axiomatized -- we prove the logic around matching is correct, not that any specific pattern catches every threat.
 - **External crypto implementations.** Ed25519 signature internals (provided by the `ed25519-dalek` crate) are trusted, not verified.
 - **Async guard timeout behavior.** The formal spec models guards as pure synchronous functions. Timeout, cancellation, and concurrency behavior in async guards are tested, not proved.
@@ -160,11 +152,9 @@ Formal verification has a scope. Here is what falls outside it:
 
 ## How it works
 
-ClawdStrike uses three complementary verification approaches:
-
 ### 1. Z3/Logos policy verification (Level 1)
 
-When you run `hush policy verify`, your policy YAML is compiled into normative logic formulas via the Logos framework. Each guard configuration produces permissions and prohibitions:
+`hush policy verify` compiles your policy YAML into normative logic formulas via the Logos framework:
 
 ```text
 ForbiddenPathConfig  -->  Prohibition(access("/etc/shadow"))
@@ -177,7 +167,7 @@ These formulas are checked for consistency (no conflicts), completeness (all act
 
 ### 2. Lean 4 specification (Level 2)
 
-The formal specification lives in `formal/lean4/ClawdStrike/` and models the policy engine as pure functions in Lean 4. The specification mirrors the Rust implementation:
+`formal/lean4/ClawdStrike/` models the policy engine as pure functions in Lean 4, mirroring the Rust implementation:
 
 | Lean module | Rust source | What it models |
 |-------------|-------------|----------------|
@@ -196,13 +186,11 @@ cd formal/lean4/ClawdStrike && lake build
 
 ### 3. Aeneas implementation verification (Level 3)
 
-[Aeneas](https://github.com/AeneasVerif/aeneas) translates the actual Rust source code into Lean 4, producing a faithful model of the implementation (not a hand-written approximation). The generated Lean code lives alongside the specification, allowing proofs that the Rust implementation matches the spec.
-
-The Aeneas-generated types can be found in `formal/lean4/ClawdStrike/ClawdStrike/Impl/`. These are auto-generated -- do not edit them by hand.
+[Aeneas](https://github.com/AeneasVerif/aeneas) translates the actual Rust source code into Lean 4, producing a faithful model of the implementation (not a hand-written approximation). The generated code in `formal/lean4/ClawdStrike/ClawdStrike/Impl/` is auto-generated -- do not edit by hand.
 
 ### 4. Differential testing
 
-The `formal-diff-tests` crate uses property-based testing (proptest) to compare the reference specification against the production Rust implementation on randomly generated inputs. This bridges the gap between the Lean spec and the Rust code by testing agreement at scale.
+`formal-diff-tests` uses proptest to compare the Lean spec against the Rust implementation on randomly generated inputs.
 
 ```bash
 cargo test -p formal-diff-tests
@@ -218,43 +206,67 @@ The differential tests cover:
 
 ### Building the Lean specification
 
-Prerequisites: [Lean 4](https://leanprover.github.io/lean4/doc/setup.html) (via elan) and [Lake](https://github.com/leanprover/lean4/tree/master/src/lake) (bundled with Lean).
-
 ```bash
 # Install Lean 4 (if not already installed)
 curl https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -sSf | sh
 
-# Build the specification and check all proofs
-cd formal/lean4/ClawdStrike
-lake build
+# Build and check all proofs
+cd formal/lean4/ClawdStrike && lake build
 ```
 
-A successful build means every theorem statement in `Spec/Properties.lean` has been verified by Lean's kernel.
+A successful build means every theorem in `Spec/Properties.lean` has been verified by Lean's kernel.
 
-### Running the full verification suite
+### Full verification suite
 
 ```bash
-# Z3 policy verification (your policies)
-hush policy verify my-policy.yaml
-
-# Differential tests (spec vs. implementation agreement)
-cargo test -p formal-diff-tests
-
-# Lean specification (engine correctness proofs)
-cd formal/lean4/ClawdStrike && lake build
+hush policy verify my-policy.yaml         # Z3 policy verification
+cargo test -p formal-diff-tests            # Differential tests
+cd formal/lean4/ClawdStrike && lake build  # Lean proofs
 ```
 
 ### Regenerating Aeneas output
 
-If the Rust `core` module changes, the Aeneas-generated Lean code needs to be regenerated:
+When you change any file in `crates/libs/clawdstrike/src/core/`, the Aeneas-generated Lean code must be regenerated so the Lean proofs continue to reflect the actual Rust implementation.
+
+**When to regenerate:**
+
+- After modifying `verdict.rs`, `aggregate.rs`, `merge.rs`, `cycle.rs`, or `mod.rs` in the `core/` module
+- After adding new types or functions to the core module
+- CI will flag drift automatically on a weekly schedule
+
+**How to regenerate:**
 
 ```bash
-# Requires charon and aeneas binaries installed
-charon --crate clawdstrike
-aeneas --backend lean4 clawdstrike.llbc
+# Regenerate and overwrite the committed Impl/ files
+mise run regenerate-aeneas
+
+# Or run the script directly
+./formal/scripts/regenerate-aeneas.sh
 ```
 
-The generated files go into `formal/lean4/ClawdStrike/ClawdStrike/Impl/`. After regeneration, run `lake build` to verify the proofs still hold against the updated implementation.
+**How to check without overwriting (CI mode):**
+
+```bash
+# Compare freshly generated output against committed files
+mise run check-aeneas
+
+# Or directly
+./formal/scripts/regenerate-aeneas.sh --check
+```
+
+**Prerequisites:** The script requires [Charon](https://github.com/AeneasVerif/charon) and [Aeneas](https://github.com/AeneasVerif/aeneas) to be installed. See the script header for installation instructions.
+
+**What to do if proofs break after regeneration:**
+
+1. Run `./formal/scripts/regenerate-aeneas.sh` to update the Impl/ files
+2. Run `cd formal/lean4/ClawdStrike && lake build` to see which proofs fail
+3. Update the affected theorems in `Spec/Properties.lean` (or the relevant `Core/*.lean` files) to match the new implementation shape
+4. Re-run `lake build` until all proofs pass
+5. Commit both the updated `Impl/` files and the proof fixes together
+
+The auto-generated files are `Types.lean`, `Funs.lean`, and `*_Template.lean` in the `Impl/` directory. Files named `*External.lean` (without the `_Template` suffix) are hand-written glue and are not overwritten by regeneration.
+
+**CI behavior:** The `aeneas-check` job in the Formal Verification workflow runs on a weekly schedule and can be triggered manually via `workflow_dispatch`. It does not block PRs (the OCaml toolchain install takes ~15 minutes), but will alert the team when Impl/ files have drifted.
 
 ## Further reading
 

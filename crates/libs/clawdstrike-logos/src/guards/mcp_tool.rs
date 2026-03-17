@@ -1,7 +1,4 @@
 //! Formula translation for [`McpToolConfig`].
-//!
-//! Blocked tools become `Prohibition` formulas. Allowed tools become `Permission`
-//! formulas. The default action produces a wildcard formula for unmatched tools.
 
 use clawdstrike::guards::{McpDefaultAction, McpToolConfig};
 use logos_ffi::{AgentId, Formula};
@@ -10,17 +7,8 @@ use super::GuardFormulas;
 use crate::atoms::ActionAtom;
 
 impl GuardFormulas for McpToolConfig {
-    /// Translate MCP-tool configuration into normative formulas.
-    ///
-    /// For each blocked tool `t`:
-    ///   `F_agent(mcp(t))` -- Prohibition on invoking tool t
-    ///
-    /// For each allowed tool `t`:
-    ///   `P_agent(mcp(t))` -- Permission to invoke tool t
-    ///
-    /// For the default action (when not explicitly matched):
-    ///   - `Block` => `F_agent(mcp(*))`
-    ///   - `Allow` (or absent) => `P_agent(mcp(*))`
+    /// `F_agent(mcp(t))` per block, `P_agent(mcp(t))` per allow,
+    /// plus a wildcard default (`mcp(*)`).
     fn to_formulas(&self, agent: &AgentId) -> Vec<Formula> {
         if !self.enabled {
             return vec![];

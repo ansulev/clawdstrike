@@ -10,15 +10,13 @@
 
 ## Executive Summary
 
-This roadmap details the phased plan to add formal verification to ClawdStrike's policy enforcement engine. The goal is to provide mathematical guarantees -- not just tests -- that "deny means deny," inheritance never weakens security, and the engine is fail-closed for all inputs.
+Six phases, ~28 weeks, three complementary paths:
 
-Three complementary verification paths converge over six phases spanning approximately **28 weeks** (with explicit buffer):
+1. **Logos/Z3** (shortest): SMT-based policy consistency/completeness checking. Requires building Z3 FFI from scratch (Layer 0 is currently enumeration-only) and a policy-to-formula bridge crate.
+2. **Aeneas/Lean 4** (deepest): Translate the pure Rust core to Lean 4, prove properties about the actual implementation.
+3. **Leanstral** (experimental): Mistral's Lean 4 proof agent for proof maintenance. Near-zero success on software verification benchmarks -- treat as evaluation only.
 
-1. **Logos/Z3** (shortest path): SMT-based policy consistency and completeness checking. Requires completing the Z3 integration in `logos-z3` (currently Layer 0 only, via enumeration -- the Z3 FFI is not yet wired up) and building a policy-to-formula bridge crate.
-2. **Aeneas/Lean 4** (deepest): Translate the pure Rust policy engine core to Lean 4, prove properties about the actual implementation.
-3. **Leanstral** (automation): Mistral's Lean 4 proof agent for reducing ongoing proof maintenance cost. Treat as experimental -- current benchmarks show near-zero success on software verification problems.
-
-**Precedent**: Amazon Cedar proved "forbid overrides permit" in Lean 4 and runs 100M+ differential tests nightly with a team of ~5 verification engineers over 2+ years. ClawdStrike aims to achieve comparable core property coverage for the policy decision logic at a fraction of the scope by targeting only the ~500-800 lines of pure decision-making code.
+Target: ~500-800 lines of pure decision-making code. Cedar achieved comparable coverage with ~5 engineers over 2+ years; we scope aggressively to the decision-making core.
 
 ---
 
@@ -332,13 +330,12 @@ clawdstrike check --verify-policy /tmp/contradictory.yaml && exit 1
 
 **Extended to 6 weeks** from the original 4 to account for: (a) realistic Lean 4 ramp-up time for the team, (b) the policy-specification doc defining a much richer spec than what the original 4-week window assumed, (c) the differential test harness requiring both Rust and Lean executable integration.
 
-### Prerequisite: Team Lean 4 Expertise
+### Prerequisite: Lean 4 Expertise
 
-This phase requires at least one engineer with working Lean 4 experience. The aeneas-pipeline doc (Risk #7) rates this as High severity / High likelihood. Mitigations:
-
-1. **Budget 2 weeks of ramp-up** in the first half of this phase (types + simple proofs while learning).
-2. **Engage a contract proof engineer** ($250-400/hr, ~15-20 hrs/week for 6-8 weeks = $22,500-$48,000) to pair with an internal engineer. The internal engineer does the Lean types and spec; the contractor does the hard proofs and reviews.
-3. **Fallback**: If no Lean expertise is available by Week 9, defer Phase 2 and continue with Phase 1 (Z3) as the production verification path. Z3 alone is a viable long-term position.
+Requires at least one engineer with working Lean 4 experience (High severity / High likelihood risk). Mitigations:
+1. Budget 2 weeks of ramp-up (types + simple proofs while learning).
+2. Contract proof engineer ($250-400/hr, 15-20 hrs/week, 6-8 weeks = $22,500-$48,000) for hard proofs.
+3. **Fallback**: If unavailable by Week 9, defer Phase 2 and ship Z3-only.
 
 ### Tasks
 
@@ -552,7 +549,7 @@ This phase requires at least one engineer with working Lean 4 experience. The ae
 
 **Goal**: Evaluate AI-assisted proof generation and establish a workflow for ongoing proof maintenance.
 
-**Renamed from "Automation" to "Evaluation"** to set accurate expectations. Based on the landscape survey, Leanstral's pass@16 rate is 32% on research math problems. For software verification problems (miniCodeProps), the pass rate for all current LLM provers is "near-zero on medium and hard." This phase is an evaluation, not a deployment.
+This phase is an evaluation, not a deployment. Leanstral's pass@16 rate is 32% on research math; software verification (miniCodeProps) is near-zero for all current LLM provers.
 
 ### Tasks
 
@@ -569,12 +566,12 @@ This phase requires at least one engineer with working Lean 4 experience. The ae
     - Time to proof (or timeout at 30 minutes)?
     - Proof quality (tactic count, use of `sorry`, readability)?
     - Cost per proof attempt?
-  - **Realistic expectations** (adjusted from landscape survey data):
-    - Trivial lemmas (reflexivity, `simp`/`omega` on numeric bounds): ~60-80% autonomous success
-    - Easy structural induction (`severity_ord` total order, case splits): ~20-40% autonomous success
-    - Medium lemmas (deny monotonicity by list induction): ~5-15% autonomous success
-    - Hard lemmas (merge correctness, cycle termination via well-founded recursion): ~0-5% autonomous success
-    - **Software verification is not research math**: Leanstral's published benchmarks (FLTEval) are on mathematical theorems. Our proofs involve Aeneas-generated code with non-standard types from the Aeneas primitives library, which Leanstral has likely never seen in training.
+  - **Expected success rates** (from landscape survey):
+    - Trivial lemmas (`simp`/`omega`): ~60-80%
+    - Easy structural induction: ~20-40%
+    - Medium lemmas (deny monotonicity): ~5-15%
+    - Hard lemmas (merge, cycle termination): ~0-5%
+    - Our proofs use Aeneas-generated code with non-standard types, likely unseen in training.
   - Document results in `formal/lean4/ClawdStrike/evaluation/leanstral-benchmark.md`
 
 - [ ] **Set up lean-lsp-mcp for interactive proof development**
@@ -591,10 +588,8 @@ This phase requires at least one engineer with working Lean 4 experience. The ae
   - Track metrics: % of proofs automated, time saved vs. manual, cost per proof
 
 - [ ] **Assessment report**
-  - "Is Leanstral ready to own proof maintenance for ClawdStrike?"
-  - Can Leanstral prove P1 (deny monotonicity) from scratch given only the type signature?
-  - Can Leanstral repair a broken proof when `aggregate_overall` changes?
-  - Expected answer based on current state of the art: **No, not yet.** But the evaluation gives us data for future re-assessment.
+  - Can Leanstral prove P1 from scratch? Can it repair a broken proof when code changes?
+  - Expected answer: **No, not yet.** The evaluation gives data for future re-assessment.
 
 ### Deliverables
 
@@ -782,14 +777,7 @@ Phase 0 (Foundation, Weeks 1-3)
 
 ### Parallelism
 
-Phases 1 and 2 can execute in parallel after Phase 0 completes. They require different skills:
-
-- Phase 1 (Z3): Rust engineer with SMT/logic background. Works in `clawdstrike-logos` and `logos-z3`.
-- Phase 2 (Lean): Engineer with Lean 4 experience (or contractor). Works in `formal/lean4/ClawdStrike/`.
-
-Phase 3 depends on Phase 2 (Lean project must exist before Aeneas output can be proved).
-Phase 4 depends on Phase 2 (Lean proofs must exist before Leanstral can be benchmarked). Phase 4 overlaps with Phase 3 (weeks 19-22) since the Leanstral evaluation can use Phase 2 proofs.
-Phase 5 depends on Phase 1 (Z3 must work) and Phase 3 (Aeneas proofs for Level 3 attestation). Phase 5 can ship Level 1 attestation with only Phase 1 complete.
+Phases 1 (Z3, Rust engineer) and 2 (Lean, proof engineer/contractor) run in parallel after Phase 0. Phase 3 depends on Phase 2; Phase 4 overlaps Phase 3 (weeks 19-22). Phase 5 can ship Level 1 attestation with Phase 1 alone.
 
 ---
 
@@ -842,7 +830,7 @@ Week  1  2  3  4  5  6  7  8  9  10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25
 | Phases 0-3 (full) | ~$22-48k + FTE time | 22 weeks | Implementation-level verification; Attestation Level 3 |
 | Cedar's approach (reference) | ~$500k+ (5 engineers, 2+ years) | 12+ months | Production-grade, comprehensive |
 
-**Note on proof engineer costs**: The $22.5-48k estimate assumes a part-time contractor (15-20 hrs/week). A full-time senior proof engineer specializing in Lean 4 and Rust verification commands $300-500/hr, and there are very few of them. If the project requires more than part-time engagement, costs will be at the high end. If an internal engineer can ramp up on Lean 4 during Phase 2, the contractor engagement can be shorter (4 weeks of review + hard proofs only).
+**Note:** The $22.5-48k assumes part-time (15-20 hrs/week). Full-time senior Lean 4 + Rust verification engineers command $300-500/hr and are scarce. If an internal engineer ramps up during Phase 2, the contractor engagement can be shortened to 4 weeks.
 
 ---
 
@@ -866,15 +854,7 @@ Week  1  2  3  4  5  6  7  8  9  10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25
 
 ## Competitive Positioning
 
-| Competitor | Domain | Formal Verification | Our Advantage |
-|------------|--------|-------------------|---------------|
-| OPA / Rego | General policy | None; Rego is Turing-complete (unfriendly to verification) | ClawdStrike policies are bounded and decidable |
-| Amazon Cedar | Authorization | Lean 4 + Dafny + differential testing | Cedar verifies authorization; we verify runtime AI security (different domain). Cedar had ~5 engineers for 2+ years; we aim for core property coverage at a fraction of that scope. |
-| Sentinel (HashiCorp) | Infrastructure policy | None | Custom language without formal semantics |
-| Casbin | Access control | None | Model-based but unverified |
-| Any AI agent security tool | Runtime security | None have published formal verification work | ClawdStrike would be the first runtime AI security system to ship formally verified policy checking |
-
-The Logos modal-temporal logic stack (`logos-ffi`, `logos-z3`) provides a structural advantage: the formula AST already has normative operators (Obligation, Permission, Prohibition) that map directly to policy semantics. However, the Z3 integration is not yet complete -- Layer 0 works via enumeration, Layers 1-3 are stubs. Phase 1 completes the Z3 wiring. Once done, the cost of verifying new policies is near-zero (Z3 queries run in milliseconds).
+See [Landscape Survey, Section 5](./landscape-survey.md) for full analysis. No competitor in AI agent security has formal verification. OPA/Rego is Turing-complete (unfriendly to verification). Cedar verified authorization, not runtime security.
 
 ---
 

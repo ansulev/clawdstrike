@@ -212,7 +212,6 @@ pub use irm::{
 #[cfg(feature = "full")]
 pub use origin_runtime::{OriginFingerprint, OriginRuntimeState};
 
-/// Re-export hush-core cryptographic primitives.
 pub mod crypto {
     pub use hush_core::*;
 }
@@ -220,10 +219,8 @@ pub mod crypto {
 #[path = "core/mod.rs"]
 mod formal_core;
 
-/// Backward-compatible `core` namespace.
-///
-/// Historically this exposed `hush_core::*`. Keep that API intact while also
-/// surfacing the pure decision core used by the formal-verification pipeline.
+/// Preserves the historical `hush_core::*` re-export while adding the
+/// pure decision core (`CoreSeverity`, `CoreVerdict`, etc.).
 pub mod core {
     pub use crate::formal_core::*;
     pub use hush_core::*;

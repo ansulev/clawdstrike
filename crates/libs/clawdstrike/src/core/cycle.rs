@@ -1,38 +1,18 @@
-//! Pure cycle detection logic for policy `extends` chains.
-//!
-//! This module contains the depth and cycle checking logic used during
-//! policy resolution. It has **no** external dependencies (no serde, no
-//! async, no I/O, no filesystem access).
+//! Cycle/depth detection for policy `extends` chains (no serde, no I/O).
 
 use std::collections::HashSet;
 
-/// Maximum allowed depth for policy `extends` chains.
 pub const MAX_POLICY_EXTENDS_DEPTH: usize = 32;
 
-/// Outcome of a cycle/depth check.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CycleCheckResult {
-    /// The reference is safe to follow.
     Ok,
-    /// The depth limit has been exceeded.
-    DepthExceeded {
-        /// Current depth at the time of the check.
-        depth: usize,
-        /// Maximum allowed depth.
-        limit: usize,
-    },
-    /// A circular dependency was detected.
-    CycleDetected {
-        /// The key that forms the cycle.
-        key: String,
-    },
+    DepthExceeded { depth: usize, limit: usize },
+    CycleDetected { key: String },
 }
 
-/// Check whether adding `key` at `depth` to the visited set is safe.
-///
-/// Returns `CycleCheckResult::Ok` if neither the depth limit nor a cycle
-/// is triggered. The caller is responsible for inserting `key` into `visited`
-/// after a successful check (this function does not mutate state).
+/// Check whether adding `key` at `depth` is safe. Does not mutate `visited`;
+/// the caller must insert on success.
 #[must_use]
 pub fn check_extends_cycle(key: &str, visited: &HashSet<String>, depth: usize) -> CycleCheckResult {
     if depth > MAX_POLICY_EXTENDS_DEPTH {
@@ -50,10 +30,6 @@ pub fn check_extends_cycle(key: &str, visited: &HashSet<String>, depth: usize) -
 
     CycleCheckResult::Ok
 }
-
-// =========================================================================
-// Tests
-// =========================================================================
 
 #[cfg(test)]
 mod tests {

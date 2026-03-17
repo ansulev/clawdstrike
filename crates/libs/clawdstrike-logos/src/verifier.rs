@@ -1,16 +1,7 @@
-//! Policy verification via formula inspection.
+//! Policy verification via formula inspection (solver-agnostic).
 //!
-//! This module provides static analysis of compiled Logos normative formulas to
-//! verify key policy properties without requiring an external solver such as Z3.
-//! When a Z3 backend is available it can be substituted; the API is designed to
-//! be solver-agnostic.
-//!
-//! # Properties checked
-//!
-//! - **Consistency**: No atom is both permitted and prohibited for the same agent.
-//! - **Completeness**: All expected action types have at least one formula.
-//! - **Inheritance soundness**: A child policy does not weaken (remove) any
-//!   prohibition present in a base policy.
+//! Checks: consistency (no P+F conflict), completeness (all action types
+//! covered), inheritance soundness (child preserves base prohibitions).
 
 use std::collections::{BTreeSet, HashSet};
 use std::time::Instant;
@@ -19,10 +10,6 @@ use logos_ffi::{AgentId, Formula};
 use serde::{Deserialize, Serialize};
 
 use crate::compiler::{DefaultPolicyCompiler, PolicyCompiler};
-
-// ---------------------------------------------------------------------------
-// Attestation levels
-// ---------------------------------------------------------------------------
 
 /// Verification depth tier for receipt attestation.
 ///
@@ -49,13 +36,11 @@ pub enum AttestationLevel {
 }
 
 impl AttestationLevel {
-    /// Numeric value of this level (0-3).
     #[must_use]
     pub fn as_u8(self) -> u8 {
         self as u8
     }
 
-    /// Human-readable name suitable for JSON output.
     #[must_use]
     pub fn name(self) -> &'static str {
         match self {
@@ -66,7 +51,6 @@ impl AttestationLevel {
         }
     }
 
-    /// Try to convert from a numeric value.
     #[must_use]
     pub fn from_u8(value: u8) -> Option<Self> {
         match value {
@@ -85,24 +69,16 @@ impl std::fmt::Display for AttestationLevel {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Result types
-// ---------------------------------------------------------------------------
-
 /// Outcome of a single verification property check.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum CheckOutcome {
-    /// The property holds.
     Pass,
-    /// The property is violated.
     Fail,
-    /// The check was skipped (e.g. no base policy for inheritance).
     Skipped,
 }
 
 impl CheckOutcome {
-    /// Returns `true` when the check passed.
     #[must_use]
     pub fn is_pass(&self) -> bool {
         *self == Self::Pass
@@ -119,74 +95,49 @@ impl std::fmt::Display for CheckOutcome {
     }
 }
 
-/// A normative conflict between two formulas (same atom, different modality).
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Conflict {
-    /// The atom string that is both permitted and prohibited.
     pub atom: String,
 }
 
-/// Detailed result of a consistency check.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ConsistencyResult {
-    /// Overall outcome.
     pub outcome: CheckOutcome,
-    /// Number of conflicts found.
     pub conflict_count: usize,
-    /// The individual conflicts.
     pub conflicts: Vec<Conflict>,
 }
 
-/// Detailed result of a completeness check.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CompletenessResult {
-    /// Overall outcome.
     pub outcome: CheckOutcome,
-    /// Action types that were covered.
     pub covered: Vec<String>,
-    /// Action types that were expected but not found.
     pub missing: Vec<String>,
 }
 
-/// A weakened prohibition found during inheritance checking.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct WeakenedProhibition {
-    /// The atom that is prohibited in the base but not in the child.
     pub atom: String,
 }
 
-/// Detailed result of an inheritance soundness check.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct InheritanceResult {
-    /// Overall outcome.
     pub outcome: CheckOutcome,
-    /// Prohibitions from the base that are weakened in the child.
     pub weakened: Vec<WeakenedProhibition>,
 }
 
-/// Aggregated verification report.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct VerificationReport {
-    /// Formula count in the compiled policy.
     pub formula_count: usize,
-    /// Unique action atoms found.
     pub atom_count: usize,
-    /// Consistency check result.
     pub consistency: ConsistencyResult,
-    /// Completeness check result.
     pub completeness: CompletenessResult,
-    /// Inheritance check result.
     pub inheritance: InheritanceResult,
-    /// Wall-clock verification time in milliseconds.
     pub verification_time_ms: u64,
-    /// Which properties were checked.
     pub properties_checked: Vec<String>,
-    /// The highest attestation level achieved by this verification.
     pub attestation_level: AttestationLevel,
 }
 
 impl VerificationReport {
-    /// Returns `true` when all checked properties pass (skipped counts as pass).
     #[must_use]
     pub fn all_pass(&self) -> bool {
         (self.consistency.outcome.is_pass() || self.consistency.outcome == CheckOutcome::Skipped)
@@ -196,7 +147,7 @@ impl VerificationReport {
                 || self.inheritance.outcome == CheckOutcome::Skipped)
     }
 
-    /// Produce a JSON value suitable for [`Receipt::merge_metadata`].
+    /// JSON value for [`Receipt::merge_metadata`].
     #[must_use]
     pub fn to_receipt_metadata(&self) -> serde_json::Value {
         serde_json::json!({
@@ -215,10 +166,6 @@ impl VerificationReport {
         })
     }
 }
-
-// ---------------------------------------------------------------------------
-// Verifier
-// ---------------------------------------------------------------------------
 
 /// The set of action types expected for a completeness check.
 ///
@@ -252,16 +199,12 @@ impl PolicyVerifier {
         }
     }
 
-    /// Override the expected action types for completeness checking.
     #[must_use]
     pub fn with_expected_action_types(mut self, types: Vec<String>) -> Self {
         self.expected_action_types = types;
         self
     }
 
-    /// Run all applicable checks and return an aggregated report.
-    ///
-    /// If `base_formulas` is `Some`, inheritance soundness is also checked.
     pub fn verify(
         &self,
         formulas: &[Formula],
@@ -289,9 +232,6 @@ impl PolicyVerifier {
 
         let elapsed = start.elapsed();
 
-        // Determine the attestation level from verification results.
-        // Level 1 requires all checked properties to pass. Levels 2-3 require
-        // Lean/Aeneas proofs which are not yet wired up at runtime.
         let attestation_level =
             compute_attestation_level(&consistency, &completeness, &inheritance);
 
@@ -321,10 +261,6 @@ impl PolicyVerifier {
         Self::new()
     }
 
-    /// Compile and verify a [`Policy`](clawdstrike::policy::Policy) for a given agent.
-    ///
-    /// Runs consistency and completeness checks using the verifier's configured
-    /// expected action types.
     pub fn verify_policy(
         &self,
         policy: &clawdstrike::policy::Policy,
@@ -335,9 +271,6 @@ impl PolicyVerifier {
         self.verify(&formulas, None)
     }
 
-    /// Compile and verify a child policy against its parent (base) policy.
-    ///
-    /// Runs consistency, completeness, and inheritance soundness checks.
     pub fn verify_policy_with_parent(
         &self,
         parent: &clawdstrike::policy::Policy,
@@ -350,7 +283,6 @@ impl PolicyVerifier {
         self.verify(&merged_formulas, Some(&parent_formulas))
     }
 
-    /// Check consistency: no atom should be both permitted and prohibited.
     pub fn check_consistency(&self, formulas: &[Formula]) -> ConsistencyResult {
         let mut permitted: HashSet<String> = HashSet::new();
         let mut prohibited: HashSet<String> = HashSet::new();
@@ -377,12 +309,9 @@ impl PolicyVerifier {
         }
     }
 
-    /// Check completeness: all expected action types should have at least one
-    /// formula covering them.
     pub fn check_completeness(&self, formulas: &[Formula]) -> CompletenessResult {
         let atoms = collect_atoms(formulas);
 
-        // Extract the action-type prefix from each atom (the part before the opening paren).
         let covered_types: HashSet<String> = atoms
             .iter()
             .filter_map(|atom| atom.split('(').next().map(String::from))
@@ -412,8 +341,6 @@ impl PolicyVerifier {
         }
     }
 
-    /// Check inheritance soundness: every prohibition in the base policy should
-    /// still be present (or strengthened) in the child policy.
     pub fn check_inheritance(
         &self,
         child_formulas: &[Formula],
@@ -449,15 +376,6 @@ impl PolicyVerifier {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Attestation level computation
-// ---------------------------------------------------------------------------
-
-/// Compute the achievable attestation level from check results.
-///
-/// - Level 0 (Heuristic): always the baseline.
-/// - Level 1 (Z3-Verified): all non-skipped checks pass.
-/// - Levels 2-3: reserved for Lean/Aeneas proofs (not computed here).
 fn compute_attestation_level(
     consistency: &ConsistencyResult,
     completeness: &CompletenessResult,
@@ -476,11 +394,6 @@ fn compute_attestation_level(
     }
 }
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-/// Collect all unique atom strings from a set of formulas.
 fn collect_atoms(formulas: &[Formula]) -> BTreeSet<String> {
     let mut atoms = BTreeSet::new();
     for formula in formulas {
@@ -538,8 +451,6 @@ fn collect_atoms_recursive(formula: &Formula, atoms: &mut BTreeSet<String>) {
     }
 }
 
-/// Classify a formula's top-level normative operator and extract the inner atom
-/// string into the appropriate set.
 fn classify_formula(
     formula: &Formula,
     permitted: &mut HashSet<String>,
@@ -558,13 +469,10 @@ fn classify_formula(
                 prohibited.insert(name);
             }
         }
-        // Obligations and other operators are not relevant for P/F conflict detection.
         _ => {}
     }
 }
 
-/// Extract the atom name from a (possibly nested) formula. This handles the
-/// common case where the inner formula is just `Formula::Atom(name)`.
 fn extract_atom_string(formula: &Formula) -> Option<String> {
     match formula {
         Formula::Atom(name) => Some(name.clone()),
@@ -572,24 +480,6 @@ fn extract_atom_string(formula: &Formula) -> Option<String> {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Receipt enrichment
-// ---------------------------------------------------------------------------
-
-/// Enrich a [`Receipt`] with verification metadata from a [`VerificationReport`].
-///
-/// This calls [`Receipt::merge_metadata`] with the standard verification JSON
-/// structure, including the attestation level achieved.
-///
-/// # Example
-///
-/// ```rust,ignore
-/// use hush_core::receipt::Receipt;
-/// use clawdstrike_logos::verify::{PolicyVerifier, enrich_receipt};
-///
-/// let report = verifier.verify(&formulas, None);
-/// let receipt = enrich_receipt(receipt, &report);
-/// ```
 pub fn enrich_receipt(
     receipt: hush_core::receipt::Receipt,
     report: &VerificationReport,
@@ -597,38 +487,14 @@ pub fn enrich_receipt(
     receipt.merge_metadata(report.to_receipt_metadata())
 }
 
-// ---------------------------------------------------------------------------
-// Load-time verification
-// ---------------------------------------------------------------------------
-
-/// Result of load-time policy verification.
 #[derive(Clone, Debug)]
 pub struct LoadTimeVerificationResult {
-    /// The verification report, if verification was run.
     pub report: Option<VerificationReport>,
-    /// Whether the result was served from cache.
     pub cache_hit: bool,
-    /// If verification failed and strict mode is on, contains the error message.
     pub error: Option<String>,
 }
 
-/// Verify a policy at load time according to its [`VerificationSettings`].
-///
-/// This is the main integration point for optional policy verification. Callers
-/// (engine, CLI, etc.) invoke this after loading a policy. The function respects
-/// the `enabled`, `strict`, and `cache` fields from the policy's settings.
-///
-/// # Caching
-///
-/// When `cache` is enabled, results are stored in an in-process
-/// [`VerificationCache`]. The caller should hold a single cache instance for
-/// the process lifetime.
-///
-/// # Errors
-///
-/// Returns `Ok` in all cases, even when verification fails in non-strict mode
-/// (the failure is captured in `LoadTimeVerificationResult::error`). Returns
-/// `Err` only when strict mode is on and verification fails.
+/// Verify a policy at load time. Returns `Err` only in strict mode on failure.
 pub fn verify_policy_at_load_time(
     policy: &clawdstrike::policy::Policy,
     cache: &VerificationCache,
@@ -643,24 +509,27 @@ pub fn verify_policy_at_load_time(
         });
     }
 
-    // Content-addressed cache lookup.
     let policy_yaml = policy.to_yaml().unwrap_or_default();
     let content_hash = hush_core::hashing::sha256(policy_yaml.as_bytes());
     let cache_key = content_hash.to_hex();
 
     if settings.cache {
         if let Some(cached) = cache.get(&cache_key) {
-            let error = if !cached.all_pass() && settings.strict {
-                Some(
-                    "Policy verification failed (cached result); strict mode blocks loading"
-                        .to_string(),
-                )
-            } else {
-                None
-            };
+            if !cached.all_pass() {
+                let msg = format!(
+                    "Policy verification failed (cached): consistency={}, completeness={}, inheritance={}",
+                    cached.consistency.outcome, cached.completeness.outcome, cached.inheritance.outcome,
+                );
 
-            if let Some(ref err_msg) = error {
-                return Err(err_msg.clone());
+                if settings.strict {
+                    return Err(msg);
+                }
+
+                return Ok(LoadTimeVerificationResult {
+                    report: Some(cached),
+                    cache_hit: true,
+                    error: Some(msg),
+                });
             }
 
             return Ok(LoadTimeVerificationResult {
@@ -671,12 +540,10 @@ pub fn verify_policy_at_load_time(
         }
     }
 
-    // Run verification.
     let agent = logos_ffi::AgentId::new("clawdstrike-agent");
     let verifier = PolicyVerifier::new();
     let report = verifier.verify_policy(policy, agent);
 
-    // Cache the result.
     if settings.cache {
         cache.insert(cache_key, report.clone());
     }
@@ -707,15 +574,13 @@ pub fn verify_policy_at_load_time(
     })
 }
 
-/// Thread-safe in-process cache for verification results, keyed by policy
-/// content hash.
+/// Thread-safe cache keyed by policy content hash.
 #[derive(Debug, Default)]
 pub struct VerificationCache {
     entries: std::sync::Mutex<std::collections::HashMap<String, VerificationReport>>,
 }
 
 impl VerificationCache {
-    /// Create a new empty cache.
     #[must_use]
     pub fn new() -> Self {
         Self {
@@ -723,36 +588,27 @@ impl VerificationCache {
         }
     }
 
-    /// Look up a cached verification report by content hash.
     #[must_use]
     pub fn get(&self, key: &str) -> Option<VerificationReport> {
         let guard = self.entries.lock().ok()?;
         guard.get(key).cloned()
     }
 
-    /// Insert a verification report into the cache.
     pub fn insert(&self, key: String, report: VerificationReport) {
         if let Ok(mut guard) = self.entries.lock() {
             guard.insert(key, report);
         }
     }
 
-    /// Number of cached entries.
     #[must_use]
     pub fn len(&self) -> usize {
         self.entries.lock().map(|g| g.len()).unwrap_or(0)
     }
-
-    /// Whether the cache is empty.
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
 }
-
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
 
 #[cfg(test)]
 mod tests {
@@ -768,8 +624,6 @@ mod tests {
     fn agent() -> AgentId {
         AgentId::new("test-agent")
     }
-
-    // -- consistency (formula-level) ----------------------------------------
 
     #[test]
     fn consistent_when_no_overlap() {
@@ -829,8 +683,6 @@ mod tests {
         assert!(result.outcome.is_pass());
     }
 
-    // -- completeness (formula-level) ---------------------------------------
-
     #[test]
     fn complete_when_all_types_covered() {
         let formulas = vec![
@@ -876,8 +728,6 @@ mod tests {
         let result = verifier.check_completeness(&[]);
         assert!(result.outcome.is_pass());
     }
-
-    // -- inheritance (formula-level) ----------------------------------------
 
     #[test]
     fn sound_inheritance_preserves_base_prohibitions() {
@@ -934,8 +784,6 @@ mod tests {
         assert!(result.outcome.is_pass());
     }
 
-    // -- full report --------------------------------------------------------
-
     #[test]
     fn full_report_passes() {
         let formulas = vec![
@@ -983,8 +831,6 @@ mod tests {
         let report = verifier.verify(&formulas, None);
         assert!(!report.all_pass());
     }
-
-    // -- verify_policy integration ------------------------------------------
 
     #[test]
     fn verify_default_policy_consistent() {
@@ -1131,8 +977,6 @@ mod tests {
         assert!(report.completeness.missing.contains(&"mcp".to_string()));
     }
 
-    // -- verify_policy_with_parent ------------------------------------------
-
     #[test]
     fn verify_sound_inheritance_via_policy() {
         let verifier = PolicyVerifier::new().with_expected_action_types(vec![]);
@@ -1209,8 +1053,6 @@ mod tests {
         assert!(!report.all_pass());
     }
 
-    // -- receipt enrichment -------------------------------------------------
-
     #[test]
     fn receipt_enrichment() {
         let formulas = vec![
@@ -1286,8 +1128,6 @@ mod tests {
         assert_eq!(meta["verification"]["attestation_level_name"], "heuristic");
     }
 
-    // -- ActionKind helpers -------------------------------------------------
-
     #[test]
     fn action_kind_all_returns_seven() {
         assert_eq!(ActionKind::all().len(), 7);
@@ -1313,8 +1153,6 @@ mod tests {
         assert_eq!(ActionKind::from_prefix(""), None);
     }
 
-    // -- helper unit tests --------------------------------------------------
-
     #[test]
     fn collect_atoms_deduplicates() {
         let formulas = vec![
@@ -1332,8 +1170,6 @@ mod tests {
         assert_eq!(format!("{}", CheckOutcome::Fail), "fail");
         assert_eq!(format!("{}", CheckOutcome::Skipped), "skipped");
     }
-
-    // -- attestation level --------------------------------------------------
 
     #[test]
     fn attestation_level_z3_when_all_pass() {
@@ -1420,8 +1256,6 @@ mod tests {
         assert_eq!(restored, level);
     }
 
-    // -- load-time verification ---------------------------------------------
-
     #[test]
     fn load_time_skip_when_not_enabled() {
         let policy = Policy::default();
@@ -1447,7 +1281,6 @@ mod tests {
         let result = verify_policy_at_load_time(&policy, &cache).unwrap();
         assert!(result.report.is_some());
         assert!(!result.cache_hit);
-        // Default policy has no guards so completeness fails, but non-strict allows it.
     }
 
     #[test]
@@ -1455,7 +1288,6 @@ mod tests {
         use clawdstrike::policy::VerificationSettings;
 
         let mut policy = Policy::default();
-        // Default policy has no guards, so completeness will fail.
         policy.settings.verification = Some(VerificationSettings {
             enabled: true,
             strict: true,
@@ -1478,7 +1310,6 @@ mod tests {
             strict: false,
             cache: true,
         });
-        // Add a guard so the policy has some content
         policy.guards.forbidden_path = Some(ForbiddenPathConfig {
             enabled: true,
             patterns: Some(vec!["/etc/shadow".to_string()]),

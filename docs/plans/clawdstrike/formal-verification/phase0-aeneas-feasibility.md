@@ -2,7 +2,7 @@
 
 ## Summary
 
-**Recommendation: CONDITIONAL GO** -- Aeneas extraction is feasible for a meaningful subset of ClawdStrike's security-critical pure functions. The Merkle tree module and verdict aggregation logic are strong first candidates with low refactoring cost. The policy merge layer is feasible but requires medium effort to abstract away serde types and HashMap usage. The Ed25519 signing module is **infeasible** for Aeneas extraction due to deep dependence on external crypto crates (`ed25519-dalek`, `rand_core`). The cycle-detection code in extends resolution is infeasible due to `HashSet`, `impl Trait` parameters, filesystem I/O, and recursive resolver dispatch.
+**Recommendation: CONDITIONAL GO.** Merkle tree and verdict aggregation are strong first candidates (low refactoring). Policy merge is feasible with medium effort. Ed25519 signing and cycle detection are **infeasible** for Aeneas (external crypto crates, I/O, `impl Trait`, `HashSet`).
 
 ---
 
@@ -24,18 +24,11 @@ fn severity_ord(s: &Severity) -> u8 {
 }
 ```
 
-**Rust patterns used:**
-- Pure function, exhaustive match on a fieldless enum
-- No async, no dyn Trait, no Arc/Mutex, no unsafe
-- No serde in the function body (Severity has serde derives but the function itself ignores them)
-- No HashMap, no closures, no external crate types in signature
-- No `#[cfg]` guards
+**Patterns:** Pure function, exhaustive match on fieldless enum. No async/dyn/Arc/unsafe/HashMap/closures/cfg.
 
-**Dependencies:**
-- `Severity` enum (4-variant fieldless enum with `Serialize`/`Deserialize`/`Clone`/`Debug`/`PartialEq`/`Eq` derives and `serde(alias)` attributes)
-- Serde derives would need stripping from the extracted `Severity` type, but this is trivial
+**Dependencies:** `Severity` enum (strip serde derives).
 
-**Extraction difficulty: Easy.** This is a textbook Aeneas candidate -- a total, pure function over a simple algebraic type. Zero refactoring needed beyond stripping serde derives from the `Severity` type definition.
+**Extraction difficulty: Easy.** Textbook Aeneas candidate. Zero refactoring beyond stripping serde derives.
 
 ---
 
@@ -45,27 +38,13 @@ fn severity_ord(s: &Severity) -> u8 {
 
 **Code pattern:** Takes `&[GuardResult]`, iterates to find the "most severe" result using a priority scheme (blocked > allowed, then by severity ordinal, then sanitized tiebreaker). Returns `best.clone()`.
 
-**Rust patterns used:**
-- No async, no dyn Trait, no Arc/Mutex, no unsafe
-- Slice iteration with indexing (`&results[0]`, `&results[1..]`)
-- Calls `severity_ord()` (pure, extractable)
-- Calls `r.is_sanitized()` -- **this inspects `serde_json::Value`**: it does `self.details.as_ref().and_then(|v| v.get("action")).and_then(|v| v.as_str()).is_some_and(|a| a == "sanitized")`
-- Uses `Clone` on `GuardResult`
-- No HashMap, no complex closures
+**Patterns:** No async/dyn/Arc/unsafe. Slice iteration, `severity_ord()` call, `Clone`. Key problem: `is_sanitized()` inspects `serde_json::Value`.
 
-**Dependencies:**
-- `GuardResult` struct: fields are `bool`, `String`, `Severity`, `String`, `Option<serde_json::Value>`
-- The `details: Option<serde_json::Value>` field is the key problem -- `serde_json::Value` is an external crate type that Aeneas cannot extract
-- `is_sanitized()` method performs JSON value inspection
+**Blockers:**
+1. `GuardResult.details: Option<serde_json::Value>` -- replace with `sanitized: bool` in extracted version
+2. Strip serde derives
 
-**Blockers requiring refactoring:**
-1. `GuardResult.details` uses `serde_json::Value` -- must be abstracted. Options:
-   - Replace with a dedicated enum (`GuardDetails::Sanitized { original, sanitized }` | `GuardDetails::Other(...)`) for the extraction target
-   - Or replace `is_sanitized()` with a `bool` field `sanitized: bool` in the extracted version
-2. `serde` derives on `GuardResult` and `Severity` need stripping
-3. The `impl Into<String>` constructors (`allow()`, `block()`, etc.) are not needed for extraction -- only the struct definition and `is_sanitized()` logic matter
-
-**Extraction difficulty: Medium.** The core aggregation logic is pure and algorithmic, but `serde_json::Value` in `GuardResult.details` requires creating an abstracted version of the type. The `is_sanitized()` check would need to be rewritten as a simple field check or pattern match on an extracted-friendly type. Estimated refactoring: ~30 lines of shim code.
+**Extraction difficulty: Medium.** Core logic is pure, but `serde_json::Value` requires type abstraction (~30 lines of shim code).
 
 ---
 
@@ -166,31 +145,9 @@ fn severity_ord(s: &Severity) -> u8 {
 
 **Code pattern:** Recursive function that resolves policy `extends` chains with cycle detection via `HashSet<String>` and depth limiting via `MAX_POLICY_EXTENDS_DEPTH`.
 
-**Rust patterns used:**
-- **`impl PolicyResolver`** parameter -- `impl Trait` in function signatures requires monomorphization; Aeneas needs concrete types
-- **`HashSet<String>`** for cycle detection -- limited Aeneas support
-- **Recursive calls** -- Aeneas handles recursion but combined with the other issues this adds complexity
-- String allocation, `.contains()`, `.insert()` on HashSet
-- Calls `resolver.resolve()` -- this is a **trait method** that dispatches to I/O (filesystem reads, HTTP fetches, git operations)
-- Calls `Policy::from_yaml_unvalidated()` -- serde YAML deserialization
-- Calls `merged.validate_with_options()` -- validation with regex compilation
+**Hard blockers:** `impl PolicyResolver` (trait dispatch to I/O), `HashSet<String>`, `serde_yaml::from_str`, filesystem/network side effects. Recursive + effectful.
 
-**Dependencies:**
-- `PolicyResolver` trait (with `resolve()` method returning `Result<ResolvedPolicySource>`)
-- `PolicyLocation` enum (6 variants including `File(PathBuf)`, `Url(String)`, `Git{...}`)
-- YAML deserialization via `serde_yaml`
-- Filesystem and network I/O (through resolver)
-
-**Blockers (multiple hard blockers):**
-1. `impl PolicyResolver` requires monomorphization or `dyn Trait` -- both problematic for Aeneas
-2. I/O side effects (filesystem, network) in resolver -- cannot be extracted as pure functions
-3. `HashSet<String>` for cycle detection
-4. `serde_yaml::from_str` deserialization
-5. Recursive + effectful -- fundamentally not amenable to Aeneas extraction
-
-**Extraction difficulty: Infeasible.** This function is deeply entangled with I/O, trait dispatch, and serde deserialization. The cycle detection *algorithm* (HashSet + depth counter) is simple enough to verify by inspection; formal verification adds little value here relative to effort.
-
-**Alternative:** Extract just the depth/cycle invariants as lemmas about a simplified abstract model, without extracting the actual Rust code.
+**Extraction difficulty: Infeasible.** Deeply entangled with I/O, trait dispatch, and serde. The cycle detection algorithm itself (HashSet + depth counter) is simple enough to verify via an abstract model.
 
 ---
 
@@ -269,26 +226,9 @@ fn severity_ord(s: &Severity) -> u8 {
 
 **Code pattern:** Thin wrappers around `ed25519-dalek` types.
 
-**Rust patterns used:**
-- `ed25519_dalek::SigningKey`, `VerifyingKey`, `DalekSignature` -- external crate types throughout
-- `rand_core::OsRng` for key generation -- effectful RNG
-- `Signer`/`Verifier` traits from ed25519-dalek
-- Custom serde modules (`pubkey_serde`, `sig_serde`) with generic serializer/deserializer impls
-- `hex::decode`/`encode` -- external crate
-- `ZeroizeOnDrop` semantics (implicit via ed25519-dalek)
+**Hard blockers:** Every type wraps `ed25519-dalek` (external crypto with assembly). `OsRng` is effectful. Custom serde modules.
 
-**Dependencies:**
-- `ed25519-dalek` crate: complex cryptographic implementation with assembly optimizations
-- `rand_core` crate: OS-level randomness
-- `hex` crate: encoding utilities
-
-**Blockers (multiple hard blockers):**
-1. Every type wraps an `ed25519-dalek` type -- cannot extract without extracting the crypto library
-2. `OsRng` is effectful (OS syscalls for entropy)
-3. Ed25519 operations involve field arithmetic, curve point operations -- far beyond Aeneas's current scope
-4. Custom serde modules use generic `Serializer`/`Deserializer` traits
-
-**Extraction difficulty: Infeasible.** The signing module is a thin wrapper around `ed25519-dalek`. There is no meaningful algorithm to extract -- the security properties come from the underlying crypto library. Formal verification of Ed25519 is a research-level problem (see e.g., HACL* / Vale projects). The correct approach is to axiomatize signing operations and verify the *protocol* that uses them, not the primitives.
+**Extraction difficulty: Infeasible.** Thin wrapper around `ed25519-dalek` -- no meaningful algorithm to extract. The correct approach is to axiomatize signing and verify the protocol that uses it.
 
 ---
 
@@ -402,4 +342,4 @@ fn severity_ord(s: &Severity) -> u8 {
 3. Do **not** attempt extraction of the signing module or the extends-resolution cycle detection. These provide negligible ROI for the effort required.
 4. Budget 2-3 days for Aeneas toolchain setup and smoke testing before committing to the full Merkle extraction.
 
-**Expected outcome:** Formally verified Merkle tree correctness in LEAN 4, plus formally verified fail-closed property of verdict aggregation. These cover the two highest-value security invariants in the ClawdStrike trust chain.
+**Expected outcome:** Formally verified Merkle tree correctness and fail-closed verdict aggregation -- the two highest-value security invariants.

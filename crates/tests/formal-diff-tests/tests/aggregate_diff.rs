@@ -3,20 +3,37 @@
 //! Compares the reference specification's aggregation against the production
 //! `clawdstrike::core::aggregate_overall` on randomly generated verdicts.
 
-use formal_diff_tests::generators::{
-    arb_core_verdict, arb_paired_verdict, arb_paired_verdicts,
-};
+use formal_diff_tests::generators::{arb_core_verdict, arb_paired_verdict, arb_paired_verdicts};
 use formal_diff_tests::harness::verdicts_match;
 use formal_diff_tests::spec::{aggregate_spec, severity_ord_spec, SpecSeverity};
 
 use clawdstrike::core::{aggregate_overall, severity_ord, CoreSeverity, CoreVerdict};
 use proptest::prelude::*;
+use proptest::test_runner::Config as ProptestConfig;
+
+/// Read case count from `PROPTEST_CASES` env var, falling back to the given default.
+fn case_count(default: u32) -> u32 {
+    std::env::var("PROPTEST_CASES")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(default)
+}
+
+/// Build a `ProptestConfig` with the env-driven case count and tuned shrinking.
+fn config() -> ProptestConfig {
+    ProptestConfig {
+        cases: case_count(256),
+        max_shrink_iters: 10_000,
+        ..ProptestConfig::default()
+    }
+}
 
 // ===========================================================================
 // Differential tests: spec vs. impl
 // ===========================================================================
 
 proptest! {
+    #![proptest_config(config())]
     /// Core differential test: aggregate produces the same verdict in spec and impl.
     #[test]
     fn aggregate_spec_matches_impl(
@@ -70,6 +87,7 @@ proptest! {
 // ===========================================================================
 
 proptest! {
+    #![proptest_config(config())]
     /// P1: Deny monotonicity — if any guard denies, aggregate must deny.
     #[test]
     fn deny_monotonicity(results in prop::collection::vec(arb_core_verdict(), 1..50)) {

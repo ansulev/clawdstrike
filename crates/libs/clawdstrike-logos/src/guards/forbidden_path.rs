@@ -1,7 +1,4 @@
 //! Formula translation for [`ForbiddenPathConfig`].
-//!
-//! Each effective forbidden pattern becomes a `Prohibition` formula.
-//! Each exception becomes a `Permission` formula.
 
 use clawdstrike::guards::ForbiddenPathConfig;
 use logos_ffi::{AgentId, Formula};
@@ -10,13 +7,7 @@ use super::GuardFormulas;
 use crate::atoms::ActionAtom;
 
 impl GuardFormulas for ForbiddenPathConfig {
-    /// Translate forbidden-path configuration into normative formulas.
-    ///
-    /// For each effective pattern `p` that is not excepted:
-    ///   `F_agent(access(p))` -- Prohibition on accessing path matching p
-    ///
-    /// For each exception `e`:
-    ///   `P_agent(access(e))` -- Permission to access excepted path e
+    /// `F_agent(access(p))` per pattern, `P_agent(access(e))` per exception.
     fn to_formulas(&self, agent: &AgentId) -> Vec<Formula> {
         if !self.enabled {
             return vec![];

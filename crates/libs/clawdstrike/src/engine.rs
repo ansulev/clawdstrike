@@ -1695,7 +1695,6 @@ pub struct EngineStats {
     pub violation_count: u64,
 }
 
-/// Convert a serde `Severity` to its pure core equivalent.
 fn severity_to_core(s: &Severity) -> crate::core::CoreSeverity {
     match s {
         Severity::Info => crate::core::CoreSeverity::Info,
@@ -1782,11 +1781,6 @@ fn format_origin_brief(origin: &OriginContext) -> String {
     parts.join(",")
 }
 
-/// Aggregate guard results into a single overall verdict.
-///
-/// Delegates to [`crate::core::aggregate::aggregate_index`] for the pure
-/// selection logic, then indexes back into the original `GuardResult` slice
-/// to preserve serde details and `serde_json::Value` payloads.
 fn aggregate_overall(results: &[GuardResult]) -> GuardResult {
     let tuples: Vec<(bool, crate::core::CoreSeverity, bool)> = results
         .iter()

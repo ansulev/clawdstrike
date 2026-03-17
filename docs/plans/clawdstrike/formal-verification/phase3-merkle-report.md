@@ -5,15 +5,15 @@
 
 ---
 
-## 1. Executive Summary
+## 1. Summary
 
-We ran Charon (v0.1.173) and Aeneas on the `hush-core` crate's Merkle tree module (`crate::merkle`). The extraction produced correct Lean 4 type definitions for `MerkleTree`, `MerkleProof`, `Hash`, and `Error`, but **zero function bodies** were translated. All 10 Merkle functions failed at the Aeneas interpretation stage due to three root causes:
+Charon (v0.1.173) + Aeneas on `hush-core::merkle`. **Types extracted successfully; zero function bodies translated.** Three root causes:
 
-1. **SHA-256 type errors** (digest/typenum crate complexity) -- blocked `leaf_hash`, `node_hash`
+1. **SHA-256 type errors** (digest/typenum complexity) -- blocked `leaf_hash`, `node_hash`
 2. **Nested borrow limitation** -- blocked `inclusion_proof`
-3. **Transitive failures** -- all remaining functions (`from_leaves`, `from_hashes`, `leaf_count`, `root`, `compute_root`, `compute_root_from_hash`, `verify`, `verify_hash`) depend on (1) or (2)
+3. **Transitive failures** -- remaining 8 functions depend on (1) or (2)
 
-This confirms the Phase 0 feasibility report's prediction: SHA-256 must be axiomatized before Merkle extraction can succeed.
+Confirms Phase 0 prediction: SHA-256 must be axiomatized.
 
 ---
 
@@ -257,7 +257,7 @@ if self.levels.is_empty() {
    - P15: `tree.inclusion_proof(i).verify(leaves[i], tree.root()) = true` (inclusion proof soundness)
    - P16: `leaf_hash(x) != node_hash(a, b)` (domain separation, from axiom)
 
-Note: Option B (opaque flags) is preferable to Option A (trait abstraction) because it requires zero Rust source changes. The Rust code stays as-is; only the extraction command changes.
+Option B is preferable: zero Rust source changes, only the extraction command changes.
 
 ---
 
@@ -323,14 +323,8 @@ The type definitions (`MerkleTree`, `MerkleProof`, `Hash`, `Error`) are correct 
 
 ## 9. Conclusion
 
-The Merkle module is extractable in principle, but requires targeted Rust refactoring before Aeneas can produce function bodies. The `--opaque` flag approach successfully handles the SHA-256 dependency (zero Rust changes needed), but the remaining 8 functions need rewriting to avoid three Aeneas-unsupported patterns:
+Extractable in principle; requires ~100 lines of mechanical refactoring (iterators to while-loops, combinators to if-else) to avoid three unsupported patterns: nested borrows (2 functions), iterator+closure+collect (3 functions), Option combinator chains (3 functions).
 
-1. **Nested borrows** in `for level in &self.levels` (2 functions)
-2. **Iterator + closure + collect** patterns (3 functions)
-3. **Option combinator chains** like `.and_then().unwrap_or_else()` (3 functions)
+The type definitions and `leaf_hash`/`node_hash` axioms from this run serve as the foundation for hand-written Lean specs in the interim.
 
-The required refactoring is ~100 lines of mechanical rewriting (iterators to while-loops, combinators to if-else), backward-compatible, and does not change semantics. It can be done in a `cfg(feature = "formal")` module or as direct rewrites (the while-loop forms are arguably more readable anyway).
-
-The correct type definitions already produced by this run -- `MerkleTree`, `MerkleProof`, `Hash`, `Error` -- plus the `leaf_hash`/`node_hash` axioms from the opaque run, can serve as the foundation for hand-written Lean specifications in the interim.
-
-**Next step:** Create a `merkle_extractable.rs` module with Aeneas-friendly rewrites and re-run the pipeline.
+**Next step:** Create `merkle_extractable.rs` with Aeneas-friendly rewrites and re-run.

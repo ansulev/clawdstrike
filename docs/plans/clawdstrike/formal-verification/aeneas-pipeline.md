@@ -9,77 +9,17 @@
 
 ## 1. Aeneas Overview
 
-[Aeneas](https://github.com/AeneasVerif/aeneas) is a two-stage pipeline for translating safe Rust into theorem prover code, developed by Inria and Microsoft Research (ICFP 2022, 2024).
-
-### Pipeline Architecture
+[Aeneas](https://github.com/AeneasVerif/aeneas) translates safe Rust into theorem prover code via Charon (LLBC extraction from rustc) followed by codegen to Lean 4 / HOL4 / Coq / F*. Developed by Inria and Microsoft Research (ICFP 2022, 2024).
 
 ```
-rustc (Rust source)
-  |
-  v
-Charon (rustc plugin)          ~60-120s for a medium crate
-  |  Produces ULLBC (Unstructured LLBC)
-  |  Lowers to LLBC (Low-Level Borrow Calculus)
-  v
-Aeneas (LLBC -> formal backend)  ~2-5s codegen
-  |
-  v
-Lean 4 / HOL4 / Coq / F*
+rustc -> Charon (~60-120s) -> LLBC -> Aeneas (~2-5s) -> Lean 4
 ```
 
-### Key Technique: Backward Functions
+**Key technique:** Mutable borrows become backward functions (`&mut T` -> `(T, T -> Result)`), eliminating the need for separation logic. Proofs use standard functional reasoning.
 
-Aeneas eliminates the need for separation logic by translating Rust's borrow checker guarantees into "backward functions." A mutable borrow `&mut T` becomes a pair: a forward function that reads the value and a backward function that writes back the final value. This means:
+**Support and limitations** are detailed in the [Landscape Survey](./landscape-survey.md). In summary: Aeneas handles structs, enums, generics, traits, closures, `Vec`, `Option`, `Result`, pattern matching, and loops. It does NOT handle `unsafe`, `async`, interior mutability, `dyn Trait`, FFI, I/O, `Arc`/`Mutex`, serde derives, or complex iterator chains.
 
-- No frame rule, no heap assertions, no points-to predicates
-- Proofs use standard functional reasoning (induction, case analysis, rewriting)
-- Generated code reads like idiomatic functional programming
-
-### What Aeneas Supports
-
-| Feature | Status |
-|---------|--------|
-| Structs, enums, tuples | Full |
-| Generics (type and lifetime) | Full |
-| Trait definitions and implementations | Full |
-| Closures (non-capturing and capturing) | Most patterns (complex captured `&mut` may need rewriting) |
-| Iterators (common patterns) | Partial (basic `for`/`iter()` loops; complex iterator chains may fail) |
-| `Vec<T>` | Via Aeneas primitives library |
-| `HashMap<K,V>`, `HashSet<K>` | Partial (model provided but some operations unsupported) |
-| `Option<T>`, `Result<T,E>` | Full |
-| Pattern matching with guards | Full |
-| Loops (for, while, loop) | Full (translated to recursive functions) |
-| `#[must_use]`, `Copy`, `Clone` | Supported |
-| Recursive types and functions | Supported (with termination obligations) |
-
-### What Aeneas Does NOT Support
-
-| Feature | Blocker | Workaround |
-|---------|---------|------------|
-| `unsafe` code | Fundamental -- Aeneas reasons about safe Rust semantics | Axiomatize at the boundary |
-| `async`/`await` | No desugaring of state machine transform | Extract sync core |
-| Interior mutability (`Cell`, `RefCell`) | Breaks borrow analysis | Avoid in verifiable core |
-| `dyn Trait` (trait objects) | Dynamic dispatch unsupported | Use enums or monomorphized generics |
-| FFI (`extern "C"`) | No foreign semantics | Axiomatize |
-| I/O, filesystem, network | Side effects outside model | Axiomatize or mock |
-| `Arc`, `Mutex`, `RwLock` | Shared ownership / interior mutability | Eliminate from pure core |
-| Procedural macros (serde derives) | Expansion may produce unsupported patterns | Remove from verifiable module |
-| Complex iterator chains (`.filter().map().collect()`) | Charon extraction may fail | Rewrite as explicit loops |
-
-### Industrial Precedent
-
-- **Microsoft SymCrypt ML-KEM** (2024-2025): Microsoft used hax (which shares Charon with Aeneas) to verify their post-quantum cryptography implementation in Rust. This is the largest industrial deployment of the Charon extraction pipeline to date.
-- **Amazon Cedar**: Uses a Lean 4 reference spec (not Aeneas, but the same proof ecosystem).
-- **Eurydice** (C extraction): Aeneas sibling project extracting verified Rust to C for HACL\*.
-
-### Performance Characteristics
-
-| Phase | Time | Output Size |
-|-------|------|-------------|
-| Charon extraction (medium crate) | ~60-120s | `.llbc` binary (~200KB typical) |
-| Aeneas codegen (Lean 4 backend) | ~2-5s | `.lean` files (~1.5-3x source LOC) |
-| Lean 4 type-checking (generated code) | ~10-30s | Depends on proof obligations |
-| Proof checking (human-written theorems) | Varies | Minutes to hours per theorem |
+**Industrial precedent:** Microsoft SymCrypt ML-KEM (2024-2025), Amazon Cedar (same Lean 4 ecosystem), Eurydice (C extraction for HACL*).
 
 ---
 
@@ -464,7 +404,7 @@ These axioms are sound under standard cryptographic assumptions:
 | `ed25519_sign_deterministic` | RFC 8032 deterministic nonce | Unconditional |
 | `ed25519_unforgeable` | Discrete log hardness on Curve25519 | Computational |
 
-The collision resistance axiom is the strongest assumption. If SHA-256 is broken, the proofs no longer hold. This is acceptable: ClawdStrike's security already depends on SHA-256 collision resistance.
+The collision resistance axiom is the strongest assumption. ClawdStrike's security already depends on SHA-256 collision resistance, so this does not expand the trust boundary.
 
 ---
 
@@ -624,11 +564,7 @@ jobs:
 
 ## 9. Relationship to Other Verification Paths
 
-This document focuses on Aeneas (Rust -> Lean 4). It complements:
-
-- **[Logos Integration](./logos-integration.md)**: Logos/Z3 for normative policy reasoning (Layer 3 obligations/permissions). Operates at the *policy specification* level, not the *implementation* level. The two approaches are complementary: Logos proves policy *semantics*, Aeneas proves the *implementation* matches the semantics.
-- **[Verification Targets](./verification-targets.md)**: The master list of what to verify and with which tool. Some targets (e.g., shell command regex) are better served by differential testing than by Aeneas.
-- **Verus**: An alternative Rust verification tool (SMT-based). Could verify targets that Aeneas cannot handle (e.g., code using `unsafe` in controlled ways). Not explored in this document because Aeneas has better support for the pure functional style ClawdStrike's core logic uses.
+This document focuses on Aeneas (Rust -> Lean 4). See [Logos Integration](./logos-integration.md) for the complementary Z3 policy-level verification path and [Verification Targets](./verification-targets.md) for the master list of what to verify with which tool.
 
 ---
 

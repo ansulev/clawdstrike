@@ -1,11 +1,4 @@
-//! Pure merge strategies for policy composition.
-//!
-//! This module contains the structural merge logic used when resolving
-//! policy `extends` chains. It has **no** serde, async, or I/O dependencies.
-//!
-//! The key abstraction is a set of generic merge combinators that the
-//! serde-laden `Policy` and `GuardConfigs` types delegate to. This keeps
-//! the decision-making logic testable and verifiable independently.
+//! Merge strategies for policy `extends` composition (no serde, no I/O).
 
 use std::collections::HashMap;
 
@@ -20,23 +13,14 @@ pub enum CoreMergeStrategy {
     DeepMerge,
 }
 
-// ---------------------------------------------------------------------------
-// Generic merge combinators
-// ---------------------------------------------------------------------------
-
-/// "Child overrides base" — if child has a value, use it; otherwise fall back to base.
-///
-/// This is the merge strategy used for scalar/leaf fields like `patch_integrity`,
-/// `shell_command`, `jailbreak`, `prompt_injection`, `computer_use`, etc.
+/// Child overrides base for `Option<T>` (by reference).
 #[inline]
 #[must_use]
 pub fn child_overrides<T: Clone>(base: &Option<T>, child: &Option<T>) -> Option<T> {
     child.clone().or_else(|| base.clone())
 }
 
-/// "Child overrides base" for non-empty strings.
-///
-/// Returns the child value if it is non-empty, otherwise the base value.
+/// Child overrides base for non-empty strings.
 #[inline]
 #[must_use]
 pub fn child_overrides_str(base: &str, child: &str) -> String {
@@ -47,21 +31,15 @@ pub fn child_overrides_str(base: &str, child: &str) -> String {
     }
 }
 
-/// "Child overrides base" for `Option<T>` scalars (like `Option<bool>`, `Option<u64>`).
-///
-/// Returns child if `Some`, otherwise base.
+/// Child overrides base for `Option<T>` (by value).
 #[inline]
 #[must_use]
 pub fn child_overrides_option<T: Clone>(base: Option<T>, child: Option<T>) -> Option<T> {
     child.or(base)
 }
 
-/// Merge two `Vec<T>` keyed by an extracted ID field.
-///
-/// Child entries replace base entries with the same key; new entries are appended.
-/// If child is empty, base is returned unchanged. If base is empty, child is returned.
-///
-/// The `key_fn` extracts the dedup key from each element.
+/// Merge two `Vec<T>` keyed by `key_fn`. Child replaces matching base entries;
+/// new entries are appended.
 pub fn merge_keyed_vec<T: Clone, K: Eq + std::hash::Hash>(
     base: &[T],
     child: &[T],
@@ -93,14 +71,9 @@ pub fn merge_keyed_vec<T: Clone, K: Eq + std::hash::Hash>(
     out
 }
 
-// ---------------------------------------------------------------------------
 // Aeneas-compatible merge (no HashMap, no closures)
-// ---------------------------------------------------------------------------
 
-/// Find the position of a key in a `Vec<(String, T)>` by linear scan.
-///
-/// Returns `Some(index)` if found, `None` otherwise.
-/// This is an Aeneas-friendly alternative to `HashMap::get`.
+/// Linear scan for key position. Aeneas-friendly alternative to `HashMap::get`.
 #[must_use]
 fn find_key_position<T>(haystack: &[(String, T)], needle: &str) -> Option<usize> {
     let mut i: usize = 0;
@@ -113,15 +86,8 @@ fn find_key_position<T>(haystack: &[(String, T)], needle: &str) -> Option<usize>
     None
 }
 
-/// Aeneas-compatible merge for `Vec<(String, T)>` keyed by the first element.
-///
-/// Semantically identical to [`merge_keyed_vec`] when called with a key function
-/// that extracts the first tuple element, but implemented without `HashMap` or
-/// closures so that [Charon](https://github.com/AeneasVerif/charon) +
-/// [Aeneas](https://github.com/AeneasVerif/aeneas) can translate it to Lean 4.
-///
-/// Child entries replace base entries with the same key; new entries are appended.
-/// If child is empty, base is returned unchanged. If base is empty, child is returned.
+/// [`merge_keyed_vec`] equivalent without `HashMap` or closures, so
+/// Charon/Aeneas can translate it to Lean 4.
 #[must_use]
 pub fn merge_keyed_vec_pure<T: Clone>(
     base: &[(String, T)],
@@ -152,10 +118,6 @@ pub fn merge_keyed_vec_pure<T: Clone>(
 
     out
 }
-
-// =========================================================================
-// Tests
-// =========================================================================
 
 #[cfg(test)]
 mod tests {
@@ -233,8 +195,6 @@ mod tests {
     fn child_overrides_option_none_falls_back() {
         assert_eq!(child_overrides_option(Some(false), None), Some(false));
     }
-
-    // -- merge_keyed_vec_pure tests ------------------------------------------
 
     #[test]
     fn merge_keyed_vec_pure_empty_child() {

@@ -9,11 +9,11 @@
 
 ## 1. Overview
 
-This document defines a formal specification of ClawdStrike's policy evaluation engine, inspired by the IMP programming language formalization from Software Foundations (Pierce et al.). The specification is intended to serve as a reference for:
+Formal specification of ClawdStrike's policy evaluation engine, inspired by the IMP formalization from Software Foundations. Serves as:
 
-1. **Theorem proving** in Lean 4 (future formal proofs of core properties)
-2. **Differential testing** against the Rust implementation (high-volume property-based testing)
-3. **Specification review** by security engineers (unambiguous semantics documentation)
+1. **Theorem proving** target in Lean 4
+2. **Differential testing** oracle against the Rust implementation
+3. **Specification review** reference for security engineers
 
 ### 1.1 The Key Insight: Policy Evaluation Is Simpler Than IMP
 
@@ -27,11 +27,7 @@ IMP is a small imperative language with assignment, sequencing, conditionals, an
 | Turing-completeness | Yes (while loops) | **No.** The evaluator is a total decision procedure. |
 | Decidability of properties | Undecidable in general | **Decidable.** All properties in this spec are decidable via finite enumeration or SMT. |
 
-This means:
-- The evaluation function is **total** (always terminates, always produces a result)
-- Properties are **decidable** (can be checked by SMT/exhaustive enumeration)
-- The spec is a **function definition**, not a relation
-- Fully automatic verification is feasible for core properties
+Consequence: evaluation is total, properties are decidable (SMT/enumeration), and the spec is a function definition (not a relation).
 
 ### 1.2 What This Spec Covers
 
@@ -725,7 +721,7 @@ theorem determinism :
   rfl
 ```
 
-This is trivially true because `evalPolicy` is defined as a pure function. **Why state this?** While trivially true in the spec, it is non-obvious in the _implementation_. The Rust code uses `async`, `Arc<RwLock<EngineState>>`, and interior mutability. Differential testing (section 6) validates empirically that these implementation details do not affect the verdict.
+Trivially true in the spec (`rfl`), but non-obvious in the implementation which uses `async`, `Arc<RwLock<EngineState>>`, and interior mutability. Differential testing (section 6) validates that these details do not affect the verdict.
 
 ### 4.2 P2: Deny Monotonicity (Forbid-Overrides-Permit)
 
@@ -886,7 +882,7 @@ See Appendix A.
 
 ### 6.1 Differential Testing Architecture
 
-We bridge the gap between the Lean 4 specification and the Rust implementation via differential testing, following the approach used by Amazon Cedar (100M+ differential tests between Lean spec and Rust implementation).
+Differential testing bridges the Lean 4 spec and the Rust implementation (following Cedar's approach).
 
 ```
                      ┌──────────────────────┐

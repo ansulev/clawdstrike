@@ -9,16 +9,33 @@ use formal_diff_tests::generators::{
 use formal_diff_tests::harness::cycle_results_match;
 use formal_diff_tests::spec::{check_extends_cycle_spec, MAX_DEPTH_SPEC};
 
-use clawdstrike::core::{
-    check_extends_cycle, CycleCheckResult, MAX_POLICY_EXTENDS_DEPTH,
-};
+use clawdstrike::core::{check_extends_cycle, CycleCheckResult, MAX_POLICY_EXTENDS_DEPTH};
 use proptest::prelude::*;
+use proptest::test_runner::Config as ProptestConfig;
+
+/// Read case count from `PROPTEST_CASES` env var, falling back to the given default.
+fn case_count(default: u32) -> u32 {
+    std::env::var("PROPTEST_CASES")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(default)
+}
+
+/// Build a `ProptestConfig` with the env-driven case count and tuned shrinking.
+fn config() -> ProptestConfig {
+    ProptestConfig {
+        cases: case_count(256),
+        max_shrink_iters: 10_000,
+        ..ProptestConfig::default()
+    }
+}
 
 // ===========================================================================
 // Differential tests: spec vs. impl
 // ===========================================================================
 
 proptest! {
+    #![proptest_config(config())]
     /// Core differential test: cycle detection produces the same result.
     #[test]
     fn cycle_check_spec_matches_impl(
@@ -55,6 +72,7 @@ proptest! {
 // ===========================================================================
 
 proptest! {
+    #![proptest_config(config())]
     /// P1: Constants agree between spec and impl.
     #[test]
     fn max_depth_constants_agree(_dummy in 0u8..1) {

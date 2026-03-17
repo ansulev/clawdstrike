@@ -1,6 +1,5 @@
 /-
-  ClawdStrike Proofs: Deny Monotonicity (P1, P1a, P1b, P2)
-  Updated for Lean 4.28.
+  Deny monotonicity proofs (P1, P1a, P1b, P2).
 -/
 
 import ClawdStrike.Core.Verdict
@@ -13,31 +12,26 @@ namespace ClawdStrike.Proofs
 
 open ClawdStrike.Core
 
--- P1a: worseResult preserves denial from the left (accumulator)
+-- P1a
 theorem worseResult_preserves_deny_left (best candidate : GuardResult)
     (h : best.allowed = false) :
     (worseResult best candidate).allowed = false := by
   unfold worseResult
   simp only [h]
   cases hc : candidate.allowed
-  · -- both block: the if chain picks one or the other, both have allowed=false
-    simp; split <;> simp_all
-  · -- candidate allows, best blocks: best wins
-    simp; exact h
+  · simp; split <;> simp_all
+  · simp; exact h
 
--- P1b: worseResult preserves denial from the right (new element)
+-- P1b
 theorem worseResult_preserves_deny_right (best candidate : GuardResult)
     (h : candidate.allowed = false) :
     (worseResult best candidate).allowed = false := by
   unfold worseResult
   simp only [h]
   cases hb : best.allowed
-  · -- both block
-    simp; split <;> simp_all
-  · -- best allows, candidate blocks: candidate wins
-    simp; exact h
+  · simp; split <;> simp_all
+  · simp; exact h
 
--- Generalized foldl lemma: denial is "sticky" through the fold.
 theorem foldl_worseResult_deny (acc : GuardResult) (xs : List GuardResult)
     (h : acc.allowed = false) :
     (xs.foldl worseResult acc).allowed = false := by
@@ -47,7 +41,6 @@ theorem foldl_worseResult_deny (acc : GuardResult) (xs : List GuardResult)
     simp only [List.foldl]
     exact ih (worseResult acc x) (worseResult_preserves_deny_left acc x h)
 
--- Dual foldl lemma: denied element anywhere in list -> denied result
 theorem foldl_worseResult_deny_mem (acc : GuardResult) (xs : List GuardResult)
     (r : GuardResult) (h_mem : r ∈ xs) (h_deny : r.allowed = false) :
     (xs.foldl worseResult acc).allowed = false := by
@@ -62,14 +55,14 @@ theorem foldl_worseResult_deny_mem (acc : GuardResult) (xs : List GuardResult)
     | tail _ h_tail =>
       exact ih _ h_tail
 
--- P1: Deny Monotonicity
+-- P1
 theorem deny_monotonicity (results : List GuardResult) (r : GuardResult)
     (h_mem : r ∈ results) (h_deny : r.allowed = false) :
     (aggregateOverall results).allowed = false := by
   unfold aggregateOverall
   exact foldl_worseResult_deny_mem defaultResult results r h_mem h_deny
 
--- P2: Allow Requires Unanimity (contrapositive of P1)
+-- P2
 theorem allow_requires_unanimity (results : List GuardResult)
     (h_allow : (aggregateOverall results).allowed = true)
     (r : GuardResult) (h_mem : r ∈ results) :

@@ -4,19 +4,40 @@
 //! `clawdstrike::core::merge` functions on randomly generated inputs.
 
 use formal_diff_tests::generators::{
-    arb_keyed_item, arb_keyed_vec_pair, arb_option_pair, arb_str_pair,
+    arb_keyed_item, arb_keyed_vec_pair, arb_nonempty_str, arb_option_pair, arb_str_pair,
     arb_unique_keyed_vec_pair, KeyedItem,
 };
-use formal_diff_tests::spec::{child_overrides_spec, child_overrides_str_spec, merge_keyed_vec_spec};
+use formal_diff_tests::spec::{
+    child_overrides_spec, child_overrides_str_spec, merge_keyed_vec_spec,
+};
 
 use clawdstrike::core::merge::{child_overrides, child_overrides_str, merge_keyed_vec};
 use proptest::prelude::*;
+use proptest::test_runner::Config as ProptestConfig;
+
+/// Read case count from `PROPTEST_CASES` env var, falling back to the given default.
+fn case_count(default: u32) -> u32 {
+    std::env::var("PROPTEST_CASES")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(default)
+}
+
+/// Build a `ProptestConfig` with the env-driven case count and tuned shrinking.
+fn config() -> ProptestConfig {
+    ProptestConfig {
+        cases: case_count(256),
+        max_shrink_iters: 10_000,
+        ..ProptestConfig::default()
+    }
+}
 
 // ===========================================================================
 // Differential tests: spec vs. impl
 // ===========================================================================
 
 proptest! {
+    #![proptest_config(config())]
     /// child_overrides: spec and impl agree for Option<i32>.
     #[test]
     fn child_overrides_spec_matches_impl((base, child) in arb_option_pair()) {
@@ -70,6 +91,7 @@ proptest! {
 // ===========================================================================
 
 proptest! {
+    #![proptest_config(config())]
     /// P1: child_overrides with Some child always returns child.
     #[test]
     fn child_overrides_some_child_wins(base in any::<Option<i32>>(), child in any::<i32>()) {
@@ -86,14 +108,17 @@ proptest! {
 
     /// P3: child_overrides_str with non-empty child always returns child.
     #[test]
-    fn child_overrides_str_nonempty_child(base in ".*", child in "[a-z]{1,10}") {
+    fn child_overrides_str_nonempty_child(
+        (base, _) in arb_str_pair(),
+        child in arb_nonempty_str(),
+    ) {
         let result = child_overrides_str(&base, &child);
         prop_assert_eq!(result, child);
     }
 
     /// P4: child_overrides_str with empty child falls back to base.
     #[test]
-    fn child_overrides_str_empty_child(base in ".*") {
+    fn child_overrides_str_empty_child((base, _) in arb_str_pair()) {
         let result = child_overrides_str(&base, "");
         prop_assert_eq!(result, base);
     }

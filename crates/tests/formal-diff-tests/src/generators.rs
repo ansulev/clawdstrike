@@ -1,7 +1,7 @@
 //! Proptest generators for differential testing.
 //!
-//! Generates random inputs that can be fed to both the reference specification
-//! and the production implementation for comparison.
+//! Uses pool-based string selection instead of regex strategies (~10x faster
+//! at high case counts).
 
 use proptest::prelude::*;
 use std::collections::HashSet;
@@ -9,11 +9,64 @@ use std::collections::HashSet;
 use crate::spec::SpecSeverity;
 use crate::spec::SpecVerdict;
 
-// ---------------------------------------------------------------------------
-// Severity generators
-// ---------------------------------------------------------------------------
+const GUARD_NAMES: &[&str] = &[
+    "a",
+    "ab",
+    "abc",
+    "guard",
+    "check",
+    "block",
+    "allow",
+    "scan",
+    "policy",
+    "deny",
+    "egress",
+    "secret",
+    "patch",
+    "shell",
+    "mcp",
+    "inject",
+    "jailbreak",
+    "spider",
+    "cua",
+    "rds",
+];
 
-/// Generate a random `SpecSeverity`.
+const KEY_NAMES: &[&str] = &[
+    "a.yaml",
+    "bb.yaml",
+    "ccc.yaml",
+    "default.yaml",
+    "strict.yaml",
+    "perm.yaml",
+    "agent.yaml",
+    "cicd.yaml",
+    "remote.yaml",
+    "spider.yaml",
+    "extra.yaml",
+    "base.yaml",
+    "child.yaml",
+    "root.yaml",
+    "leaf.yaml",
+];
+
+const SHORT_VALS: &[&str] = &[
+    "a", "bb", "ccc", "dd", "eee", "f", "gg", "hhh", "ii", "jjj", "k", "ll", "mmm", "nn", "ooo",
+    "p", "qq", "rrr", "ss", "ttt",
+];
+
+fn pool_guard(idx: usize) -> String {
+    GUARD_NAMES[idx % GUARD_NAMES.len()].to_string()
+}
+
+fn pool_key(idx: usize) -> String {
+    KEY_NAMES[idx % KEY_NAMES.len()].to_string()
+}
+
+fn pool_short(idx: usize) -> String {
+    SHORT_VALS[idx % SHORT_VALS.len()].to_string()
+}
+
 pub fn arb_spec_severity() -> impl Strategy<Value = SpecSeverity> {
     prop_oneof![
         Just(SpecSeverity::Info),
@@ -23,7 +76,6 @@ pub fn arb_spec_severity() -> impl Strategy<Value = SpecSeverity> {
     ]
 }
 
-/// Generate a random `CoreSeverity` (production type).
 pub fn arb_core_severity() -> impl Strategy<Value = clawdstrike::core::CoreSeverity> {
     prop_oneof![
         Just(clawdstrike::core::CoreSeverity::Info),
@@ -33,58 +85,50 @@ pub fn arb_core_severity() -> impl Strategy<Value = clawdstrike::core::CoreSever
     ]
 }
 
-// ---------------------------------------------------------------------------
-// Verdict generators
-// ---------------------------------------------------------------------------
-
-/// Generate a random `SpecVerdict`.
 pub fn arb_spec_verdict() -> impl Strategy<Value = SpecVerdict> {
     (
         any::<bool>(),
         arb_spec_severity(),
         any::<bool>(),
-        "[a-z]{1,10}",
+        0usize..GUARD_NAMES.len(),
     )
-        .prop_map(|(allowed, severity, sanitized, guard)| SpecVerdict {
+        .prop_map(|(allowed, severity, sanitized, guard_idx)| SpecVerdict {
             allowed,
             severity,
             sanitized,
-            guard,
+            guard: pool_guard(guard_idx),
             message: String::new(),
         })
 }
 
-/// Generate a random `CoreVerdict` (production type).
 pub fn arb_core_verdict() -> impl Strategy<Value = clawdstrike::core::CoreVerdict> {
     (
         any::<bool>(),
         arb_core_severity(),
         any::<bool>(),
-        "[a-z]{1,10}",
+        0usize..GUARD_NAMES.len(),
     )
         .prop_map(
-            |(allowed, severity, sanitized, guard)| clawdstrike::core::CoreVerdict {
+            |(allowed, severity, sanitized, guard_idx)| clawdstrike::core::CoreVerdict {
                 allowed,
                 severity,
                 sanitized,
-                guard,
+                guard: pool_guard(guard_idx),
                 message: String::new(),
             },
         )
 }
 
-/// Generate a paired (spec, impl) verdict from the same random seed.
-///
-/// This ensures both sides see identical inputs for differential comparison.
-pub fn arb_paired_verdict(
-) -> impl Strategy<Value = (SpecVerdict, clawdstrike::core::CoreVerdict)> {
+/// Paired (spec, impl) verdict from the same random seed.
+pub fn arb_paired_verdict() -> impl Strategy<Value = (SpecVerdict, clawdstrike::core::CoreVerdict)>
+{
     (
         any::<bool>(),
         0u8..4,
         any::<bool>(),
-        "[a-z]{1,10}",
+        0usize..GUARD_NAMES.len(),
     )
-        .prop_map(|(allowed, sev_idx, sanitized, guard)| {
+        .prop_map(|(allowed, sev_idx, sanitized, guard_idx)| {
             let spec_sev = match sev_idx {
                 0 => SpecSeverity::Info,
                 1 => SpecSeverity::Warning,
@@ -98,6 +142,7 @@ pub fn arb_paired_verdict(
                 _ => clawdstrike::core::CoreSeverity::Critical,
             };
 
+            let guard = pool_guard(guard_idx);
             let spec = SpecVerdict {
                 allowed,
                 severity: spec_sev,
@@ -116,7 +161,6 @@ pub fn arb_paired_verdict(
         })
 }
 
-/// Generate a paired list of verdicts (1..50 items).
 pub fn arb_paired_verdicts(
 ) -> impl Strategy<Value = (Vec<SpecVerdict>, Vec<clawdstrike::core::CoreVerdict>)> {
     prop::collection::vec(arb_paired_verdict(), 1..50).prop_map(|pairs| {
@@ -125,42 +169,44 @@ pub fn arb_paired_verdicts(
     })
 }
 
-// ---------------------------------------------------------------------------
-// Merge generators
-// ---------------------------------------------------------------------------
-
-/// An optional value for merge testing.
 pub fn arb_option_i32() -> impl Strategy<Value = Option<i32>> {
     prop_oneof![Just(None), any::<i32>().prop_map(Some)]
 }
 
-/// Generate a pair of optional values for child-overrides testing.
 pub fn arb_option_pair() -> impl Strategy<Value = (Option<i32>, Option<i32>)> {
     (arb_option_i32(), arb_option_i32())
 }
 
-/// Generate a pair of strings for child-overrides-str testing.
+pub fn arb_nonempty_str() -> impl Strategy<Value = String> {
+    (0usize..SHORT_VALS.len()).prop_map(pool_short)
+}
+
 pub fn arb_str_pair() -> impl Strategy<Value = (String, String)> {
     (
-        prop_oneof![Just(String::new()), "[a-z]{1,10}".prop_map(String::from)],
-        prop_oneof![Just(String::new()), "[a-z]{1,10}".prop_map(String::from)],
+        prop_oneof![
+            Just(String::new()),
+            (0usize..SHORT_VALS.len()).prop_map(pool_short)
+        ],
+        prop_oneof![
+            Just(String::new()),
+            (0usize..SHORT_VALS.len()).prop_map(pool_short)
+        ],
     )
 }
 
-/// A keyed item for merge_keyed_vec testing.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct KeyedItem {
     pub key: u8,
     pub value: String,
 }
 
-/// Generate a random keyed item.
 pub fn arb_keyed_item() -> impl Strategy<Value = KeyedItem> {
-    (0u8..20, "[a-z]{1,5}").prop_map(|(key, value)| KeyedItem { key, value })
+    (0u8..20, 0usize..SHORT_VALS.len()).prop_map(|(key, val_idx)| KeyedItem {
+        key,
+        value: pool_short(val_idx),
+    })
 }
 
-/// Generate a pair of keyed-item vectors for merge testing.
-/// NOTE: base and child may contain duplicate keys (matching production usage).
 pub fn arb_keyed_vec_pair() -> impl Strategy<Value = (Vec<KeyedItem>, Vec<KeyedItem>)> {
     (
         prop::collection::vec(arb_keyed_item(), 0..15),
@@ -168,19 +214,18 @@ pub fn arb_keyed_vec_pair() -> impl Strategy<Value = (Vec<KeyedItem>, Vec<KeyedI
     )
 }
 
-/// Generate a pair of keyed-item vectors with unique keys within each vector.
-/// This is useful for property tests that assume no duplicate keys in the base.
+/// Like `arb_keyed_vec_pair` but deduplicates keys within each vector.
 pub fn arb_unique_keyed_vec_pair() -> impl Strategy<Value = (Vec<KeyedItem>, Vec<KeyedItem>)> {
     arb_keyed_vec_pair().prop_map(|(base, child)| {
-        // Deduplicate: keep last occurrence per key (same HashMap semantics).
         fn dedup(items: Vec<KeyedItem>) -> Vec<KeyedItem> {
-            let mut seen = std::collections::HashMap::new();
-            let mut out = Vec::new();
+            let mut positions: [Option<usize>; 20] = [None; 20];
+            let mut out = Vec::with_capacity(items.len());
             for item in items {
-                if let Some(idx) = seen.get(&item.key).copied() {
-                    out[idx] = item.clone();
+                let k = item.key as usize;
+                if let Some(idx) = positions[k] {
+                    out[idx] = item;
                 } else {
-                    seen.insert(item.key, out.len());
+                    positions[k] = Some(out.len());
                     out.push(item);
                 }
             }
@@ -190,41 +235,37 @@ pub fn arb_unique_keyed_vec_pair() -> impl Strategy<Value = (Vec<KeyedItem>, Vec
     })
 }
 
-// ---------------------------------------------------------------------------
-// Cycle detection generators
-// ---------------------------------------------------------------------------
-
-/// Generate a random key for cycle detection testing.
 pub fn arb_key() -> impl Strategy<Value = String> {
-    "[a-z]{1,8}\\.yaml"
+    (0usize..KEY_NAMES.len()).prop_map(pool_key)
 }
 
-/// Generate a random visited set (0..10 keys).
 pub fn arb_visited_set() -> impl Strategy<Value = HashSet<String>> {
     prop::collection::hash_set(arb_key(), 0..10)
 }
 
-/// Generate a random depth value (0..40, so it can exceed the limit of 32).
 pub fn arb_depth() -> impl Strategy<Value = usize> {
     0usize..40
 }
 
-/// Generate a complete cycle-detection scenario.
 pub fn arb_cycle_scenario() -> impl Strategy<Value = (String, HashSet<String>, usize)> {
     (arb_key(), arb_visited_set(), arb_depth())
 }
 
-/// Generate a cycle-detection scenario where the key IS in the visited set
-/// (to ensure cycle detection fires reliably).
+/// Scenario where the key is guaranteed to be in the visited set.
 pub fn arb_cycle_present_scenario() -> impl Strategy<Value = (String, HashSet<String>, usize)> {
-    arb_visited_set()
-        .prop_filter("need at least one key", |s| !s.is_empty())
-        .prop_flat_map(|set| {
-            let keys: Vec<String> = set.iter().cloned().collect();
-            (
-                prop::sample::select(keys),
-                Just(set),
-                0usize..=32, // depth within limit so cycle is the trigger
-            )
+    // Generate 1..10 key indices, then pick one of them as the "present" key.
+    // This avoids the expensive prop_flat_map + prop_filter pattern.
+    (
+        prop::collection::vec(0usize..KEY_NAMES.len(), 1..10),
+        0usize..10,
+        0usize..=32,
+    )
+        .prop_map(|(key_indices, pick_idx, depth)| {
+            let mut set = HashSet::with_capacity(key_indices.len());
+            for &idx in &key_indices {
+                set.insert(pool_key(idx));
+            }
+            let present_key = pool_key(key_indices[pick_idx % key_indices.len()]);
+            (present_key, set, depth)
         })
 }

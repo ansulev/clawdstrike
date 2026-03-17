@@ -1,9 +1,6 @@
-//! Pure verdict types and severity ordering for formal verification.
-//!
-//! This module contains the core decision types used by the aggregation logic.
-//! It has **no** external dependencies (no serde, no async, no I/O).
+//! Core verdict types and severity ordering (no serde, no I/O).
 
-/// Severity level for violations (pure enum, no serde).
+/// Severity level for violations.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum CoreSeverity {
     /// Informational, logged but allowed.
@@ -16,10 +13,7 @@ pub enum CoreSeverity {
     Critical,
 }
 
-/// Convert severity to ordinal for comparison.
-///
-/// Higher values indicate more severe violations:
-/// `Info(0) < Warning(1) < Error(2) < Critical(3)`
+/// Severity as ordinal: `Info(0) < Warning(1) < Error(2) < Critical(3)`.
 #[inline]
 #[must_use]
 pub const fn severity_ord(s: CoreSeverity) -> u8 {
@@ -31,26 +25,18 @@ pub const fn severity_ord(s: CoreSeverity) -> u8 {
     }
 }
 
-/// Minimal verdict representation used by the aggregation logic.
-///
-/// This mirrors the fields of `GuardResult` that the `aggregate_overall`
-/// function actually inspects, but without serde or `serde_json::Value`.
+/// Minimal verdict representation for aggregation (mirrors `GuardResult`
+/// without serde or `serde_json::Value`).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CoreVerdict {
-    /// Whether the action is allowed.
     pub allowed: bool,
-    /// Severity of any violation.
     pub severity: CoreSeverity,
-    /// Whether this verdict represents a sanitization (content was modified).
     pub sanitized: bool,
-    /// Guard that produced this result.
     pub guard: String,
-    /// Human-readable message.
     pub message: String,
 }
 
 impl CoreVerdict {
-    /// Create an allow verdict.
     #[must_use]
     pub fn allow(guard: impl Into<String>) -> Self {
         Self {
@@ -62,7 +48,6 @@ impl CoreVerdict {
         }
     }
 
-    /// Create a block verdict.
     #[must_use]
     pub fn block(
         guard: impl Into<String>,
@@ -78,7 +63,6 @@ impl CoreVerdict {
         }
     }
 
-    /// Create a warning verdict (allowed but logged).
     #[must_use]
     pub fn warn(guard: impl Into<String>, message: impl Into<String>) -> Self {
         Self {
@@ -90,7 +74,6 @@ impl CoreVerdict {
         }
     }
 
-    /// Create a sanitize verdict (allowed but with modified content).
     #[must_use]
     pub fn sanitize(guard: impl Into<String>, message: impl Into<String>) -> Self {
         Self {
@@ -102,10 +85,6 @@ impl CoreVerdict {
         }
     }
 }
-
-// =========================================================================
-// Tests
-// =========================================================================
 
 #[cfg(test)]
 mod tests {

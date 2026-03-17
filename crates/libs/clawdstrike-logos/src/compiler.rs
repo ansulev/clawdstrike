@@ -1,42 +1,27 @@
 //! Policy-to-formula compiler.
-//!
-//! The [`PolicyCompiler`] trait defines the interface for translating ClawdStrike
-//! policies and guard configurations into Logos normative formulas.
-//! [`DefaultPolicyCompiler`] provides the standard translation that maps each
-//! guard config into prohibition, permission, and obligation formulas.
 
 use clawdstrike::policy::{GuardConfigs, Policy};
 use logos_ffi::{AgentId, Formula};
 
 use crate::guards::GuardFormulas;
 
-/// Trait for compiling ClawdStrike policy types into Logos formulas.
 pub trait PolicyCompiler {
-    /// Compile a [`GuardConfigs`] block into normative formulas.
     fn compile_guards(&self, guards: &GuardConfigs) -> Vec<Formula>;
 
-    /// Compile a complete [`Policy`] into normative formulas.
-    ///
-    /// The default implementation delegates to [`compile_guards`](Self::compile_guards)
-    /// on the policy's guard block.
     fn compile_policy(&self, policy: &Policy) -> Vec<Formula> {
         self.compile_guards(&policy.guards)
     }
 }
 
-/// Default policy compiler that translates each guard configuration into
-/// normative formulas using the [`GuardFormulas`] trait implementations.
 pub struct DefaultPolicyCompiler {
     agent: AgentId,
 }
 
 impl DefaultPolicyCompiler {
-    /// Create a new compiler for the given agent identifier.
     pub fn new(agent: AgentId) -> Self {
         Self { agent }
     }
 
-    /// Return the agent identifier used for formula generation.
     pub fn agent(&self) -> &AgentId {
         &self.agent
     }

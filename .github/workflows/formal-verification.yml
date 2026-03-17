@@ -123,7 +123,10 @@ jobs:
 
       - name: Verify all built-in rulesets
         run: |
-          if cargo build -p hush-cli --bin hush --features z3; then
+          set -euo pipefail
+
+          if command -v z3 >/dev/null 2>&1 && [ -f /usr/include/z3.h ]; then
+            cargo build -p hush-cli --bin hush --features z3
             cargo_args=(cargo run -p hush-cli --bin hush --features z3 --quiet --)
             echo "Using Z3 verification backend."
           else

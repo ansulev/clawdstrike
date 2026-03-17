@@ -22,6 +22,8 @@ tracing.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 glob.workspace = true
+regex.workspace = true
+regex-syntax = "0.8"
 
 [dev-dependencies]
 

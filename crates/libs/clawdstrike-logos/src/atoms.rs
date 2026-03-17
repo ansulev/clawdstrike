@@ -140,12 +140,6 @@ impl fmt::Display for ActionAtom {
     }
 }
 
-/// Produce a [`Formula::Atom`] from an action type string and parameter.
-#[must_use]
-pub fn action_atom(action_type: &str, param: &str) -> Formula {
-    Formula::atom(format!("{action_type}({param})"))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -160,12 +154,6 @@ mod tests {
     fn atom_display() {
         let atom = ActionAtom::egress("api.openai.com");
         assert_eq!(format!("{atom}"), "egress(api.openai.com)");
-    }
-
-    #[test]
-    fn action_atom_helper() {
-        let f = action_atom("mcp", "shell_exec");
-        assert!(matches!(f, Formula::Atom(ref s) if s == "mcp(shell_exec)"));
     }
 
     #[test]

@@ -34,13 +34,3 @@ pub mod guards;
 pub mod verifier;
 
 pub use logos_ffi;
-
-use thiserror::Error;
-
-#[derive(Debug, Error)]
-pub enum CompileError {
-    #[error("invalid pattern in guard `{guard}`: {detail}")]
-    InvalidPattern { guard: String, detail: String },
-}
-
-pub type Result<T> = std::result::Result<T, CompileError>;

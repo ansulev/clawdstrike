@@ -152,6 +152,7 @@ impl Formula {
     }
 
     /// Negation
+    #[allow(clippy::should_implement_trait)]
     pub fn not(f: Formula) -> Self {
         Self::Not(Box::new(f))
     }
@@ -429,6 +430,14 @@ impl Formula {
             }
             _ => false,
         }
+    }
+}
+
+impl std::ops::Not for Formula {
+    type Output = Self;
+
+    fn not(self) -> Self::Output {
+        Self::Not(Box::new(self))
     }
 }
 

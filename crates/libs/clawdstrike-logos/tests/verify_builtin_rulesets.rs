@@ -128,7 +128,9 @@ fn receipt_metadata_uses_backend_field() {
         hush_core::receipt::Verdict::pass(),
     );
     let enriched = clawdstrike_logos::verifier::enrich_receipt(receipt, &report);
-    let metadata = enriched.metadata.expect("verification metadata");
+    let Some(metadata) = enriched.metadata else {
+        panic!("verification metadata missing");
+    };
 
     assert!(metadata["verification"]["backend"].is_string());
     assert!(metadata["verification"]["consistency"].is_string());

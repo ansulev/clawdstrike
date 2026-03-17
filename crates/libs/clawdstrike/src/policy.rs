@@ -535,6 +535,20 @@ impl Default for VerificationSettings {
     }
 }
 
+impl VerificationSettings {
+    pub fn merge_with(&self, child: &Self) -> Self {
+        Self {
+            // Verification settings are monotonic across extends: a child may
+            // request stronger verification, but cannot weaken a parent gate.
+            enabled: self.enabled || child.enabled,
+            strict: self.strict || child.strict,
+            // Cache disablement is also monotonic for safety: if either side
+            // opts out of caching, the merged policy stays uncached.
+            cache: self.cache && child.cache,
+        }
+    }
+}
+
 fn default_timeout() -> u64 {
     3600 // 1 hour
 }
@@ -554,6 +568,20 @@ impl PolicySettings {
 
     pub fn effective_verification(&self) -> VerificationSettings {
         self.verification.clone().unwrap_or_default()
+    }
+
+    pub fn merge_with(&self, child: &Self) -> Self {
+        Self {
+            fail_fast: child.fail_fast.or(self.fail_fast),
+            verbose_logging: child.verbose_logging.or(self.verbose_logging),
+            session_timeout_secs: child.session_timeout_secs.or(self.session_timeout_secs),
+            verification: match (&self.verification, &child.verification) {
+                (Some(base), Some(child_cfg)) => Some(base.merge_with(child_cfg)),
+                (Some(base), None) => Some(base.clone()),
+                (None, Some(child_cfg)) => Some(child_cfg.clone()),
+                (None, None) => None,
+            },
+        }
     }
 }
 
@@ -1366,7 +1394,19 @@ impl Policy {
     /// Uses child's merge_strategy to determine how to combine.
     pub fn merge(&self, child: &Policy) -> Self {
         match child.merge_strategy {
-            MergeStrategy::Replace => child.clone(),
+            MergeStrategy::Replace => {
+                let mut replaced = child.clone();
+                replaced.extends = None;
+                replaced.merge_strategy = MergeStrategy::default();
+                replaced.settings.verification =
+                    match (&self.settings.verification, &child.settings.verification) {
+                        (Some(base), Some(child_cfg)) => Some(base.merge_with(child_cfg)),
+                        (Some(base), None) => Some(base.clone()),
+                        (None, Some(child_cfg)) => Some(child_cfg.clone()),
+                        (None, None) => None,
+                    };
+                replaced
+            }
             MergeStrategy::Merge => Self {
                 version: if child.version != self.version {
                     child.version.clone()
@@ -1396,7 +1436,7 @@ impl Policy {
                     self.custom_guards.clone()
                 },
                 settings: if child.settings != PolicySettings::default() {
-                    child.settings.clone()
+                    self.settings.merge_with(&child.settings)
                 } else {
                     self.settings.clone()
                 },
@@ -1424,22 +1464,7 @@ impl Policy {
                 merge_strategy: MergeStrategy::default(),
                 guards: self.guards.merge_with(&child.guards),
                 custom_guards: merge_custom_guards(&self.custom_guards, &child.custom_guards),
-                settings: PolicySettings {
-                    fail_fast: child.settings.fail_fast.or(self.settings.fail_fast),
-                    verbose_logging: child
-                        .settings
-                        .verbose_logging
-                        .or(self.settings.verbose_logging),
-                    session_timeout_secs: child
-                        .settings
-                        .session_timeout_secs
-                        .or(self.settings.session_timeout_secs),
-                    verification: child
-                        .settings
-                        .verification
-                        .clone()
-                        .or_else(|| self.settings.verification.clone()),
-                },
+                settings: self.settings.merge_with(&child.settings),
                 posture: match (&self.posture, &child.posture) {
                     (Some(base), Some(child_posture)) => Some(base.merge_with(child_posture)),
                     (Some(base), None) => Some(base.clone()),
@@ -3795,8 +3820,7 @@ name: Test
         ));
         let root_yaml = std::fs::read_to_string(&root).expect("read root");
         let err = Policy::from_yaml_with_extends(&root_yaml, Some(root.as_path()))
-            .err()
-            .expect("depth exceeded");
+            .expect_err("depth exceeded");
         assert!(
             err.to_string().contains("Policy extends depth exceeded"),
             "unexpected error: {err}"
@@ -3883,8 +3907,7 @@ settings:
 "#;
 
         let err = Policy::from_yaml(yaml)
-            .err()
-            .expect("strict verification should fail without a registered verifier");
+            .expect_err("strict verification should fail without a registered verifier");
         assert!(err
             .to_string()
             .contains("no load-time policy verifier is registered"));
@@ -3906,13 +3929,8 @@ settings:
     }
 
     #[test]
-    fn child_can_disable_parent_verification_during_extends_load() {
-        let dir = tempdir().expect("tempdir");
-        let parent = dir.path().join("parent.yaml");
-        let child = dir.path().join("child.yaml");
-
-        std::fs::write(
-            &parent,
+    fn child_inherits_parent_verification_during_extends_load() {
+        let parent = Policy::from_yaml_unvalidated(
             r#"
 version: "1.5.0"
 name: parent
@@ -3922,10 +3940,9 @@ settings:
     strict: true
 "#,
         )
-        .expect("write parent");
+        .expect("parse parent");
 
-        std::fs::write(
-            &child,
+        let child = Policy::from_yaml_unvalidated(
             r#"
 version: "1.5.0"
 name: child
@@ -3936,12 +3953,46 @@ settings:
     strict: false
 "#,
         )
-        .expect("write child");
+        .expect("parse child");
 
-        let child_yaml = std::fs::read_to_string(&child).expect("read child");
-        let policy =
-            Policy::from_yaml_with_extends(&child_yaml, Some(child.as_path())).expect("load child");
-        assert_eq!(policy.name, "child");
-        assert!(!policy.settings.effective_verification().enabled);
+        let merged = parent.merge(&child);
+        merged.validate().expect("merged policy should validate");
+        assert_eq!(merged.name, "child");
+        let verification = merged.settings.effective_verification();
+        assert!(verification.enabled);
+        assert!(verification.strict);
+    }
+
+    #[test]
+    fn replace_merge_cannot_disable_parent_verification() {
+        let parent = Policy::from_yaml_unvalidated(
+            r#"
+version: "1.5.0"
+name: parent
+settings:
+  verification:
+    enabled: true
+    strict: true
+"#,
+        )
+        .expect("parse parent");
+
+        let child = Policy::from_yaml_unvalidated(
+            r#"
+version: "1.5.0"
+name: child
+merge_strategy: replace
+settings:
+  verification:
+    enabled: false
+    strict: false
+"#,
+        )
+        .expect("parse child");
+
+        let merged = parent.merge(&child);
+        let verification = merged.settings.effective_verification();
+        assert!(verification.enabled);
+        assert!(verification.strict);
     }
 }

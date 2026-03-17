@@ -4,9 +4,10 @@
 //! keeping the original public API unchanged.
 
 pub use hush_core::{
-    canonical, canonicalize_json, duration, hashing, keccak256, keccak256_hex, merkle,
-    parse_human_duration, receipt, sha256, sha256_hex, signing, Hash, Keypair, MerkleProof,
-    MerkleTree, Provenance, PublicKey, Receipt, Signature, SignedReceipt, Signer, Verdict,
+    canonical, canonicalize_json, duration, error, hashing, keccak256, keccak256_hex, merkle,
+    parse_human_duration, prelude, receipt, sha256, sha256_hex, signing, Error, Hash, Keypair,
+    MerkleProof, MerkleTree, Provenance, PublicKey, Receipt, Result, Signature, SignedReceipt,
+    Signer, Verdict,
 };
 #[cfg(not(target_arch = "wasm32"))]
 pub use hush_core::{tpm, TpmSealedBlob, TpmSealedSeedSigner};

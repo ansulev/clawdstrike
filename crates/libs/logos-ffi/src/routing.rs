@@ -188,13 +188,9 @@ impl RoutingSpec {
         let mut sorted_rules: Vec<_> = self.rules.iter().collect();
         sorted_rules.sort_by(|a, b| b.priority.cmp(&a.priority));
 
-        for rule in sorted_rules {
-            if evaluate_condition(&rule.condition, issue_state) {
-                return Some(rule);
-            }
-        }
-
-        None
+        sorted_rules
+            .into_iter()
+            .find(|rule| evaluate_condition(&rule.condition, issue_state))
     }
 }
 

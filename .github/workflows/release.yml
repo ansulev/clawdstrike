@@ -305,7 +305,7 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           RELEASE_VERSION: ${{ needs.resolve-version.outputs.version }}
-          MISSING_PACKAGES_JSON: ${{ steps.detect.outputs.missing_packages }}
+          PACKAGE_PATHS_JSON: ${{ steps.discover.outputs.packages }}
         shell: bash
         run: |
           set -euo pipefail
@@ -353,7 +353,7 @@ jobs:
           }
 
           node <<'NODE' > /tmp/release-npm-packages.txt
-          const packages = JSON.parse(process.env.MISSING_PACKAGES_JSON || "[]");
+          const packages = JSON.parse(process.env.PACKAGE_PATHS_JSON || "[]");
           for (const pkg of packages) {
             console.log(pkg);
           }

@@ -48,31 +48,24 @@ pub fn load_policy_from_arg(
         Some((yaml, id)) => {
             let source = ResolvedPolicySource::Ruleset { id: id.clone() };
             let source_location = PolicyLocation::Ruleset { id };
-            let (policy, source_policy) = if resolve {
-                let source_policy =
-                    Policy::from_yaml_without_load_verification(yaml).map_err(|e| {
-                        PolicyLoadError {
-                            message: format!("Failed to load ruleset {:?}: {}", arg, e),
-                            source: e,
-                        }
-                    })?;
-                let policy = Policy::from_yaml_with_extends_location_resolver(
-                    yaml,
-                    source_location.clone(),
-                    &resolver,
-                )
-                .map_err(|e| PolicyLoadError {
-                    message: format!("Failed to resolve ruleset extends: {}", e),
-                    source: e,
-                })?;
-                (policy, source_policy)
-            } else {
-                let source_policy = Policy::from_yaml(yaml).map_err(|e| PolicyLoadError {
+            let source_policy =
+                Policy::from_yaml_without_load_verification(yaml).map_err(|e| PolicyLoadError {
                     message: format!("Failed to load ruleset {:?}: {}", arg, e),
                     source: e,
                 })?;
-                (source_policy.clone(), source_policy)
-            };
+            // Built-in rulesets historically load as effective policies via
+            // `RuleSet::by_name()`. Keep that behavior even when callers do not
+            // request `--resolve`, while still preserving the raw source policy
+            // for inheritance-aware CLI reporting.
+            let policy = Policy::from_yaml_with_extends_location_resolver(
+                yaml,
+                source_location.clone(),
+                &resolver,
+            )
+            .map_err(|e| PolicyLoadError {
+                message: format!("Failed to resolve ruleset extends: {}", e),
+                source: e,
+            })?;
             let original_extends = source_policy.extends.clone();
 
             Ok(LoadedPolicy {
@@ -315,6 +308,31 @@ mod tests {
         )
         .expect("load resolved ruleset");
 
+        assert_eq!(loaded.original_extends.as_deref(), Some("remote-desktop"));
+        assert_eq!(
+            loaded.source_policy.extends.as_deref(),
+            Some("remote-desktop")
+        );
+        assert_eq!(loaded.policy.extends, None);
+    }
+
+    #[test]
+    fn load_unresolved_ruleset_still_returns_effective_policy() {
+        let loaded = load_policy_from_arg(
+            "remote-desktop-strict",
+            false,
+            &RemoteExtendsConfig::disabled(),
+        )
+        .expect("load unresolved ruleset");
+        let expected = RuleSet::by_name("remote-desktop-strict")
+            .expect("ruleset lookup")
+            .expect("ruleset")
+            .policy;
+
+        assert_eq!(
+            serde_json::to_value(&loaded.policy).expect("serialize loaded policy"),
+            serde_json::to_value(&expected).expect("serialize expected policy")
+        );
         assert_eq!(loaded.original_extends.as_deref(), Some("remote-desktop"));
         assert_eq!(
             loaded.source_policy.extends.as_deref(),

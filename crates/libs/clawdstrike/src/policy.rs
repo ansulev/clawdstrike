@@ -549,6 +549,18 @@ impl VerificationSettings {
     }
 }
 
+fn merge_verification_settings(
+    base: &Option<VerificationSettings>,
+    child: &Option<VerificationSettings>,
+) -> Option<VerificationSettings> {
+    match (base, child) {
+        (Some(base), Some(child_cfg)) => Some(base.merge_with(child_cfg)),
+        (Some(base), None) => Some(base.clone()),
+        (None, Some(child_cfg)) => Some(child_cfg.clone()),
+        (None, None) => None,
+    }
+}
+
 fn default_timeout() -> u64 {
     3600 // 1 hour
 }
@@ -575,12 +587,7 @@ impl PolicySettings {
             fail_fast: child.fail_fast.or(self.fail_fast),
             verbose_logging: child.verbose_logging.or(self.verbose_logging),
             session_timeout_secs: child.session_timeout_secs.or(self.session_timeout_secs),
-            verification: match (&self.verification, &child.verification) {
-                (Some(base), Some(child_cfg)) => Some(base.merge_with(child_cfg)),
-                (Some(base), None) => Some(base.clone()),
-                (None, Some(child_cfg)) => Some(child_cfg.clone()),
-                (None, None) => None,
-            },
+            verification: merge_verification_settings(&self.verification, &child.verification),
         }
     }
 }
@@ -1411,52 +1418,57 @@ impl Policy {
                 let mut replaced = child.clone();
                 replaced.extends = None;
                 replaced.merge_strategy = MergeStrategy::default();
-                replaced.settings.verification =
-                    match (&self.settings.verification, &child.settings.verification) {
-                        (Some(base), Some(child_cfg)) => Some(base.merge_with(child_cfg)),
-                        (Some(base), None) => Some(base.clone()),
-                        (None, Some(child_cfg)) => Some(child_cfg.clone()),
-                        (None, None) => None,
-                    };
+                replaced.settings.verification = merge_verification_settings(
+                    &self.settings.verification,
+                    &child.settings.verification,
+                );
                 replaced
             }
-            MergeStrategy::Merge => Self {
-                version: if child.version != self.version {
-                    child.version.clone()
-                } else {
-                    self.version.clone()
-                },
-                name: if !child.name.is_empty() {
-                    child.name.clone()
-                } else {
-                    self.name.clone()
-                },
-                description: if !child.description.is_empty() {
-                    child.description.clone()
-                } else {
-                    self.description.clone()
-                },
-                extends: None, // Don't propagate extends
-                merge_strategy: MergeStrategy::default(),
-                guards: if child.guards != GuardConfigs::default() {
-                    child.guards.clone()
-                } else {
-                    self.guards.clone()
-                },
-                custom_guards: if !child.custom_guards.is_empty() {
-                    child.custom_guards.clone()
-                } else {
-                    self.custom_guards.clone()
-                },
-                settings: if child.settings != PolicySettings::default() {
-                    self.settings.merge_with(&child.settings)
+            MergeStrategy::Merge => {
+                let mut settings = if child.settings != PolicySettings::default() {
+                    child.settings.clone()
                 } else {
                     self.settings.clone()
-                },
-                posture: child.posture.clone().or_else(|| self.posture.clone()),
-                origins: child.origins.clone().or_else(|| self.origins.clone()),
-                broker: child.broker.clone().or_else(|| self.broker.clone()),
-            },
+                };
+                settings.verification = merge_verification_settings(
+                    &self.settings.verification,
+                    &settings.verification,
+                );
+
+                Self {
+                    version: if child.version != self.version {
+                        child.version.clone()
+                    } else {
+                        self.version.clone()
+                    },
+                    name: if !child.name.is_empty() {
+                        child.name.clone()
+                    } else {
+                        self.name.clone()
+                    },
+                    description: if !child.description.is_empty() {
+                        child.description.clone()
+                    } else {
+                        self.description.clone()
+                    },
+                    extends: None, // Don't propagate extends
+                    merge_strategy: MergeStrategy::default(),
+                    guards: if child.guards != GuardConfigs::default() {
+                        child.guards.clone()
+                    } else {
+                        self.guards.clone()
+                    },
+                    custom_guards: if !child.custom_guards.is_empty() {
+                        child.custom_guards.clone()
+                    } else {
+                        self.custom_guards.clone()
+                    },
+                    settings,
+                    posture: child.posture.clone().or_else(|| self.posture.clone()),
+                    origins: child.origins.clone().or_else(|| self.origins.clone()),
+                    broker: child.broker.clone().or_else(|| self.broker.clone()),
+                }
+            }
             MergeStrategy::DeepMerge => Self {
                 version: if child.version != self.version {
                     child.version.clone()
@@ -4000,6 +4012,44 @@ settings:
         .expect("parse child");
 
         let merged = parent.merge(&child);
+        let verification = merged.settings.effective_verification();
+        assert!(verification.enabled);
+        assert!(verification.strict);
+    }
+
+    #[test]
+    fn merge_strategy_merge_keeps_settings_shallow_except_verification_gate() {
+        let parent = Policy::from_yaml_unvalidated(
+            r#"
+version: "1.5.0"
+name: parent
+settings:
+  fail_fast: true
+  session_timeout_secs: 42
+  verification:
+    enabled: true
+    strict: true
+"#,
+        )
+        .expect("parse parent");
+
+        let child = Policy::from_yaml_unvalidated(
+            r#"
+version: "1.5.0"
+name: child
+merge_strategy: merge
+settings:
+  verbose_logging: true
+"#,
+        )
+        .expect("parse child");
+
+        let merged = parent.merge(&child);
+
+        assert_eq!(merged.settings.fail_fast, None);
+        assert_eq!(merged.settings.session_timeout_secs, None);
+        assert_eq!(merged.settings.verbose_logging, Some(true));
+
         let verification = merged.settings.effective_verification();
         assert!(verification.enabled);
         assert!(verification.strict);

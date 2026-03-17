@@ -38,7 +38,7 @@ B = BoolSort()
 bv3 = BitVecSort(3)
 
 
-state = Function('state', [ bv3 for c in cars] + [B])
+state = Function('state', [bv3 for _ in cars] + [B])
 
 def num(i):
     return BitVecVal(i,bv3)

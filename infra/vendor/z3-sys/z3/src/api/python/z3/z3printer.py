@@ -460,10 +460,10 @@ class FormatObject:
 class NAryFormatObject(FormatObject):
     def __init__(self, fs):
         assert all([isinstance(a, FormatObject) for a in fs])
-        self.children = fs
+        self._children = fs
 
     def children(self):
-        return self.children
+        return self._children
 
 
 class ComposeFormatObject(NAryFormatObject):
@@ -471,11 +471,11 @@ class ComposeFormatObject(NAryFormatObject):
         return True
 
     def as_tuple(self):
-        return ("compose", [a.as_tuple() for a in self.children])
+        return ("compose", [a.as_tuple() for a in self._children])
 
     def space_upto_nl(self):
         r = 0
-        for child in self.children:
+        for child in self._children:
             s, nl = child.space_upto_nl()
             r = r + s
             if nl:
@@ -483,7 +483,7 @@ class ComposeFormatObject(NAryFormatObject):
         return (r, False)
 
     def flat(self):
-        return compose([a.flat() for a in self.children])
+        return compose([a.flat() for a in self._children])
 
 
 class ChoiceFormatObject(NAryFormatObject):
@@ -491,13 +491,13 @@ class ChoiceFormatObject(NAryFormatObject):
         return True
 
     def as_tuple(self):
-        return ("choice", [a.as_tuple() for a in self.children])
+        return ("choice", [a.as_tuple() for a in self._children])
 
     def space_upto_nl(self):
-        return self.children[0].space_upto_nl()
+        return self._children[0].space_upto_nl()
 
     def flat(self):
-        return self.children[0].flat()
+        return self._children[0].flat()
 
 
 class IndentFormatObject(FormatObject):

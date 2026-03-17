@@ -44,37 +44,28 @@ pub fn load_policy_from_arg(
             source: e,
         })?;
 
-    match RuleSet::by_name(arg) {
-        Ok(Some(rs)) => {
-            let source = ResolvedPolicySource::Ruleset { id: rs.id.clone() };
-            let source_location = PolicyLocation::Ruleset { id: rs.id.clone() };
-            let source_policy = rs.policy.clone();
+    match RuleSet::yaml_by_name(arg) {
+        Some((yaml, id)) => {
+            let source = ResolvedPolicySource::Ruleset { id: id.clone() };
+            let source_location = PolicyLocation::Ruleset { id };
+            let source_policy = Policy::from_yaml(yaml).map_err(|e| PolicyLoadError {
+                message: format!("Failed to load ruleset {:?}: {}", arg, e),
+                source: e,
+            })?;
             let original_extends = source_policy.extends.clone();
-            if !resolve {
-                return Ok(LoadedPolicy {
-                    policy: source_policy.clone(),
-                    source_policy,
-                    source,
-                    source_location,
-                    original_extends,
-                });
-            }
-
-            // Resolve `extends` using the same mechanism as file-based policies.
-            let yaml = rs.policy.to_yaml().map_err(|e| PolicyLoadError {
-                message: format!("Failed to export ruleset as YAML: {}", e),
-                source: e,
-            })?;
-
-            let policy = Policy::from_yaml_with_extends_location_resolver(
-                &yaml,
-                source_location.clone(),
-                &resolver,
-            )
-            .map_err(|e| PolicyLoadError {
-                message: format!("Failed to resolve ruleset extends: {}", e),
-                source: e,
-            })?;
+            let policy = if resolve {
+                Policy::from_yaml_with_extends_location_resolver(
+                    yaml,
+                    source_location.clone(),
+                    &resolver,
+                )
+                .map_err(|e| PolicyLoadError {
+                    message: format!("Failed to resolve ruleset extends: {}", e),
+                    source: e,
+                })?
+            } else {
+                source_policy.clone()
+            };
 
             Ok(LoadedPolicy {
                 policy,
@@ -84,7 +75,7 @@ pub fn load_policy_from_arg(
                 original_extends,
             })
         }
-        Ok(None) => {
+        None => {
             let path = std::path::Path::new(arg);
             let source = ResolvedPolicySource::File {
                 path: arg.to_string(),
@@ -144,10 +135,6 @@ pub fn load_policy_from_arg(
                 original_extends,
             })
         }
-        Err(e) => Err(PolicyLoadError {
-            message: format!("Failed to load ruleset {arg:?}: {}", e),
-            source: e,
-        }),
     }
 }
 
@@ -306,6 +293,23 @@ mod tests {
             loaded.source_location,
             PolicyLocation::Ruleset { ref id } if id == "default"
         ));
+    }
+
+    #[test]
+    fn load_resolved_ruleset_keeps_original_extends_metadata() {
+        let loaded = load_policy_from_arg(
+            "remote-desktop-strict",
+            true,
+            &RemoteExtendsConfig::disabled(),
+        )
+        .expect("load resolved ruleset");
+
+        assert_eq!(loaded.original_extends.as_deref(), Some("remote-desktop"));
+        assert_eq!(
+            loaded.source_policy.extends.as_deref(),
+            Some("remote-desktop")
+        );
+        assert_eq!(loaded.policy.extends, None);
     }
 
     #[test]

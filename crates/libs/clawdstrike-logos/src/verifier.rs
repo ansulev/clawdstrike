@@ -12,7 +12,7 @@ use clawdstrike::guards::{
     EgressAllowlistConfig, ForbiddenPathConfig, ForbiddenPathGuard, McpDefaultAction,
     McpToolConfig, McpToolGuard, PathAllowlistConfig, PathAllowlistGuard, ShellCommandConfig,
 };
-use clawdstrike::policy::Policy;
+use clawdstrike::policy::{LocalPolicyResolver, Policy, PolicyLocation, PolicyResolver};
 use glob::Pattern;
 use hush_proxy::policy::{DomainPolicy, PolicyAction};
 #[cfg(feature = "z3")]
@@ -1804,7 +1804,34 @@ pub fn verify_policy_at_load_time(
     policy: &clawdstrike::policy::Policy,
     cache: &VerificationCache,
 ) -> std::result::Result<LoadTimeVerificationResult, String> {
-    let settings = policy.settings.effective_verification();
+    verify_policy_at_load_time_inner::<LocalPolicyResolver>(policy, Some(policy), None, cache)
+}
+
+/// Verify a resolved policy at load time using the original source policy and
+/// its source location so inheritance soundness can be checked against the
+/// actual parent policy.
+pub fn verify_policy_at_load_time_with_resolver<R: PolicyResolver>(
+    effective_policy: &clawdstrike::policy::Policy,
+    source_policy: &clawdstrike::policy::Policy,
+    source_location: &PolicyLocation,
+    resolver: &R,
+    cache: &VerificationCache,
+) -> std::result::Result<LoadTimeVerificationResult, String> {
+    verify_policy_at_load_time_inner(
+        effective_policy,
+        Some(source_policy),
+        Some((source_location, resolver)),
+        cache,
+    )
+}
+
+fn verify_policy_at_load_time_inner<R: PolicyResolver>(
+    effective_policy: &clawdstrike::policy::Policy,
+    source_policy: Option<&clawdstrike::policy::Policy>,
+    source_context: Option<(&PolicyLocation, &R)>,
+    cache: &VerificationCache,
+) -> std::result::Result<LoadTimeVerificationResult, String> {
+    let settings = effective_policy.settings.effective_verification();
 
     if !settings.enabled {
         return Ok(LoadTimeVerificationResult {
@@ -1814,9 +1841,7 @@ pub fn verify_policy_at_load_time(
         });
     }
 
-    let policy_yaml = policy.to_yaml().unwrap_or_default();
-    let content_hash = hush_core::hashing::sha256(policy_yaml.as_bytes());
-    let cache_key = content_hash.to_hex();
+    let cache_key = load_time_cache_key(effective_policy, source_policy, source_context);
 
     if settings.cache {
         if let Some(cached) = cache.get(&cache_key) {
@@ -1829,6 +1854,8 @@ pub fn verify_policy_at_load_time(
                 if settings.strict {
                     return Err(msg);
                 }
+
+                tracing::warn!("{}", msg);
 
                 return Ok(LoadTimeVerificationResult {
                     report: Some(cached),
@@ -1845,21 +1872,118 @@ pub fn verify_policy_at_load_time(
         }
     }
 
-    let agent = logos_ffi::AgentId::new("clawdstrike-agent");
     let verifier = load_time_verifier();
-    let report = verifier.verify_policy(policy, agent);
+    let (report, detailed_error) = match source_policy.and_then(|policy| policy.extends.as_deref())
+    {
+        Some(parent_ref) => {
+            let (source_location, resolver) = match source_context {
+                Some(context) => context,
+                None => {
+                    let message = format!(
+                        "Policy verification could not check inheritance for parent {:?}: missing source location/resolver context",
+                        parent_ref
+                    );
+                    return finish_load_time_verification(
+                        settings.strict,
+                        inheritance_context_failure_report(effective_policy, message.clone()),
+                        false,
+                        Some(message),
+                    );
+                }
+            };
+
+            match resolve_parent_policy_for_load_time(
+                source_policy.expect("source policy"),
+                source_location,
+                resolver,
+            ) {
+                Ok(parent) => (
+                    verifier.verify_policy_with_parent_and_source(
+                        &parent,
+                        source_policy.expect("source policy"),
+                        effective_policy,
+                        AgentId::new("clawdstrike-agent"),
+                    ),
+                    None,
+                ),
+                Err(message) => (
+                    inheritance_context_failure_report(effective_policy, message.clone()),
+                    Some(message),
+                ),
+            }
+        }
+        None => (
+            verifier.verify_policy(effective_policy, AgentId::new("clawdstrike-agent")),
+            None,
+        ),
+    };
 
     if settings.cache {
         cache.insert(cache_key, report.clone());
     }
 
-    if !report.all_pass() {
-        let msg = format!(
-            "Policy verification failed: consistency={}, completeness={}, inheritance={}",
-            report.consistency.outcome, report.completeness.outcome, report.inheritance.outcome,
-        );
+    finish_load_time_verification(settings.strict, report, false, detailed_error)
+}
 
-        if settings.strict {
+fn resolve_parent_policy_for_load_time<R: PolicyResolver>(
+    source_policy: &Policy,
+    source_location: &PolicyLocation,
+    resolver: &R,
+) -> std::result::Result<Policy, String> {
+    let extends_name = source_policy
+        .extends
+        .as_deref()
+        .ok_or_else(|| "source policy does not declare extends".to_string())?;
+
+    let resolved = resolver
+        .resolve(extends_name, source_location)
+        .map_err(|e| format!("failed to resolve parent policy {:?}: {}", extends_name, e))?;
+
+    Policy::from_yaml_with_extends_location_resolver(&resolved.yaml, resolved.location, resolver)
+        .map_err(|e| format!("failed to load parent policy {:?}: {}", extends_name, e))
+}
+
+fn inheritance_context_failure_report(
+    effective_policy: &Policy,
+    _message: String,
+) -> VerificationReport {
+    let verifier = load_time_verifier();
+    let mut report = verifier.verify_policy(effective_policy, AgentId::new("clawdstrike-agent"));
+    report.inheritance = InheritanceResult {
+        outcome: CheckOutcome::Fail,
+        weakened: Vec::new(),
+    };
+    if !report
+        .properties_checked
+        .iter()
+        .any(|item| item == "inheritance")
+    {
+        report.properties_checked.push("inheritance".to_string());
+    }
+    report.attestation_level = compute_attestation_level(
+        report.backend,
+        &report.consistency,
+        &report.completeness,
+        &report.inheritance,
+    );
+    report
+}
+
+fn finish_load_time_verification(
+    strict: bool,
+    report: VerificationReport,
+    cache_hit: bool,
+    detailed_error: Option<String>,
+) -> std::result::Result<LoadTimeVerificationResult, String> {
+    if !report.all_pass() {
+        let msg = detailed_error.unwrap_or_else(|| {
+            format!(
+                "Policy verification failed: consistency={}, completeness={}, inheritance={}",
+                report.consistency.outcome, report.completeness.outcome, report.inheritance.outcome,
+            )
+        });
+
+        if strict {
             return Err(msg);
         }
 
@@ -1867,16 +1991,49 @@ pub fn verify_policy_at_load_time(
 
         return Ok(LoadTimeVerificationResult {
             report: Some(report),
-            cache_hit: false,
+            cache_hit,
             error: Some(msg),
         });
     }
 
     Ok(LoadTimeVerificationResult {
         report: Some(report),
-        cache_hit: false,
+        cache_hit,
         error: None,
     })
+}
+
+fn load_time_cache_key<R: PolicyResolver>(
+    effective_policy: &Policy,
+    source_policy: Option<&Policy>,
+    source_context: Option<(&PolicyLocation, &R)>,
+) -> String {
+    let mut cache_input = effective_policy.to_yaml().unwrap_or_default();
+
+    if let Some(source_policy) = source_policy {
+        cache_input.push_str("\n---source-policy---\n");
+        cache_input.push_str(&source_policy.to_yaml().unwrap_or_default());
+    }
+
+    if let Some((source_location, _)) = source_context {
+        cache_input.push_str("\n---source-location---\n");
+        cache_input.push_str(&describe_policy_location(source_location));
+    }
+
+    hush_core::hashing::sha256(cache_input.as_bytes()).to_hex()
+}
+
+fn describe_policy_location(location: &PolicyLocation) -> String {
+    match location {
+        PolicyLocation::None => "none".to_string(),
+        PolicyLocation::File(path) => format!("file:{}", path.display()),
+        PolicyLocation::Url(url) => format!("url:{url}"),
+        PolicyLocation::Git { repo, commit, path } => {
+            format!("git:{repo}@{commit}:{path}")
+        }
+        PolicyLocation::Ruleset { id } => format!("ruleset:{id}"),
+        PolicyLocation::Package { name, version } => format!("package:{name}@{version}"),
+    }
 }
 
 fn load_time_verifier() -> PolicyVerifier {
@@ -1976,13 +2133,18 @@ impl VerificationCacheState {
 
 #[cfg(test)]
 mod tests {
+    use std::fs;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
     use super::*;
     use crate::atoms::ActionKind;
     use clawdstrike::guards::{
         EgressAllowlistConfig, ForbiddenPathConfig, McpToolConfig, PathAllowlistConfig,
         ShellCommandConfig,
     };
-    use clawdstrike::policy::{GuardConfigs, Policy, RuleSet, VerificationSettings};
+    use clawdstrike::policy::{
+        GuardConfigs, LocalPolicyResolver, Policy, PolicyLocation, RuleSet, VerificationSettings,
+    };
     use hush_proxy::policy::PolicyAction;
     use logos_ffi::AgentId;
 
@@ -2624,6 +2786,95 @@ mod tests {
         let cache = VerificationCache::new();
         let result = verify_policy_at_load_time(&policy, &cache);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn load_time_strict_fails_closed_without_inheritance_context() {
+        let mut policy = Policy::default();
+        policy.settings.verification = Some(VerificationSettings {
+            enabled: true,
+            strict: true,
+            cache: false,
+        });
+        policy.extends = Some("parent.yaml".to_string());
+
+        let cache = VerificationCache::new();
+        let result = verify_policy_at_load_time(&policy, &cache);
+
+        assert!(result.is_err());
+        assert!(result
+            .err()
+            .unwrap_or_default()
+            .contains("missing source location/resolver context"));
+    }
+
+    #[test]
+    fn load_time_with_resolver_enforces_inheritance_soundness() {
+        let dir = std::env::temp_dir().join(format!(
+            "clawdstrike_logos_verifier_{}",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("time")
+                .as_nanos()
+        ));
+        fs::create_dir_all(&dir).expect("create temp dir");
+        let parent = dir.join("parent.yaml");
+        let child = dir.join("child.yaml");
+
+        fs::write(
+            &parent,
+            r#"
+version: "1.1.0"
+name: "parent"
+guards:
+  forbidden_path:
+    enabled: true
+    patterns:
+      - "/etc/shadow"
+"#,
+        )
+        .expect("write parent");
+        fs::write(
+            &child,
+            r#"
+version: "1.1.0"
+name: "child"
+extends: "parent.yaml"
+settings:
+  verification:
+    enabled: true
+    strict: true
+    cache: false
+guards:
+  forbidden_path:
+    enabled: true
+    remove_patterns:
+      - "/etc/shadow"
+"#,
+        )
+        .expect("write child");
+
+        let child_yaml = fs::read_to_string(&child).expect("read child");
+        let source_policy = Policy::from_yaml(&child_yaml).expect("parse source policy");
+        let resolver = LocalPolicyResolver::new();
+        let effective_policy = Policy::from_yaml_with_extends_location_resolver(
+            &child_yaml,
+            PolicyLocation::File(child.clone()),
+            &resolver,
+        )
+        .expect("resolve child policy");
+
+        let cache = VerificationCache::new();
+        let result = verify_policy_at_load_time_with_resolver(
+            &effective_policy,
+            &source_policy,
+            &PolicyLocation::File(child),
+            &resolver,
+            &cache,
+        );
+
+        let err = result.expect_err("weakened inheritance should fail strict verification");
+        assert!(err.contains("inheritance"));
     }
 
     #[test]

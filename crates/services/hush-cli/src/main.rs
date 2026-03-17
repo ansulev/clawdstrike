@@ -1337,6 +1337,8 @@ enum HuntCommands {
 
 #[tokio::main]
 async fn main() {
+    clawdstrike_logos::verifier::install_clawdstrike_policy_load_verifier();
+
     // Initialize color early so --version banner respects NO_COLOR env.
     // The --no-color flag is handled after full parse succeeds below.
     if std::env::var_os("NO_COLOR").is_some() {

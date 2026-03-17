@@ -6,6 +6,7 @@
 //! information to model guard-specific override behavior soundly.
 
 use std::collections::{BTreeSet, HashMap, HashSet, VecDeque};
+use std::sync::{Once, OnceLock};
 use std::time::Instant;
 
 use clawdstrike::guards::{
@@ -1765,18 +1766,31 @@ fn segment_has_meta(segment: &str) -> bool {
 }
 
 fn shortest_common_supersequence(left: &[String], right: &[String]) -> Vec<String> {
+    let mut lcs = vec![vec![0usize; right.len() + 1]; left.len() + 1];
+    for i in (0..left.len()).rev() {
+        for j in (0..right.len()).rev() {
+            lcs[i][j] = if left[i] == right[j] {
+                lcs[i + 1][j + 1] + 1
+            } else {
+                lcs[i + 1][j].max(lcs[i][j + 1])
+            };
+        }
+    }
+
     let mut out = Vec::new();
     let mut i = 0usize;
     let mut j = 0usize;
-
     while i < left.len() && j < right.len() {
         if left[i] == right[j] {
             out.push(left[i].clone());
             i += 1;
             j += 1;
-        } else {
+        } else if lcs[i + 1][j] >= lcs[i][j + 1] {
             out.push(left[i].clone());
             i += 1;
+        } else {
+            out.push(right[j].clone());
+            j += 1;
         }
     }
 
@@ -1823,6 +1837,45 @@ pub fn verify_policy_at_load_time_with_resolver<R: PolicyResolver>(
         Some((source_location, resolver)),
         cache,
     )
+}
+
+fn verify_policy_at_load_time_with_parent(
+    effective_policy: &clawdstrike::policy::Policy,
+    source_policy: &clawdstrike::policy::Policy,
+    parent_policy: &clawdstrike::policy::Policy,
+    cache: &VerificationCache,
+) -> std::result::Result<LoadTimeVerificationResult, String> {
+    let settings = effective_policy.settings.effective_verification();
+
+    if !settings.enabled {
+        return Ok(LoadTimeVerificationResult {
+            report: None,
+            cache_hit: false,
+            error: None,
+        });
+    }
+
+    let cache_key =
+        load_time_cache_key_with_parent(effective_policy, Some(source_policy), Some(parent_policy));
+
+    if settings.cache {
+        if let Some(cached) = cache.get(&cache_key) {
+            return finish_load_time_verification(settings.strict, cached, true, None);
+        }
+    }
+
+    let report = load_time_verifier().verify_policy_with_parent_and_source(
+        parent_policy,
+        source_policy,
+        effective_policy,
+        AgentId::new("clawdstrike-agent"),
+    );
+
+    if settings.cache {
+        cache.insert(cache_key, report.clone());
+    }
+
+    finish_load_time_verification(settings.strict, report, false, None)
 }
 
 fn verify_policy_at_load_time_inner<R: PolicyResolver>(
@@ -2023,6 +2076,26 @@ fn load_time_cache_key<R: PolicyResolver>(
     hush_core::hashing::sha256(cache_input.as_bytes()).to_hex()
 }
 
+fn load_time_cache_key_with_parent(
+    effective_policy: &Policy,
+    source_policy: Option<&Policy>,
+    parent_policy: Option<&Policy>,
+) -> String {
+    let mut cache_input = effective_policy.to_yaml().unwrap_or_default();
+
+    if let Some(source_policy) = source_policy {
+        cache_input.push_str("\n---source-policy---\n");
+        cache_input.push_str(&source_policy.to_yaml().unwrap_or_default());
+    }
+
+    if let Some(parent_policy) = parent_policy {
+        cache_input.push_str("\n---parent-policy---\n");
+        cache_input.push_str(&parent_policy.to_yaml().unwrap_or_default());
+    }
+
+    hush_core::hashing::sha256(cache_input.as_bytes()).to_hex()
+}
+
 fn describe_policy_location(location: &PolicyLocation) -> String {
     match location {
         PolicyLocation::None => "none".to_string(),
@@ -2108,6 +2181,32 @@ impl Default for VerificationCache {
     }
 }
 
+static POLICY_LOAD_VERIFIER_REGISTRATION: Once = Once::new();
+static POLICY_LOAD_VERIFICATION_CACHE: OnceLock<VerificationCache> = OnceLock::new();
+
+fn registered_policy_load_cache() -> &'static VerificationCache {
+    POLICY_LOAD_VERIFICATION_CACHE.get_or_init(VerificationCache::new)
+}
+
+pub fn install_clawdstrike_policy_load_verifier() {
+    POLICY_LOAD_VERIFIER_REGISTRATION.call_once(|| {
+        let _ = clawdstrike::policy::install_policy_load_verifier(|input| {
+            let cache = registered_policy_load_cache();
+            let result = match (&input.parent_policy, &input.source_policy) {
+                (Some(parent), Some(source)) => verify_policy_at_load_time_with_parent(
+                    &input.effective_policy,
+                    source,
+                    parent,
+                    cache,
+                ),
+                _ => verify_policy_at_load_time(&input.effective_policy, cache),
+            };
+
+            result.map(|_| ()).map_err(clawdstrike::Error::ConfigError)
+        });
+    });
+}
+
 impl VerificationCacheState {
     fn get(&self, key: &str) -> Option<VerificationReport> {
         self.entries.get(key).cloned()
@@ -2133,18 +2232,13 @@ impl VerificationCacheState {
 
 #[cfg(test)]
 mod tests {
-    use std::fs;
-    use std::time::{SystemTime, UNIX_EPOCH};
-
     use super::*;
     use crate::atoms::ActionKind;
     use clawdstrike::guards::{
         EgressAllowlistConfig, ForbiddenPathConfig, McpToolConfig, PathAllowlistConfig,
         ShellCommandConfig,
     };
-    use clawdstrike::policy::{
-        GuardConfigs, LocalPolicyResolver, Policy, PolicyLocation, RuleSet, VerificationSettings,
-    };
+    use clawdstrike::policy::{GuardConfigs, Policy, RuleSet, VerificationSettings};
     use hush_proxy::policy::PolicyAction;
     use logos_ffi::AgentId;
 
@@ -2470,6 +2564,17 @@ mod tests {
             .weakened
             .iter()
             .any(|item| item.atom == "access(/workspace/a)"));
+    }
+
+    #[test]
+    fn shortest_common_supersequence_does_not_duplicate_shared_suffixes() {
+        let left = vec!["a".to_string(), "b".to_string()];
+        let right = vec!["c".to_string(), "b".to_string()];
+
+        assert_eq!(
+            shortest_common_supersequence(&left, &right),
+            vec!["a".to_string(), "c".to_string(), "b".to_string()]
+        );
     }
 
     #[test]
@@ -2810,19 +2915,7 @@ mod tests {
 
     #[test]
     fn load_time_with_resolver_enforces_inheritance_soundness() {
-        let dir = std::env::temp_dir().join(format!(
-            "clawdstrike_logos_verifier_{}",
-            SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .expect("time")
-                .as_nanos()
-        ));
-        fs::create_dir_all(&dir).expect("create temp dir");
-        let parent = dir.join("parent.yaml");
-        let child = dir.join("child.yaml");
-
-        fs::write(
-            &parent,
+        let parent = Policy::from_yaml(
             r#"
 version: "1.1.0"
 name: "parent"
@@ -2833,43 +2926,39 @@ guards:
       - "/etc/shadow"
 "#,
         )
-        .expect("write parent");
-        fs::write(
-            &child,
-            r#"
-version: "1.1.0"
-name: "child"
-extends: "parent.yaml"
-settings:
-  verification:
-    enabled: true
-    strict: true
-    cache: false
-guards:
-  forbidden_path:
-    enabled: true
-    remove_patterns:
-      - "/etc/shadow"
-"#,
-        )
-        .expect("write child");
+        .expect("parse parent");
 
-        let child_yaml = fs::read_to_string(&child).expect("read child");
-        let source_policy = Policy::from_yaml(&child_yaml).expect("parse source policy");
-        let resolver = LocalPolicyResolver::new();
-        let effective_policy = Policy::from_yaml_with_extends_location_resolver(
-            &child_yaml,
-            PolicyLocation::File(child.clone()),
-            &resolver,
-        )
-        .expect("resolve child policy");
+        let source_policy = Policy {
+            version: "1.1.0".to_string(),
+            name: "child".to_string(),
+            extends: Some("parent.yaml".to_string()),
+            settings: clawdstrike::policy::PolicySettings {
+                verification: Some(VerificationSettings {
+                    enabled: true,
+                    strict: true,
+                    cache: false,
+                }),
+                ..Default::default()
+            },
+            guards: GuardConfigs {
+                forbidden_path: Some(ForbiddenPathConfig {
+                    enabled: true,
+                    patterns: None,
+                    exceptions: Vec::new(),
+                    additional_patterns: Vec::new(),
+                    remove_patterns: vec!["/etc/shadow".to_string()],
+                }),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let effective_policy = parent.merge(&source_policy);
 
         let cache = VerificationCache::new();
-        let result = verify_policy_at_load_time_with_resolver(
+        let result = verify_policy_at_load_time_with_parent(
             &effective_policy,
             &source_policy,
-            &PolicyLocation::File(child),
-            &resolver,
+            &parent,
             &cache,
         );
 

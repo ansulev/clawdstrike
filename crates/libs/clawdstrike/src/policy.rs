@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 #[cfg(feature = "full")]
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
 
 use globset::GlobBuilder;
 
@@ -199,6 +200,30 @@ pub struct Policy {
     pub origins: Option<OriginsConfig>,
     #[serde(default)]
     pub broker: Option<BrokerConfig>,
+}
+
+/// Fully materialized policy load context passed to an optional verifier hook.
+///
+/// `effective_policy` is the validated policy that will be returned to the
+/// caller. For inherited policies, `source_policy` is the raw child policy and
+/// `parent_policy` is the resolved base policy that was merged into it.
+#[derive(Clone, Debug)]
+pub struct PolicyLoadVerificationInput {
+    pub effective_policy: Policy,
+    pub source_policy: Option<Policy>,
+    pub parent_policy: Option<Policy>,
+}
+
+type PolicyLoadVerifier =
+    dyn Fn(&PolicyLoadVerificationInput) -> Result<()> + Send + Sync + 'static;
+
+static POLICY_LOAD_VERIFIER: OnceLock<Box<PolicyLoadVerifier>> = OnceLock::new();
+
+pub fn install_policy_load_verifier<F>(verifier: F) -> bool
+where
+    F: Fn(&PolicyLoadVerificationInput) -> Result<()> + Send + Sync + 'static,
+{
+    POLICY_LOAD_VERIFIER.set(Box::new(verifier)).is_ok()
 }
 
 fn default_version() -> String {
@@ -816,6 +841,7 @@ impl Policy {
     pub fn from_yaml(yaml: &str) -> Result<Self> {
         let policy = Self::from_yaml_unvalidated(yaml)?;
         policy.validate()?;
+        maybe_verify_loaded_policy(&policy, Some(&policy), None)?;
         Ok(policy)
     }
 
@@ -1525,9 +1551,15 @@ impl Policy {
 
             let merged = base.merge(&child);
             merged.validate_with_options(validation)?;
+            if depth == 0 {
+                maybe_verify_loaded_policy(&merged, Some(&child), Some(&base))?;
+            }
             Ok(merged)
         } else {
             child.validate_with_options(validation)?;
+            if depth == 0 {
+                maybe_verify_loaded_policy(&child, Some(&child), None)?;
+            }
             Ok(child)
         }
     }
@@ -1637,6 +1669,32 @@ impl Policy {
                 .unwrap_or_default(),
         }
     }
+}
+
+fn maybe_verify_loaded_policy(
+    effective_policy: &Policy,
+    source_policy: Option<&Policy>,
+    parent_policy: Option<&Policy>,
+) -> Result<()> {
+    let settings = effective_policy.settings.effective_verification();
+    if !settings.enabled {
+        return Ok(());
+    }
+
+    let Some(verifier) = POLICY_LOAD_VERIFIER.get() else {
+        let message = "policy.settings.verification is enabled, but no load-time policy verifier is registered";
+        if settings.strict {
+            return Err(Error::ConfigError(message.to_string()));
+        }
+        tracing::warn!("{}", message);
+        return Ok(());
+    };
+
+    verifier(&PolicyLoadVerificationInput {
+        effective_policy: effective_policy.clone(),
+        source_policy: source_policy.cloned(),
+        parent_policy: parent_policy.cloned(),
+    })
 }
 
 fn merge_custom_guards(
@@ -3811,5 +3869,79 @@ origins:
         assert_eq!(origins.profiles.len(), 2);
         assert!(origins.profiles.iter().any(|p| p.id == "existing"));
         assert!(origins.profiles.iter().any(|p| p.id == "new-profile"));
+    }
+
+    #[test]
+    fn strict_verification_without_registered_verifier_fails_closed() {
+        let yaml = r#"
+version: "1.5.0"
+name: strict-verified
+settings:
+  verification:
+    enabled: true
+    strict: true
+"#;
+
+        let err = Policy::from_yaml(yaml)
+            .err()
+            .expect("strict verification should fail without a registered verifier");
+        assert!(err
+            .to_string()
+            .contains("no load-time policy verifier is registered"));
+    }
+
+    #[test]
+    fn non_strict_verification_without_registered_verifier_warns_but_loads() {
+        let yaml = r#"
+version: "1.5.0"
+name: non-strict-verified
+settings:
+  verification:
+    enabled: true
+    strict: false
+"#;
+
+        let policy = Policy::from_yaml(yaml).expect("non-strict verification should not block");
+        assert_eq!(policy.name, "non-strict-verified");
+    }
+
+    #[test]
+    fn child_can_disable_parent_verification_during_extends_load() {
+        let dir = tempdir().expect("tempdir");
+        let parent = dir.path().join("parent.yaml");
+        let child = dir.path().join("child.yaml");
+
+        std::fs::write(
+            &parent,
+            r#"
+version: "1.5.0"
+name: parent
+settings:
+  verification:
+    enabled: true
+    strict: true
+"#,
+        )
+        .expect("write parent");
+
+        std::fs::write(
+            &child,
+            r#"
+version: "1.5.0"
+name: child
+extends: "parent.yaml"
+settings:
+  verification:
+    enabled: false
+    strict: false
+"#,
+        )
+        .expect("write child");
+
+        let child_yaml = std::fs::read_to_string(&child).expect("read child");
+        let policy =
+            Policy::from_yaml_with_extends(&child_yaml, Some(child.as_path())).expect("load child");
+        assert_eq!(policy.name, "child");
+        assert!(!policy.settings.effective_verification().enabled);
     }
 }

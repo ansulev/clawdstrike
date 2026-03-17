@@ -3924,6 +3924,7 @@ dependencies = [
  "clap",
  "clawdstrike",
  "clawdstrike-broker-protocol",
+ "clawdstrike-logos",
  "clawdstrike-ocsf",
  "clawdstrike-policy-event",
  "dashmap",

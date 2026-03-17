@@ -3,10 +3,15 @@ import { useWorkbench } from "@/lib/workbench/multi-policy-store";
 import { useToast } from "@/components/ui/toast";
 import { YamlEditor, type YamlEditorError } from "@/components/ui/yaml-editor";
 import { cn } from "@/lib/utils";
+import type { FileType } from "@/lib/workbench/file-type-registry";
 
 type Tab = "preview" | "edit";
 
-export function YamlPreviewPanel() {
+interface YamlPreviewPanelProps {
+  fileType?: FileType;
+}
+
+export function YamlPreviewPanel({ fileType }: YamlPreviewPanelProps) {
   const { state, dispatch } = useWorkbench();
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState<Tab>("preview");
@@ -44,6 +49,11 @@ export function YamlPreviewPanel() {
   }, []);
 
   const { errors, warnings } = state.validation;
+  const editLabel = fileType === "yara_rule"
+    ? "Edit Source"
+    : fileType === "ocsf_event"
+    ? "Edit JSON"
+    : "Edit YAML";
 
   // Show toast when new YAML parse errors appear (only while editing)
   const prevErrorCountRef = useRef(errors.length);
@@ -125,7 +135,7 @@ export function YamlPreviewPanel() {
               : "text-[#6f7f9a] hover:text-[#ece7dc]"
           )}
         >
-          Edit YAML
+          {editLabel}
           {activeTab === "edit" && (
             <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-[#d4a84b]" />
           )}
@@ -139,12 +149,14 @@ export function YamlPreviewPanel() {
             value={state.yaml}
             onChange={() => {}}
             readOnly
+            fileType={fileType}
           />
         ) : (
           <YamlEditor
             value={localYaml}
             onChange={handleYamlChange}
             errors={editorErrors}
+            fileType={fileType}
           />
         )}
       </div>

@@ -3,11 +3,11 @@
 
 mod commands;
 
-use commands::{
-    capability, mcp_sidecar, repo_roots, stronghold as stronghold_cmds, terminal, workbench,
-    worktree,
-};
 use capability::CommandCapabilityState;
+use commands::{
+    capability, detection, mcp_sidecar, repo_roots, stronghold as stronghold_cmds, terminal,
+    workbench, worktree,
+};
 use mcp_sidecar::McpState;
 use stronghold_cmds::StrongholdState;
 #[allow(unused_imports)]
@@ -33,10 +33,9 @@ fn main() {
         })
         .manage(StrongholdState::new())
         .manage(McpState::new())
-        .manage(
-            std::sync::Arc::new(tokio::sync::Mutex::new(capability::CommandCapabilityManager::new()))
-                as CommandCapabilityState,
-        )
+        .manage(std::sync::Arc::new(tokio::sync::Mutex::new(
+            capability::CommandCapabilityManager::new(),
+        )) as CommandCapabilityState)
         .manage(
             std::sync::Arc::new(tokio::sync::Mutex::new(terminal::TerminalManager::new()))
                 as TerminalState,
@@ -134,6 +133,16 @@ fn main() {
             mcp_sidecar::get_mcp_status,
             mcp_sidecar::stop_mcp_server,
             mcp_sidecar::restart_mcp_server,
+            detection::validate_sigma_rule,
+            detection::validate_yara_rule,
+            detection::validate_ocsf_event,
+            detection::detect_file_type,
+            detection::import_detection_file,
+            detection::export_detection_file,
+            detection::test_sigma_rule,
+            detection::compile_sigma_rule,
+            detection::normalize_ocsf_event,
+            detection::convert_sigma_rule,
             terminal::terminal_create,
             terminal::terminal_write,
             terminal::terminal_resize,

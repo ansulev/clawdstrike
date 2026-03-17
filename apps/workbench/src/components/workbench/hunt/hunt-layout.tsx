@@ -9,6 +9,10 @@ import {
 } from "@/lib/workbench/hunt-engine";
 import { useFleetConnection } from "@/lib/workbench/use-fleet-connection";
 import { fetchAuditEvents } from "@/lib/workbench/fleet-client";
+import { useMultiPolicy } from "@/lib/workbench/multi-policy-store";
+import { useDraftDetection } from "@/lib/workbench/detection-workflow/use-draft-detection";
+import { buildOpenDocumentCoverage } from "@/lib/workbench/detection-workflow/coverage-projection";
+import { usePublishedCoverage } from "@/lib/workbench/detection-workflow/use-published-coverage";
 import {
   IconActivity,
   IconChartBar,
@@ -117,6 +121,18 @@ export function HuntLayout() {
   const { connection, getAuthenticatedConnection } = useFleetConnection();
   const connected = connection.connected;
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const publishedCoverage = usePublishedCoverage();
+
+  // Draft detection hook — bridges Hunt -> Editor
+  const { multiDispatch, tabs } = useMultiPolicy();
+  const {
+    draftFromEvents,
+    draftFromInvestigation,
+    draftFromPattern,
+  } = useDraftDetection({
+    dispatch: multiDispatch,
+    onNavigateToEditor: undefined, // Hunt is embedded; no navigation needed
+  });
 
   // Fetch events from fleet and convert + enrich
   const fetchEvents = useCallback(async () => {
@@ -195,6 +211,11 @@ export function HuntLayout() {
     [baselines],
   );
 
+  const openDocumentCoverage = useMemo(
+    () => buildOpenDocumentCoverage(tabs),
+    [tabs],
+  );
+
   return (
     <div className="flex flex-col h-full min-h-0">
       {/* Sub-tab bar with status indicators */}
@@ -217,6 +238,7 @@ export function HuntLayout() {
             events={events}
             filters={streamFilters}
             onFilterChange={setStreamFilters}
+            onDraftDetection={draftFromEvents}
             stats={streamStats}
             live={streamLive}
             onToggleLive={() => setStreamLive((prev) => !prev)}
@@ -264,6 +286,7 @@ export function HuntLayout() {
           <InvestigationWorkbench
             investigations={investigations}
             events={events}
+            onDraftDetection={draftFromInvestigation}
             onCreateInvestigation={(inv) => {
               setInvestigations((prev) => [inv, ...prev]);
             }}
@@ -293,11 +316,20 @@ export function HuntLayout() {
                 ),
               );
             }}
+            openDocumentCoverage={openDocumentCoverage}
+            publishedCoverage={publishedCoverage}
           />
         )}
 
         {activeTab === "patterns" && (
-          <PatternMining patterns={patterns} events={events} onPatternsChange={setPatterns} />
+          <PatternMining
+            patterns={patterns}
+            events={events}
+            onPatternsChange={setPatterns}
+            onDraftDetection={draftFromPattern}
+            openDocumentCoverage={openDocumentCoverage}
+            publishedCoverage={publishedCoverage}
+          />
         )}
       </div>
     </div>

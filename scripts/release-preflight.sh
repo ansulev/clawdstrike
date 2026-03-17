@@ -64,6 +64,14 @@ cargo = read_toml("Cargo.toml")
 workspace_version = cargo.get("workspace", {}).get("package", {}).get("version")
 errors.append(check("Cargo.toml [workspace.package].version", workspace_version))
 
+root_package = read_json("package.json")
+workspace_entries = root_package.get("workspaces")
+workspace_set: set[str] = set()
+if not isinstance(workspace_entries, list):
+    errors.append("package.json workspaces: missing or not an array")
+else:
+    workspace_set = {entry for entry in workspace_entries if isinstance(entry, str)}
+
 pyproject = read_toml("packages/sdk/hush-py/pyproject.toml")
 py_version = pyproject.get("project", {}).get("version")
 errors.append(check("packages/sdk/hush-py/pyproject.toml [project].version", py_version))
@@ -140,6 +148,12 @@ for pkg_path in sorted((repo_root / "packages").rglob("package.json")):
         errors.append(f"{rel} name: missing package name")
     elif name != "clawdstrike" and not name.startswith("@clawdstrike/"):
         errors.append(f"{rel} name: expected @clawdstrike/* or clawdstrike, found {name}")
+
+    publish_access = data.get("publishConfig", {}).get("access")
+    if publish_access == "public":
+        workspace_rel = str(pkg_path.parent.relative_to(repo_root))
+        if workspace_rel not in workspace_set:
+            errors.append(f"{rel}: publishable package is missing from package.json workspaces")
 
 errors.append(check("crates/libs/hush-wasm/package.json", read_json("crates/libs/hush-wasm/package.json").get("version")))
 

@@ -1,6 +1,8 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { useMultiPolicy } from "@/lib/workbench/multi-policy-store";
 import type { PolicyTab } from "@/lib/workbench/multi-policy-store";
+import { FILE_TYPE_REGISTRY } from "@/lib/workbench/file-type-registry";
+import type { FileType } from "@/lib/workbench/file-type-registry";
 import { cn } from "@/lib/utils";
 import {
   IconPlus,
@@ -9,6 +11,7 @@ import {
   IconEdit,
   IconTrash,
   IconHome,
+  IconChevronDown,
 } from "@tabler/icons-react";
 
 
@@ -162,6 +165,7 @@ function TabItem({
   onRename: (tabId: string, name: string) => void;
 }) {
   const isRenaming = renamingId === tab.id;
+  const iconColor = FILE_TYPE_REGISTRY[tab.fileType ?? "clawdstrike_policy"].iconColor;
 
   return (
     <div
@@ -189,16 +193,28 @@ function TabItem({
         dropPosition === "left" && "border-l-2 border-l-[#d4a84b]",
         dropPosition === "right" && "border-r-2 border-r-[#d4a84b]",
       )}
+      style={isActive ? { backgroundColor: `${iconColor}08` } : undefined}
     >
-      {/* Active indicator — gold bottom border */}
+      {/* Active indicator — format-colored top border */}
       {isActive && (
-        <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-[#d4a84b]" />
+        <div
+          className="absolute top-0 left-0 right-0 h-[3px]"
+          style={{ backgroundColor: FILE_TYPE_REGISTRY[tab.fileType ?? "clawdstrike_policy"].iconColor }}
+        />
       )}
 
       {/* Split indicator */}
       {isSplit && !isActive && (
         <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-[#6f7f9a]/40" />
       )}
+
+      {/* Format indicator dot */}
+      <span
+        className="inline-block w-2.5 h-2.5 rounded-full flex-shrink-0"
+        style={{ backgroundColor: FILE_TYPE_REGISTRY[tab.fileType ?? "clawdstrike_policy"].iconColor }}
+        title={FILE_TYPE_REGISTRY[tab.fileType ?? "clawdstrike_policy"].label}
+        aria-label={FILE_TYPE_REGISTRY[tab.fileType ?? "clawdstrike_policy"].label}
+      />
 
       {/* Dirty dot */}
       {tab.dirty && (
@@ -223,9 +239,8 @@ function TabItem({
             onClose();
           }}
           className={cn(
-            "shrink-0 p-0.5 rounded hover:bg-[#c45c5c]/20 hover:text-[#c45c5c] transition-colors",
-            "opacity-0 group-hover:opacity-100",
-            isActive && "opacity-60",
+            "shrink-0 p-1 rounded hover:bg-[#c45c5c]/20 hover:text-[#c45c5c] transition-colors",
+            isActive ? "opacity-60 group-hover:opacity-100" : "opacity-0 group-hover:opacity-100",
           )}
           title="Close tab"
         >
@@ -330,9 +345,48 @@ export function PolicyTabBar({ isHomeActive, onHomeClick, onTabSwitch }: PolicyT
     [multiDispatch],
   );
 
+  const [newTabDropdownOpen, setNewTabDropdownOpen] = useState(false);
+  const newTabDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Close dropdown on click outside or Escape
+  useEffect(() => {
+    if (!newTabDropdownOpen) return;
+    function handleClickOutside(e: MouseEvent) {
+      if (newTabDropdownRef.current && !newTabDropdownRef.current.contains(e.target as Node)) {
+        setNewTabDropdownOpen(false);
+      }
+    }
+    function handleEsc(e: KeyboardEvent) {
+      if (e.key === "Escape") setNewTabDropdownOpen(false);
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleEsc);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleEsc);
+    };
+  }, [newTabDropdownOpen]);
+
   const handleNewTab = useCallback(() => {
     multiDispatch({ type: "NEW_TAB" });
   }, [multiDispatch]);
+
+  const handleNewTabWithType = useCallback(
+    (fileType: FileType) => {
+      const descriptor = FILE_TYPE_REGISTRY[fileType];
+      if (fileType === "clawdstrike_policy") {
+        multiDispatch({ type: "NEW_TAB" });
+      } else {
+        multiDispatch({
+          type: "NEW_TAB",
+          fileType,
+          yaml: descriptor.defaultContent,
+        });
+      }
+      setNewTabDropdownOpen(false);
+    },
+    [multiDispatch],
+  );
 
   const handleContextMenu = useCallback(
     (tabId: string) => (e: React.MouseEvent) => {
@@ -471,21 +525,69 @@ export function PolicyTabBar({ isHomeActive, onHomeClick, onTabSwitch }: PolicyT
             </div>
           ))}
 
-          {/* New tab button — inline with tabs, matches tab item padding */}
-          <button
-            type="button"
-            onClick={handleNewTab}
-            disabled={!canAddTab}
-            className={cn(
-              "shrink-0 flex items-center justify-center px-2.5 py-1.5 transition-colors",
-              canAddTab
-                ? "text-[#6f7f9a] hover:text-[#d4a84b] hover:bg-[#d4a84b]/10"
-                : "text-[#6f7f9a]/30 cursor-not-allowed",
+          {/* New tab split button — main + dropdown caret */}
+          <div ref={newTabDropdownRef} className="relative shrink-0 flex items-center">
+            {/* Main button: creates a new ClawdStrike policy tab */}
+            <button
+              type="button"
+              onClick={handleNewTab}
+              disabled={!canAddTab}
+              className={cn(
+                "flex items-center justify-center pl-2.5 pr-1 py-1.5 transition-colors",
+                canAddTab
+                  ? "text-[#6f7f9a] hover:text-[#d4a84b] hover:bg-[#d4a84b]/10"
+                  : "text-[#6f7f9a]/30 cursor-not-allowed",
+              )}
+              title={canAddTab ? "New policy tab" : "Maximum tabs reached (25)"}
+            >
+              <IconPlus size={13} stroke={1.5} />
+            </button>
+
+            {/* Dropdown caret */}
+            <button
+              type="button"
+              onClick={() => setNewTabDropdownOpen((prev) => !prev)}
+              disabled={!canAddTab}
+              className={cn(
+                "flex items-center justify-center pr-2 pl-0.5 py-1.5 transition-colors",
+                canAddTab
+                  ? "text-[#6f7f9a] hover:text-[#d4a84b] hover:bg-[#d4a84b]/10"
+                  : "text-[#6f7f9a]/30 cursor-not-allowed",
+              )}
+              title="New tab from format..."
+            >
+              <IconChevronDown size={10} stroke={1.5} />
+            </button>
+
+            {/* Format dropdown */}
+            {newTabDropdownOpen && canAddTab && (
+              <div className="absolute top-full left-0 z-[100] mt-0.5 min-w-[200px] bg-[#0b0d13] border border-[#2d3240] rounded-lg shadow-lg py-1">
+                {(
+                  [
+                    { fileType: "clawdstrike_policy" as FileType, label: "New Policy", ext: ".yaml" },
+                    { fileType: "sigma_rule" as FileType, label: "New Sigma Rule", ext: ".yml" },
+                    { fileType: "yara_rule" as FileType, label: "New YARA Rule", ext: ".yar" },
+                    { fileType: "ocsf_event" as FileType, label: "New OCSF Event", ext: ".json" },
+                  ] as const
+                ).map((item) => (
+                  <button
+                    key={item.fileType}
+                    type="button"
+                    onClick={() => handleNewTabWithType(item.fileType)}
+                    className="flex items-center gap-2 w-full px-3 py-1.5 text-[11px] font-mono text-[#ece7dc] hover:bg-[#131721] cursor-pointer transition-colors"
+                  >
+                    <span
+                      className="inline-block w-2 h-2 rounded-full shrink-0"
+                      style={{ backgroundColor: FILE_TYPE_REGISTRY[item.fileType].iconColor }}
+                      aria-hidden="true"
+                    />
+                    <span className="flex-1 text-left">{item.label}</span>
+                    <span className="text-[#6f7f9a]/60 text-[10px]">{item.ext}</span>
+                  </button>
+                ))}
+              </div>
             )}
-            title={canAddTab ? "New tab" : "Maximum tabs reached (10)"}
-          >
-            <IconPlus size={13} stroke={1.5} />
-          </button>
+          </div>
         </div>
       </div>
 

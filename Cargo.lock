@@ -1837,6 +1837,7 @@ name = "clawdstrike-logos"
 version = "0.2.5"
 dependencies = [
  "clawdstrike",
+ "glob",
  "hush-core",
  "hush-proxy",
  "logos-ffi",
@@ -4612,25 +4613,27 @@ checksum = "5e5032e24019045c762d3c0f28f5b6b8bbf38563a65908389bf7978758920897"
 
 [[package]]
 name = "logos-ffi"
-version = "0.1.0"
+version = "0.2.5"
 dependencies = [
  "chrono",
  "hex",
+ "proptest",
  "serde",
  "serde_json",
  "sha2",
- "thiserror 1.0.69",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
 name = "logos-z3"
-version = "0.1.0"
+version = "0.2.5"
 dependencies = [
  "chrono",
  "logos-ffi",
+ "proptest",
  "serde",
  "serde_json",
- "thiserror 1.0.69",
+ "thiserror 2.0.18",
  "z3",
 ]
 
@@ -9250,6 +9253,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d7cf70fdbc0de3f42b404f49b0d4686a82562254ea29ff0a155eef2f5430f4b0"
 dependencies = [
  "bindgen",
+ "cmake",
 ]
 
 [[package]]

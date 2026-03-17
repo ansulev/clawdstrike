@@ -80,7 +80,7 @@ mise run verify-all         # All of the above
 - [Amazon Cedar](https://www.cedarpolicy.com/) -- Formally verified authorization policy language (Lean 4 + Dafny)
 - [Verus](https://github.com/verus-lang/verus) -- Verified Rust via SMT (Microsoft Research / CMU)
 - [IMP Formalization](https://www.cs.princeton.edu/courses/archive/fall10/cos441/sf/Imp.html) -- Software Foundations Ch. 8 (inspiration for [Policy Specification](./policy-specification.md))
-- Logos Stack: `platform/crates/logos-ffi` (formula AST, axiom schemas), `logos-z3` (propositional checker, Layer 0), `logos-goap` (verified planning)
+- Logos Stack: `crates/libs/logos-ffi` (formula AST, axiom schemas), `crates/libs/logos-z3` (SMT-backed checker), `logos-goap` (verified planning)
 
 ## Relationship to Logos
 

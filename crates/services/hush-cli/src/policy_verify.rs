@@ -1,5 +1,5 @@
-//! `hush policy verify` -- Static verification of policy properties via Logos
-//! normative formula compilation and inspection.
+//! `hush policy verify` -- policy verification via Logos formula inspection
+//! and optional Z3 checks.
 
 use std::io::Write;
 
@@ -10,7 +10,7 @@ use colored::Colorize;
 use clawdstrike_logos::compiler::{DefaultPolicyCompiler, PolicyCompiler};
 use clawdstrike_logos::logos_ffi::AgentId;
 use clawdstrike_logos::verifier::{
-    AttestationLevel, CheckOutcome, PolicyVerifier, VerificationReport,
+    AttestationLevel, CheckOutcome, PolicyVerifier, VerificationBackend, VerificationReport,
 };
 
 use crate::policy_diff::{
@@ -52,11 +52,15 @@ pub fn cmd_policy_verify(
 ) -> ExitCode {
     let PolicyVerifyCommand {
         policy_ref,
-        resolve,
+        resolve: _resolve,
         json,
         attestation_level: show_attestation_level,
         verbose,
     } = command;
+
+    // Verification must inspect the effective policy graph, not the unresolved leaf,
+    // otherwise inheritance checks can false-pass across extends chains.
+    let resolve = true;
 
     let loaded =
         match crate::policy_diff::load_policy_from_arg(&policy_ref, resolve, remote_extends) {
@@ -73,9 +77,10 @@ pub fn cmd_policy_verify(
         };
 
     let policy_source = policy_source_for_loaded(&loaded.source);
-    let policy = &loaded.policy;
+    let effective_policy = &loaded.policy;
+    let source_policy = &loaded.source_policy;
 
-    let base_policy = match load_parent_policy_for_inheritance(&loaded, resolve, remote_extends) {
+    let base_policy = match load_parent_policy_for_inheritance(&loaded, remote_extends) {
         Ok(base) => base,
         Err(e) => {
             return emit_policy_verify_error(policy_source.clone(), e, json, stdout, stderr);
@@ -84,15 +89,18 @@ pub fn cmd_policy_verify(
 
     let agent = AgentId::new("clawdstrike-agent");
     let compiler = DefaultPolicyCompiler::new(agent.clone());
-    let formulas = compiler.compile_policy(policy);
+    let formulas = compiler.compile_policy(effective_policy);
 
-    let base_formulas = base_policy.as_ref().map(|parent| {
-        let base_compiler = DefaultPolicyCompiler::new(agent);
-        base_compiler.compile_policy(parent)
-    });
-
-    let verifier = PolicyVerifier::new();
-    let report = verifier.verify(&formulas, base_formulas.as_deref());
+    let verifier = preferred_verifier();
+    let report = match base_policy.as_ref() {
+        Some(parent) => verifier.verify_policy_with_parent_and_source(
+            parent,
+            source_policy,
+            effective_policy,
+            agent,
+        ),
+        None => verifier.verify_policy(effective_policy, agent),
+    };
 
     let all_pass = report.all_pass();
     let code = if all_pass {
@@ -125,15 +133,20 @@ pub fn cmd_policy_verify(
     let _ = writeln!(stdout, "Policy Verification Report");
     let _ = writeln!(stdout, "==========================");
     let _ = writeln!(stdout, "Policy: {}", &policy_ref);
-    let _ = writeln!(stdout, "Schema: v{}", policy.version);
+    let _ = writeln!(stdout, "Schema: v{}", effective_policy.version);
 
-    if let Some(ref extends_name) = policy.extends {
+    if let Some(ref extends_name) = loaded.original_extends {
         let _ = writeln!(stdout, "Extends: {}", extends_name);
     }
 
     let _ = writeln!(stdout);
     let _ = writeln!(stdout, "Formulas compiled: {}", report.formula_count);
     let _ = writeln!(stdout, "Action atoms:      {}", report.atom_count);
+    let _ = writeln!(
+        stdout,
+        "Backend:           {}",
+        verification_backend_label(report.backend)
+    );
     let _ = writeln!(stdout);
 
     let consistency_label = outcome_label(&report.consistency.outcome);
@@ -177,7 +190,7 @@ pub fn cmd_policy_verify(
                 "Inheritance:       {}  ({} weakened prohibitions from base {:?})",
                 inheritance_label,
                 report.inheritance.weakened.len(),
-                policy.extends.as_deref().unwrap_or("unknown"),
+                loaded.original_extends.as_deref().unwrap_or("unknown"),
             );
             for w in &report.inheritance.weakened {
                 let _ = writeln!(
@@ -206,8 +219,8 @@ pub fn cmd_policy_verify(
         let _ = writeln!(stdout, "  Level 0: Heuristic guards only");
         let _ = writeln!(
             stdout,
-            "  Level 1: Z3-verified policy consistency  {}",
-            if report.attestation_level >= AttestationLevel::Z3Verified {
+            "  Level 1: Formula-verified inspection     {}",
+            if report.attestation_level >= AttestationLevel::FormulaVerified {
                 "[achieved]".green().to_string()
             } else {
                 "[not achieved]".dimmed().to_string()
@@ -215,7 +228,18 @@ pub fn cmd_policy_verify(
         );
         let _ = writeln!(
             stdout,
-            "  Level 2: Lean-proved properties          {}",
+            "  Level 2: Z3-verified SMT checks          {}",
+            if report.attestation_level >= AttestationLevel::Z3Verified {
+                "[achieved]".green().to_string()
+            } else if report.backend == VerificationBackend::FormulaInspection {
+                "[formula backend]".dimmed().to_string()
+            } else {
+                "[not available]".dimmed().to_string()
+            }
+        );
+        let _ = writeln!(
+            stdout,
+            "  Level 3: Lean-proved properties          {}",
             if report.attestation_level >= AttestationLevel::LeanProved {
                 "[achieved]".green().to_string()
             } else {
@@ -224,7 +248,7 @@ pub fn cmd_policy_verify(
         );
         let _ = writeln!(
             stdout,
-            "  Level 3: Aeneas-verified implementation  {}",
+            "  Level 4: Aeneas-verified implementation  {}",
             if report.attestation_level >= AttestationLevel::ImplementationVerified {
                 "[achieved]".green().to_string()
             } else {
@@ -259,6 +283,18 @@ pub fn cmd_policy_verify(
     code
 }
 
+fn preferred_verifier() -> PolicyVerifier {
+    #[cfg(feature = "z3")]
+    {
+        PolicyVerifier::with_z3()
+    }
+
+    #[cfg(not(feature = "z3"))]
+    {
+        PolicyVerifier::new()
+    }
+}
+
 fn outcome_label(outcome: &CheckOutcome) -> String {
     match outcome {
         CheckOutcome::Pass => "PASS".green().bold().to_string(),
@@ -267,13 +303,23 @@ fn outcome_label(outcome: &CheckOutcome) -> String {
     }
 }
 
+fn verification_backend_label(backend: VerificationBackend) -> String {
+    match backend {
+        VerificationBackend::FormulaInspection => "Formula inspection".yellow().bold().to_string(),
+        VerificationBackend::Z3 => "Z3 SMT".green().bold().to_string(),
+    }
+}
+
 fn attestation_level_label(level: &AttestationLevel) -> String {
     match level {
         AttestationLevel::Heuristic => format!("{} (heuristic)", "Level 0".yellow().bold()),
-        AttestationLevel::Z3Verified => format!("{} (z3_verified)", "Level 1".green().bold()),
-        AttestationLevel::LeanProved => format!("{} (lean_proved)", "Level 2".green().bold()),
+        AttestationLevel::FormulaVerified => {
+            format!("{} (formula_verified)", "Level 1".green().bold())
+        }
+        AttestationLevel::Z3Verified => format!("{} (z3_verified)", "Level 2".green().bold()),
+        AttestationLevel::LeanProved => format!("{} (lean_proved)", "Level 3".green().bold()),
         AttestationLevel::ImplementationVerified => {
-            format!("{} (implementation_verified)", "Level 3".green().bold())
+            format!("{} (implementation_verified)", "Level 4".green().bold())
         }
     }
 }
@@ -338,7 +384,6 @@ fn emit_policy_verify_error(
 
 fn load_parent_policy_for_inheritance(
     loaded: &LoadedPolicy,
-    resolve: bool,
     remote_extends: &RemoteExtendsConfig,
 ) -> Result<Option<Policy>, PolicyLoadError> {
     let Some(extends_name) = loaded.original_extends.as_deref() else {
@@ -358,22 +403,15 @@ fn load_parent_policy_for_inheritance(
             source: e,
         })?;
 
-    let parent = if resolve {
-        Policy::from_yaml_with_extends_location_resolver(
-            &resolved.yaml,
-            resolved.location.clone(),
-            &resolver,
-        )
-        .map_err(|e| PolicyLoadError {
-            message: format!("Failed to load parent policy {:?}: {}", extends_name, e),
-            source: e,
-        })?
-    } else {
-        Policy::from_yaml(&resolved.yaml).map_err(|e| PolicyLoadError {
-            message: format!("Failed to load parent policy {:?}: {}", extends_name, e),
-            source: e,
-        })?
-    };
+    let parent = Policy::from_yaml_with_extends_location_resolver(
+        &resolved.yaml,
+        resolved.location.clone(),
+        &resolver,
+    )
+    .map_err(|e| PolicyLoadError {
+        message: format!("Failed to load parent policy {:?}: {}", extends_name, e),
+        source: e,
+    })?;
 
     Ok(Some(parent))
 }
@@ -475,5 +513,72 @@ extends: "missing-parent.yaml"
         assert_eq!(code, ExitCode::ConfigError);
         let error = String::from_utf8(stderr).expect("utf8 stderr");
         assert!(error.contains("missing-parent.yaml"));
+    }
+
+    #[test]
+    fn verification_resolves_grandparent_chain_even_without_flag() {
+        let dir = tempdir().expect("tempdir");
+        let grandparent = dir.path().join("grandparent.yaml");
+        let parent = dir.path().join("parent.yaml");
+        let child = dir.path().join("child.yaml");
+
+        fs::write(
+            &grandparent,
+            r#"
+version: "1.1.0"
+name: "grandparent"
+guards:
+  forbidden_path:
+    enabled: true
+    patterns:
+      - "/etc/shadow"
+"#,
+        )
+        .expect("write grandparent");
+
+        fs::write(
+            &parent,
+            r#"
+version: "1.1.0"
+name: "parent"
+extends: "grandparent.yaml"
+"#,
+        )
+        .expect("write parent");
+
+        fs::write(
+            &child,
+            r#"
+version: "1.1.0"
+name: "child"
+extends: "parent.yaml"
+guards:
+  forbidden_path:
+    enabled: true
+    exceptions:
+      - "/etc/shadow"
+"#,
+        )
+        .expect("write child");
+
+        let mut stdout = Vec::new();
+        let mut stderr = Vec::new();
+        let code = cmd_policy_verify(
+            PolicyVerifyCommand {
+                policy_ref: child.to_string_lossy().into_owned(),
+                resolve: false,
+                json: false,
+                attestation_level: false,
+                verbose: false,
+            },
+            &RemoteExtendsConfig::disabled(),
+            &mut stdout,
+            &mut stderr,
+        );
+
+        assert_eq!(code, ExitCode::Fail);
+        let output = String::from_utf8(stdout).expect("utf8 stdout");
+        assert!(output.contains("access(/etc/shadow)"));
+        assert!(output.contains("FAIL"));
     }
 }

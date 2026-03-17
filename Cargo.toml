@@ -35,6 +35,8 @@ members = [
     "crates/libs/clawdstrike-ocsf",
     "crates/libs/clawdstrike-policy-event",
     "crates/libs/clawdstrike-logos",
+    "crates/libs/logos-ffi",
+    "crates/libs/logos-z3",
 ]
 exclude = [
     "fuzz",
@@ -170,6 +172,8 @@ hunt-scan = { path = "crates/libs/hunt-scan", version = "0.2.5" }
 hunt-query = { path = "crates/libs/hunt-query", version = "0.2.5" }
 hunt-correlate = { path = "crates/libs/hunt-correlate", version = "0.2.5" }
 clawdstrike-logos = { path = "crates/libs/clawdstrike-logos", version = "0.2.5" }
+logos-ffi = { path = "crates/libs/logos-ffi", version = "0.2.5" }
+logos-z3 = { path = "crates/libs/logos-z3", version = "0.2.5" }
 clawdstrike-ocsf = { path = "crates/libs/clawdstrike-ocsf", version = "0.2.5" }
 clawdstrike-policy-event = { path = "crates/libs/clawdstrike-policy-event", version = "0.2.5", default-features = false }
 nono = { path = "infra/vendor/nono", version = "0.11.0", default-features = false, features = ["sandbox"] }

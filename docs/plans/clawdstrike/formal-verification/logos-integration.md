@@ -3,13 +3,13 @@
 **Status:** Design
 **Authors:** Security Engineering
 **Last updated:** 2026-03-16
-**Depends on:** `platform/crates/logos-ffi`, `platform/crates/logos-z3`, `crates/libs/clawdstrike`
+**Depends on:** `crates/libs/logos-ffi`, `crates/libs/logos-z3`, `crates/libs/clawdstrike`
 
 ---
 
 ## 1. Overview
 
-This document designs the integration between the Logos formal reasoning stack (`platform/crates/logos-*`) and ClawdStrike's policy engine. The goal: static, pre-deployment verification of security policies by translating them into normative formulas and checking properties via Z3 SMT solving.
+This document designs the integration between the Logos formal reasoning stack (`crates/libs/logos-*`) and ClawdStrike's policy engine. The goal: static, pre-deployment verification of security policies by translating them into normative formulas and checking properties via Z3 SMT solving.
 
 ### 1.1 What This Enables
 
@@ -25,7 +25,7 @@ With Logos integration, policy authors can prove (over all possible inputs, not 
 See [Landscape Survey, Section 3.3](./landscape-survey.md) for full details. Key points for this integration:
 
 - **logos-ffi**: Layer 3 normative operators (Obligation, Permission, Prohibition) with `AgentId`. `RoutingSpec` already has `verify_completeness()` and `verify_consistency()` as precedent.
-- **logos-z3**: Layer 0 propositional SAT implemented (enumeration, up to 10 atoms). Layers 1-3 return `Unknown` (stubs). `check_normative()` at `lib.rs:220` is the integration point.
+- **logos-z3**: Layer 0 SMT checking is implemented and the ClawdStrike policy verifier now calls the Z3-backed checker. Broader Layer 3 normative semantics still need hardening beyond the current policy-focused checks.
 
 ### 1.3 Policy Engine Types (Quick Reference)
 
@@ -808,7 +808,7 @@ Phases 1--5 are the minimal viable integration. Phase 6 adds stateful verificati
 
 - Standard Deontic Logic: von Wright, G.H. "Deontic Logic." _Mind_, 1951.
 - Z3 SMT Solver: de Moura, L. and Bjorner, N. "Z3: An Efficient SMT Solver." _TACAS_, 2008.
-- Logos Stack: `platform/crates/logos-ffi`, `platform/crates/logos-z3`
+- Logos Stack: `crates/libs/logos-ffi`, `crates/libs/logos-z3`
 - ClawdStrike Policy Engine: `crates/libs/clawdstrike/src/policy.rs`, `crates/libs/clawdstrike/src/engine.rs`
 - Amazon Cedar formal verification: Cutler et al. "Cedar: A New Language for Expressive, Fast, Safe, and Analyzable Authorization." _OOPSLA_, 2024.
 - Bounded Model Checking: Biere et al. "Bounded Model Checking." _Advances in Computers_, 2003.

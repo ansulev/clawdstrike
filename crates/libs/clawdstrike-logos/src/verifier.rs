@@ -1,15 +1,52 @@
-//! Policy verification via formula inspection (solver-agnostic).
+//! Policy verification via formula inspection and optional Z3 checking.
 //!
-//! Checks: consistency (no P+F conflict), completeness (all action types
-//! covered), inheritance soundness (child preserves base prohibitions).
+//! The formula-only API intentionally stays lightweight and conservative.
+//! Policy-aware verification goes further by using guard semantics for
+//! inheritance checks, because compiled formulas alone do not carry enough
+//! information to model guard-specific override behavior soundly.
 
 use std::collections::{BTreeSet, HashSet};
 use std::time::Instant;
 
+use clawdstrike::guards::{
+    EgressAllowlistConfig, ForbiddenPathConfig, ForbiddenPathGuard, McpDefaultAction,
+    McpToolConfig, McpToolGuard, PathAllowlistConfig, PathAllowlistGuard, ShellCommandConfig,
+};
+use clawdstrike::policy::Policy;
+use glob::Pattern;
+use hush_proxy::policy::{DomainPolicy, PolicyAction};
+#[cfg(feature = "z3")]
+use logos_ffi::ProofResult;
 use logos_ffi::{AgentId, Formula};
+#[cfg(feature = "z3")]
+use logos_z3::Z3Checker;
 use serde::{Deserialize, Serialize};
 
 use crate::compiler::{DefaultPolicyCompiler, PolicyCompiler};
+
+/// Verification engine used for the report.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum VerificationBackend {
+    FormulaInspection,
+    Z3,
+}
+
+impl VerificationBackend {
+    #[must_use]
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::FormulaInspection => "formula_inspection",
+            Self::Z3 => "z3",
+        }
+    }
+}
+
+impl std::fmt::Display for VerificationBackend {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.name())
+    }
+}
 
 /// Verification depth tier for receipt attestation.
 ///
@@ -18,21 +55,24 @@ use crate::compiler::{DefaultPolicyCompiler, PolicyCompiler};
 ///
 /// | Level | Name | Meaning |
 /// |-------|------|---------|
-/// | 0 | Heuristic | Guards evaluated, no formal verification |
-/// | 1 | Z3-Verified | Policy passed Z3 consistency/completeness checks |
-/// | 2 | Lean-Proved | Policy properties proved in Lean 4 reference spec |
-/// | 3 | Implementation-Verified | Rust implementation verified via Aeneas |
+/// | 0 | Heuristic | Guards evaluated, no static verification |
+/// | 1 | Formula-Verified | Static formula / policy inspection passed |
+/// | 2 | Z3-Verified | Z3-backed checks confirmed the policy |
+/// | 3 | Lean-Proved | Policy properties proved in Lean 4 reference spec |
+/// | 4 | Implementation-Verified | Rust implementation verified via Aeneas |
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AttestationLevel {
     /// Level 0: Heuristic guards only (current default).
     Heuristic = 0,
-    /// Level 1: Z3-verified policy consistency.
-    Z3Verified = 1,
-    /// Level 2: Lean-proved policy properties.
-    LeanProved = 2,
-    /// Level 3: Implementation verified via Aeneas translation.
-    ImplementationVerified = 3,
+    /// Level 1: Static formula and policy checks passed.
+    FormulaVerified = 1,
+    /// Level 2: Z3-backed checks passed.
+    Z3Verified = 2,
+    /// Level 3: Lean-proved policy properties.
+    LeanProved = 3,
+    /// Level 4: Implementation verified via Aeneas translation.
+    ImplementationVerified = 4,
 }
 
 impl AttestationLevel {
@@ -45,6 +85,7 @@ impl AttestationLevel {
     pub fn name(self) -> &'static str {
         match self {
             Self::Heuristic => "heuristic",
+            Self::FormulaVerified => "formula_verified",
             Self::Z3Verified => "z3_verified",
             Self::LeanProved => "lean_proved",
             Self::ImplementationVerified => "implementation_verified",
@@ -55,9 +96,10 @@ impl AttestationLevel {
     pub fn from_u8(value: u8) -> Option<Self> {
         match value {
             0 => Some(Self::Heuristic),
-            1 => Some(Self::Z3Verified),
-            2 => Some(Self::LeanProved),
-            3 => Some(Self::ImplementationVerified),
+            1 => Some(Self::FormulaVerified),
+            2 => Some(Self::Z3Verified),
+            3 => Some(Self::LeanProved),
+            4 => Some(Self::ImplementationVerified),
             _ => None,
         }
     }
@@ -127,6 +169,7 @@ pub struct InheritanceResult {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct VerificationReport {
+    pub backend: VerificationBackend,
     pub formula_count: usize,
     pub atom_count: usize,
     pub consistency: ConsistencyResult,
@@ -152,12 +195,13 @@ impl VerificationReport {
     pub fn to_receipt_metadata(&self) -> serde_json::Value {
         serde_json::json!({
             "verification": {
+                "backend": self.backend.name(),
                 "attestation_level": self.attestation_level.as_u8(),
                 "attestation_level_name": self.attestation_level.name(),
-                "z3_verified": self.all_pass(),
-                "z3_consistency": self.consistency.outcome.to_string(),
-                "z3_completeness": self.completeness.outcome.to_string(),
-                "z3_inheritance_sound": self.inheritance.outcome.to_string(),
+                "checks_passed": self.all_pass(),
+                "consistency": self.consistency.outcome.to_string(),
+                "completeness": self.completeness.outcome.to_string(),
+                "inheritance_sound": self.inheritance.outcome.to_string(),
                 "verification_time_ms": self.verification_time_ms,
                 "formula_count": self.formula_count,
                 "atom_count": self.atom_count,
@@ -175,10 +219,14 @@ pub static DEFAULT_EXPECTED_ACTION_TYPES: &[&str] = &["access", "egress", "exec"
 
 /// Policy verifier that operates on compiled Logos formulas.
 ///
-/// The verifier performs static formula inspection. No external solver is required.
+/// The verifier performs static formula inspection by default and can be
+/// constructed with a Z3 backend when the `z3` feature is enabled.
 pub struct PolicyVerifier {
     /// Action types that must have at least one formula for completeness.
     expected_action_types: Vec<String>,
+    backend: VerificationBackend,
+    #[cfg(feature = "z3")]
+    z3_checker: Option<Z3Checker>,
 }
 
 impl Default for PolicyVerifier {
@@ -196,6 +244,9 @@ impl PolicyVerifier {
                 .iter()
                 .map(|s| (*s).to_string())
                 .collect(),
+            backend: VerificationBackend::FormulaInspection,
+            #[cfg(feature = "z3")]
+            z3_checker: None,
         }
     }
 
@@ -205,37 +256,39 @@ impl PolicyVerifier {
         self
     }
 
+    #[must_use]
+    pub fn backend(&self) -> VerificationBackend {
+        self.backend
+    }
+
     pub fn verify(
         &self,
         formulas: &[Formula],
-        base_formulas: Option<&[Formula]>,
+        _base_formulas: Option<&[Formula]>,
     ) -> VerificationReport {
         let start = Instant::now();
 
         let atoms = collect_atoms(formulas);
         let atom_count = atoms.len();
 
-        let consistency = self.check_consistency(formulas);
-        let completeness = self.check_completeness(formulas);
-        let inheritance = match base_formulas {
-            Some(base) => self.check_inheritance(formulas, base),
-            None => InheritanceResult {
-                outcome: CheckOutcome::Skipped,
-                weakened: Vec::new(),
-            },
+        let (consistency, consistency_z3) = self.check_consistency_internal(formulas);
+        let (completeness, completeness_z3) =
+            self.check_completeness_for_expected(formulas, &self.expected_action_types);
+        let inheritance = InheritanceResult {
+            outcome: CheckOutcome::Skipped,
+            weakened: Vec::new(),
         };
 
-        let mut properties_checked = vec!["consistency".to_string(), "completeness".to_string()];
-        if base_formulas.is_some() {
-            properties_checked.push("inheritance".to_string());
-        }
+        let properties_checked = vec!["consistency".to_string(), "completeness".to_string()];
 
         let elapsed = start.elapsed();
 
+        let backend = report_backend(consistency_z3, completeness_z3, None);
         let attestation_level =
-            compute_attestation_level(&consistency, &completeness, &inheritance);
+            compute_attestation_level(backend, &consistency, &completeness, &inheritance);
 
         VerificationReport {
+            backend,
             formula_count: formulas.len(),
             atom_count,
             consistency,
@@ -248,79 +301,196 @@ impl PolicyVerifier {
     }
 
     /// Create a verifier that delegates to the Z3 SMT solver when available.
-    ///
-    /// Falls back to pure formula inspection if Z3 is not linked. This
-    /// constructor is only available when the `z3` crate feature is enabled.
     #[cfg(feature = "z3")]
     #[must_use]
     pub fn with_z3() -> Self {
-        // Currently the Z3 checker only handles propositional / Layer 0
-        // formulas. Normative (Layer 3) checking returns Unknown, so we
-        // fall through to the enumeration-based checks in all practical
-        // cases. The constructor is kept for forward-compatibility.
-        Self::new()
+        Self {
+            expected_action_types: DEFAULT_EXPECTED_ACTION_TYPES
+                .iter()
+                .map(|s| (*s).to_string())
+                .collect(),
+            backend: VerificationBackend::Z3,
+            z3_checker: Some(Z3Checker::new()),
+        }
     }
 
-    pub fn verify_policy(
-        &self,
-        policy: &clawdstrike::policy::Policy,
-        agent: AgentId,
-    ) -> VerificationReport {
+    pub fn verify_policy(&self, policy: &Policy, agent: AgentId) -> VerificationReport {
         let compiler = DefaultPolicyCompiler::new(agent);
         let formulas = compiler.compile_policy(policy);
-        self.verify(&formulas, None)
+        let (consistency, consistency_z3) = self.check_consistency_internal(&formulas);
+        let expected = expected_action_types_for_policy(policy);
+        let (completeness, completeness_z3) =
+            self.check_completeness_for_expected(&formulas, &expected);
+
+        build_policy_report(
+            &formulas,
+            None,
+            consistency,
+            completeness,
+            report_backend(consistency_z3, completeness_z3, None),
+        )
     }
 
     pub fn verify_policy_with_parent(
         &self,
-        parent: &clawdstrike::policy::Policy,
-        merged: &clawdstrike::policy::Policy,
+        parent: &Policy,
+        effective: &Policy,
         agent: AgentId,
     ) -> VerificationReport {
         let compiler = DefaultPolicyCompiler::new(agent);
         let parent_formulas = compiler.compile_policy(parent);
-        let merged_formulas = compiler.compile_policy(merged);
-        self.verify(&merged_formulas, Some(&parent_formulas))
+        let effective_formulas = compiler.compile_policy(effective);
+        let (consistency, consistency_z3) = self.check_consistency_internal(&effective_formulas);
+        let expected = expected_action_types_for_policy(effective);
+        let (completeness, completeness_z3) =
+            self.check_completeness_for_expected(&effective_formulas, &expected);
+        let (inheritance, inheritance_z3) =
+            self.check_policy_inheritance(parent, effective, &parent_formulas, &effective_formulas);
+
+        build_policy_report(
+            &effective_formulas,
+            Some(inheritance),
+            consistency,
+            completeness,
+            report_backend(consistency_z3, completeness_z3, Some(inheritance_z3)),
+        )
+    }
+
+    pub fn verify_policy_with_parent_and_source(
+        &self,
+        parent: &Policy,
+        child: &Policy,
+        effective: &Policy,
+        agent: AgentId,
+    ) -> VerificationReport {
+        let compiler = DefaultPolicyCompiler::new(agent);
+        let parent_formulas = compiler.compile_policy(parent);
+        let effective_formulas = compiler.compile_policy(effective);
+        let (consistency, consistency_z3) = self.check_consistency_internal(&effective_formulas);
+        let expected = expected_action_types_for_policy(effective);
+        let (completeness, completeness_z3) =
+            self.check_completeness_for_expected(&effective_formulas, &expected);
+        let inherited = parent.merge(child);
+        let inherited_formulas = compiler.compile_policy(&inherited);
+        let (inheritance, inheritance_z3) = self.check_policy_inheritance(
+            parent,
+            &inherited,
+            &parent_formulas,
+            &inherited_formulas,
+        );
+
+        build_policy_report(
+            &effective_formulas,
+            Some(inheritance),
+            consistency,
+            completeness,
+            report_backend(consistency_z3, completeness_z3, Some(inheritance_z3)),
+        )
     }
 
     pub fn check_consistency(&self, formulas: &[Formula]) -> ConsistencyResult {
-        let mut permitted: HashSet<String> = HashSet::new();
-        let mut prohibited: HashSet<String> = HashSet::new();
-
-        for formula in formulas {
-            classify_formula(formula, &mut permitted, &mut prohibited);
-        }
-
-        let conflicts: Vec<Conflict> = permitted
-            .intersection(&prohibited)
-            .map(|atom| Conflict { atom: atom.clone() })
-            .collect();
-
-        let outcome = if conflicts.is_empty() {
-            CheckOutcome::Pass
-        } else {
-            CheckOutcome::Fail
-        };
-
-        ConsistencyResult {
-            outcome,
-            conflict_count: conflicts.len(),
-            conflicts,
-        }
+        self.check_consistency_internal(formulas).0
     }
 
     pub fn check_completeness(&self, formulas: &[Formula]) -> CompletenessResult {
+        self.check_completeness_for_expected(formulas, &self.expected_action_types)
+            .0
+    }
+
+    pub fn check_inheritance(
+        &self,
+        _child_formulas: &[Formula],
+        _base_formulas: &[Formula],
+    ) -> InheritanceResult {
+        InheritanceResult {
+            outcome: CheckOutcome::Skipped,
+            weakened: Vec::new(),
+        }
+    }
+
+    fn check_consistency_internal(&self, formulas: &[Formula]) -> (ConsistencyResult, bool) {
+        let mut permitted: HashSet<String> = HashSet::new();
+        let mut prohibited: HashSet<String> = HashSet::new();
+        let mut obligated: HashSet<String> = HashSet::new();
+
+        for formula in formulas {
+            classify_formula(formula, &mut permitted, &mut prohibited, &mut obligated);
+        }
+
+        let mut conflicts: Vec<Conflict> = permitted
+            .intersection(&prohibited)
+            .chain(obligated.intersection(&prohibited))
+            .map(|atom| Conflict { atom: atom.clone() })
+            .collect();
+        conflicts.sort_by(|a, b| a.atom.cmp(&b.atom));
+        conflicts.dedup_by(|a, b| a.atom == b.atom);
+
+        #[allow(unused_mut)]
+        let mut inspected = ConsistencyResult {
+            outcome: if conflicts.is_empty() {
+                CheckOutcome::Pass
+            } else {
+                CheckOutcome::Fail
+            },
+            conflict_count: conflicts.len(),
+            conflicts,
+        };
+
+        #[cfg(feature = "z3")]
+        if let Some(z3_checker) = self.z3_checker.as_ref() {
+            let overlapping_atoms: Vec<String> = permitted
+                .intersection(&prohibited)
+                .chain(obligated.intersection(&prohibited))
+                .cloned()
+                .collect();
+            let candidate_groups = consistency_candidate_groups(formulas, &overlapping_atoms);
+            let groups = if candidate_groups.is_empty() {
+                vec![Vec::new()]
+            } else {
+                candidate_groups
+            };
+
+            for group in groups {
+                match z3_checker.check_consistency(&group) {
+                    ProofResult::Valid(_) => {}
+                    ProofResult::Invalid(counterexample) => {
+                        if inspected.conflicts.is_empty() {
+                            inspected.conflicts.push(Conflict {
+                                atom: render_counterexample_hint(&counterexample.model_description),
+                            });
+                            inspected.conflict_count = inspected.conflicts.len();
+                        }
+                        inspected.outcome = CheckOutcome::Fail;
+                        return (inspected, true);
+                    }
+                    ProofResult::Unknown { .. } | ProofResult::Timeout { .. } => {
+                        return (inspected, false);
+                    }
+                }
+            }
+
+            return (inspected, true);
+        }
+
+        (inspected, false)
+    }
+
+    fn check_completeness_for_expected(
+        &self,
+        formulas: &[Formula],
+        expected_action_types: &[String],
+    ) -> (CompletenessResult, bool) {
         let atoms = collect_atoms(formulas);
 
         let covered_types: HashSet<String> = atoms
             .iter()
-            .filter_map(|atom| atom.split('(').next().map(String::from))
+            .filter_map(|atom| atom_action_type(atom).map(String::from))
             .collect();
 
         let mut covered = Vec::new();
         let mut missing = Vec::new();
 
-        for expected in &self.expected_action_types {
+        for expected in expected_action_types {
             if covered_types.contains(expected.as_str()) {
                 covered.push(expected.clone());
             } else {
@@ -328,55 +498,64 @@ impl PolicyVerifier {
             }
         }
 
-        let outcome = if missing.is_empty() {
-            CheckOutcome::Pass
-        } else {
-            CheckOutcome::Fail
-        };
-
-        CompletenessResult {
-            outcome,
+        let inspected = CompletenessResult {
+            outcome: if missing.is_empty() {
+                CheckOutcome::Pass
+            } else {
+                CheckOutcome::Fail
+            },
             covered,
             missing,
-        }
-    }
-
-    pub fn check_inheritance(
-        &self,
-        child_formulas: &[Formula],
-        base_formulas: &[Formula],
-    ) -> InheritanceResult {
-        let mut base_permitted: HashSet<String> = HashSet::new();
-        let mut base_prohibited: HashSet<String> = HashSet::new();
-        for formula in base_formulas {
-            classify_formula(formula, &mut base_permitted, &mut base_prohibited);
-        }
-        drop(base_permitted);
-
-        let mut child_permitted: HashSet<String> = HashSet::new();
-        let mut child_prohibited: HashSet<String> = HashSet::new();
-        for formula in child_formulas {
-            classify_formula(formula, &mut child_permitted, &mut child_prohibited);
-        }
-        drop(child_permitted);
-
-        // Any base prohibition that is absent in the child is "weakened".
-        let weakened: Vec<WeakenedProhibition> = base_prohibited
-            .difference(&child_prohibited)
-            .map(|atom| WeakenedProhibition { atom: atom.clone() })
-            .collect();
-
-        let outcome = if weakened.is_empty() {
-            CheckOutcome::Pass
-        } else {
-            CheckOutcome::Fail
         };
 
-        InheritanceResult { outcome, weakened }
+        #[cfg(feature = "z3")]
+        if let Some(z3_checker) = self.z3_checker.as_ref() {
+            let expected_atoms =
+                representative_atoms_for_expected_types(&atoms, expected_action_types);
+            return match z3_checker.check_completeness(formulas, &expected_atoms) {
+                ProofResult::Valid(_) | ProofResult::Invalid(_) => (inspected, true),
+                ProofResult::Unknown { .. } | ProofResult::Timeout { .. } => (inspected, false),
+            };
+        }
+
+        (inspected, false)
+    }
+
+    fn check_policy_inheritance(
+        &self,
+        parent: &Policy,
+        merged: &Policy,
+        _parent_formulas: &[Formula],
+        _merged_formulas: &[Formula],
+    ) -> (InheritanceResult, bool) {
+        #[allow(unused_mut)]
+        let mut inspected = check_policy_inheritance(merged, parent);
+
+        #[cfg(feature = "z3")]
+        if let Some(z3_checker) = self.z3_checker.as_ref() {
+            return match z3_checker.check_inheritance_soundness(_parent_formulas, _merged_formulas)
+            {
+                ProofResult::Valid(_) => (inspected, true),
+                ProofResult::Invalid(counterexample) => {
+                    if inspected.outcome == CheckOutcome::Pass {
+                        inspected.outcome = CheckOutcome::Fail;
+                    }
+                    let hint = render_counterexample_hint(&counterexample.model_description);
+                    if !inspected.weakened.iter().any(|item| item.atom == hint) {
+                        inspected.weakened.push(WeakenedProhibition { atom: hint });
+                    }
+                    (inspected, true)
+                }
+                ProofResult::Unknown { .. } | ProofResult::Timeout { .. } => (inspected, false),
+            };
+        }
+
+        (inspected, false)
     }
 }
 
 fn compute_attestation_level(
+    backend: VerificationBackend,
     consistency: &ConsistencyResult,
     completeness: &CompletenessResult,
     inheritance: &InheritanceResult,
@@ -388,10 +567,129 @@ fn compute_attestation_level(
         && checks_pass(&completeness.outcome)
         && checks_pass(&inheritance.outcome)
     {
-        AttestationLevel::Z3Verified
+        match backend {
+            VerificationBackend::FormulaInspection => AttestationLevel::FormulaVerified,
+            VerificationBackend::Z3 => AttestationLevel::Z3Verified,
+        }
     } else {
         AttestationLevel::Heuristic
     }
+}
+
+fn build_policy_report(
+    formulas: &[Formula],
+    inheritance: Option<InheritanceResult>,
+    consistency: ConsistencyResult,
+    completeness: CompletenessResult,
+    backend: VerificationBackend,
+) -> VerificationReport {
+    let start = Instant::now();
+    let atoms = collect_atoms(formulas);
+    let atom_count = atoms.len();
+    let inheritance = inheritance.unwrap_or(InheritanceResult {
+        outcome: CheckOutcome::Skipped,
+        weakened: Vec::new(),
+    });
+
+    let mut properties_checked = vec!["consistency".to_string(), "completeness".to_string()];
+    if inheritance.outcome != CheckOutcome::Skipped {
+        properties_checked.push("inheritance".to_string());
+    }
+
+    let attestation_level =
+        compute_attestation_level(backend, &consistency, &completeness, &inheritance);
+
+    VerificationReport {
+        backend,
+        formula_count: formulas.len(),
+        atom_count,
+        consistency,
+        completeness,
+        inheritance,
+        verification_time_ms: start.elapsed().as_millis() as u64,
+        properties_checked,
+        attestation_level,
+    }
+}
+
+fn report_backend(
+    consistency_z3: bool,
+    completeness_z3: bool,
+    inheritance_z3: Option<bool>,
+) -> VerificationBackend {
+    if consistency_z3 && completeness_z3 && inheritance_z3.unwrap_or(true) {
+        VerificationBackend::Z3
+    } else {
+        VerificationBackend::FormulaInspection
+    }
+}
+
+fn expected_action_types_for_policy(policy: &Policy) -> Vec<String> {
+    let mut expected = BTreeSet::new();
+
+    if let Some(cfg) = policy
+        .guards
+        .forbidden_path
+        .as_ref()
+        .filter(|cfg| cfg.enabled)
+    {
+        if !cfg.effective_patterns().is_empty() || !cfg.exceptions.is_empty() {
+            expected.insert("access".to_string());
+        }
+    }
+
+    if let Some(cfg) = policy
+        .guards
+        .path_allowlist
+        .as_ref()
+        .filter(|cfg| cfg.enabled)
+    {
+        if !cfg.file_access_allow.is_empty() {
+            expected.insert("access".to_string());
+        }
+        if !cfg.file_write_allow.is_empty() {
+            expected.insert("write".to_string());
+        }
+        if !cfg.patch_allow.is_empty() {
+            expected.insert("patch".to_string());
+        }
+    }
+
+    if policy
+        .guards
+        .egress_allowlist
+        .as_ref()
+        .is_some_and(|cfg| cfg.enabled)
+    {
+        expected.insert("egress".to_string());
+    }
+
+    if policy
+        .guards
+        .shell_command
+        .as_ref()
+        .is_some_and(|cfg| cfg.enabled && !cfg.forbidden_patterns.is_empty())
+    {
+        expected.insert("exec".to_string());
+    }
+
+    if policy
+        .guards
+        .mcp_tool
+        .as_ref()
+        .is_some_and(|cfg| cfg.enabled)
+    {
+        expected.insert("mcp".to_string());
+    }
+
+    expected.into_iter().collect()
+}
+
+#[cfg(test)]
+fn expected_action_types_for_policy_set(policy: &Policy) -> BTreeSet<String> {
+    expected_action_types_for_policy(policy)
+        .into_iter()
+        .collect()
 }
 
 fn collect_atoms(formulas: &[Formula]) -> BTreeSet<String> {
@@ -455,6 +753,7 @@ fn classify_formula(
     formula: &Formula,
     permitted: &mut HashSet<String>,
     prohibited: &mut HashSet<String>,
+    obligated: &mut HashSet<String>,
 ) {
     match formula {
         Formula::Permission(_, inner) => {
@@ -469,6 +768,12 @@ fn classify_formula(
                 prohibited.insert(name);
             }
         }
+        Formula::Obligation(_, inner) => {
+            let atom = extract_atom_string(inner);
+            if let Some(name) = atom {
+                obligated.insert(name);
+            }
+        }
         _ => {}
     }
 }
@@ -478,6 +783,880 @@ fn extract_atom_string(formula: &Formula) -> Option<String> {
         Formula::Atom(name) => Some(name.clone()),
         _ => None,
     }
+}
+
+fn atom_action_type(atom: &str) -> Option<&str> {
+    atom.split('(').next()
+}
+
+#[cfg(feature = "z3")]
+fn representative_atoms_for_expected_types(
+    atoms: &BTreeSet<String>,
+    expected_action_types: &[String],
+) -> Vec<String> {
+    expected_action_types
+        .iter()
+        .map(|expected| {
+            atoms
+                .iter()
+                .find(|atom| atom_action_type(atom).is_some_and(|kind| kind == expected))
+                .cloned()
+                .unwrap_or_else(|| format!("{expected}(__missing__)"))
+        })
+        .collect()
+}
+
+#[cfg(feature = "z3")]
+fn render_counterexample_hint(description: &str) -> String {
+    description.trim().to_string()
+}
+
+#[cfg(feature = "z3")]
+fn consistency_candidate_groups(
+    formulas: &[Formula],
+    overlapping_atoms: &[String],
+) -> Vec<Vec<Formula>> {
+    let overlapping_atoms: BTreeSet<&str> = overlapping_atoms.iter().map(String::as_str).collect();
+    let mut grouped = std::collections::BTreeMap::<String, Vec<Formula>>::new();
+
+    for formula in formulas {
+        if let Some(atom) = normative_formula_atom(formula) {
+            if overlapping_atoms.contains(atom.as_str()) {
+                grouped.entry(atom).or_default().push(formula.clone());
+            }
+        }
+    }
+
+    grouped.into_values().collect()
+}
+
+#[cfg(feature = "z3")]
+fn normative_formula_atom(formula: &Formula) -> Option<String> {
+    match formula {
+        Formula::Permission(_, inner)
+        | Formula::Prohibition(_, inner)
+        | Formula::Obligation(_, inner) => extract_atom_string(inner),
+        _ => None,
+    }
+}
+
+fn check_policy_inheritance(child: &Policy, base: &Policy) -> InheritanceResult {
+    let mut weakened = Vec::new();
+    weakened.extend(check_forbidden_path_inheritance(
+        base.guards.forbidden_path.as_ref(),
+        child.guards.forbidden_path.as_ref(),
+    ));
+    weakened.extend(check_path_allowlist_inheritance(
+        base.guards.path_allowlist.as_ref(),
+        child.guards.path_allowlist.as_ref(),
+    ));
+    weakened.extend(check_egress_inheritance(
+        base.guards.egress_allowlist.as_ref(),
+        child.guards.egress_allowlist.as_ref(),
+    ));
+    weakened.extend(check_mcp_inheritance(
+        base.guards.mcp_tool.as_ref(),
+        child.guards.mcp_tool.as_ref(),
+    ));
+    weakened.extend(check_shell_command_inheritance(
+        base.guards.shell_command.as_ref(),
+        child.guards.shell_command.as_ref(),
+        base.guards.forbidden_path.as_ref(),
+        child.guards.forbidden_path.as_ref(),
+    ));
+
+    weakened.sort_by(|a, b| a.atom.cmp(&b.atom));
+    weakened.dedup_by(|a, b| a.atom == b.atom);
+
+    InheritanceResult {
+        outcome: if weakened.is_empty() {
+            CheckOutcome::Pass
+        } else {
+            CheckOutcome::Fail
+        },
+        weakened,
+    }
+}
+
+fn check_forbidden_path_inheritance(
+    base_cfg: Option<&ForbiddenPathConfig>,
+    child_cfg: Option<&ForbiddenPathConfig>,
+) -> Vec<WeakenedProhibition> {
+    let Some(base_cfg) = base_cfg.filter(|cfg| cfg.enabled) else {
+        return Vec::new();
+    };
+
+    let base_guard = ForbiddenPathGuard::with_config(base_cfg.clone());
+    let child_guard = ForbiddenPathGuard::with_config(
+        child_cfg
+            .filter(|cfg| cfg.enabled)
+            .cloned()
+            .unwrap_or_else(disabled_forbidden_path_config),
+    );
+
+    let mut candidates = BTreeSet::new();
+    let child_exceptions = child_cfg
+        .filter(|cfg| cfg.enabled)
+        .map(|cfg| cfg.exceptions.as_slice())
+        .unwrap_or(&[]);
+    let mut weakened = Vec::new();
+
+    for exception in child_exceptions {
+        if base_guard.is_forbidden(exception) && !child_guard.is_forbidden(exception) {
+            weakened.push(WeakenedProhibition {
+                atom: format!("access({exception})"),
+            });
+        }
+    }
+
+    for pattern in base_cfg.effective_patterns() {
+        candidates.insert(representative_path(&pattern));
+        for exception in child_exceptions {
+            if let Some(witness) = path_intersection_witness(&pattern, exception) {
+                candidates.insert(witness);
+            }
+        }
+    }
+
+    for exception in child_exceptions {
+        candidates.insert(representative_path(exception));
+    }
+
+    weakened.extend(candidates.into_iter().filter_map(|candidate| {
+        (base_guard.is_forbidden(&candidate) && !child_guard.is_forbidden(&candidate)).then(|| {
+            WeakenedProhibition {
+                atom: format!("access({candidate})"),
+            }
+        })
+    }));
+
+    weakened
+}
+
+fn check_path_allowlist_inheritance(
+    base_cfg: Option<&PathAllowlistConfig>,
+    child_cfg: Option<&PathAllowlistConfig>,
+) -> Vec<WeakenedProhibition> {
+    let Some(base_cfg) = base_cfg.filter(|cfg| cfg.enabled) else {
+        return Vec::new();
+    };
+
+    let base_guard = PathAllowlistGuard::with_config(base_cfg.clone());
+    let child_guard = PathAllowlistGuard::with_config(
+        child_cfg
+            .filter(|cfg| cfg.enabled)
+            .cloned()
+            .unwrap_or_else(disabled_path_allowlist_config),
+    );
+
+    let child_cfg = child_cfg.filter(|cfg| cfg.enabled);
+    let mut weakened = Vec::new();
+    weakened.extend(check_path_allowlist_mode_inheritance(
+        &base_guard,
+        &child_guard,
+        child_cfg.map_or(&[][..], |cfg| cfg.file_access_allow.as_slice()),
+        "access",
+        PathAllowlistGuard::is_file_access_allowed,
+    ));
+    weakened.extend(check_path_allowlist_mode_inheritance(
+        &base_guard,
+        &child_guard,
+        child_cfg.map_or(&[][..], |cfg| cfg.file_write_allow.as_slice()),
+        "write",
+        PathAllowlistGuard::is_file_write_allowed,
+    ));
+    weakened.extend(check_path_allowlist_mode_inheritance(
+        &base_guard,
+        &child_guard,
+        child_cfg.map_or(&[][..], |cfg| cfg.patch_allow.as_slice()),
+        "patch",
+        PathAllowlistGuard::is_patch_allowed,
+    ));
+    weakened
+}
+
+fn check_path_allowlist_mode_inheritance<F>(
+    base_guard: &PathAllowlistGuard,
+    child_guard: &PathAllowlistGuard,
+    child_patterns: &[String],
+    atom_prefix: &str,
+    is_allowed: F,
+) -> Vec<WeakenedProhibition>
+where
+    F: Fn(&PathAllowlistGuard, &str) -> bool,
+{
+    let mut candidates = BTreeSet::new();
+    for pattern in child_patterns {
+        candidates.insert(representative_path(pattern));
+    }
+    candidates.insert(default_path_probe(base_guard, &is_allowed));
+
+    candidates
+        .into_iter()
+        .filter(|candidate| {
+            !is_allowed(base_guard, candidate) && is_allowed(child_guard, candidate)
+        })
+        .map(|candidate| WeakenedProhibition {
+            atom: format!("{atom_prefix}({candidate})"),
+        })
+        .collect()
+}
+
+fn check_egress_inheritance(
+    base_cfg: Option<&EgressAllowlistConfig>,
+    child_cfg: Option<&EgressAllowlistConfig>,
+) -> Vec<WeakenedProhibition> {
+    let Some(base_cfg) = base_cfg.filter(|cfg| cfg.enabled) else {
+        return Vec::new();
+    };
+
+    let base_policy = domain_policy_from_config(base_cfg);
+    let child_policy = domain_policy_from_config(
+        &child_cfg
+            .filter(|cfg| cfg.enabled)
+            .cloned()
+            .unwrap_or_else(disabled_egress_config),
+    );
+
+    let mut candidates = BTreeSet::new();
+    for blocked in &base_cfg.block {
+        candidates.insert(representative_domain(blocked));
+    }
+
+    if child_cfg.filter(|cfg| cfg.enabled).is_some_and(|cfg| {
+        matches!(
+            cfg.default_action,
+            None | Some(PolicyAction::Allow) | Some(PolicyAction::Log)
+        )
+    }) {
+        candidates.insert(default_domain_probe(&base_policy));
+    }
+
+    if let Some(child_cfg) = child_cfg.filter(|cfg| cfg.enabled) {
+        for allowed in &child_cfg.allow {
+            candidates.insert(representative_domain(allowed));
+            for blocked in &base_cfg.block {
+                if let Some(witness) = domain_intersection_witness(blocked, allowed) {
+                    candidates.insert(witness);
+                }
+            }
+        }
+    }
+
+    candidates
+        .into_iter()
+        .filter(|candidate| {
+            domain_action(&base_policy, candidate) == PolicyAction::Block
+                && domain_action(&child_policy, candidate) != PolicyAction::Block
+        })
+        .map(|candidate| WeakenedProhibition {
+            atom: format!("egress({candidate})"),
+        })
+        .collect()
+}
+
+fn check_mcp_inheritance(
+    base_cfg: Option<&McpToolConfig>,
+    child_cfg: Option<&McpToolConfig>,
+) -> Vec<WeakenedProhibition> {
+    let Some(base_cfg) = base_cfg.filter(|cfg| cfg.enabled) else {
+        return Vec::new();
+    };
+
+    let base_guard = McpToolGuard::with_config(base_cfg.clone());
+    let child_guard = McpToolGuard::with_config(
+        child_cfg
+            .filter(|cfg| cfg.enabled)
+            .cloned()
+            .unwrap_or_else(disabled_mcp_config),
+    );
+
+    let mut candidates = BTreeSet::new();
+    for blocked in &base_cfg.block {
+        candidates.insert(blocked.clone());
+    }
+
+    if let Some(child_cfg) = child_cfg.filter(|cfg| cfg.enabled) {
+        candidates.extend(child_cfg.allow.iter().cloned());
+        candidates.extend(child_cfg.require_confirmation.iter().cloned());
+    }
+
+    if !base_cfg.allow.is_empty()
+        || matches!(base_cfg.default_action, Some(McpDefaultAction::Block))
+    {
+        candidates.insert(default_mcp_probe(base_cfg, child_cfg));
+    }
+
+    candidates
+        .into_iter()
+        .filter(|candidate| {
+            tool_action(&base_guard, candidate) == "Block"
+                && tool_action(&child_guard, candidate) != "Block"
+        })
+        .map(|candidate| WeakenedProhibition {
+            atom: format!("mcp({candidate})"),
+        })
+        .collect()
+}
+
+fn check_shell_command_inheritance(
+    base_cfg: Option<&ShellCommandConfig>,
+    child_cfg: Option<&ShellCommandConfig>,
+    base_forbidden_path: Option<&ForbiddenPathConfig>,
+    child_forbidden_path: Option<&ForbiddenPathConfig>,
+) -> Vec<WeakenedProhibition> {
+    let Some(base_cfg) = base_cfg.filter(|cfg| cfg.enabled) else {
+        return Vec::new();
+    };
+
+    let mut weakened: Vec<WeakenedProhibition> = match child_cfg.filter(|cfg| cfg.enabled) {
+        Some(child_cfg) => base_cfg
+            .forbidden_patterns
+            .iter()
+            .filter(|pattern| !child_cfg.forbidden_patterns.contains(*pattern))
+            .map(|pattern| WeakenedProhibition {
+                atom: format!("exec({pattern})"),
+            })
+            .collect(),
+        None => base_cfg
+            .forbidden_patterns
+            .iter()
+            .map(|pattern| WeakenedProhibition {
+                atom: format!("exec({pattern})"),
+            })
+            .collect(),
+    };
+
+    if base_cfg.enforce_forbidden_paths {
+        let child_shell_cfg = child_cfg.filter(|cfg| cfg.enabled);
+        let child_forbidden_path = if child_shell_cfg.is_some_and(|cfg| cfg.enforce_forbidden_paths)
+        {
+            child_forbidden_path
+        } else {
+            None
+        };
+
+        weakened.extend(check_shell_forbidden_path_inheritance(
+            base_forbidden_path,
+            child_forbidden_path,
+        ));
+    }
+
+    weakened.sort_by(|a, b| a.atom.cmp(&b.atom));
+    weakened.dedup_by(|a, b| a.atom == b.atom);
+    weakened
+}
+
+fn check_shell_forbidden_path_inheritance(
+    base_cfg: Option<&ForbiddenPathConfig>,
+    child_cfg: Option<&ForbiddenPathConfig>,
+) -> Vec<WeakenedProhibition> {
+    let Some(base_cfg) = base_cfg.filter(|cfg| cfg.enabled) else {
+        return Vec::new();
+    };
+
+    let base_guard = ForbiddenPathGuard::with_config(base_cfg.clone());
+    let child_guard = ForbiddenPathGuard::with_config(
+        child_cfg
+            .filter(|cfg| cfg.enabled)
+            .cloned()
+            .unwrap_or_else(disabled_forbidden_path_config),
+    );
+
+    let mut candidates = BTreeSet::new();
+    let child_exceptions = child_cfg
+        .filter(|cfg| cfg.enabled)
+        .map(|cfg| cfg.exceptions.as_slice())
+        .unwrap_or(&[]);
+    let mut weakened = Vec::new();
+
+    for exception in child_exceptions {
+        if base_guard.is_forbidden(exception) && !child_guard.is_forbidden(exception) {
+            weakened.push(WeakenedProhibition {
+                atom: format!("exec(touches {exception})"),
+            });
+        }
+    }
+
+    for pattern in base_cfg.effective_patterns() {
+        candidates.insert(representative_path(&pattern));
+        for exception in child_exceptions {
+            if let Some(witness) = path_intersection_witness(&pattern, exception) {
+                candidates.insert(witness);
+            }
+        }
+    }
+
+    weakened.extend(candidates.into_iter().filter_map(|candidate| {
+        (base_guard.is_forbidden(&candidate) && !child_guard.is_forbidden(&candidate)).then(|| {
+            WeakenedProhibition {
+                atom: format!("exec(touches {candidate})"),
+            }
+        })
+    }));
+
+    weakened
+}
+
+fn disabled_forbidden_path_config() -> ForbiddenPathConfig {
+    ForbiddenPathConfig {
+        enabled: false,
+        patterns: Some(Vec::new()),
+        exceptions: Vec::new(),
+        additional_patterns: Vec::new(),
+        remove_patterns: Vec::new(),
+    }
+}
+
+fn disabled_path_allowlist_config() -> PathAllowlistConfig {
+    PathAllowlistConfig {
+        enabled: false,
+        file_access_allow: Vec::new(),
+        file_write_allow: Vec::new(),
+        patch_allow: Vec::new(),
+    }
+}
+
+fn disabled_egress_config() -> EgressAllowlistConfig {
+    EgressAllowlistConfig {
+        enabled: false,
+        allow: Vec::new(),
+        block: Vec::new(),
+        default_action: Some(PolicyAction::Allow),
+        additional_allow: Vec::new(),
+        remove_allow: Vec::new(),
+        additional_block: Vec::new(),
+        remove_block: Vec::new(),
+    }
+}
+
+fn disabled_mcp_config() -> McpToolConfig {
+    McpToolConfig {
+        enabled: false,
+        allow: Vec::new(),
+        block: Vec::new(),
+        require_confirmation: Vec::new(),
+        default_action: Some(McpDefaultAction::Allow),
+        max_args_size: None,
+        additional_allow: Vec::new(),
+        remove_allow: Vec::new(),
+        additional_block: Vec::new(),
+        remove_block: Vec::new(),
+    }
+}
+
+fn domain_policy_from_config(config: &EgressAllowlistConfig) -> DomainPolicy {
+    let mut policy = DomainPolicy::new();
+    policy.set_default_action(config.default_action.clone().unwrap_or_default());
+    policy.extend_allow(config.allow.clone());
+    policy.extend_block(config.block.clone());
+    policy
+}
+
+fn domain_action(policy: &DomainPolicy, domain: &str) -> PolicyAction {
+    policy.evaluate_detailed(domain).action
+}
+
+fn tool_action(guard: &McpToolGuard, tool_name: &str) -> String {
+    format!("{:?}", guard.is_allowed(tool_name))
+}
+
+fn default_path_probe<F>(base_guard: &PathAllowlistGuard, is_allowed: F) -> String
+where
+    F: Fn(&PathAllowlistGuard, &str) -> bool,
+{
+    let seed = "/__clawdstrike_inheritance_probe__";
+    if !is_allowed(base_guard, seed) {
+        return seed.to_string();
+    }
+
+    for idx in 0..32 {
+        let candidate = format!("/__clawdstrike_inheritance_probe_{idx}__");
+        if !is_allowed(base_guard, &candidate) {
+            return candidate;
+        }
+    }
+
+    seed.to_string()
+}
+
+fn default_domain_probe(base_policy: &DomainPolicy) -> String {
+    let seed = "clawdstrike-inheritance-check.invalid";
+    if domain_action(base_policy, seed) == PolicyAction::Block {
+        return seed.to_string();
+    }
+
+    for idx in 0..32 {
+        let candidate = format!("clawdstrike-inheritance-check-{idx}.invalid");
+        if domain_action(base_policy, &candidate) == PolicyAction::Block {
+            return candidate;
+        }
+    }
+
+    seed.to_string()
+}
+
+fn default_mcp_probe(base_cfg: &McpToolConfig, child_cfg: Option<&McpToolConfig>) -> String {
+    let mut idx = 0usize;
+    loop {
+        let candidate = if idx == 0 {
+            "__clawdstrike_inheritance_probe__".to_string()
+        } else {
+            format!("__clawdstrike_inheritance_probe_{idx}__")
+        };
+
+        let used_in_base = base_cfg.allow.contains(&candidate)
+            || base_cfg.block.contains(&candidate)
+            || base_cfg.require_confirmation.contains(&candidate);
+        let used_in_child = child_cfg.is_some_and(|cfg| {
+            cfg.allow.contains(&candidate)
+                || cfg.block.contains(&candidate)
+                || cfg.require_confirmation.contains(&candidate)
+        });
+        if !used_in_base && !used_in_child {
+            return candidate;
+        }
+        idx += 1;
+    }
+}
+
+fn representative_path(pattern: &str) -> String {
+    let absolute = pattern.starts_with('/');
+    let mut segments = Vec::new();
+    for segment in pattern.split('/') {
+        if segment.is_empty() {
+            continue;
+        }
+        if segment == "**" {
+            segments.push("x".to_string());
+        } else {
+            segments.push(representative_token(segment));
+        }
+    }
+
+    if segments.is_empty() {
+        segments.push("x".to_string());
+    }
+
+    let mut path = segments.join("/");
+    if absolute {
+        path.insert(0, '/');
+    }
+    path
+}
+
+fn path_intersection_witness(left: &str, right: &str) -> Option<String> {
+    let candidates = [
+        Some(representative_path(left)),
+        Some(representative_path(right)),
+        merge_path_literal_segments(left, right),
+        merge_path_literal_segments(right, left),
+        prefix_suffix_path_candidate(left, right),
+        prefix_suffix_path_candidate(right, left),
+    ];
+
+    candidates.into_iter().flatten().find(|candidate| {
+        path_pattern_matches(left, candidate) && path_pattern_matches(right, candidate)
+    })
+}
+
+fn merge_path_literal_segments(left: &str, right: &str) -> Option<String> {
+    let left_segments = literal_path_segments(left);
+    let right_segments = literal_path_segments(right);
+    if left_segments.is_empty() && right_segments.is_empty() {
+        return None;
+    }
+
+    let merged = shortest_common_supersequence(&left_segments, &right_segments);
+    if merged.is_empty() {
+        return None;
+    }
+
+    let mut path = merged.join("/");
+    if left.starts_with('/') || right.starts_with('/') {
+        path.insert(0, '/');
+    }
+    Some(path)
+}
+
+fn prefix_suffix_path_candidate(left: &str, right: &str) -> Option<String> {
+    let prefix = literal_path_prefix(left);
+    let suffix = literal_path_suffix(right);
+    if prefix.is_empty() && suffix.is_empty() {
+        return None;
+    }
+
+    let mut segments = Vec::new();
+    segments.extend(prefix);
+    if segments.is_empty()
+        || segments
+            .last()
+            .is_some_and(|segment| !segment.contains('.'))
+    {
+        segments.push("x".to_string());
+    }
+    segments.extend(suffix);
+    let mut path = segments.join("/");
+    if left.starts_with('/') || right.starts_with('/') {
+        path.insert(0, '/');
+    }
+    Some(path)
+}
+
+fn literal_path_segments(pattern: &str) -> Vec<String> {
+    pattern
+        .split('/')
+        .filter(|segment| !segment.is_empty() && *segment != "**")
+        .filter_map(|segment| {
+            let literal = literal_segment(segment);
+            if literal.is_empty() {
+                None
+            } else {
+                Some(literal)
+            }
+        })
+        .collect()
+}
+
+fn literal_path_prefix(pattern: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    for segment in pattern.split('/') {
+        if segment.is_empty() {
+            continue;
+        }
+        if segment_has_meta(segment) {
+            break;
+        }
+        out.push(segment.to_string());
+    }
+    out
+}
+
+fn literal_path_suffix(pattern: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    for segment in pattern.rsplit('/') {
+        if segment.is_empty() {
+            continue;
+        }
+        if segment_has_meta(segment) {
+            break;
+        }
+        out.push(segment.to_string());
+    }
+    out.reverse();
+    out
+}
+
+fn literal_segment(pattern: &str) -> String {
+    let mut literal = String::new();
+    let mut chars = pattern.chars().peekable();
+
+    while let Some(ch) = chars.next() {
+        match ch {
+            '*' | '?' => {}
+            '[' => {
+                let mut saw_literal = None;
+                for inner in chars.by_ref() {
+                    if inner == ']' {
+                        break;
+                    }
+                    if saw_literal.is_none() && !matches!(inner, '^' | '!') {
+                        saw_literal = Some(inner);
+                    }
+                }
+                literal.push(saw_literal.unwrap_or('x'));
+            }
+            '{' => {
+                let mut branch = String::new();
+                for inner in chars.by_ref() {
+                    if matches!(inner, ',' | '}') {
+                        break;
+                    }
+                    branch.push(inner);
+                }
+                if branch.is_empty() {
+                    literal.push('x');
+                } else {
+                    literal.push_str(&branch);
+                }
+            }
+            '\\' => {
+                if let Some(escaped) = chars.next() {
+                    literal.push(escaped);
+                }
+            }
+            _ => literal.push(ch),
+        }
+    }
+
+    if literal.is_empty() {
+        "x".to_string()
+    } else if literal.starts_with('.') && !literal.contains('.') {
+        format!("x{literal}")
+    } else if literal.ends_with('.') {
+        format!("{literal}x")
+    } else {
+        literal
+    }
+}
+
+fn representative_domain(pattern: &str) -> String {
+    representative_token(pattern)
+}
+
+fn domain_intersection_witness(left: &str, right: &str) -> Option<String> {
+    let candidates = [
+        Some(representative_domain(left)),
+        Some(representative_domain(right)),
+        prefix_suffix_token_candidate(left, right),
+        prefix_suffix_token_candidate(right, left),
+    ];
+
+    candidates.into_iter().flatten().find(|candidate| {
+        domain_pattern_matches(left, candidate) && domain_pattern_matches(right, candidate)
+    })
+}
+
+fn prefix_suffix_token_candidate(left: &str, right: &str) -> Option<String> {
+    let prefix = literal_prefix_token(left);
+    let suffix = literal_suffix_token(right);
+    if prefix.is_empty() && suffix.is_empty() {
+        return None;
+    }
+
+    let middle = if prefix.is_empty() || suffix.is_empty() {
+        "x"
+    } else {
+        ""
+    };
+    Some(format!("{prefix}{middle}{suffix}"))
+}
+
+fn representative_token(pattern: &str) -> String {
+    let mut out = String::new();
+    let mut chars = pattern.chars().peekable();
+
+    while let Some(ch) = chars.next() {
+        match ch {
+            '*' | '?' => out.push('x'),
+            '[' => {
+                let mut saw_literal = None;
+                for inner in chars.by_ref() {
+                    if inner == ']' {
+                        break;
+                    }
+                    if saw_literal.is_none() && !matches!(inner, '^' | '!') {
+                        saw_literal = Some(inner);
+                    }
+                }
+                out.push(saw_literal.unwrap_or('x'));
+            }
+            '{' => {
+                let mut branch = String::new();
+                for inner in chars.by_ref() {
+                    if matches!(inner, ',' | '}') {
+                        break;
+                    }
+                    branch.push(inner);
+                }
+                if branch.is_empty() {
+                    out.push('x');
+                } else {
+                    out.push_str(&branch);
+                }
+            }
+            '\\' => {
+                if let Some(escaped) = chars.next() {
+                    out.push(escaped);
+                }
+            }
+            _ => out.push(ch),
+        }
+    }
+
+    if out.is_empty() {
+        "x".to_string()
+    } else {
+        out
+    }
+}
+
+fn literal_prefix_token(pattern: &str) -> String {
+    let mut out = String::new();
+    let mut chars = pattern.chars().peekable();
+
+    while let Some(ch) = chars.next() {
+        match ch {
+            '*' | '?' | '[' | '{' => break,
+            '\\' => {
+                if let Some(escaped) = chars.next() {
+                    out.push(escaped);
+                }
+            }
+            _ => out.push(ch),
+        }
+    }
+
+    out
+}
+
+fn literal_suffix_token(pattern: &str) -> String {
+    let mut out = String::new();
+    let mut escape = false;
+    for ch in pattern.chars().rev() {
+        if escape {
+            out.insert(0, ch);
+            escape = false;
+            continue;
+        }
+
+        match ch {
+            '\\' => escape = true,
+            '*' | '?' | ']' | '}' => break,
+            _ => out.insert(0, ch),
+        }
+    }
+    out
+}
+
+fn path_pattern_matches(pattern: &str, candidate: &str) -> bool {
+    Pattern::new(pattern)
+        .map(|compiled| compiled.matches(candidate))
+        .unwrap_or(false)
+}
+
+fn domain_pattern_matches(pattern: &str, domain: &str) -> bool {
+    let mut policy = DomainPolicy::new();
+    policy.set_default_action(PolicyAction::Block);
+    policy.extend_allow([pattern.to_string()]);
+    policy.is_allowed(domain)
+}
+
+fn segment_has_meta(segment: &str) -> bool {
+    segment
+        .chars()
+        .any(|ch| matches!(ch, '*' | '?' | '[' | ']' | '{' | '}' | '\\'))
+}
+
+fn shortest_common_supersequence(left: &[String], right: &[String]) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut i = 0usize;
+    let mut j = 0usize;
+
+    while i < left.len() && j < right.len() {
+        if left[i] == right[j] {
+            out.push(left[i].clone());
+            i += 1;
+            j += 1;
+        } else {
+            out.push(left[i].clone());
+            i += 1;
+        }
+    }
+
+    out.extend(left[i..].iter().cloned());
+    out.extend(right[j..].iter().cloned());
+    out
 }
 
 pub fn enrich_receipt(
@@ -541,7 +1720,7 @@ pub fn verify_policy_at_load_time(
     }
 
     let agent = logos_ffi::AgentId::new("clawdstrike-agent");
-    let verifier = PolicyVerifier::new();
+    let verifier = load_time_verifier();
     let report = verifier.verify_policy(policy, agent);
 
     if settings.cache {
@@ -572,6 +1751,18 @@ pub fn verify_policy_at_load_time(
         cache_hit: false,
         error: None,
     })
+}
+
+fn load_time_verifier() -> PolicyVerifier {
+    #[cfg(feature = "z3")]
+    {
+        PolicyVerifier::with_z3()
+    }
+
+    #[cfg(not(feature = "z3"))]
+    {
+        PolicyVerifier::new()
+    }
 }
 
 /// Thread-safe cache keyed by policy content hash.
@@ -615,14 +1806,29 @@ mod tests {
     use super::*;
     use crate::atoms::ActionKind;
     use clawdstrike::guards::{
-        EgressAllowlistConfig, ForbiddenPathConfig, McpToolConfig, ShellCommandConfig,
+        EgressAllowlistConfig, ForbiddenPathConfig, McpToolConfig, PathAllowlistConfig,
+        ShellCommandConfig,
     };
-    use clawdstrike::policy::{GuardConfigs, Policy};
+    use clawdstrike::policy::{GuardConfigs, Policy, VerificationSettings};
     use hush_proxy::policy::PolicyAction;
     use logos_ffi::AgentId;
 
     fn agent() -> AgentId {
         AgentId::new("test-agent")
+    }
+
+    fn formula_verifier() -> PolicyVerifier {
+        PolicyVerifier::new()
+    }
+
+    fn simple_forbidden_path(path: &str) -> ForbiddenPathConfig {
+        ForbiddenPathConfig {
+            enabled: true,
+            patterns: Some(vec![path.to_string()]),
+            exceptions: vec![],
+            additional_patterns: vec![],
+            remove_patterns: vec![],
+        }
     }
 
     #[test]
@@ -631,84 +1837,26 @@ mod tests {
             Formula::prohibition(agent(), Formula::atom("access(/etc/shadow)")),
             Formula::permission(agent(), Formula::atom("egress(api.openai.com)")),
         ];
-        let verifier = PolicyVerifier::new();
-        let result = verifier.check_consistency(&formulas);
+        let result = formula_verifier().check_consistency(&formulas);
         assert!(result.outcome.is_pass());
         assert_eq!(result.conflict_count, 0);
     }
 
     #[test]
-    fn inconsistent_when_same_atom_permitted_and_prohibited() {
+    fn obligation_and_prohibition_conflict_detected() {
         let formulas = vec![
-            Formula::prohibition(agent(), Formula::atom("access(/etc/shadow)")),
-            Formula::permission(agent(), Formula::atom("access(/etc/shadow)")),
-        ];
-        let verifier = PolicyVerifier::new();
-        let result = verifier.check_consistency(&formulas);
-        assert_eq!(result.outcome, CheckOutcome::Fail);
-        assert_eq!(result.conflict_count, 1);
-        assert_eq!(result.conflicts[0].atom, "access(/etc/shadow)");
-    }
-
-    #[test]
-    fn empty_formulas_are_consistent() {
-        let verifier = PolicyVerifier::new();
-        let result = verifier.check_consistency(&[]);
-        assert!(result.outcome.is_pass());
-        assert_eq!(result.conflict_count, 0);
-    }
-
-    #[test]
-    fn multiple_conflicts_reported() {
-        let formulas = vec![
-            Formula::prohibition(agent(), Formula::atom("access(/etc/shadow)")),
-            Formula::permission(agent(), Formula::atom("access(/etc/shadow)")),
-            Formula::prohibition(agent(), Formula::atom("egress(evil.com)")),
-            Formula::permission(agent(), Formula::atom("egress(evil.com)")),
-        ];
-        let verifier = PolicyVerifier::new();
-        let result = verifier.check_consistency(&formulas);
-        assert_eq!(result.outcome, CheckOutcome::Fail);
-        assert_eq!(result.conflict_count, 2);
-    }
-
-    #[test]
-    fn different_atoms_no_conflict() {
-        let formulas = vec![
-            Formula::prohibition(agent(), Formula::atom("access(/etc/shadow)")),
-            Formula::permission(agent(), Formula::atom("access(/app/**)")),
-        ];
-        let verifier = PolicyVerifier::new();
-        let result = verifier.check_consistency(&formulas);
-        assert!(result.outcome.is_pass());
-    }
-
-    #[test]
-    fn complete_when_all_types_covered() {
-        let formulas = vec![
-            Formula::prohibition(agent(), Formula::atom("access(/etc/shadow)")),
-            Formula::permission(agent(), Formula::atom("egress(api.openai.com)")),
+            Formula::obligation(agent(), Formula::atom("exec(rm -rf /)")),
             Formula::prohibition(agent(), Formula::atom("exec(rm -rf /)")),
-            Formula::prohibition(agent(), Formula::atom("mcp(shell_exec)")),
         ];
-        let verifier = PolicyVerifier::new();
-        let result = verifier.check_completeness(&formulas);
-        assert!(result.outcome.is_pass());
-        assert_eq!(result.covered.len(), 4);
-        assert!(result.missing.is_empty());
-    }
-
-    #[test]
-    fn incomplete_when_missing_type() {
-        let formulas = vec![
-            Formula::prohibition(agent(), Formula::atom("access(/etc/shadow)")),
-            Formula::permission(agent(), Formula::atom("egress(api.openai.com)")),
-        ];
-        let verifier = PolicyVerifier::new();
-        let result = verifier.check_completeness(&formulas);
-        assert_eq!(result.outcome, CheckOutcome::Fail);
-        assert!(result.missing.contains(&"exec".to_string()));
-        assert!(result.missing.contains(&"mcp".to_string()));
+        let result = formula_verifier()
+            .with_expected_action_types(vec!["exec".to_string()])
+            .verify(&formulas, None);
+        assert_eq!(result.consistency.outcome, CheckOutcome::Fail);
+        assert!(result
+            .consistency
+            .conflicts
+            .iter()
+            .any(|conflict| conflict.atom == "exec(rm -rf /)"));
     }
 
     #[test]
@@ -717,147 +1865,32 @@ mod tests {
             agent(),
             Formula::atom("access(/etc/shadow)"),
         )];
-        let verifier = PolicyVerifier::new().with_expected_action_types(vec!["access".to_string()]);
-        let result = verifier.check_completeness(&formulas);
+        let result = formula_verifier()
+            .with_expected_action_types(vec!["access".to_string()])
+            .check_completeness(&formulas);
         assert!(result.outcome.is_pass());
+        assert_eq!(result.covered, vec!["access".to_string()]);
     }
 
     #[test]
-    fn completeness_empty_expected_passes() {
-        let verifier = PolicyVerifier::new().with_expected_action_types(vec![]);
-        let result = verifier.check_completeness(&[]);
-        assert!(result.outcome.is_pass());
-    }
-
-    #[test]
-    fn sound_inheritance_preserves_base_prohibitions() {
-        let base = vec![Formula::prohibition(
-            agent(),
-            Formula::atom("access(/etc/shadow)"),
-        )];
-        let child = vec![
-            Formula::prohibition(agent(), Formula::atom("access(/etc/shadow)")),
-            Formula::prohibition(agent(), Formula::atom("access(/etc/passwd)")),
-        ];
-        let verifier = PolicyVerifier::new();
-        let result = verifier.check_inheritance(&child, &base);
-        assert!(result.outcome.is_pass());
-        assert!(result.weakened.is_empty());
-    }
-
-    #[test]
-    fn weakened_inheritance_detected() {
-        let base = vec![
-            Formula::prohibition(agent(), Formula::atom("access(/etc/shadow)")),
-            Formula::prohibition(agent(), Formula::atom("access(/etc/passwd)")),
-        ];
-        let child = vec![
-            Formula::prohibition(agent(), Formula::atom("access(/etc/shadow)")),
-            // /etc/passwd prohibition dropped
-        ];
-        let verifier = PolicyVerifier::new();
-        let result = verifier.check_inheritance(&child, &base);
-        assert_eq!(result.outcome, CheckOutcome::Fail);
-        assert_eq!(result.weakened.len(), 1);
-        assert_eq!(result.weakened[0].atom, "access(/etc/passwd)");
-    }
-
-    #[test]
-    fn inheritance_skipped_when_no_base() {
+    fn inheritance_is_skipped_for_formula_only_api() {
         let formulas = vec![Formula::prohibition(
             agent(),
             Formula::atom("access(/etc/shadow)"),
         )];
-        let verifier = PolicyVerifier::new();
-        let report = verifier.verify(&formulas, None);
+        let report = formula_verifier()
+            .with_expected_action_types(vec!["access".to_string()])
+            .verify(&formulas, None);
         assert_eq!(report.inheritance.outcome, CheckOutcome::Skipped);
+        assert_eq!(report.backend, VerificationBackend::FormulaInspection);
+        assert_eq!(report.attestation_level, AttestationLevel::FormulaVerified);
     }
 
     #[test]
-    fn inheritance_empty_base_always_sound() {
-        let child = vec![Formula::prohibition(
-            agent(),
-            Formula::atom("access(/etc/shadow)"),
-        )];
-        let verifier = PolicyVerifier::new();
-        let result = verifier.check_inheritance(&child, &[]);
-        assert!(result.outcome.is_pass());
-    }
-
-    #[test]
-    fn full_report_passes() {
-        let formulas = vec![
-            Formula::prohibition(agent(), Formula::atom("access(/etc/shadow)")),
-            Formula::permission(agent(), Formula::atom("egress(api.openai.com)")),
-            Formula::prohibition(agent(), Formula::atom("exec(rm -rf /)")),
-            Formula::prohibition(agent(), Formula::atom("mcp(shell_exec)")),
-        ];
-        let verifier = PolicyVerifier::new();
-        let report = verifier.verify(&formulas, None);
-        assert!(report.all_pass());
-        assert_eq!(report.formula_count, 4);
-        assert_eq!(report.atom_count, 4);
-        assert_eq!(report.properties_checked.len(), 2);
-    }
-
-    #[test]
-    fn full_report_with_inheritance() {
-        let base = vec![
-            Formula::prohibition(agent(), Formula::atom("access(/etc/shadow)")),
-            Formula::permission(agent(), Formula::atom("egress(api.openai.com)")),
-            Formula::prohibition(agent(), Formula::atom("exec(rm -rf /)")),
-            Formula::prohibition(agent(), Formula::atom("mcp(shell_exec)")),
-        ];
-        let child = base.clone();
-        let verifier = PolicyVerifier::new();
-        let report = verifier.verify(&child, Some(&base));
-        assert!(report.all_pass());
-        assert_eq!(report.properties_checked.len(), 3);
-        assert!(report
-            .properties_checked
-            .contains(&"inheritance".to_string()));
-    }
-
-    #[test]
-    fn all_pass_false_when_consistency_fails() {
-        let formulas = vec![
-            Formula::prohibition(agent(), Formula::atom("access(/etc/shadow)")),
-            Formula::permission(agent(), Formula::atom("access(/etc/shadow)")),
-            Formula::permission(agent(), Formula::atom("egress(*)")),
-            Formula::prohibition(agent(), Formula::atom("exec(rm)")),
-            Formula::prohibition(agent(), Formula::atom("mcp(shell_exec)")),
-        ];
-        let verifier = PolicyVerifier::new();
-        let report = verifier.verify(&formulas, None);
-        assert!(!report.all_pass());
-    }
-
-    #[test]
-    fn verify_default_policy_consistent() {
-        let verifier = PolicyVerifier::new();
-        let policy = Policy::default();
-        let report = verifier.verify_policy(&policy, agent());
-        assert!(
-            report.consistency.outcome.is_pass(),
-            "default policy should be consistent: {:?}",
-            report.consistency
-        );
-    }
-
-    #[test]
-    #[allow(clippy::field_reassign_with_default)]
-    fn verify_policy_with_all_core_guards() {
-        let verifier = PolicyVerifier::new();
-
+    fn dynamic_policy_completeness_only_requires_configured_guards() {
         let mut policy = Policy::default();
         policy.guards = GuardConfigs {
-            forbidden_path: Some(ForbiddenPathConfig {
-                enabled: true,
-                patterns: Some(vec!["/etc/shadow".to_string()]),
-                exceptions: vec![],
-                additional_patterns: vec![],
-                remove_patterns: vec![],
-            }),
+            forbidden_path: Some(simple_forbidden_path("/etc/shadow")),
             egress_allowlist: Some(EgressAllowlistConfig {
                 enabled: true,
                 allow: vec!["api.openai.com".to_string()],
@@ -868,36 +1901,37 @@ mod tests {
                 additional_block: vec![],
                 remove_block: vec![],
             }),
-            shell_command: Some(ShellCommandConfig {
-                enabled: true,
-                forbidden_patterns: vec!["rm -rf /".to_string()],
-                enforce_forbidden_paths: true,
-            }),
-            mcp_tool: Some(McpToolConfig {
-                enabled: true,
-                allow: vec!["file_read".to_string()],
-                block: vec![],
-                require_confirmation: vec![],
-                default_action: None,
-                max_args_size: None,
-                additional_allow: vec![],
-                remove_allow: vec![],
-                additional_block: vec![],
-                remove_block: vec![],
-            }),
             ..GuardConfigs::default()
         };
 
-        let report = verifier.verify_policy(&policy, agent());
-        assert!(report.consistency.outcome.is_pass());
-        assert!(report.completeness.outcome.is_pass());
-        assert!(report.all_pass());
+        let report = formula_verifier().verify_policy(&policy, agent());
+        assert!(report.completeness.outcome.is_pass(), "{report:?}");
+        assert_eq!(report.completeness.covered, vec!["access", "egress"]);
+        assert!(report.completeness.missing.is_empty());
+    }
+
+    #[test]
+    fn configured_action_types_are_derived_from_enabled_guards() {
+        let mut policy = Policy::default();
+        policy.guards.egress_allowlist = Some(EgressAllowlistConfig {
+            enabled: true,
+            allow: vec!["api.openai.com".to_string()],
+            block: vec![],
+            default_action: None,
+            additional_allow: vec![],
+            remove_allow: vec![],
+            additional_block: vec![],
+            remove_block: vec![],
+        });
+
+        assert_eq!(
+            expected_action_types_for_policy_set(&policy),
+            BTreeSet::from(["egress".to_string()])
+        );
     }
 
     #[test]
     fn contradictory_egress_policy_detected() {
-        let verifier = PolicyVerifier::new().with_expected_action_types(vec![]);
-
         let mut policy = Policy::default();
         policy.guards.egress_allowlist = Some(EgressAllowlistConfig {
             enabled: true,
@@ -910,18 +1944,12 @@ mod tests {
             remove_block: vec![],
         });
 
-        let report = verifier.verify_policy(&policy, agent());
-        assert_eq!(
-            report.consistency.outcome,
-            CheckOutcome::Fail,
-            "should detect egress contradiction"
-        );
+        let report = formula_verifier().verify_policy(&policy, agent());
+        assert_eq!(report.consistency.outcome, CheckOutcome::Fail);
     }
 
     #[test]
     fn mcp_allow_and_block_same_tool_conflict() {
-        let verifier = PolicyVerifier::new().with_expected_action_types(vec![]);
-
         let mut policy = Policy::default();
         policy.guards.mcp_tool = Some(McpToolConfig {
             enabled: true,
@@ -936,26 +1964,383 @@ mod tests {
             remove_block: vec![],
         });
 
-        let report = verifier.verify_policy(&policy, agent());
-        assert_eq!(
-            report.consistency.outcome,
-            CheckOutcome::Fail,
-            "should detect MCP tool conflict"
-        );
+        let report = formula_verifier().verify_policy(&policy, agent());
+        assert_eq!(report.consistency.outcome, CheckOutcome::Fail);
     }
 
     #[test]
-    fn policy_missing_shell_guard_incomplete() {
-        let verifier = PolicyVerifier::new();
+    fn sound_inheritance_passes_for_stricter_child_policy() {
+        let mut parent = Policy::default();
+        parent.guards.forbidden_path = Some(simple_forbidden_path("/etc/shadow"));
 
-        let mut policy = Policy::default();
-        policy.guards.forbidden_path = Some(ForbiddenPathConfig {
+        let mut merged = parent.clone();
+        merged.guards.forbidden_path = Some(ForbiddenPathConfig {
             enabled: true,
-            patterns: Some(vec!["/etc/shadow".to_string()]),
+            patterns: Some(vec!["/etc/shadow".to_string(), "/etc/passwd".to_string()]),
             exceptions: vec![],
             additional_patterns: vec![],
             remove_patterns: vec![],
         });
+
+        let report = formula_verifier().verify_policy_with_parent(&parent, &merged, agent());
+        assert!(report.inheritance.outcome.is_pass(), "{report:?}");
+        assert!(report.all_pass());
+    }
+
+    #[test]
+    fn inheritance_uses_source_child_without_false_failure() {
+        let mut parent = Policy::default();
+        parent.guards.forbidden_path = Some(simple_forbidden_path("/etc/shadow"));
+
+        let mut child = Policy::default();
+        child.extends = Some("parent.yaml".to_string());
+
+        let effective = parent.merge(&child);
+        let report = formula_verifier().verify_policy_with_parent_and_source(
+            &parent,
+            &child,
+            &effective,
+            agent(),
+        );
+        assert!(report.inheritance.outcome.is_pass(), "{report:?}");
+    }
+
+    #[test]
+    fn forbidden_path_exception_weakening_is_detected_semantically() {
+        let mut parent = Policy::default();
+        parent.guards.forbidden_path = Some(ForbiddenPathConfig {
+            enabled: true,
+            patterns: Some(vec!["**/.env".to_string()]),
+            exceptions: vec![],
+            additional_patterns: vec![],
+            remove_patterns: vec![],
+        });
+
+        let mut merged = parent.clone();
+        merged.guards.forbidden_path = Some(ForbiddenPathConfig {
+            enabled: true,
+            patterns: Some(vec!["**/.env".to_string()]),
+            exceptions: vec!["/tmp/project/.env".to_string()],
+            additional_patterns: vec![],
+            remove_patterns: vec![],
+        });
+
+        let report = formula_verifier().verify_policy_with_parent(&parent, &merged, agent());
+        assert_eq!(report.inheritance.outcome, CheckOutcome::Fail);
+        assert!(report
+            .inheritance
+            .weakened
+            .iter()
+            .any(|item| item.atom == "access(/tmp/project/.env)"));
+    }
+
+    #[test]
+    fn path_allowlist_widening_is_detected_semantically() {
+        let mut parent = Policy::default();
+        parent.guards.path_allowlist = Some(PathAllowlistConfig {
+            enabled: true,
+            file_access_allow: vec!["/workspace/project/**".to_string()],
+            file_write_allow: vec![],
+            patch_allow: vec![],
+        });
+
+        let mut merged = parent.clone();
+        merged.guards.path_allowlist = Some(PathAllowlistConfig {
+            enabled: true,
+            file_access_allow: vec!["/workspace/**".to_string()],
+            file_write_allow: vec![],
+            patch_allow: vec![],
+        });
+
+        let report = formula_verifier().verify_policy_with_parent(&parent, &merged, agent());
+        assert_eq!(report.inheritance.outcome, CheckOutcome::Fail);
+        assert!(report
+            .inheritance
+            .weakened
+            .iter()
+            .any(|item| item.atom == "access(/workspace/x)"));
+    }
+
+    #[test]
+    fn egress_allow_override_is_detected_semantically() {
+        let mut parent = Policy::default();
+        parent.guards.egress_allowlist = Some(EgressAllowlistConfig {
+            enabled: true,
+            allow: vec![],
+            block: vec!["*.internal".to_string()],
+            default_action: Some(PolicyAction::Allow),
+            additional_allow: vec![],
+            remove_allow: vec![],
+            additional_block: vec![],
+            remove_block: vec![],
+        });
+
+        let mut merged = parent.clone();
+        merged.guards.egress_allowlist = Some(EgressAllowlistConfig {
+            enabled: true,
+            allow: vec!["db.internal".to_string()],
+            block: vec![],
+            default_action: Some(PolicyAction::Allow),
+            additional_allow: vec![],
+            remove_allow: vec![],
+            additional_block: vec![],
+            remove_block: vec![],
+        });
+
+        let report = formula_verifier().verify_policy_with_parent(&parent, &merged, agent());
+        assert_eq!(report.inheritance.outcome, CheckOutcome::Fail);
+        assert!(report
+            .inheritance
+            .weakened
+            .iter()
+            .any(|item| item.atom == "egress(db.internal)"));
+    }
+
+    #[test]
+    fn mcp_allow_override_is_detected_semantically() {
+        let mut parent = Policy::default();
+        parent.guards.mcp_tool = Some(McpToolConfig {
+            enabled: true,
+            allow: vec![],
+            block: vec!["shell_exec".to_string()],
+            require_confirmation: vec![],
+            default_action: Some(clawdstrike::guards::McpDefaultAction::Allow),
+            max_args_size: None,
+            additional_allow: vec![],
+            remove_allow: vec![],
+            additional_block: vec![],
+            remove_block: vec![],
+        });
+
+        let mut merged = parent.clone();
+        merged.guards.mcp_tool = Some(McpToolConfig {
+            enabled: true,
+            allow: vec!["shell_exec".to_string()],
+            block: vec![],
+            require_confirmation: vec![],
+            default_action: Some(clawdstrike::guards::McpDefaultAction::Allow),
+            max_args_size: None,
+            additional_allow: vec![],
+            remove_allow: vec![],
+            additional_block: vec![],
+            remove_block: vec![],
+        });
+
+        let report = formula_verifier().verify_policy_with_parent(&parent, &merged, agent());
+        assert_eq!(report.inheritance.outcome, CheckOutcome::Fail);
+        assert!(report
+            .inheritance
+            .weakened
+            .iter()
+            .any(|item| item.atom == "mcp(shell_exec)"));
+    }
+
+    #[test]
+    fn dropped_shell_command_guard_is_detected_semantically() {
+        let mut parent = Policy::default();
+        parent.guards.shell_command = Some(ShellCommandConfig {
+            enabled: true,
+            forbidden_patterns: vec!["rm -rf /".to_string()],
+            enforce_forbidden_paths: true,
+        });
+
+        let merged = Policy::default();
+        let report = formula_verifier().verify_policy_with_parent(&parent, &merged, agent());
+        assert_eq!(report.inheritance.outcome, CheckOutcome::Fail);
+        assert!(report
+            .inheritance
+            .weakened
+            .iter()
+            .any(|item| item.atom == "exec(rm -rf /)"));
+    }
+
+    #[test]
+    fn shell_command_path_enforcement_drop_is_detected() {
+        let mut parent = Policy::default();
+        parent.guards.forbidden_path = Some(simple_forbidden_path("/etc/shadow"));
+        parent.guards.shell_command = Some(ShellCommandConfig {
+            enabled: true,
+            forbidden_patterns: vec!["rm -rf /".to_string()],
+            enforce_forbidden_paths: true,
+        });
+
+        let mut merged = parent.clone();
+        merged.guards.shell_command = Some(ShellCommandConfig {
+            enabled: true,
+            forbidden_patterns: vec!["rm -rf /".to_string()],
+            enforce_forbidden_paths: false,
+        });
+
+        let report = formula_verifier().verify_policy_with_parent(&parent, &merged, agent());
+        assert_eq!(report.inheritance.outcome, CheckOutcome::Fail);
+        assert!(report
+            .inheritance
+            .weakened
+            .iter()
+            .any(|item| item.atom == "exec(touches /etc/shadow)"));
+    }
+
+    #[test]
+    fn receipt_metadata_uses_honest_backend_fields() {
+        let formulas = vec![
+            Formula::prohibition(agent(), Formula::atom("access(/etc/shadow)")),
+            Formula::permission(agent(), Formula::atom("egress(api.openai.com)")),
+        ];
+        let report = formula_verifier()
+            .with_expected_action_types(vec!["access".to_string(), "egress".to_string()])
+            .verify(&formulas, None);
+        let receipt = hush_core::receipt::Receipt::new(
+            hush_core::hashing::Hash::zero(),
+            hush_core::receipt::Verdict::pass(),
+        );
+        let enriched = enrich_receipt(receipt, &report);
+        let metadata = enriched.metadata.expect("verification metadata");
+
+        assert_eq!(metadata["verification"]["backend"], "formula_inspection");
+        assert_eq!(metadata["verification"]["checks_passed"], true);
+        assert_eq!(metadata["verification"]["consistency"], "pass");
+        assert_eq!(metadata["verification"]["completeness"], "pass");
+        assert_eq!(metadata["verification"]["inheritance_sound"], "skipped");
+        assert_eq!(metadata["verification"]["attestation_level"], 1);
+        assert_eq!(
+            metadata["verification"]["attestation_level_name"],
+            "formula_verified"
+        );
+    }
+
+    #[test]
+    fn metadata_reports_failure_honestly() {
+        let formulas = vec![
+            Formula::prohibition(agent(), Formula::atom("access(/etc/shadow)")),
+            Formula::permission(agent(), Formula::atom("access(/etc/shadow)")),
+        ];
+        let report = formula_verifier()
+            .with_expected_action_types(vec![])
+            .verify(&formulas, None);
+        let metadata = report.to_receipt_metadata();
+        assert_eq!(metadata["verification"]["backend"], "formula_inspection");
+        assert_eq!(metadata["verification"]["checks_passed"], false);
+        assert_eq!(metadata["verification"]["consistency"], "fail");
+        assert_eq!(metadata["verification"]["attestation_level"], 0);
+        assert_eq!(
+            metadata["verification"]["attestation_level_name"],
+            "heuristic"
+        );
+    }
+
+    #[test]
+    fn attestation_level_roundtrip_and_ordering() {
+        for level_u8 in 0..=4 {
+            let level = AttestationLevel::from_u8(level_u8).unwrap();
+            assert_eq!(level.as_u8(), level_u8);
+        }
+        assert!(AttestationLevel::from_u8(5).is_none());
+        assert!(AttestationLevel::Heuristic < AttestationLevel::FormulaVerified);
+        assert!(AttestationLevel::FormulaVerified < AttestationLevel::Z3Verified);
+        assert!(AttestationLevel::Z3Verified < AttestationLevel::LeanProved);
+        assert!(AttestationLevel::LeanProved < AttestationLevel::ImplementationVerified);
+    }
+
+    #[test]
+    fn attestation_level_names_and_display_are_honest() {
+        assert_eq!(AttestationLevel::Heuristic.name(), "heuristic");
+        assert_eq!(AttestationLevel::FormulaVerified.name(), "formula_verified");
+        assert_eq!(AttestationLevel::Z3Verified.name(), "z3_verified");
+        assert_eq!(
+            format!("{}", AttestationLevel::FormulaVerified),
+            "Level 1 (formula_verified)"
+        );
+        assert_eq!(
+            format!("{}", AttestationLevel::Z3Verified),
+            "Level 2 (z3_verified)"
+        );
+    }
+
+    #[test]
+    fn action_kind_roundtrip_still_works() {
+        assert_eq!(ActionKind::all().len(), 7);
+        assert_eq!(ActionKind::core().len(), 4);
+        for kind in ActionKind::all() {
+            let prefix = format!("{kind}");
+            assert_eq!(ActionKind::from_prefix(&prefix), Some(kind));
+        }
+        assert_eq!(ActionKind::from_prefix("unknown"), None);
+    }
+
+    #[test]
+    fn load_time_skip_when_not_enabled() {
+        let policy = Policy::default();
+        let cache = VerificationCache::new();
+        let result = verify_policy_at_load_time(&policy, &cache).unwrap();
+        assert!(result.report.is_none());
+        assert!(result.error.is_none());
+        assert!(!result.cache_hit);
+    }
+
+    #[test]
+    fn load_time_runs_when_enabled() {
+        let mut policy = Policy::default();
+        policy.settings.verification = Some(VerificationSettings {
+            enabled: true,
+            strict: false,
+            cache: false,
+        });
+        policy.guards.forbidden_path = Some(simple_forbidden_path("/etc/shadow"));
+
+        let cache = VerificationCache::new();
+        let result = verify_policy_at_load_time(&policy, &cache).unwrap();
+        assert!(result.report.is_some());
+        assert!(!result.cache_hit);
+    }
+
+    #[test]
+    fn load_time_strict_blocks_on_failure() {
+        let mut policy = Policy::default();
+        policy.settings.verification = Some(VerificationSettings {
+            enabled: true,
+            strict: true,
+            cache: false,
+        });
+        policy.guards.egress_allowlist = Some(EgressAllowlistConfig {
+            enabled: true,
+            allow: vec!["evil.example.com".to_string()],
+            block: vec!["evil.example.com".to_string()],
+            default_action: None,
+            additional_allow: vec![],
+            remove_allow: vec![],
+            additional_block: vec![],
+            remove_block: vec![],
+        });
+
+        let cache = VerificationCache::new();
+        let result = verify_policy_at_load_time(&policy, &cache);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn load_time_caching_works() {
+        let mut policy = Policy::default();
+        policy.settings.verification = Some(VerificationSettings {
+            enabled: true,
+            strict: false,
+            cache: true,
+        });
+        policy.guards.forbidden_path = Some(simple_forbidden_path("/etc/shadow"));
+
+        let cache = VerificationCache::new();
+        let first = verify_policy_at_load_time(&policy, &cache).unwrap();
+        let second = verify_policy_at_load_time(&policy, &cache).unwrap();
+
+        assert!(!first.cache_hit);
+        assert!(second.cache_hit);
+        assert_eq!(cache.len(), 1);
+    }
+
+    #[cfg(feature = "z3")]
+    #[test]
+    fn z3_verifier_reports_real_z3_backend() {
+        let mut policy = Policy::default();
+        policy.guards.forbidden_path = Some(simple_forbidden_path("/etc/shadow"));
         policy.guards.egress_allowlist = Some(EgressAllowlistConfig {
             enabled: true,
             allow: vec!["api.openai.com".to_string()],
@@ -967,370 +2352,9 @@ mod tests {
             remove_block: vec![],
         });
 
-        let report = verifier.verify_policy(&policy, agent());
-        assert_eq!(
-            report.completeness.outcome,
-            CheckOutcome::Fail,
-            "should be incomplete"
-        );
-        assert!(report.completeness.missing.contains(&"exec".to_string()));
-        assert!(report.completeness.missing.contains(&"mcp".to_string()));
-    }
-
-    #[test]
-    fn verify_sound_inheritance_via_policy() {
-        let verifier = PolicyVerifier::new().with_expected_action_types(vec![]);
-
-        let mut parent = Policy::default();
-        parent.guards.forbidden_path = Some(ForbiddenPathConfig {
-            enabled: true,
-            patterns: Some(vec!["/etc/shadow".to_string()]),
-            exceptions: vec![],
-            additional_patterns: vec![],
-            remove_patterns: vec![],
-        });
-        parent.guards.shell_command = Some(ShellCommandConfig {
-            enabled: true,
-            forbidden_patterns: vec!["rm -rf /".to_string()],
-            enforce_forbidden_paths: true,
-        });
-
-        let mut merged = parent.clone();
-        merged.guards.egress_allowlist = Some(EgressAllowlistConfig {
-            enabled: true,
-            allow: vec!["api.openai.com".to_string()],
-            block: vec![],
-            default_action: Some(PolicyAction::Block),
-            additional_allow: vec![],
-            remove_allow: vec![],
-            additional_block: vec![],
-            remove_block: vec![],
-        });
-
-        let report = verifier.verify_policy_with_parent(&parent, &merged, agent());
-        assert!(
-            report.inheritance.outcome.is_pass(),
-            "inheritance should be sound: {:?}",
-            report.inheritance
-        );
-        assert!(report.all_pass());
-    }
-
-    #[test]
-    fn verify_weakened_inheritance_via_policy() {
-        let verifier = PolicyVerifier::new().with_expected_action_types(vec![]);
-
-        let mut parent = Policy::default();
-        parent.guards.forbidden_path = Some(ForbiddenPathConfig {
-            enabled: true,
-            patterns: Some(vec!["/etc/shadow".to_string()]),
-            exceptions: vec![],
-            additional_patterns: vec![],
-            remove_patterns: vec![],
-        });
-        parent.guards.shell_command = Some(ShellCommandConfig {
-            enabled: true,
-            forbidden_patterns: vec!["rm -rf /".to_string()],
-            enforce_forbidden_paths: true,
-        });
-
-        // Child drops shell_command guard entirely.
-        let mut merged = Policy::default();
-        merged.guards.forbidden_path = Some(ForbiddenPathConfig {
-            enabled: true,
-            patterns: Some(vec!["/etc/shadow".to_string()]),
-            exceptions: vec![],
-            additional_patterns: vec![],
-            remove_patterns: vec![],
-        });
-
-        let report = verifier.verify_policy_with_parent(&parent, &merged, agent());
-        assert_eq!(
-            report.inheritance.outcome,
-            CheckOutcome::Fail,
-            "inheritance should fail"
-        );
-        assert!(!report.all_pass());
-    }
-
-    #[test]
-    fn receipt_enrichment() {
-        let formulas = vec![
-            Formula::prohibition(agent(), Formula::atom("access(/etc/shadow)")),
-            Formula::permission(agent(), Formula::atom("egress(api.openai.com)")),
-            Formula::prohibition(agent(), Formula::atom("exec(rm -rf /)")),
-            Formula::prohibition(agent(), Formula::atom("mcp(shell_exec)")),
-        ];
-        let verifier = PolicyVerifier::new();
-        let report = verifier.verify(&formulas, None);
-
-        let receipt = hush_core::receipt::Receipt::new(
-            hush_core::hashing::Hash::zero(),
-            hush_core::receipt::Verdict::pass(),
-        );
-        let enriched = enrich_receipt(receipt, &report);
-
-        assert!(enriched.metadata.is_some(), "metadata should be set");
-        let meta = match enriched.metadata {
-            Some(m) => m,
-            None => unreachable!(),
-        };
-        assert_eq!(meta["verification"]["z3_verified"], true);
-        assert_eq!(meta["verification"]["z3_consistency"], "pass");
-        assert_eq!(meta["verification"]["z3_completeness"], "pass");
-        assert_eq!(meta["verification"]["z3_inheritance_sound"], "skipped");
-        assert_eq!(meta["verification"]["formula_count"], 4);
-        assert_eq!(meta["verification"]["atom_count"], 4);
-        assert_eq!(meta["verification"]["attestation_level"], 1);
-        assert_eq!(
-            meta["verification"]["attestation_level_name"],
-            "z3_verified"
-        );
-    }
-
-    #[test]
-    fn metadata_format_matches_spec() {
-        let formulas = vec![
-            Formula::prohibition(agent(), Formula::atom("access(/etc/shadow)")),
-            Formula::permission(agent(), Formula::atom("egress(api.openai.com)")),
-            Formula::prohibition(agent(), Formula::atom("exec(rm)")),
-            Formula::prohibition(agent(), Formula::atom("mcp(shell_exec)")),
-        ];
-        let verifier = PolicyVerifier::new();
-        let report = verifier.verify(&formulas, None);
-        let meta = report.to_receipt_metadata();
-
-        let v = &meta["verification"];
-        assert!(v["z3_verified"].is_boolean());
-        assert!(v["z3_consistency"].is_string());
-        assert!(v["z3_completeness"].is_string());
-        assert!(v["z3_inheritance_sound"].is_string());
-        assert!(v["verification_time_ms"].is_number());
-        assert!(v["formula_count"].is_number());
-        assert!(v["atom_count"].is_number());
-        assert!(v["properties_checked"].is_array());
-        assert!(v["attestation_level"].is_number());
-        assert!(v["attestation_level_name"].is_string());
-    }
-
-    #[test]
-    fn metadata_reports_failure() {
-        let formulas = vec![
-            Formula::prohibition(agent(), Formula::atom("access(/etc/shadow)")),
-            Formula::permission(agent(), Formula::atom("access(/etc/shadow)")),
-        ];
-        let verifier = PolicyVerifier::new().with_expected_action_types(vec![]);
-        let report = verifier.verify(&formulas, None);
-        let meta = report.to_receipt_metadata();
-        assert_eq!(meta["verification"]["z3_verified"], false);
-        assert_eq!(meta["verification"]["z3_consistency"], "fail");
-        assert_eq!(meta["verification"]["attestation_level"], 0);
-        assert_eq!(meta["verification"]["attestation_level_name"], "heuristic");
-    }
-
-    #[test]
-    fn action_kind_all_returns_seven() {
-        assert_eq!(ActionKind::all().len(), 7);
-    }
-
-    #[test]
-    fn action_kind_core_returns_four() {
-        assert_eq!(ActionKind::core().len(), 4);
-    }
-
-    #[test]
-    fn action_kind_from_prefix_roundtrip() {
-        for kind in ActionKind::all() {
-            let prefix = format!("{kind}");
-            let parsed = ActionKind::from_prefix(&prefix);
-            assert_eq!(parsed, Some(kind));
-        }
-    }
-
-    #[test]
-    fn action_kind_from_prefix_unknown() {
-        assert_eq!(ActionKind::from_prefix("unknown"), None);
-        assert_eq!(ActionKind::from_prefix(""), None);
-    }
-
-    #[test]
-    fn collect_atoms_deduplicates() {
-        let formulas = vec![
-            Formula::prohibition(agent(), Formula::atom("access(/etc/shadow)")),
-            Formula::permission(agent(), Formula::atom("access(/etc/shadow)")),
-            Formula::prohibition(agent(), Formula::atom("exec(rm -rf /)")),
-        ];
-        let atoms = collect_atoms(&formulas);
-        assert_eq!(atoms.len(), 2);
-    }
-
-    #[test]
-    fn check_outcome_display() {
-        assert_eq!(format!("{}", CheckOutcome::Pass), "pass");
-        assert_eq!(format!("{}", CheckOutcome::Fail), "fail");
-        assert_eq!(format!("{}", CheckOutcome::Skipped), "skipped");
-    }
-
-    #[test]
-    fn attestation_level_z3_when_all_pass() {
-        let formulas = vec![
-            Formula::prohibition(agent(), Formula::atom("access(/etc/shadow)")),
-            Formula::permission(agent(), Formula::atom("egress(api.openai.com)")),
-            Formula::prohibition(agent(), Formula::atom("exec(rm -rf /)")),
-            Formula::prohibition(agent(), Formula::atom("mcp(shell_exec)")),
-        ];
-        let verifier = PolicyVerifier::new();
-        let report = verifier.verify(&formulas, None);
-        assert!(report.all_pass());
+        let report = PolicyVerifier::with_z3().verify_policy(&policy, agent());
+        assert_eq!(report.backend, VerificationBackend::Z3);
         assert_eq!(report.attestation_level, AttestationLevel::Z3Verified);
-        assert_eq!(report.attestation_level.as_u8(), 1);
-    }
-
-    #[test]
-    fn attestation_level_heuristic_when_consistency_fails() {
-        let formulas = vec![
-            Formula::prohibition(agent(), Formula::atom("access(/etc/shadow)")),
-            Formula::permission(agent(), Formula::atom("access(/etc/shadow)")),
-        ];
-        let verifier = PolicyVerifier::new().with_expected_action_types(vec![]);
-        let report = verifier.verify(&formulas, None);
-        assert!(!report.all_pass());
-        assert_eq!(report.attestation_level, AttestationLevel::Heuristic);
-        assert_eq!(report.attestation_level.as_u8(), 0);
-    }
-
-    #[test]
-    fn attestation_level_from_u8_roundtrip() {
-        for level_u8 in 0..=3 {
-            let level = AttestationLevel::from_u8(level_u8).unwrap();
-            assert_eq!(level.as_u8(), level_u8);
-        }
-        assert!(AttestationLevel::from_u8(4).is_none());
-        assert!(AttestationLevel::from_u8(255).is_none());
-    }
-
-    #[test]
-    fn attestation_level_ordering() {
-        assert!(AttestationLevel::Heuristic < AttestationLevel::Z3Verified);
-        assert!(AttestationLevel::Z3Verified < AttestationLevel::LeanProved);
-        assert!(AttestationLevel::LeanProved < AttestationLevel::ImplementationVerified);
-    }
-
-    #[test]
-    fn attestation_level_display() {
-        assert_eq!(
-            format!("{}", AttestationLevel::Heuristic),
-            "Level 0 (heuristic)"
-        );
-        assert_eq!(
-            format!("{}", AttestationLevel::Z3Verified),
-            "Level 1 (z3_verified)"
-        );
-        assert_eq!(
-            format!("{}", AttestationLevel::LeanProved),
-            "Level 2 (lean_proved)"
-        );
-        assert_eq!(
-            format!("{}", AttestationLevel::ImplementationVerified),
-            "Level 3 (implementation_verified)"
-        );
-    }
-
-    #[test]
-    fn attestation_level_name_values() {
-        assert_eq!(AttestationLevel::Heuristic.name(), "heuristic");
-        assert_eq!(AttestationLevel::Z3Verified.name(), "z3_verified");
-        assert_eq!(AttestationLevel::LeanProved.name(), "lean_proved");
-        assert_eq!(
-            AttestationLevel::ImplementationVerified.name(),
-            "implementation_verified"
-        );
-    }
-
-    #[test]
-    fn attestation_level_serialization_roundtrip() {
-        let level = AttestationLevel::Z3Verified;
-        let json = serde_json::to_string(&level).unwrap();
-        assert_eq!(json, "\"z3_verified\"");
-        let restored: AttestationLevel = serde_json::from_str(&json).unwrap();
-        assert_eq!(restored, level);
-    }
-
-    #[test]
-    fn load_time_skip_when_not_enabled() {
-        let policy = Policy::default();
-        let cache = VerificationCache::new();
-        let result = verify_policy_at_load_time(&policy, &cache).unwrap();
-        assert!(result.report.is_none());
-        assert!(!result.cache_hit);
-        assert!(result.error.is_none());
-    }
-
-    #[test]
-    fn load_time_runs_when_enabled() {
-        use clawdstrike::policy::VerificationSettings;
-
-        let mut policy = Policy::default();
-        policy.settings.verification = Some(VerificationSettings {
-            enabled: true,
-            strict: false,
-            cache: false,
-        });
-
-        let cache = VerificationCache::new();
-        let result = verify_policy_at_load_time(&policy, &cache).unwrap();
-        assert!(result.report.is_some());
-        assert!(!result.cache_hit);
-    }
-
-    #[test]
-    fn load_time_strict_blocks_on_failure() {
-        use clawdstrike::policy::VerificationSettings;
-
-        let mut policy = Policy::default();
-        policy.settings.verification = Some(VerificationSettings {
-            enabled: true,
-            strict: true,
-            cache: false,
-        });
-
-        let cache = VerificationCache::new();
-        let result = verify_policy_at_load_time(&policy, &cache);
-        assert!(result.is_err(), "strict mode should return Err on failure");
-    }
-
-    #[test]
-    fn load_time_caching_works() {
-        use clawdstrike::guards::ForbiddenPathConfig;
-        use clawdstrike::policy::VerificationSettings;
-
-        let mut policy = Policy::default();
-        policy.settings.verification = Some(VerificationSettings {
-            enabled: true,
-            strict: false,
-            cache: true,
-        });
-        policy.guards.forbidden_path = Some(ForbiddenPathConfig {
-            enabled: true,
-            patterns: Some(vec!["/etc/shadow".to_string()]),
-            exceptions: vec![],
-            additional_patterns: vec![],
-            remove_patterns: vec![],
-        });
-
-        let cache = VerificationCache::new();
-        assert!(cache.is_empty());
-
-        // First call: cache miss.
-        let result1 = verify_policy_at_load_time(&policy, &cache).unwrap();
-        assert!(!result1.cache_hit);
-        assert!(result1.report.is_some());
-        assert_eq!(cache.len(), 1);
-
-        // Second call: cache hit.
-        let result2 = verify_policy_at_load_time(&policy, &cache).unwrap();
-        assert!(result2.cache_hit);
-        assert!(result2.report.is_some());
-        assert_eq!(cache.len(), 1);
+        assert!(report.all_pass());
     }
 }

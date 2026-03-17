@@ -15,12 +15,13 @@ z3 = ["dep:logos-z3"]
 clawdstrike = { path = "../clawdstrike", default-features = false, features = ["full"] }
 hush-core.workspace = true
 hush-proxy.workspace = true
-logos-ffi = { path = "../../../../../platform/crates/logos-ffi" }
-logos-z3 = { path = "../../../../../platform/crates/logos-z3", optional = true }
+logos-ffi.workspace = true
+logos-z3 = { workspace = true, optional = true }
 thiserror.workspace = true
 tracing.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+glob.workspace = true
 
 [dev-dependencies]
 

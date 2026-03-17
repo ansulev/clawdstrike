@@ -172,24 +172,23 @@ Eight core properties, ranked by security impact. Numbering is consistent with t
 
 ### Prerequisite: Logos Z3 Current State (Honest Assessment)
 
-The `logos-z3` crate (`platform/crates/logos-z3/`) has the `z3` crate as a dependency but **does not currently use its FFI**. The implementation status:
+The `logos-z3` crate (`crates/libs/logos-z3/`) now uses the `z3` crate FFI for satisfiability/validity checks and for the policy-verification integration in `clawdstrike-logos`. The implementation status:
 
-- **Layer 0 (propositional)**: Implemented via exhaustive enumeration over boolean assignments, limited to 10 atoms. Does not use Z3 at all.
-- **Layer 1 (explanatory)**: Returns `Unknown` (stub at `lib.rs:204`).
-- **Layer 2 (epistemic)**: Returns `Unknown` (stub at `lib.rs:213`).
-- **Layer 3 (normative)**: Returns `Unknown` (stub at `lib.rs:220`).
-- `checker.rs` and `translation.rs` are empty placeholder files.
+- **Layer 0 (propositional)**: Implemented with hybrid enumeration for small formulas and direct Z3 checks for larger formulas.
+- **Layer 1 (explanatory)**: Returns `Unknown` (still stubbed).
+- **Layer 2 (epistemic)**: Returns `Unknown` (still stubbed).
+- **Layer 3 (normative)**: Partially implemented for policy consistency, completeness, and inheritance checks used by ClawdStrike verification.
+- `checker.rs` and `translation.rs` are populated and exercised by the Z3-backed test suite.
 
-**Implication for Phase 1**: We are not "extending" an existing Z3 integration. We are building the Z3 FFI from scratch. The `z3` crate bindings exist in `Cargo.toml` but no code calls them. This adds approximately 1-2 weeks vs. the assumption that we are merely filling in stubs.
+**Implication for Phase 1**: We are extending a working Z3 integration, not wiring it from scratch. The remaining work is about broadening and hardening the normative encoding rather than first-use FFI bring-up.
 
 ### Tasks
 
-- [ ] **Wire up actual Z3 FFI in `logos-z3`**
-  - Replace the exhaustive enumeration in `check_propositional()` with Z3 solver calls for formulas with >10 atoms
-  - Implement `translation.rs`: Logos `Formula` -> Z3 AST conversion
-  - Implement `checker.rs`: Z3 context management, solver lifecycle, model extraction
-  - Ensure Layer 0 works through Z3 for all atom counts (not just <=10)
-  - Validate against existing Layer 0 tests (enumeration and Z3 must agree)
+- [x] **Wire up actual Z3 FFI in `logos-z3`**
+  - `translation.rs`: Logos `Formula` -> Z3 AST conversion
+  - `checker.rs`: Z3 context management, solver lifecycle, model extraction
+  - Hybrid Layer 0 path: exhaustive enumeration for small formulas, Z3 solver for larger formulas
+  - Validation against the existing Layer 0 tests and the `clawdstrike-logos` Z3 verification path
 
 - [ ] **Implement Logos Layer 3 (normative) Z3 encoding**
   - Extend `check_normative()` (currently returns `Unknown` at `lib.rs:220`)
@@ -287,7 +286,7 @@ The `logos-z3` crate (`platform/crates/logos-z3/`) has the `z3` crate as a depen
 
 | Deliverable | Acceptance Criteria |
 |-------------|-------------------|
-| Z3 FFI integration | `logos-z3` calls Z3 solver for propositional formulas >10 atoms; existing tests pass |
+| Z3 FFI integration | `logos-z3` calls the Z3 solver for propositional checks and ClawdStrike policy verification; existing tests pass |
 | Normative Z3 encoding | `check_normative()` returns `Valid`/`Invalid` for test formulas; deontic axioms validated against known theorems |
 | Guard translators | All 5 guard types produce correct formulas; round-trip tests against known policies |
 | Consistency checker | Detects intentionally contradictory policies; passes on all built-in rulesets (`permissive`, `default`, `strict`, `ai-agent`, `cicd`) |
@@ -922,7 +921,7 @@ See [Landscape Survey, Section 5](./landscape-survey.md) for full analysis. No c
 - [Verus: Verified Rust via SMT](https://github.com/verus-lang/verus) (Microsoft Research / CMU)
 - [lean-lsp-mcp](https://github.com/leanprover/lean-lsp-mcp) -- MCP server for Lean Language Server
 - [SymCrypt ML-KEM verification via Aeneas](https://www.microsoft.com/en-us/research/publication/a-verified-implementation-of-ml-kem/) (Microsoft, 2025)
-- Logos stack: `platform/crates/logos-ffi/`, `platform/crates/logos-z3/`, `platform/crates/logos-goap/`
+- Logos stack: `crates/libs/logos-ffi/`, `crates/libs/logos-z3/`, `logos-goap`
 - ClawdStrike policy engine: `crates/libs/clawdstrike/src/engine.rs`, `crates/libs/clawdstrike/src/policy.rs`
 - ClawdStrike Merkle tree: `crates/libs/hush-core/src/merkle.rs`
 - ClawdStrike canonical JSON: `crates/libs/hush-core/src/canonical.rs`

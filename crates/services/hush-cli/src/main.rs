@@ -467,8 +467,8 @@ enum PolicyCommands {
     Verify {
         /// Policy reference (ruleset name or file path)
         policy_ref: String,
-        /// Resolve extends before verifying
-        #[arg(long)]
+        /// Deprecated: verification always resolves extends transitively.
+        #[arg(long, hide = true)]
         resolve: bool,
         /// Emit machine-readable JSON.
         #[arg(long)]

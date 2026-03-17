@@ -7,6 +7,8 @@ on:
       - 'crates/libs/clawdstrike/src/core/**'
       - 'crates/libs/clawdstrike/src/policy.rs'
       - 'crates/libs/clawdstrike/src/engine.rs'
+      - 'crates/libs/clawdstrike-logos/**'
+      - 'crates/services/hush-cli/**'
       - 'crates/libs/hush-core/src/merkle.rs'
       - 'crates/libs/hush-core/src/canonical.rs'
       - 'crates/tests/formal-diff-tests/**'
@@ -18,6 +20,8 @@ on:
       - 'crates/libs/clawdstrike/src/core/**'
       - 'crates/libs/clawdstrike/src/policy.rs'
       - 'crates/libs/clawdstrike/src/engine.rs'
+      - 'crates/libs/clawdstrike-logos/**'
+      - 'crates/services/hush-cli/**'
       - 'crates/libs/hush-core/src/merkle.rs'
       - 'crates/libs/hush-core/src/canonical.rs'
       - 'crates/tests/formal-diff-tests/**'
@@ -35,17 +39,56 @@ on:
         description: 'Run Aeneas regeneration check'
         type: boolean
         default: true
+      run_nightly_diff_tests:
+        description: 'Run 100M nightly differential tests'
+        type: boolean
+        default: false
 
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
 
 jobs:
+  detect-core-changes:
+    name: Detect core changes
+    runs-on: ubuntu-latest
+    outputs:
+      core_changed: ${{ steps.detect.outputs.core_changed }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Detect changed core files
+        id: detect
+        env:
+          GITHUB_BASE_REF: ${{ github.base_ref }}
+          GITHUB_EVENT_BEFORE: ${{ github.event.before }}
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            git fetch --no-tags origin "${GITHUB_BASE_REF}:refs/remotes/origin/${GITHUB_BASE_REF}"
+            git diff --name-only "origin/${GITHUB_BASE_REF}...HEAD" -- 'crates/libs/clawdstrike/src/core/**' > changed_core_files.txt
+          elif [ "${{ github.event_name }}" = "push" ]; then
+            if [ -z "${GITHUB_EVENT_BEFORE}" ] || [ "${GITHUB_EVENT_BEFORE}" = "0000000000000000000000000000000000000000" ]; then
+              git ls-files 'crates/libs/clawdstrike/src/core/**' > changed_core_files.txt
+            else
+              git diff --name-only "${GITHUB_EVENT_BEFORE}...${GITHUB_SHA}" -- 'crates/libs/clawdstrike/src/core/**' > changed_core_files.txt
+            fi
+          else
+            : > changed_core_files.txt
+          fi
+
+          if [ -s changed_core_files.txt ]; then
+            echo "core_changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "core_changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
   # --------------------------------------------------------------------------
-  # Job 1: Z3 policy consistency and completeness checks
+  # Job 1: Policy verification (prefer Z3, fall back to formula inspection)
   # --------------------------------------------------------------------------
   policy-verification:
-    name: Policy Verification (Z3)
+    name: Policy Verification
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -54,10 +97,10 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Install Z3
+      - name: Install Z3 toolchain
         run: |
           sudo apt-get update
-          sudo apt-get install -y z3
+          sudo apt-get install -y z3 libz3-dev clang libclang-dev
 
       - name: Cache cargo registry
         uses: actions/cache@v5
@@ -72,10 +115,19 @@ jobs:
 
       - name: Verify all built-in rulesets
         run: |
+          if cargo build -p hush-cli --bin hush --features z3; then
+            cargo_args=(cargo run -p hush-cli --bin hush --features z3 --quiet --)
+            echo "Using Z3 verification backend."
+          else
+            cargo_args=(cargo run -p hush-cli --bin hush --quiet --)
+            echo "Falling back to formula inspection backend."
+          fi
+
           for f in rulesets/*.yaml; do
             echo "==> Verifying $f"
-            cargo run -p hush-cli --quiet -- policy verify "$f" || exit 1
+            "${cargo_args[@]}" policy verify "$f" || exit 1
           done
+
           echo "All policy rulesets verified."
 
   # --------------------------------------------------------------------------
@@ -126,7 +178,7 @@ jobs:
     runs-on: ubuntu-latest
     if: >-
       (github.event_name == 'schedule' && github.event.schedule == '0 3 * * *') ||
-      github.event_name == 'workflow_dispatch'
+      (github.event_name == 'workflow_dispatch' && inputs.run_nightly_diff_tests)
     timeout-minutes: 240
     env:
       PROPTEST_CASES: '100000000'
@@ -252,13 +304,13 @@ jobs:
   aeneas-check:
     name: Aeneas Regeneration Check
     runs-on: ubuntu-latest
+    needs: detect-core-changes
     timeout-minutes: 30
-    # Run on weekly schedule (Monday cron at index 1), dispatch, or push/PR when core/ changed.
-    # Skip the nightly diff-test schedule (cron index 0).
     if: >-
       (github.event_name == 'schedule' && github.event.schedule == '0 6 * * 1') ||
-      github.event_name == 'workflow_dispatch' ||
-      contains(github.event.head_commit.modified, 'crates/libs/clawdstrike/src/core/')
+      (github.event_name == 'workflow_dispatch' && inputs.run_aeneas_check) ||
+      ((github.event_name == 'push' || github.event_name == 'pull_request') &&
+       needs.detect-core-changes.outputs.core_changed == 'true')
     steps:
       - uses: actions/checkout@v6
 

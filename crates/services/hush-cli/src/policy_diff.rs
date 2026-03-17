@@ -21,6 +21,7 @@ impl ResolvedPolicySource {
 #[derive(Clone, Debug)]
 pub struct LoadedPolicy {
     pub policy: Policy,
+    pub source_policy: Policy,
     pub source: ResolvedPolicySource,
     pub source_location: PolicyLocation,
     pub original_extends: Option<String>,
@@ -47,10 +48,12 @@ pub fn load_policy_from_arg(
         Ok(Some(rs)) => {
             let source = ResolvedPolicySource::Ruleset { id: rs.id.clone() };
             let source_location = PolicyLocation::Ruleset { id: rs.id.clone() };
-            let original_extends = rs.policy.extends.clone();
+            let source_policy = rs.policy.clone();
+            let original_extends = source_policy.extends.clone();
             if !resolve {
                 return Ok(LoadedPolicy {
-                    policy: rs.policy,
+                    policy: source_policy.clone(),
+                    source_policy,
                     source,
                     source_location,
                     original_extends,
@@ -75,6 +78,7 @@ pub fn load_policy_from_arg(
 
             Ok(LoadedPolicy {
                 policy,
+                source_policy,
                 source,
                 source_location,
                 original_extends,
@@ -87,7 +91,7 @@ pub fn load_policy_from_arg(
             };
             let source_location = PolicyLocation::File(path.to_path_buf());
 
-            let (policy, original_extends) = if resolve {
+            let (policy, source_policy, original_extends) = if resolve {
                 let content = std::fs::read_to_string(path).map_err(|e| PolicyLoadError {
                     message: format!(
                         "{arg:?} is not a known ruleset; failed to read policy file: {}",
@@ -118,7 +122,7 @@ pub fn load_policy_from_arg(
                     source: e,
                 })?;
 
-                (policy, original_extends)
+                (policy, raw_policy, original_extends)
             } else {
                 let policy = Policy::from_yaml_file(arg).map_err(|e| PolicyLoadError {
                     message: format!(
@@ -129,11 +133,12 @@ pub fn load_policy_from_arg(
                 })?;
                 let original_extends = policy.extends.clone();
 
-                (policy, original_extends)
+                (policy.clone(), policy, original_extends)
             };
 
             Ok(LoadedPolicy {
                 policy,
+                source_policy,
                 source,
                 source_location,
                 original_extends,
@@ -334,5 +339,6 @@ name: "test-policy"
             PolicyLocation::File { .. }
         ));
         assert_eq!(loaded.policy.name, "test-policy");
+        assert_eq!(loaded.source_policy.name, "test-policy");
     }
 }

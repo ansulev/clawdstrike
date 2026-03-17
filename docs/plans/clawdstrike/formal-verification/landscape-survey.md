@@ -135,7 +135,7 @@ Key weaknesses:
 
 ### 3.3 Logos Stack (Existing, In-Repository)
 
-**Location**: `platform/crates/logos-ffi`, `platform/crates/logos-z3`, `platform/crates/logos-goap`
+**Location**: `crates/libs/logos-ffi`, `crates/libs/logos-z3`, `logos-goap`
 
 The Logos stack exists in the monorepo, implements a 4-layer modal-temporal logic, and has operators that map directly to policy semantics.
 
@@ -144,7 +144,7 @@ The Logos stack exists in the monorepo, implements a 4-layer modal-temporal logi
 | Component | Status | What It Does |
 |-----------|--------|-------------|
 | `logos-ffi` | Complete | Formula AST for all 4 layers, axiom schemas (S5 modal + linear temporal), proof receipts with Ed25519 signing |
-| `logos-z3` | Layer 0 complete, Layers 1-3 stubbed | Propositional satisfiability via exhaustive enumeration (up to 10 atoms), counterexample generation |
+| `logos-z3` | Layer 0 complete, policy-focused Layer 3 partial, Layers 1-2 stubbed | Hybrid enumeration/Z3 satisfiability plus policy-verification checks and counterexample generation |
 | `logos-goap` | Complete | Verified planning with proof receipts |
 
 #### Layer 3 Normative Operators (Directly Relevant)

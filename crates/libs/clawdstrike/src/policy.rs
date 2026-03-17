@@ -1471,12 +1471,19 @@ impl Policy {
         depth: usize,
         validation: PolicyValidationOptions,
     ) -> Result<Self> {
+        if depth > crate::core::cycle::MAX_POLICY_EXTENDS_DEPTH {
+            return Err(Error::ConfigError(format!(
+                "Policy extends depth exceeded (limit: {})",
+                crate::core::cycle::MAX_POLICY_EXTENDS_DEPTH
+            )));
+        }
+
         let child = Policy::from_yaml_unvalidated(yaml)?;
 
         if let Some(ref extends) = child.extends {
             let resolved = resolver.resolve(extends, &location)?;
 
-            match crate::core::cycle::check_extends_cycle(&resolved.key, visited, depth) {
+            match crate::core::cycle::check_extends_cycle(&resolved.key, visited, depth + 1) {
                 crate::core::cycle::CycleCheckResult::Ok => {}
                 crate::core::cycle::CycleCheckResult::DepthExceeded { limit, .. } => {
                     return Err(Error::ConfigError(format!(
@@ -2177,6 +2184,7 @@ mod tests {
 
     use super::*;
     use std::sync::Mutex;
+    use tempfile::tempdir;
 
     static ENV_MUTEX: Mutex<()> = Mutex::new(());
 
@@ -3688,6 +3696,39 @@ name: Test
         assert!(!policy_version_supports_broker("1.1.0"));
         assert!(!policy_version_supports_broker("1.4.0"));
         assert!(policy_version_supports_broker("1.5.0"));
+    }
+
+    #[test]
+    fn test_extends_depth_terminal_policy_still_fails() {
+        let dir = tempdir().expect("tempdir");
+        let mut previous: Option<std::path::PathBuf> = None;
+
+        for depth in 0..=crate::core::cycle::MAX_POLICY_EXTENDS_DEPTH + 1 {
+            let path = dir.path().join(format!("policy-{depth}.yaml"));
+            let yaml = if let Some(previous) = previous.as_ref() {
+                format!(
+                    "version: \"1.1.0\"\nname: \"policy-{depth}\"\nextends: \"{}\"\n",
+                    previous.file_name().expect("filename").to_string_lossy()
+                )
+            } else {
+                format!("version: \"1.1.0\"\nname: \"policy-{depth}\"\n")
+            };
+            std::fs::write(&path, yaml).expect("write policy");
+            previous = Some(path);
+        }
+
+        let root = dir.path().join(format!(
+            "policy-{}.yaml",
+            crate::core::cycle::MAX_POLICY_EXTENDS_DEPTH + 1
+        ));
+        let root_yaml = std::fs::read_to_string(&root).expect("read root");
+        let err = Policy::from_yaml_with_extends(&root_yaml, Some(root.as_path()))
+            .err()
+            .expect("depth exceeded");
+        assert!(
+            err.to_string().contains("Policy extends depth exceeded"),
+            "unexpected error: {err}"
+        );
     }
 
     #[test]

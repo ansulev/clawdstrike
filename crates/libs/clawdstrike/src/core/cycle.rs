@@ -130,6 +130,6 @@ mod tests {
     fn depth_one_past_limit_fails() {
         let visited = HashSet::new();
         let result = check_extends_cycle("too_deep.yaml", &visited, MAX_POLICY_EXTENDS_DEPTH + 1);
-        matches!(result, CycleCheckResult::DepthExceeded { .. });
+        assert!(matches!(result, CycleCheckResult::DepthExceeded { .. }));
     }
 }

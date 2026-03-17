@@ -415,10 +415,12 @@ This phase requires at least one engineer with working Lean 4 experience. The ae
       (p : String) (h : p in (base.forbiddenPath.getD default).effectivePatterns) :
       p in ((mergeGuardConfigs base child).forbiddenPath.getD default).effectivePatterns
     ```
-  - **P6: Merge idempotence** -- Merging a policy with itself yields the same policy.
+  - **P6: Merge idempotence on normalized policies** -- Once `extends` and additive/removal helper fields have been resolved, self-merge yields the same evaluation result.
     ```lean
-    theorem merge_idempotent (p : Policy) :
-      mergePolicy p p = p
+    theorem merge_policy_idempotent
+      (p : Policy) (action : Action) (ctx : Context)
+      (h_norm : Policy.Normalized p) :
+      evalPolicy (mergePolicy p p) action ctx = evalPolicy p action ctx
     ```
   - Determinism (trivial for total functions; `rfl` proof)
 

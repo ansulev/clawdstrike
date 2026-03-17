@@ -3,6 +3,8 @@
 
 use std::io::Write;
 
+use clawdstrike::policy::PolicyResolver;
+use clawdstrike::Policy;
 use colored::Colorize;
 
 use clawdstrike_logos::compiler::{DefaultPolicyCompiler, PolicyCompiler};
@@ -11,7 +13,9 @@ use clawdstrike_logos::verifier::{
     AttestationLevel, CheckOutcome, PolicyVerifier, VerificationReport,
 };
 
-use crate::policy_diff::{ResolvedPolicySource, ResolvedPolicySource as Rps};
+use crate::policy_diff::{
+    LoadedPolicy, PolicyLoadError, ResolvedPolicySource, ResolvedPolicySource as Rps,
+};
 use crate::remote_extends::RemoteExtendsConfig;
 use crate::ui;
 use crate::{CliJsonError, ExitCode, PolicySource, CLI_JSON_VERSION};
@@ -71,45 +75,25 @@ pub fn cmd_policy_verify(
         match crate::policy_diff::load_policy_from_arg(&policy_ref, resolve, remote_extends) {
             Ok(v) => v,
             Err(e) => {
-                let code = crate::policy_error_exit_code(&e.source);
-                let error_kind = if code == ExitCode::RuntimeError {
-                    "runtime_error"
-                } else {
-                    "config_error"
-                };
-                let message = e.message;
-                let policy = guess_policy_source(&policy_ref);
-
-                if json {
-                    let output = PolicyVerifyJsonOutput {
-                        version: CLI_JSON_VERSION,
-                        command: "policy_verify",
-                        policy,
-                        outcome: "error",
-                        exit_code: code.as_i32(),
-                        attestation_level: AttestationLevel::Heuristic.as_u8(),
-                        attestation_level_name: AttestationLevel::Heuristic.name(),
-                        report: None,
-                        error: Some(CliJsonError {
-                            kind: error_kind,
-                            message: message.clone(),
-                        }),
-                    };
-                    let _ = writeln!(
-                        stdout,
-                        "{}",
-                        serde_json::to_string_pretty(&output).unwrap_or_else(|_| "{}".to_string())
-                    );
-                    return code;
-                }
-
-                let _ = writeln!(stderr, "Error: {}", message);
-                return code;
+                return emit_policy_verify_error(
+                    guess_policy_source(&policy_ref),
+                    e,
+                    json,
+                    stdout,
+                    stderr,
+                );
             }
         };
 
     let policy_source = policy_source_for_loaded(&loaded.source);
     let policy = &loaded.policy;
+
+    let base_policy = match load_parent_policy_for_inheritance(&loaded, resolve, remote_extends) {
+        Ok(base) => base,
+        Err(e) => {
+            return emit_policy_verify_error(policy_source.clone(), e, json, stdout, stderr);
+        }
+    };
 
     // Compile to formulas.
     let agent = AgentId::new("clawdstrike-agent");
@@ -117,17 +101,10 @@ pub fn cmd_policy_verify(
     let formulas = compiler.compile_policy(policy);
 
     // If the policy extends a base, compile the base too for inheritance check.
-    let base_formulas = if let Some(ref extends_name) = policy.extends {
-        match crate::policy_diff::load_policy_from_arg(extends_name, resolve, remote_extends) {
-            Ok(base_loaded) => {
-                let base_compiler = DefaultPolicyCompiler::new(agent);
-                Some(base_compiler.compile_policy(&base_loaded.policy))
-            }
-            Err(_) => None,
-        }
-    } else {
-        None
-    };
+    let base_formulas = base_policy.as_ref().map(|parent| {
+        let base_compiler = DefaultPolicyCompiler::new(agent);
+        base_compiler.compile_policy(parent)
+    });
 
     // Run verification.
     let verifier = PolicyVerifier::new();
@@ -340,5 +317,189 @@ fn guess_policy_source(policy_ref: &str) -> PolicySource {
         _ => PolicySource::PolicyFile {
             path: policy_ref.to_string(),
         },
+    }
+}
+
+fn emit_policy_verify_error(
+    policy: PolicySource,
+    error: PolicyLoadError,
+    json: bool,
+    stdout: &mut dyn Write,
+    stderr: &mut dyn Write,
+) -> ExitCode {
+    let code = crate::policy_error_exit_code(&error.source);
+    let error_kind = if code == ExitCode::RuntimeError {
+        "runtime_error"
+    } else {
+        "config_error"
+    };
+    let message = error.message;
+
+    if json {
+        let output = PolicyVerifyJsonOutput {
+            version: CLI_JSON_VERSION,
+            command: "policy_verify",
+            policy,
+            outcome: "error",
+            exit_code: code.as_i32(),
+            attestation_level: AttestationLevel::Heuristic.as_u8(),
+            attestation_level_name: AttestationLevel::Heuristic.name(),
+            report: None,
+            error: Some(CliJsonError {
+                kind: error_kind,
+                message: message.clone(),
+            }),
+        };
+        let _ = writeln!(
+            stdout,
+            "{}",
+            serde_json::to_string_pretty(&output).unwrap_or_else(|_| "{}".to_string())
+        );
+        return code;
+    }
+
+    let _ = writeln!(stderr, "Error: {}", message);
+    code
+}
+
+fn load_parent_policy_for_inheritance(
+    loaded: &LoadedPolicy,
+    resolve: bool,
+    remote_extends: &RemoteExtendsConfig,
+) -> Result<Option<Policy>, PolicyLoadError> {
+    let Some(extends_name) = loaded.original_extends.as_deref() else {
+        return Ok(None);
+    };
+
+    let resolver = crate::remote_extends::RemotePolicyResolver::new(remote_extends.clone())
+        .map_err(|e| PolicyLoadError {
+            message: format!("Failed to initialize remote extends resolver: {}", e),
+            source: e,
+        })?;
+
+    let resolved = resolver
+        .resolve(extends_name, &loaded.source_location)
+        .map_err(|e| PolicyLoadError {
+            message: format!("Failed to resolve parent policy {:?}: {}", extends_name, e),
+            source: e,
+        })?;
+
+    let parent = if resolve {
+        Policy::from_yaml_with_extends_location_resolver(
+            &resolved.yaml,
+            resolved.location.clone(),
+            &resolver,
+        )
+        .map_err(|e| PolicyLoadError {
+            message: format!("Failed to load parent policy {:?}: {}", extends_name, e),
+            source: e,
+        })?
+    } else {
+        Policy::from_yaml(&resolved.yaml).map_err(|e| PolicyLoadError {
+            message: format!("Failed to load parent policy {:?}: {}", extends_name, e),
+            source: e,
+        })?
+    };
+
+    Ok(Some(parent))
+}
+
+#[cfg(test)]
+mod tests {
+    use std::fs;
+
+    use tempfile::tempdir;
+
+    use super::*;
+
+    #[test]
+    fn resolve_keeps_parent_reference_for_inheritance_verification() {
+        let dir = tempdir().expect("tempdir");
+        let parent = dir.path().join("parent.yaml");
+        let child = dir.path().join("child.yaml");
+
+        fs::write(
+            &parent,
+            r#"
+version: "1.1.0"
+name: "parent"
+guards:
+  forbidden_path:
+    enabled: true
+    patterns:
+      - "/etc/shadow"
+"#,
+        )
+        .expect("write parent");
+
+        fs::write(
+            &child,
+            r#"
+version: "1.1.0"
+name: "child"
+extends: "parent.yaml"
+guards:
+  forbidden_path:
+    enabled: true
+    remove_patterns:
+      - "/etc/shadow"
+"#,
+        )
+        .expect("write child");
+
+        let mut stdout = Vec::new();
+        let mut stderr = Vec::new();
+        let code = cmd_policy_verify(
+            PolicyVerifyCommand {
+                policy_ref: child.to_string_lossy().into_owned(),
+                resolve: true,
+                json: false,
+                attestation_level: false,
+                verbose: false,
+            },
+            &RemoteExtendsConfig::disabled(),
+            &mut stdout,
+            &mut stderr,
+        );
+
+        assert_eq!(code, ExitCode::Fail);
+        let output = String::from_utf8(stdout).expect("utf8 stdout");
+        assert!(output.contains("Inheritance"));
+        assert!(output.contains("FAIL"));
+    }
+
+    #[test]
+    fn missing_parent_policy_is_reported_as_error() {
+        let dir = tempdir().expect("tempdir");
+        let child = dir.path().join("child.yaml");
+
+        fs::write(
+            &child,
+            r#"
+version: "1.1.0"
+name: "child"
+extends: "missing-parent.yaml"
+"#,
+        )
+        .expect("write child");
+
+        let mut stdout = Vec::new();
+        let mut stderr = Vec::new();
+        let code = cmd_policy_verify(
+            PolicyVerifyCommand {
+                policy_ref: child.to_string_lossy().into_owned(),
+                resolve: false,
+                json: false,
+                attestation_level: false,
+                verbose: false,
+            },
+            &RemoteExtendsConfig::disabled(),
+            &mut stdout,
+            &mut stderr,
+        );
+
+        assert_eq!(code, ExitCode::ConfigError);
+        let error = String::from_utf8(stderr).expect("utf8 stderr");
+        assert!(error.contains("missing-parent.yaml"));
     }
 }

@@ -838,21 +838,27 @@ theorem extends_no_weaken :
 
 ### 4.6 P6: Merge Idempotence
 
-**Statement:** Merging a policy with itself produces a policy that evaluates identically to the original.
+**Statement:** Merging a **normalized / fully resolved** policy with itself produces a policy that evaluates identically to the original.
+
+Here, "normalized" means:
+
+- `extends` has already been resolved away.
+- Deep-merge helper fields such as `additional_*` / `remove_*` have already been materialized into the effective allow/block/pattern lists.
 
 ```lean
-theorem merge_idempotent :
+theorem merge_policy_idempotent :
     forall (policy : Policy) (action : Action) (ctx : Context),
+      Policy.Normalized policy ->
       evalPolicy (mergePolicy policy policy) action ctx =
       evalPolicy policy action ctx := by
   sorry
 ```
 
 **Proof strategy:** For each guard config field:
-- **Deep-merge (forbidden_path):** When child = base, `mergeForbiddenPath` starts with base's effective_patterns (since child.patterns matches base.patterns), adds no additional patterns (child.additionalPatterns = base.additionalPatterns, already present), removes the same patterns. The result equals the base's effective patterns.
+- **Deep-merge guards:** First prove self-merge is structural identity once additive/removal helper fields are empty or already materialized. This is the interesting part for `forbidden_path`, `egress_allowlist`, `secret_leak`, and `mcp_tool`.
 - **Child-overrides:** `childOverrides (some c) (some c) = some c`. Trivially idempotent.
 
-**Caveat:** Idempotence of `mergeForbiddenPath` depends on the deduplication behavior. The Rust implementation uses `Vec::contains` which provides deduplication. The spec models this faithfully.
+**Why the normalization precondition matters:** The raw `Policy` type can still encode pre-resolution additive helper fields. In the current runtime semantics, unrestricted self-merge is false. A concrete counterexample is an `egress_allowlist` config with `allow = []`, `default_action = block`, and `additional_allow = ["good.com"]`: the original standalone policy blocks `good.com`, but `mergePolicy policy policy` materializes `additional_allow` into `allow`, changing evaluation. The normalized theorem matches the intended "fully resolved policy" domain without changing runtime behavior.
 
 ### 4.7 P7: Severity Total Order
 

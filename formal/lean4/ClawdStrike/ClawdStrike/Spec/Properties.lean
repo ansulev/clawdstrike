@@ -3,7 +3,9 @@
 
   Core properties that the policy engine must satisfy.
   These theorem statements define WHAT we want to prove.
-  32 of 35 theorems are fully proved; 3 remain `sorry` (see below).
+  All theorem statements in this file are fully proved.
+  Remaining `sorry` stubs in the broader formalization live in Merkle and
+  implementation-bridge modules, not here.
 
   Property numbering follows the formal verification specification document
   (docs/plans/clawdstrike/formal-verification/policy-specification.md).
@@ -213,7 +215,42 @@ theorem forbidden_path_policy_soundness (policy : Policy) (path : Path)
     ∃ (result : GuardResult),
       evalPolicy policy (.fileAccess path) ctx = .ok result ∧
       result.allowed = false := by
-  sorry
+  have h_guard_deny :
+      (evalForbiddenPath cfg (.fileAccess path) ctx).allowed = false :=
+    forbidden_path_guard_soundness cfg path ctx h_enabled h_match h_no_exception
+  have h_mem_guard :
+      evalForbiddenPath cfg (.fileAccess path) ctx ∈
+        evalGuards policy.guards (.fileAccess path) ctx := by
+    unfold evalGuards
+    apply List.mem_filterMap.mpr
+    refine ⟨some (evalForbiddenPath cfg (.fileAccess path) ctx), ?_⟩
+    refine ⟨?_, rfl⟩
+    simp [h_guard]
+  have h_find_isSome :
+      ((evalGuards policy.guards (.fileAccess path) ctx).find? (fun r => !r.allowed)).isSome := by
+    apply List.find?_isSome.2
+    refine ⟨evalForbiddenPath cfg (.fileAccess path) ctx, h_mem_guard, ?_⟩
+    simp [h_guard_deny]
+  let firstDeny :=
+    ((evalGuards policy.guards (.fileAccess path) ctx).find? (fun r => !r.allowed)).get
+      h_find_isSome
+  have h_find :
+      (evalGuards policy.guards (.fileAccess path) ctx).find? (fun r => !r.allowed) =
+        some firstDeny := by
+    rw [Option.eq_some_iff_get_eq]
+    exact ⟨h_find_isSome, rfl⟩
+  have h_first_deny : firstDeny.allowed = false := by
+    have h := List.find?_some h_find
+    simpa [firstDeny] using h
+  by_cases h_fail_fast : policy.settings.effectiveFailFast
+  · refine ⟨aggregateOverall [firstDeny], ?_, ?_⟩
+    · unfold evalPolicy
+      simp [h_no_error, h_fail_fast, h_find]
+    · exact deny_monotonicity [firstDeny] firstDeny (by simp) h_first_deny
+  · refine ⟨aggregateOverall (evalGuards policy.guards (.fileAccess path) ctx), ?_, ?_⟩
+    · unfold evalPolicy
+      simp [h_no_error, h_fail_fast]
+    · exact deny_monotonicity _ _ h_mem_guard h_guard_deny
 
 -- ============================================================================
 -- P5: Inheritance Restrictiveness (Merge Preserves Denials)
@@ -299,7 +336,229 @@ theorem forbidden_path_merge_includes_additions (base child : ForbiddenPathConfi
     (h_not_removed : ¬ (p ∈ child.removePatterns))
     (h_child_no_explicit : child.patterns = none) :
     p ∈ (ForbiddenPathConfig.mergeWith base child).effectivePatterns := by
-  sorry
+  rw [mergeWith_clean base child h_child_no_explicit]
+  rw [effectivePatterns_clean]
+  unfold mergedFinalPatterns
+  by_cases h_in_base : p ∈ base.effectivePatterns
+  · apply List.mem_filter.mpr
+    refine ⟨List.mem_append.mpr (Or.inl h_in_base), ?_⟩
+    rw [Bool.not_eq_true', not_mem_contains_false child.removePatterns p h_not_removed]
+  · apply List.mem_filter.mpr
+    refine ⟨List.mem_append.mpr (Or.inr ?_), ?_⟩
+    · apply List.mem_filter.mpr
+      refine ⟨h_in_additional, ?_⟩
+      rw [Bool.not_eq_true', not_mem_contains_false base.effectivePatterns p h_in_base]
+    · rw [Bool.not_eq_true', not_mem_contains_false child.removePatterns p h_not_removed]
+
+-- ============================================================================
+-- Normalization Invariants for Merge Idempotence
+-- ============================================================================
+
+/-- A forbidden-path config is merge-normalized when additive/removal helpers have
+    already been materialized into an explicit `patterns` list. -/
+def ForbiddenPathConfig.Normalized (cfg : ForbiddenPathConfig) : Prop :=
+  ∃ ps, cfg.patterns = some ps ∧ cfg.additionalPatterns = [] ∧ cfg.removePatterns = []
+
+/-- Egress config is merge-normalized when its additive/removal helpers are empty. -/
+def EgressAllowlistConfig.Normalized (cfg : EgressAllowlistConfig) : Prop :=
+  cfg.additionalAllow = [] ∧
+  cfg.removeAllow = [] ∧
+  cfg.additionalBlock = [] ∧
+  cfg.removeBlock = []
+
+/-- SecretLeak config is merge-normalized when its additive/removal helpers are empty. -/
+def SecretLeakConfig.Normalized (cfg : SecretLeakConfig) : Prop :=
+  cfg.additionalPatterns = [] ∧ cfg.removePatterns = []
+
+/-- MCP tool config is merge-normalized when its additive/removal helpers are empty. -/
+def McpToolConfig.Normalized (cfg : McpToolConfig) : Prop :=
+  cfg.additionalAllow = [] ∧
+  cfg.removeAllow = [] ∧
+  cfg.additionalBlock = [] ∧
+  cfg.removeBlock = []
+
+/-- Guard configs are merge-normalized when each deep-merge guard is normalized. -/
+def GuardConfigs.Normalized (cfg : GuardConfigs) : Prop :=
+  (∀ fp, cfg.forbiddenPath = some fp → ForbiddenPathConfig.Normalized fp) ∧
+  (∀ eg, cfg.egressAllowlist = some eg → EgressAllowlistConfig.Normalized eg) ∧
+  (∀ sl, cfg.secretLeak = some sl → SecretLeakConfig.Normalized sl) ∧
+  (∀ mcp, cfg.mcpTool = some mcp → McpToolConfig.Normalized mcp)
+
+/-- A policy is merge-normalized when it has no unresolved `extends` chain and its
+    deep-merge guard configs are normalized. -/
+def Policy.Normalized (policy : Policy) : Prop :=
+  policy.extends_ = none ∧ GuardConfigs.Normalized policy.guards
+
+private theorem filter_not_mem_self (xs : List String) :
+    xs.filter (fun x => !decide (x ∈ xs)) = [] := by
+  apply List.eq_nil_iff_forall_not_mem.mpr
+  intro y hy
+  rcases List.mem_filter.mp hy with ⟨hy_xs, h_keep⟩
+  simp [hy_xs] at h_keep
+
+private theorem forbidden_path_mergeWith_self_of_normalized (cfg : ForbiddenPathConfig)
+    (h_norm : ForbiddenPathConfig.Normalized cfg) :
+    ForbiddenPathConfig.mergeWith cfg cfg = cfg := by
+  rcases h_norm with ⟨ps, h_patterns, h_additional, h_remove⟩
+  cases cfg with
+  | mk enabled patterns exceptions additionalPatterns removePatterns =>
+    have h_patterns' : patterns = some ps := by simpa using h_patterns
+    have h_additional' : additionalPatterns = [] := by simpa using h_additional
+    have h_remove' : removePatterns = [] := by simpa using h_remove
+    unfold ForbiddenPathConfig.mergeWith
+    simp [h_patterns', h_additional', h_remove', filter_not_mem_self]
+
+private theorem path_allowlist_mergeWith_self (cfg : PathAllowlistConfig) :
+    PathAllowlistConfig.mergeWith cfg cfg = cfg := by
+  unfold PathAllowlistConfig.mergeWith
+  simp
+
+private theorem egress_allowlist_mergeWith_self_of_normalized (cfg : EgressAllowlistConfig)
+    (h_norm : EgressAllowlistConfig.Normalized cfg) :
+    EgressAllowlistConfig.mergeWith cfg cfg = cfg := by
+  rcases h_norm with ⟨h_additional_allow, h_remove_allow, h_additional_block, h_remove_block⟩
+  cases cfg with
+  | mk enabled allow block defaultAction additionalAllow removeAllow additionalBlock removeBlock =>
+    simp at h_additional_allow h_remove_allow h_additional_block h_remove_block
+    unfold EgressAllowlistConfig.mergeWith
+    cases defaultAction <;>
+      simp [h_additional_allow, h_remove_allow, h_additional_block, h_remove_block]
+
+private theorem secret_leak_mergeWith_self_of_normalized (cfg : SecretLeakConfig)
+    (h_norm : SecretLeakConfig.Normalized cfg) :
+    SecretLeakConfig.mergeWith cfg cfg = cfg := by
+  rcases h_norm with ⟨h_additional, h_remove⟩
+  cases cfg
+  rename_i enabled patterns additionalPatterns removePatterns skipPaths
+  simp at h_additional h_remove
+  unfold SecretLeakConfig.mergeWith
+  simp [h_additional, h_remove]
+
+private theorem mcp_tool_mergeWith_self_of_normalized (cfg : McpToolConfig)
+    (h_norm : McpToolConfig.Normalized cfg) :
+    McpToolConfig.mergeWith cfg cfg = cfg := by
+  rcases h_norm with ⟨h_additional_allow, h_remove_allow, h_additional_block, h_remove_block⟩
+  cases cfg with
+  | mk enabled allow block requireConfirmation defaultAction maxArgsSize
+      additionalAllow removeAllow additionalBlock removeBlock =>
+    simp at h_additional_allow h_remove_allow h_additional_block h_remove_block
+    unfold McpToolConfig.mergeWith
+    cases defaultAction <;> cases maxArgsSize <;>
+      simp [h_additional_allow, h_remove_allow, h_additional_block, h_remove_block]
+
+private theorem forbidden_path_field_mergeWith_self_of_normalized (cfg : GuardConfigs)
+    (h_norm : GuardConfigs.Normalized cfg) :
+    (match cfg.forbiddenPath with
+     | some fp => some (ForbiddenPathConfig.mergeWith fp fp)
+     | none => none) = cfg.forbiddenPath := by
+  cases h_fp : cfg.forbiddenPath with
+  | none =>
+    simp
+  | some fp =>
+    have h_fp_norm : ForbiddenPathConfig.Normalized fp := h_norm.1 fp h_fp
+    simp [forbidden_path_mergeWith_self_of_normalized fp h_fp_norm]
+
+private theorem egress_allowlist_field_mergeWith_self_of_normalized (cfg : GuardConfigs)
+    (h_norm : GuardConfigs.Normalized cfg) :
+    (match cfg.egressAllowlist with
+     | some eg => some (EgressAllowlistConfig.mergeWith eg eg)
+     | none => none) = cfg.egressAllowlist := by
+  cases h_eg : cfg.egressAllowlist with
+  | none =>
+    simp
+  | some eg =>
+    have h_eg_norm : EgressAllowlistConfig.Normalized eg := h_norm.2.1 eg h_eg
+    simp [egress_allowlist_mergeWith_self_of_normalized eg h_eg_norm]
+
+private theorem secret_leak_field_mergeWith_self_of_normalized (cfg : GuardConfigs)
+    (h_norm : GuardConfigs.Normalized cfg) :
+    (match cfg.secretLeak with
+     | some sl => some (SecretLeakConfig.mergeWith sl sl)
+     | none => none) = cfg.secretLeak := by
+  cases h_sl : cfg.secretLeak with
+  | none =>
+    simp
+  | some sl =>
+    have h_sl_norm : SecretLeakConfig.Normalized sl := h_norm.2.2.1 sl h_sl
+    simp [secret_leak_mergeWith_self_of_normalized sl h_sl_norm]
+
+private theorem mcp_tool_field_mergeWith_self_of_normalized (cfg : GuardConfigs)
+    (h_norm : GuardConfigs.Normalized cfg) :
+    (match cfg.mcpTool with
+     | some mcp => some (McpToolConfig.mergeWith mcp mcp)
+     | none => none) = cfg.mcpTool := by
+  cases h_mcp : cfg.mcpTool with
+  | none =>
+    simp
+  | some mcp =>
+    have h_mcp_norm : McpToolConfig.Normalized mcp := h_norm.2.2.2 mcp h_mcp
+    simp [mcp_tool_mergeWith_self_of_normalized mcp h_mcp_norm]
+
+private theorem guardConfigs_eq_of_fields (a b : GuardConfigs)
+    (h_forbiddenPath : a.forbiddenPath = b.forbiddenPath)
+    (h_pathAllowlist : a.pathAllowlist = b.pathAllowlist)
+    (h_egressAllowlist : a.egressAllowlist = b.egressAllowlist)
+    (h_secretLeak : a.secretLeak = b.secretLeak)
+    (h_patchIntegrity : a.patchIntegrity = b.patchIntegrity)
+    (h_shellCommand : a.shellCommand = b.shellCommand)
+    (h_mcpTool : a.mcpTool = b.mcpTool)
+    (h_promptInjection : a.promptInjection = b.promptInjection)
+    (h_jailbreak : a.jailbreak = b.jailbreak)
+    (h_computerUse : a.computerUse = b.computerUse)
+    (h_remoteDesktop : a.remoteDesktopSideChannel = b.remoteDesktopSideChannel)
+    (h_inputInjection : a.inputInjectionCapability = b.inputInjectionCapability)
+    (h_spiderSense : a.spiderSense = b.spiderSense) :
+    a = b := by
+  cases a <;> cases b <;> simp_all
+
+private theorem guardConfigs_mergeWith_self_of_normalized (cfg : GuardConfigs)
+    (h_norm : GuardConfigs.Normalized cfg) :
+    GuardConfigs.mergeWith cfg cfg = cfg := by
+  apply guardConfigs_eq_of_fields
+  · cases h_fp : cfg.forbiddenPath with
+    | none =>
+      simp [GuardConfigs.mergeWith, h_fp]
+    | some fp =>
+      have h_fp_norm : ForbiddenPathConfig.Normalized fp := h_norm.1 fp h_fp
+      simp [GuardConfigs.mergeWith, h_fp, forbidden_path_mergeWith_self_of_normalized fp h_fp_norm]
+  · cases h_path : cfg.pathAllowlist <;> simp [GuardConfigs.mergeWith, PathAllowlistConfig.mergeWith, h_path]
+  · cases h_eg : cfg.egressAllowlist with
+    | none =>
+      simp [GuardConfigs.mergeWith, h_eg]
+    | some eg =>
+      have h_eg_norm : EgressAllowlistConfig.Normalized eg := h_norm.2.1 eg h_eg
+      simp [GuardConfigs.mergeWith, h_eg, egress_allowlist_mergeWith_self_of_normalized eg h_eg_norm]
+  · cases h_sl : cfg.secretLeak with
+    | none =>
+      simp [GuardConfigs.mergeWith, h_sl]
+    | some sl =>
+      have h_sl_norm : SecretLeakConfig.Normalized sl := h_norm.2.2.1 sl h_sl
+      simp [GuardConfigs.mergeWith, h_sl, secret_leak_mergeWith_self_of_normalized sl h_sl_norm]
+  · cases h_patch : cfg.patchIntegrity <;> simp [GuardConfigs.mergeWith, childOverrides, h_patch]
+  · cases h_shell : cfg.shellCommand <;> simp [GuardConfigs.mergeWith, childOverrides, h_shell]
+  · cases h_mcp : cfg.mcpTool with
+    | none =>
+      simp [GuardConfigs.mergeWith, h_mcp]
+    | some mcp =>
+      have h_mcp_norm : McpToolConfig.Normalized mcp := h_norm.2.2.2 mcp h_mcp
+      simp [GuardConfigs.mergeWith, h_mcp, mcp_tool_mergeWith_self_of_normalized mcp h_mcp_norm]
+  · cases h_prompt : cfg.promptInjection <;> simp [GuardConfigs.mergeWith, childOverrides, h_prompt]
+  · cases h_jb : cfg.jailbreak <;> simp [GuardConfigs.mergeWith, childOverrides, h_jb]
+  · cases h_cu : cfg.computerUse <;> simp [GuardConfigs.mergeWith, childOverrides, h_cu]
+  · cases h_rd : cfg.remoteDesktopSideChannel <;> simp [GuardConfigs.mergeWith, childOverrides, h_rd]
+  · cases h_ii : cfg.inputInjectionCapability <;> simp [GuardConfigs.mergeWith, childOverrides, h_ii]
+  · cases h_ss : cfg.spiderSense <;> simp [GuardConfigs.mergeWith, childOverrides, h_ss]
+
+private theorem policy_mergeWith_self_of_normalized (policy : Policy)
+    (h_norm : Policy.Normalized policy) :
+    Policy.mergeWith policy policy = policy := by
+  cases policy with
+  | mk version name description extends_ mergeStrategy guards settings =>
+    have h_extends : extends_ = none := h_norm.1
+    have h_guards : GuardConfigs.mergeWith guards guards = guards :=
+      guardConfigs_mergeWith_self_of_normalized guards h_norm.2
+    cases h_extends
+    simp [Policy.mergeWith, h_guards]
 
 -- ============================================================================
 -- P6: Merge Idempotence
@@ -316,11 +575,14 @@ theorem childOverrides_idempotent {α : Type} (x : Option α) :
   cases x <;> rfl
 
 /-- P6a: Merge Idempotence (for full policy evaluation).
-    Merging a policy with itself yields the same evaluation result. -/
-theorem merge_policy_idempotent (policy : Policy) (action : Action) (ctx : Context) :
+    Merging a merge-normalized policy with itself yields the same evaluation result.
+    The raw `Policy` type can still encode pre-resolution additive helper fields,
+    so idempotence is stated on the normalized/resolved subset. -/
+theorem merge_policy_idempotent (policy : Policy) (action : Action) (ctx : Context)
+    (h_norm : Policy.Normalized policy) :
     evalPolicy (Policy.mergeWith policy policy) action ctx =
     evalPolicy policy action ctx := by
-  sorry
+  rw [policy_mergeWith_self_of_normalized policy h_norm]
 
 -- ============================================================================
 -- P7: Aggregate Determinism and Idempotence

@@ -29,9 +29,6 @@ use crate::posture::{validate_posture_config, PostureConfig};
 pub const POLICY_SCHEMA_VERSION: &str = "1.5.0";
 pub const POLICY_SUPPORTED_SCHEMA_VERSIONS: &[&str] =
     &["1.1.0", "1.2.0", "1.3.0", "1.4.0", "1.5.0"];
-/// Re-export from core for backward compatibility within this module.
-const MAX_POLICY_EXTENDS_DEPTH: usize = crate::core::cycle::MAX_POLICY_EXTENDS_DEPTH;
-
 fn default_true() -> bool {
     true
 }
@@ -1459,6 +1456,20 @@ impl Policy {
             .map(|p| PolicyLocation::File(p.to_path_buf()))
             .unwrap_or(PolicyLocation::None);
 
+        Self::from_yaml_with_extends_location_resolver(yaml, location, resolver)
+    }
+
+    /// Load from YAML string with extends resolution using a custom resolver and
+    /// an explicit source location.
+    ///
+    /// This is useful when the caller already knows the policy's location
+    /// context (for example, a built-in ruleset, a resolved remote source, or a
+    /// file path) and needs nested `extends` to resolve relative to that source.
+    pub fn from_yaml_with_extends_location_resolver(
+        yaml: &str,
+        location: PolicyLocation,
+        resolver: &impl PolicyResolver,
+    ) -> Result<Self> {
         Self::from_yaml_with_extends_internal_resolver(
             yaml,
             location,
@@ -1477,14 +1488,6 @@ impl Policy {
         depth: usize,
         validation: PolicyValidationOptions,
     ) -> Result<Self> {
-        // Depth check delegated to core::cycle (pure logic).
-        if depth > MAX_POLICY_EXTENDS_DEPTH {
-            return Err(Error::ConfigError(format!(
-                "Policy extends depth exceeded (limit: {})",
-                MAX_POLICY_EXTENDS_DEPTH
-            )));
-        }
-
         let child = Policy::from_yaml_unvalidated(yaml)?;
 
         if let Some(ref extends) = child.extends {

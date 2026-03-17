@@ -217,5 +217,23 @@ pub mod crypto {
     pub use hush_core::*;
 }
 
-/// Pure, safe, no-async, no-serde decision-making core for formal verification.
-pub mod core;
+#[path = "core/mod.rs"]
+mod formal_core;
+
+/// Backward-compatible `core` namespace.
+///
+/// Historically this exposed `hush_core::*`. Keep that API intact while also
+/// surfacing the pure decision core used by the formal-verification pipeline.
+pub mod core {
+    pub use crate::formal_core::*;
+    pub use hush_core::*;
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn core_namespace_preserves_hush_core_and_decision_core_exports() {
+        let _ = crate::core::sha256(b"clawdstrike");
+        let _ = crate::core::CoreSeverity::Info;
+    }
+}

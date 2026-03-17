@@ -59,7 +59,8 @@ Formal verification runs automatically on every push and PR that touches the pol
 - Lean 4 theorems: 155 (across Core, Spec, and Proofs modules)
 - Properties with complete proofs (no sorry): P1 (deny monotonicity), P3 (severity order), P5 (cycle termination), P6 (depth bound)
 - Properties with partial proofs (some sorry): P4 (merge monotonicity), P7 (Merkle inclusion), P8 (canonical JSON)
-- Spec-level sorry remaining: ~51 across Spec/Properties, MerkleProperties, and Impl bridge proofs
+- `Spec/Properties.lean` is fully proved, including forbidden-path policy soundness, forbidden-path merge additions, and normalized-policy merge idempotence
+- Remaining editable `sorry` goals live in `Spec/MerkleProperties.lean`, `Proofs/MergeMonotonicity.lean`, and `Proofs/Impl/*`
 - Differential test coverage: aggregate, merge, and cycle logic (3 test suites)
 
 **Local verification** (via mise):

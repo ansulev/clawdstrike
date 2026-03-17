@@ -410,17 +410,6 @@ impl PolicyVerifier {
             .0
     }
 
-    pub fn check_inheritance(
-        &self,
-        _child_formulas: &[Formula],
-        _base_formulas: &[Formula],
-    ) -> InheritanceResult {
-        InheritanceResult {
-            outcome: CheckOutcome::Skipped,
-            weakened: Vec::new(),
-        }
-    }
-
     fn check_consistency_internal(&self, formulas: &[Formula]) -> (ConsistencyResult, bool) {
         let mut permitted: HashSet<String> = HashSet::new();
         let mut prohibited: HashSet<String> = HashSet::new();
@@ -3348,6 +3337,79 @@ guards:
 
         let err = result.expect_err("weakened inheritance should fail strict verification");
         assert!(err.contains("inheritance"));
+    }
+
+    #[test]
+    fn strict_extends_load_verifies_invalid_ancestor_transitively() {
+        install_clawdstrike_policy_load_verifier();
+
+        let dir = std::env::temp_dir().join(format!(
+            "clawdstrike_logos_verifier_{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("time")
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&dir).expect("create temp dir");
+        let grandparent = dir.join("grandparent.yaml");
+        let parent = dir.join("parent.yaml");
+        let child = dir.join("child.yaml");
+
+        std::fs::write(
+            &grandparent,
+            r#"
+version: "1.5.0"
+name: "grandparent"
+settings:
+  verification:
+    enabled: true
+    strict: true
+guards:
+  forbidden_path:
+    enabled: true
+    patterns:
+      - "/etc/shadow"
+"#,
+        )
+        .expect("write grandparent");
+
+        std::fs::write(
+            &parent,
+            r#"
+version: "1.5.0"
+name: "parent"
+extends: "grandparent.yaml"
+settings:
+  verification:
+    enabled: true
+    strict: true
+guards:
+  forbidden_path:
+    enabled: true
+    remove_patterns:
+      - "/etc/shadow"
+"#,
+        )
+        .expect("write parent");
+
+        std::fs::write(
+            &child,
+            r#"
+version: "1.5.0"
+name: "child"
+extends: "parent.yaml"
+settings:
+  verification:
+    enabled: true
+    strict: true
+"#,
+        )
+        .expect("write child");
+
+        let child_yaml = std::fs::read_to_string(&child).expect("read child");
+        let err = Policy::from_yaml_with_extends(&child_yaml, Some(child.as_path()))
+            .expect_err("invalid strict parent should fail transitively");
+        assert!(err.to_string().contains("inheritance"));
     }
 
     #[test]

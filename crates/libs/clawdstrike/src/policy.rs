@@ -867,9 +867,20 @@ impl Policy {
 
     /// Parse from YAML string
     pub fn from_yaml(yaml: &str) -> Result<Self> {
+        let policy = Self::from_yaml_without_load_verification(yaml)?;
+        maybe_verify_loaded_policy(&policy, Some(&policy), None)?;
+        Ok(policy)
+    }
+
+    /// Parse from YAML string and validate it without running load-time
+    /// verification hooks.
+    ///
+    /// This is intended for callers that need source metadata before resolving
+    /// `extends`, or that will run load-time verification with richer parent
+    /// context later in the load pipeline.
+    pub fn from_yaml_without_load_verification(yaml: &str) -> Result<Self> {
         let policy = Self::from_yaml_unvalidated(yaml)?;
         policy.validate()?;
-        maybe_verify_loaded_policy(&policy, Some(&policy), None)?;
         Ok(policy)
     }
 
@@ -1576,15 +1587,11 @@ impl Policy {
 
             let merged = base.merge(&child);
             merged.validate_with_options(validation)?;
-            if depth == 0 {
-                maybe_verify_loaded_policy(&merged, Some(&child), Some(&base))?;
-            }
+            maybe_verify_loaded_policy(&merged, Some(&child), Some(&base))?;
             Ok(merged)
         } else {
             child.validate_with_options(validation)?;
-            if depth == 0 {
-                maybe_verify_loaded_policy(&child, Some(&child), None)?;
-            }
+            maybe_verify_loaded_policy(&child, Some(&child), None)?;
             Ok(child)
         }
     }

@@ -212,7 +212,10 @@ pub use irm::{
 #[cfg(feature = "full")]
 pub use origin_runtime::{OriginFingerprint, OriginRuntimeState};
 
-/// Re-export core types
-pub mod core {
+/// Re-export hush-core cryptographic primitives.
+pub mod crypto {
     pub use hush_core::*;
 }
+
+/// Pure, safe, no-async, no-serde decision-making core for formal verification.
+pub mod core;

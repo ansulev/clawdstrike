@@ -117,6 +117,10 @@
   - [CLI](reference/api/cli.md)
 - [Benchmarks](reference/benchmarks.md)
 
+# Formal Verification
+
+- [Formal Verification](formal-verification.md)
+
 # Hunt (Threat Hunting)
 
 - [Overview](hunt/index.md)

@@ -8,6 +8,8 @@ Clawdstrike is a runtime security enforcement system for AI agents. It provides 
 
 **Design Philosophy:** Fail-closed. Invalid policies reject at load time; errors during evaluation deny access.
 
+**Formal Verification:** The policy engine's core decision logic is formally verified via a Lean 4 specification (`formal/lean4/ClawdStrike/`) and Z3/Logos policy analysis (`clawdstrike-logos`). Differential tests (`formal-diff-tests`) compare the spec against the Rust implementation using property-based testing.
+
 ## Common Commands
 
 ```bash
@@ -42,6 +44,11 @@ pytest packages/sdk/hush-py/tests
 # CLI
 cargo install --path crates/services/hush-cli
 clawdstrike check --action-type file --ruleset strict ~/.ssh/id_rsa
+
+# Formal Verification
+hush policy verify <policy.yaml>            # Z3 policy verification
+cargo test -p formal-diff-tests             # Differential tests (spec vs impl)
+cd formal/lean4/ClawdStrike && lake build   # Build Lean 4 spec and check proofs
 ```
 
 ## Architecture
@@ -148,3 +155,9 @@ Policy Load → Guard Instantiation → Action Check → Per-Guard Evaluation
 - `deny.toml` - cargo-deny license/advisory config
 - `rulesets/*.yaml` - Built-in security policies
 - `docs/` - mdBook documentation source
+- `formal/lean4/ClawdStrike/` - Lean 4 formal specification and proofs
+- `formal/lean4/ClawdStrike/ClawdStrike/Spec/Properties.lean` - Theorem statements (P1-P13)
+- `formal/lean4/ClawdStrike/ClawdStrike/Core/` - Hand-written spec (Verdict, Aggregate, Merge, Cycle, Eval)
+- `formal/lean4/ClawdStrike/ClawdStrike/Impl/` - Aeneas-generated Lean from Rust source (do not edit)
+- `crates/tests/formal-diff-tests/` - Differential tests (proptest: spec vs implementation)
+- `crates/libs/clawdstrike-logos/` - Logos/Z3 policy-to-formula compilation and verification

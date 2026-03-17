@@ -1695,13 +1695,13 @@ pub struct EngineStats {
     pub violation_count: u64,
 }
 
-/// Convert severity to ordinal for comparison
-fn severity_ord(s: &Severity) -> u8 {
+/// Convert a serde `Severity` to its pure core equivalent.
+fn severity_to_core(s: &Severity) -> crate::core::CoreSeverity {
     match s {
-        Severity::Info => 0,
-        Severity::Warning => 1,
-        Severity::Error => 2,
-        Severity::Critical => 3,
+        Severity::Info => crate::core::CoreSeverity::Info,
+        Severity::Warning => crate::core::CoreSeverity::Warning,
+        Severity::Error => crate::core::CoreSeverity::Error,
+        Severity::Critical => crate::core::CoreSeverity::Critical,
     }
 }
 
@@ -1782,39 +1782,21 @@ fn format_origin_brief(origin: &OriginContext) -> String {
     parts.join(",")
 }
 
+/// Aggregate guard results into a single overall verdict.
+///
+/// Delegates to [`crate::core::aggregate::aggregate_index`] for the pure
+/// selection logic, then indexes back into the original `GuardResult` slice
+/// to preserve serde details and `serde_json::Value` payloads.
 fn aggregate_overall(results: &[GuardResult]) -> GuardResult {
-    if results.is_empty() {
-        return GuardResult::allow("engine");
+    let tuples: Vec<(bool, crate::core::CoreSeverity, bool)> = results
+        .iter()
+        .map(|r| (r.allowed, severity_to_core(&r.severity), r.is_sanitized()))
+        .collect();
+
+    match crate::core::aggregate::aggregate_index(&tuples) {
+        Some(idx) => results[idx].clone(),
+        None => GuardResult::allow("engine"),
     }
-
-    let mut best = &results[0];
-
-    for r in &results[1..] {
-        let best_blocks = !best.allowed;
-        let r_blocks = !r.allowed;
-
-        if r_blocks && !best_blocks {
-            best = r;
-            continue;
-        }
-
-        if r_blocks == best_blocks && severity_ord(&r.severity) > severity_ord(&best.severity) {
-            best = r;
-            continue;
-        }
-
-        if r_blocks == best_blocks
-            && severity_ord(&r.severity) == severity_ord(&best.severity)
-            && !r_blocks
-            && r.is_sanitized()
-            && !best.is_sanitized()
-        {
-            // Preserve sanitize payloads over plain warnings when severities tie.
-            best = r;
-        }
-    }
-
-    best.clone()
 }
 
 #[cfg(test)]

@@ -1,0 +1,149 @@
+name: Formal Verification
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'crates/libs/clawdstrike/src/core/**'
+      - 'crates/libs/clawdstrike/src/policy.rs'
+      - 'crates/libs/clawdstrike/src/engine.rs'
+      - 'crates/libs/hush-core/src/merkle.rs'
+      - 'crates/libs/hush-core/src/canonical.rs'
+      - 'crates/tests/formal-diff-tests/**'
+      - 'formal/**'
+      - 'rulesets/**'
+      - '.github/workflows/formal-verification.yml'
+  pull_request:
+    paths:
+      - 'crates/libs/clawdstrike/src/core/**'
+      - 'crates/libs/clawdstrike/src/policy.rs'
+      - 'crates/libs/clawdstrike/src/engine.rs'
+      - 'crates/libs/hush-core/src/merkle.rs'
+      - 'crates/libs/hush-core/src/canonical.rs'
+      - 'crates/tests/formal-diff-tests/**'
+      - 'formal/**'
+      - 'rulesets/**'
+      - '.github/workflows/formal-verification.yml'
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  # --------------------------------------------------------------------------
+  # Job 1: Z3 policy consistency and completeness checks
+  # --------------------------------------------------------------------------
+  policy-verification:
+    name: Policy Verification (Z3)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Z3
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y z3
+
+      - name: Cache cargo registry
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-formal-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-formal-
+
+      - name: Verify all built-in rulesets
+        run: |
+          for f in rulesets/*.yaml; do
+            echo "==> Verifying $f"
+            cargo run -p hush-cli --quiet -- policy verify "$f" || exit 1
+          done
+          echo "All policy rulesets verified."
+
+  # --------------------------------------------------------------------------
+  # Job 2: Differential tests (spec vs impl, high case count)
+  # --------------------------------------------------------------------------
+  differential-tests:
+    name: Differential Tests (spec vs impl)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PROPTEST_CASES: ${{ vars.PROPTEST_CASES || '1000000' }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-formal-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-formal-
+
+      - name: Run differential tests
+        run: |
+          echo "Running with PROPTEST_CASES=${PROPTEST_CASES}"
+          cargo test -p formal-diff-tests -- --nocapture
+
+      - name: Upload proptest regressions
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: proptest-regressions
+          path: '**/proptest-regressions/**'
+          if-no-files-found: ignore
+
+  # --------------------------------------------------------------------------
+  # Job 3: Lean 4 formal specification build
+  # --------------------------------------------------------------------------
+  lean-build:
+    name: Lean 4 Spec Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install elan (Lean toolchain manager)
+        run: |
+          curl -sSf https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+
+      - name: Cache Lake packages
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.elan/toolchains
+            formal/lean4/ClawdStrike/.lake
+          key: ${{ runner.os }}-lean-${{ hashFiles('formal/lean4/ClawdStrike/lean-toolchain', 'formal/lean4/ClawdStrike/lakefile.lean', 'formal/lean4/ClawdStrike/lake-manifest.json') }}
+          restore-keys: |
+            ${{ runner.os }}-lean-
+
+      - name: Build Lean project
+        working-directory: formal/lean4/ClawdStrike
+        run: lake build
+
+      - name: Count sorry occurrences (informational)
+        if: always()
+        working-directory: formal/lean4/ClawdStrike
+        run: |
+          echo "=== sorry audit (project files only) ==="
+          sorry_count=$(grep -r 'sorry' ClawdStrike/ --include='*.lean' -c 2>/dev/null | awk -F: '{s+=$2} END {print s+0}')
+          theorem_count=$(grep -rc '^theorem' ClawdStrike/ --include='*.lean' 2>/dev/null | awk -F: '{s+=$2} END {print s+0}')
+          echo "Total theorems: ${theorem_count}"
+          echo "Remaining sorry: ${sorry_count}"
+          echo "### Lean 4 Proof Status" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Theorems: **${theorem_count}**" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Remaining sorry: **${sorry_count}**" >> "$GITHUB_STEP_SUMMARY"

@@ -21,6 +21,7 @@ members = [
     "crates/services/eas-anchor",
     "crates/tests/sdr-integration-tests",
     "crates/tests/e2e-posture-cmd",
+    "crates/tests/formal-diff-tests",
     "crates/services/control-api",
     "crates/services/clawdstrike-brokerd",
     "packages/sdk/hush-py/hush-native",
@@ -33,6 +34,7 @@ members = [
     "crates/libs/hunt-correlate",
     "crates/libs/clawdstrike-ocsf",
     "crates/libs/clawdstrike-policy-event",
+    "crates/libs/clawdstrike-logos",
 ]
 exclude = [
     "fuzz",
@@ -167,6 +169,7 @@ hush-multi-agent = { path = "crates/libs/hush-multi-agent", version = "0.2.5" }
 hunt-scan = { path = "crates/libs/hunt-scan", version = "0.2.5" }
 hunt-query = { path = "crates/libs/hunt-query", version = "0.2.5" }
 hunt-correlate = { path = "crates/libs/hunt-correlate", version = "0.2.5" }
+clawdstrike-logos = { path = "crates/libs/clawdstrike-logos", version = "0.2.5" }
 clawdstrike-ocsf = { path = "crates/libs/clawdstrike-ocsf", version = "0.2.5" }
 clawdstrike-policy-event = { path = "crates/libs/clawdstrike-policy-event", version = "0.2.5", default-features = false }
 nono = { path = "infra/vendor/nono", version = "0.11.0", default-features = false, features = ["sandbox"] }

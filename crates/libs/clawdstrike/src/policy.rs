@@ -29,7 +29,8 @@ use crate::posture::{validate_posture_config, PostureConfig};
 pub const POLICY_SCHEMA_VERSION: &str = "1.5.0";
 pub const POLICY_SUPPORTED_SCHEMA_VERSIONS: &[&str] =
     &["1.1.0", "1.2.0", "1.3.0", "1.4.0", "1.5.0"];
-const MAX_POLICY_EXTENDS_DEPTH: usize = 32;
+/// Re-export from core for backward compatibility within this module.
+const MAX_POLICY_EXTENDS_DEPTH: usize = crate::core::cycle::MAX_POLICY_EXTENDS_DEPTH;
 
 fn default_true() -> bool {
     true
@@ -480,6 +481,47 @@ pub struct PolicySettings {
     pub verbose_logging: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub session_timeout_secs: Option<u64>,
+    /// Optional verification configuration for load-time policy checks.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub verification: Option<VerificationSettings>,
+}
+
+/// Configuration for optional load-time formal verification of policy
+/// properties (consistency, completeness, inheritance soundness).
+///
+/// When `enabled` is `true`, a Logos-based verifier is invoked at policy load
+/// time. The `strict` flag controls whether verification failure prevents the
+/// policy from loading (`true`) or merely emits a warning (`false`, the
+/// default).
+///
+/// Results are cached by policy content hash when `cache` is `true` to avoid
+/// redundant re-verification of unchanged policies.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct VerificationSettings {
+    /// Whether load-time verification is enabled. Default: `false`.
+    #[serde(default)]
+    pub enabled: bool,
+    /// Whether verification failure blocks policy loading. Default: `false`.
+    #[serde(default)]
+    pub strict: bool,
+    /// Whether to cache verification results by content hash. Default: `true`.
+    #[serde(default = "default_cache_enabled")]
+    pub cache: bool,
+}
+
+fn default_cache_enabled() -> bool {
+    true
+}
+
+impl Default for VerificationSettings {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            strict: false,
+            cache: true,
+        }
+    }
 }
 
 fn default_timeout() -> u64 {
@@ -497,6 +539,11 @@ impl PolicySettings {
 
     pub fn effective_session_timeout_secs(&self) -> u64 {
         self.session_timeout_secs.unwrap_or(default_timeout())
+    }
+
+    /// Return the effective verification settings (defaults when absent).
+    pub fn effective_verification(&self) -> VerificationSettings {
+        self.verification.clone().unwrap_or_default()
     }
 }
 
@@ -1362,6 +1409,11 @@ impl Policy {
                         .settings
                         .session_timeout_secs
                         .or(self.settings.session_timeout_secs),
+                    verification: child
+                        .settings
+                        .verification
+                        .clone()
+                        .or_else(|| self.settings.verification.clone()),
                 },
                 posture: match (&self.posture, &child.posture) {
                     (Some(base), Some(child_posture)) => Some(base.merge_with(child_posture)),
@@ -1425,6 +1477,7 @@ impl Policy {
         depth: usize,
         validation: PolicyValidationOptions,
     ) -> Result<Self> {
+        // Depth check delegated to core::cycle (pure logic).
         if depth > MAX_POLICY_EXTENDS_DEPTH {
             return Err(Error::ConfigError(format!(
                 "Policy extends depth exceeded (limit: {})",
@@ -1437,12 +1490,21 @@ impl Policy {
         if let Some(ref extends) = child.extends {
             let resolved = resolver.resolve(extends, &location)?;
 
-            // Check for circular dependency
-            if visited.contains(&resolved.key) {
-                return Err(Error::ConfigError(format!(
-                    "Circular policy extension detected: {}",
-                    extends
-                )));
+            // Cycle check delegated to core::cycle (pure logic).
+            match crate::core::cycle::check_extends_cycle(&resolved.key, visited, depth) {
+                crate::core::cycle::CycleCheckResult::Ok => {}
+                crate::core::cycle::CycleCheckResult::DepthExceeded { limit, .. } => {
+                    return Err(Error::ConfigError(format!(
+                        "Policy extends depth exceeded (limit: {})",
+                        limit
+                    )));
+                }
+                crate::core::cycle::CycleCheckResult::CycleDetected { .. } => {
+                    return Err(Error::ConfigError(format!(
+                        "Circular policy extension detected: {}",
+                        extends
+                    )));
+                }
             }
             visited.insert(resolved.key);
 
@@ -1571,33 +1633,14 @@ impl Policy {
     }
 }
 
+/// Merge two custom-guard lists keyed by `id`.
+///
+/// Delegates to [`crate::core::merge::merge_keyed_vec`].
 fn merge_custom_guards(
     base: &[PolicyCustomGuardSpec],
     child: &[PolicyCustomGuardSpec],
 ) -> Vec<PolicyCustomGuardSpec> {
-    if child.is_empty() {
-        return base.to_vec();
-    }
-    if base.is_empty() {
-        return child.to_vec();
-    }
-
-    let mut out: Vec<PolicyCustomGuardSpec> = base.to_vec();
-    let mut index: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
-    for (i, cg) in out.iter().enumerate() {
-        index.insert(cg.id.clone(), i);
-    }
-
-    for cg in child {
-        if let Some(i) = index.get(&cg.id).copied() {
-            out[i] = cg.clone();
-        } else {
-            index.insert(cg.id.clone(), out.len());
-            out.push(cg.clone());
-        }
-    }
-
-    out
+    crate::core::merge::merge_keyed_vec(base, child, |cg| cg.id.clone())
 }
 
 fn validate_policy_version(version: &str) -> Result<()> {

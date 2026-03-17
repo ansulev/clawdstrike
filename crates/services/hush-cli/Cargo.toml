@@ -22,6 +22,7 @@ path = "src/clawdstrike.rs"
 hush-core.workspace = true
 hush-proxy.workspace = true
 clawdstrike = { workspace = true, features = ["full"] }
+clawdstrike-logos.workspace = true
 clap.workspace = true
 clap_complete = "4.5"
 tokio.workspace = true

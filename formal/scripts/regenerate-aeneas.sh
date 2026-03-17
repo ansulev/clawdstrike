@@ -34,11 +34,6 @@ fi
 find_binary() {
     local name="$1"
     shift
-    # Check PATH first
-    if command -v "$name" &>/dev/null; then
-        command -v "$name"
-        return 0
-    fi
     # Check fallback locations
     for fallback in "$@"; do
         if [[ -x "$fallback" ]]; then
@@ -46,23 +41,43 @@ find_binary() {
             return 0
         fi
     done
+    # Check PATH last so pinned/toolchain-managed fallbacks win over bundled
+    # wrapper scripts that may appear earlier in PATH.
+    if command -v "$name" &>/dev/null; then
+        command -v "$name"
+        return 0
+    fi
     return 1
 }
 
-CHARON=$(find_binary charon "$HOME/.cargo/bin/charon") || {
-    echo "error: charon not found in PATH or ~/.cargo/bin/charon"
-    echo ""
-    echo "Install a pinned prerelease from:"
-    echo "  ${CHARON_RELEASE_URL}"
+CHARON=${CHARON_BIN:-}
+if [[ -n "$CHARON" && ! -x "$CHARON" ]]; then
+    echo "error: CHARON_BIN points to a non-executable path: $CHARON"
     exit 1
-}
+fi
+if [[ -z "$CHARON" ]]; then
+    CHARON=$(find_binary charon "/tmp/charon-bin/charon" "$HOME/.cargo/bin/charon") || {
+        echo "error: charon not found in /tmp/charon-bin/charon, PATH, or ~/.cargo/bin/charon"
+        echo ""
+        echo "Install a pinned prerelease from:"
+        echo "  ${CHARON_RELEASE_URL}"
+        exit 1
+    }
+fi
 
-AENEAS=$(find_binary aeneas "/tmp/aeneas/bin/aeneas" "$HOME/.local/bin/aeneas") || {
-    echo "error: aeneas not found in PATH, /tmp/aeneas/bin/aeneas, or ~/.local/bin/aeneas"
-    echo ""
-    echo "Install from: https://github.com/AeneasVerif/aeneas#installation"
+AENEAS=${AENEAS_BIN:-}
+if [[ -n "$AENEAS" && ! -x "$AENEAS" ]]; then
+    echo "error: AENEAS_BIN points to a non-executable path: $AENEAS"
     exit 1
-}
+fi
+if [[ -z "$AENEAS" ]]; then
+    AENEAS=$(find_binary aeneas "/tmp/aeneas-bin/aeneas" "/tmp/aeneas/bin/aeneas" "$HOME/.local/bin/aeneas") || {
+        echo "error: aeneas not found in /tmp/aeneas-bin/aeneas, /tmp/aeneas/bin/aeneas, PATH, or ~/.local/bin/aeneas"
+        echo ""
+        echo "Install from: https://github.com/AeneasVerif/aeneas#installation"
+        exit 1
+    }
+fi
 
 echo "Using charon: $CHARON"
 echo "Using aeneas: $AENEAS"

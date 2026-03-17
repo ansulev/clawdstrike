@@ -449,6 +449,9 @@ jobs:
           fi
 
       - name: Check Aeneas output for drift
+        env:
+          CHARON_BIN: /tmp/charon-bin/charon
+          AENEAS_BIN: /tmp/aeneas-bin/aeneas
         run: ./formal/scripts/regenerate-aeneas.sh --check
 
       - name: Summary

@@ -868,7 +868,9 @@ impl Policy {
     /// Parse from YAML string
     pub fn from_yaml(yaml: &str) -> Result<Self> {
         let policy = Self::from_yaml_without_load_verification(yaml)?;
-        maybe_verify_loaded_policy(&policy, Some(&policy), None)?;
+        if policy.extends.is_none() {
+            maybe_verify_loaded_policy(&policy, Some(&policy), None)?;
+        }
         Ok(policy)
     }
 
@@ -4001,5 +4003,22 @@ settings:
         let verification = merged.settings.effective_verification();
         assert!(verification.enabled);
         assert!(verification.strict);
+    }
+
+    #[test]
+    fn strict_verification_with_extends_defers_until_resolution() {
+        let yaml = r#"
+version: "1.5.0"
+name: child
+extends: "parent.yaml"
+settings:
+  verification:
+    enabled: true
+    strict: true
+"#;
+
+        let policy =
+            Policy::from_yaml(yaml).expect("unresolved strict policies should defer verification");
+        assert_eq!(policy.extends.as_deref(), Some("parent.yaml"));
     }
 }

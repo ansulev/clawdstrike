@@ -125,13 +125,20 @@ jobs:
         run: |
           set -euo pipefail
 
+          cargo_pkg_args=(-p hush-cli --bin hush)
+          feature_args=()
+
           if command -v z3 >/dev/null 2>&1 && [ -f /usr/include/z3.h ]; then
-            cargo build -p hush-cli --bin hush --features z3
-            cargo_args=(cargo run -p hush-cli --bin hush --features z3 --quiet --)
+            feature_args=(--features z3)
             echo "Using Z3 verification backend."
           else
-            cargo_args=(cargo run -p hush-cli --bin hush --quiet --)
             echo "Falling back to formula inspection backend."
+          fi
+
+          cargo build "${cargo_pkg_args[@]}" "${feature_args[@]}"
+
+          if [ "${#feature_args[@]}" -ne 0 ]; then
+            cargo test --manifest-path crates/libs/logos-z3/Cargo.toml
           fi
 
           # Some example rulesets intentionally widen a parent policy. Those
@@ -155,7 +162,8 @@ jobs:
             echo "==> Verifying $f"
             report_file="$(mktemp)"
 
-            if "${cargo_args[@]}" policy verify --json "$f" >"$report_file"; then
+            if cargo run "${cargo_pkg_args[@]}" "${feature_args[@]}" --quiet -- \
+              policy verify --json "$f" >"$report_file"; then
               verify_exit=0
             else
               verify_exit=$?
@@ -422,19 +430,22 @@ jobs:
           fi
 
       - name: Install Aeneas
+        env:
+          AENEAS_RELEASE_TAG: build-2026.03.17.182718-f4b3593e112d539904702fda4f929110fa8ef897
+          AENEAS_LINUX_X86_64_SHA256: 5c5af6e8c0f90646e128168c93190f2b630b202ec57b3dcc43eff8300da88c16
         run: |
           if command -v aeneas &>/dev/null; then
             echo "Aeneas already available"
           else
-            git clone https://github.com/AeneasVerif/aeneas.git /tmp/aeneas-src
-            cd /tmp/aeneas-src
-            opam install --yes .
-            echo "/tmp/aeneas-src/_build/default/bin" >> "$GITHUB_PATH"
-            # Also try the make-based install
-            make || true
-            if [[ -f /tmp/aeneas-src/bin/aeneas ]]; then
-              echo "/tmp/aeneas-src/bin" >> "$GITHUB_PATH"
-            fi
+            curl -fsSL \
+              "https://github.com/AeneasVerif/aeneas/releases/download/${AENEAS_RELEASE_TAG}/aeneas-linux-x86_64.tar.gz" \
+              -o /tmp/aeneas.tar.gz
+            echo "${AENEAS_LINUX_X86_64_SHA256}  /tmp/aeneas.tar.gz" | sha256sum -c -
+            rm -rf /tmp/aeneas-bin
+            mkdir -p /tmp/aeneas-bin
+            tar -xzf /tmp/aeneas.tar.gz -C /tmp/aeneas-bin
+            chmod +x /tmp/aeneas-bin/aeneas
+            echo "/tmp/aeneas-bin" >> "$GITHUB_PATH"
           fi
 
       - name: Check Aeneas output for drift

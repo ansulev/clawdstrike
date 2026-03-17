@@ -39,6 +39,9 @@ members = [
 ]
 exclude = [
     "fuzz",
+    # Optional solver backend: exercised explicitly by formal-verification CI,
+    # but kept out of default workspace-wide commands because it requires a
+    # system Z3 installation.
     "crates/libs/logos-z3",
     "examples/rust/basic-verification",
     "examples/autonomous-sandbox",
@@ -99,6 +102,7 @@ chrono = { version = "0.4", features = ["serde"] }
 chrono-tz = { version = "0.10", features = ["serde"] }
 crossterm = "0.28"
 time = "0.3"
+logos-z3 = { path = "crates/libs/logos-z3", version = "0.2.6" }
 
 # UUID
 uuid = { version = "1.21", features = ["v4", "v7", "serde", "js"] }

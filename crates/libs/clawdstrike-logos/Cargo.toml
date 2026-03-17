@@ -16,7 +16,7 @@ clawdstrike = { workspace = true, default-features = false, features = ["full"] 
 hush-core.workspace = true
 hush-proxy.workspace = true
 logos-ffi.workspace = true
-logos-z3 = { path = "../logos-z3", version = "0.2.6", optional = true }
+logos-z3 = { workspace = true, optional = true }
 thiserror.workspace = true
 tracing.workspace = true
 serde.workspace = true

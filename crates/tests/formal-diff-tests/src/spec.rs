@@ -174,6 +174,8 @@ pub fn check_extends_cycle_spec(
     visited: &HashSet<String>,
     depth: usize,
 ) -> CycleCheckSpec {
+    // Boundary matches `clawdstrike::core::check_extends_cycle`: a chain at the
+    // exact limit is valid, and only the first step past the limit fails.
     if depth > MAX_DEPTH_SPEC {
         return CycleCheckSpec::DepthExceeded {
             depth,
@@ -338,6 +340,22 @@ mod tests {
 
         assert_eq!(
             check_extends_cycle_spec("b.yaml", &empty, MAX_DEPTH_SPEC + 1),
+            CycleCheckSpec::DepthExceeded {
+                depth: MAX_DEPTH_SPEC + 1,
+                limit: MAX_DEPTH_SPEC,
+            }
+        );
+    }
+
+    #[test]
+    fn cycle_depth_boundary_matches_impl_contract() {
+        let visited = HashSet::new();
+        assert_eq!(
+            check_extends_cycle_spec("edge.yaml", &visited, MAX_DEPTH_SPEC),
+            CycleCheckSpec::Ok
+        );
+        assert_eq!(
+            check_extends_cycle_spec("too_deep.yaml", &visited, MAX_DEPTH_SPEC + 1),
             CycleCheckSpec::DepthExceeded {
                 depth: MAX_DEPTH_SPEC + 1,
                 limit: MAX_DEPTH_SPEC,

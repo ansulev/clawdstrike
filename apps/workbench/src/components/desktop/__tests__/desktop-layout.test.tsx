@@ -1,14 +1,10 @@
-import { useEffect } from "react";
-import { describe, it, expect, vi } from "vitest";
+import { afterEach, describe, it, expect, vi } from "vitest";
 import { screen } from "@testing-library/react";
-import { render } from "@testing-library/react";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { cleanup, render } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { DesktopLayout } from "../desktop-layout";
-import { MultiPolicyProvider as WorkbenchProvider, useMultiPolicy } from "@/lib/workbench/multi-policy-store";
-import { FleetConnectionProvider } from "@/lib/workbench/use-fleet-connection";
-import { SentinelProvider } from "@/lib/workbench/sentinel-store";
-import { FindingProvider } from "@/lib/workbench/finding-store";
-import { OperatorProvider } from "@/lib/workbench/operator-store";
+
+let hasDirtyBackgroundTabs = false;
 
 vi.mock("@/lib/tauri-bridge", () => ({
   isDesktop: vi.fn(() => false),
@@ -18,37 +14,76 @@ vi.mock("@/lib/tauri-bridge", () => ({
   closeWindow: vi.fn(),
 }));
 
-function DirtyBackgroundTabBootstrap() {
-  const { multiDispatch } = useMultiPolicy();
+vi.mock("@/lib/commands/init-commands", () => ({
+  InitCommands: () => null,
+}));
 
-  useEffect(() => {
-    multiDispatch({ type: "UPDATE_META", name: "dirty-background-tab" });
-    multiDispatch({ type: "NEW_TAB" });
-  }, [multiDispatch]);
+vi.mock("@/features/policy/stores/multi-policy-store", () => ({
+  useMultiPolicy: () => ({
+    tabs: hasDirtyBackgroundTabs ? [{ id: "dirty", dirty: true }] : [{ id: "clean", dirty: false }],
+  }),
+}));
 
-  return null;
-}
+vi.mock("@/lib/workbench/use-auto-save", () => ({
+  useAutoSave: () => ({
+    pendingRecovery: [],
+    dismissRecovery: vi.fn(),
+    restoreRecovery: vi.fn(),
+  }),
+}));
+
+vi.mock("@/components/desktop/titlebar", () => ({
+  Titlebar: () => (
+    <header>
+      <span>Clawdstrike</span>
+      <span>Workbench</span>
+    </header>
+  ),
+}));
+
+vi.mock("@/components/desktop/desktop-sidebar", () => ({
+  DesktopSidebar: () => (
+    <aside role="complementary">
+      <span>Editor</span>
+      <span>Lab</span>
+    </aside>
+  ),
+}));
+
+vi.mock("@/components/desktop/status-bar", () => ({
+  StatusBar: () => <footer role="contentinfo">Status</footer>,
+}));
+
+vi.mock("@/components/desktop/shortcut-provider", () => ({
+  ShortcutProvider: () => null,
+}));
+
+vi.mock("@/components/desktop/command-palette", () => ({
+  CommandPalette: () => null,
+}));
+
+vi.mock("@/components/desktop/crash-recovery-banner", () => ({
+  CrashRecoveryBanner: () => null,
+}));
+
+vi.mock("@/features/bottom-pane/bottom-pane", () => ({
+  BottomPane: () => <div data-testid="bottom-pane">Bottom Pane</div>,
+}));
+
+vi.mock("@/features/panes/pane-root", () => ({
+  PaneRoot: () => <div data-testid="pane-root">Pane Root</div>,
+}));
+
+afterEach(() => {
+  hasDirtyBackgroundTabs = false;
+  cleanup();
+});
 
 function renderLayout(route = "/editor", withDirtyBackgroundTab = false) {
+  hasDirtyBackgroundTabs = withDirtyBackgroundTab;
   return render(
     <MemoryRouter initialEntries={[route]}>
-      <OperatorProvider>
-        <FleetConnectionProvider>
-          <WorkbenchProvider>
-            <SentinelProvider>
-              <FindingProvider>
-                {withDirtyBackgroundTab ? <DirtyBackgroundTabBootstrap /> : null}
-                <Routes>
-                  <Route element={<DesktopLayout />}>
-                    <Route path="editor" element={<div data-testid="editor-page">Editor Page</div>} />
-                    <Route path="simulator" element={<div data-testid="simulator-page">Simulator Page</div>} />
-                  </Route>
-                </Routes>
-              </FindingProvider>
-            </SentinelProvider>
-          </WorkbenchProvider>
-        </FleetConnectionProvider>
-      </OperatorProvider>
+      <DesktopLayout />
     </MemoryRouter>,
   );
 }
@@ -78,18 +113,17 @@ describe("DesktopLayout", () => {
     expect(screen.getByRole("contentinfo")).toBeInTheDocument();
   });
 
-  it("renders the routed content via Outlet", () => {
+  it("renders the pane root", () => {
     renderLayout("/editor");
 
-    expect(screen.getByTestId("editor-page")).toBeInTheDocument();
-    expect(screen.getByText("Editor Page")).toBeInTheDocument();
+    expect(screen.getByTestId("pane-root")).toBeInTheDocument();
+    expect(screen.getByText("Pane Root")).toBeInTheDocument();
   });
 
-  it("renders a different route via Outlet", () => {
+  it("keeps the pane root mounted across routes", () => {
     renderLayout("/simulator");
 
-    expect(screen.getByTestId("simulator-page")).toBeInTheDocument();
-    expect(screen.getByText("Simulator Page")).toBeInTheDocument();
+    expect(screen.getByTestId("pane-root")).toBeInTheDocument();
   });
 
   it("has a flex column layout structure", () => {

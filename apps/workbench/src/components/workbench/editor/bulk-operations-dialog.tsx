@@ -15,7 +15,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useMultiPolicy, type PolicyTab, type BulkGuardUpdate } from "@/lib/workbench/multi-policy-store";
+import { useMultiPolicy, type PolicyTab, type BulkGuardUpdate } from "@/features/policy/stores/multi-policy-store";
 import { GUARD_REGISTRY } from "@/lib/workbench/guard-registry";
 import type { GuardId, GuardConfigMap } from "@/lib/workbench/types";
 import { cn } from "@/lib/utils";

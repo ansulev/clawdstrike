@@ -10,12 +10,12 @@ import { defaultKeymap, historyKeymap, history } from "@codemirror/commands";
 import { lintGutter, type Diagnostic, setDiagnostics } from "@codemirror/lint";
 import { autocompletion, closeBrackets, closeBracketsKeymap } from "@codemirror/autocomplete";
 import { cn } from "@/lib/utils";
-import { policyYamlCompletionSource } from "@/lib/workbench/yaml-schema";
+import { policyYamlCompletionSource } from "@/features/policy/yaml-schema";
 import { sigmaYamlCompletionSource } from "@/lib/workbench/sigma-schema";
 import { ocsfJsonCompletionSource } from "@/lib/workbench/ocsf-schema";
 import { yaraLanguage } from "@/lib/workbench/yara-language";
 import type { FileType } from "@/lib/workbench/file-type-registry";
-import { useGeneralSettings, type FontSize } from "@/lib/workbench/use-general-settings";
+import { useGeneralSettings, type FontSize } from "@/features/settings/use-general-settings";
 
 // ---- Types ----
 

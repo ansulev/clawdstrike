@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { GUARD_REGISTRY } from "../guard-registry";
-import { BUILTIN_RULESETS } from "../builtin-rulesets";
+import { GUARD_REGISTRY } from "@/lib/workbench/guard-registry";
+import { BUILTIN_RULESETS } from "@/features/policy/builtin-rulesets";
 
 // We cannot directly import the private functions (getCursorContext,
 // resolveSchemaNode) because they are module-private. However, we CAN test
@@ -8,7 +8,7 @@ import { BUILTIN_RULESETS } from "../builtin-rulesets";
 // a trick: we import the module and call its exported CompletionSource with
 // a minimal CompletionContext mock.
 
-import { policyYamlCompletionSource } from "../yaml-schema";
+import { policyYamlCompletionSource } from "@/features/policy/yaml-schema";
 
 
 /** Build a minimal Text-like object from a raw string. */

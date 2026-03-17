@@ -22,8 +22,8 @@ import {
   IconFileCode,
 } from "@tabler/icons-react";
 import { cn } from "@/lib/utils";
-import { useSwarmBoard } from "@/lib/workbench/swarm-board-store";
-import type { SwarmBoardNodeData, SwarmNodeType, DetectionArtifactKind } from "@/lib/workbench/swarm-board-types";
+import { useSwarmBoard } from "@/features/swarm/stores/swarm-board-store";
+import type { SwarmBoardNodeData, SwarmNodeType, DetectionArtifactKind } from "@/features/swarm/swarm-board-types";
 import { FILE_TYPE_REGISTRY, type FileType } from "@/lib/workbench/file-type-registry";
 import type { EvidencePack, LabRun, PublicationManifest } from "@/lib/workbench/detection-workflow/shared-types";
 import { getEvidencePackStore } from "@/lib/workbench/detection-workflow/evidence-pack-store";

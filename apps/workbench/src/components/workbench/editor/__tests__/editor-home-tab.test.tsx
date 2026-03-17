@@ -15,12 +15,12 @@ const multiPolicyState = {
   canAddTab: true,
 };
 
-vi.mock("@/lib/workbench/multi-policy-store", () => ({
+vi.mock("@/features/policy/stores/multi-policy-store", () => ({
   useMultiPolicy: () => multiPolicyState,
   useWorkbench: () => ({ openFile, openFileByPath }),
 }));
 
-vi.mock("@/lib/workbench/policy-store", () => ({
+vi.mock("@/features/policy/stores/policy-store", () => ({
   getRecentFiles: () => getRecentFiles(),
 }));
 

@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { ClawLogo } from "@/components/brand/claw-logo";
-import { useWorkbench } from "@/lib/workbench/multi-policy-store";
+import { useWorkbench } from "@/features/policy/stores/multi-policy-store";
 import { minimizeWindow, maximizeWindow, closeWindow, isDesktop, isMacOS } from "@/lib/tauri-bridge";
 
 export function Titlebar() {

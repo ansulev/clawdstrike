@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { fetchSwarmHubConfig, publishSwarmFinding } from "@/lib/workbench/fleet-client";
-import { useSentinels } from "@/lib/workbench/sentinel-store";
-import { useFindings } from "@/lib/workbench/finding-store";
-import { useIntel } from "@/lib/workbench/intel-store";
+import { fetchSwarmHubConfig, publishSwarmFinding } from "@/features/fleet/fleet-client";
+import { useSentinels } from "@/features/sentinels/stores/sentinel-store";
+import { useFindings } from "@/features/findings/stores/finding-store";
+import { useIntel } from "@/features/findings/stores/intel-store";
 import { promoteToIntel, signIntel } from "@/lib/workbench/intel-forge";
 import {
   FINDING_ENVELOPE_SCHEMA,
@@ -11,11 +11,11 @@ import {
   type FindingEnvelope,
   type HeadAnnouncement,
   type ProtocolSeverity,
-} from "@/lib/workbench/swarm-protocol";
-import { useSwarms } from "@/lib/workbench/swarm-store";
-import { useSwarmFeed } from "@/lib/workbench/swarm-feed-store";
-import { useOperator } from "@/lib/workbench/operator-store";
-import { useFleetConnection } from "@/lib/workbench/use-fleet-connection";
+} from "@/features/swarm/swarm-protocol";
+import { useSwarms } from "@/features/swarm/stores/swarm-store";
+import { useSwarmFeed } from "@/features/swarm/stores/swarm-feed-store";
+import { useOperator } from "@/features/operator/stores/operator-store";
+import { useFleetConnection } from "@/features/fleet/use-fleet-connection";
 import type { OperatorIdentity } from "@/lib/workbench/operator-types";
 import type { SentinelMutablePatch } from "@/lib/workbench/sentinel-manager";
 import {
@@ -24,8 +24,8 @@ import {
   fetchVerifiedFindingBlob,
   requestSwarmBlobPin,
   type SwarmBlobPinResponse,
-} from "@/lib/workbench/swarm-blob-client";
-import { FAIL_CLOSED_HUB_TRUST_POLICY } from "@/lib/workbench/swarm-trust-policy";
+} from "@/features/swarm/swarm-blob-client";
+import { FAIL_CLOSED_HUB_TRUST_POLICY } from "@/features/swarm/swarm-trust-policy";
 import { SentinelList } from "./sentinels/sentinel-list";
 import { SentinelCreate } from "./sentinels/sentinel-create";
 import { SentinelDetail } from "./sentinels/sentinel-detail";
@@ -37,7 +37,7 @@ import type {
   IntelShareability,
   Sentinel,
 } from "@/lib/workbench/sentinel-types";
-import type { FindingBlobRef } from "@/lib/workbench/swarm-protocol";
+import type { FindingBlobRef } from "@/features/swarm/swarm-protocol";
 
 const PROTOCOL_SEVERITY_TAGS: readonly ProtocolSeverity[] = [
   "info",

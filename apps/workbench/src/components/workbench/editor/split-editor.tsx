@@ -16,8 +16,8 @@ import { SigmaVisualPanel } from "@/components/workbench/editor/sigma-visual-pan
 import { OcsfVisualPanel } from "@/components/workbench/editor/ocsf-visual-panel";
 import { YaraVisualPanel } from "@/components/workbench/editor/yara-visual-panel";
 import { YamlPreviewPanel } from "@/components/workbench/editor/yaml-preview-panel";
-import { useMultiPolicy, useWorkbench, type SplitMode } from "@/lib/workbench/multi-policy-store";
-import { useNativeValidation } from "@/lib/workbench/use-native-validation";
+import { useMultiPolicy, useWorkbench, type SplitMode } from "@/features/policy/stores/multi-policy-store";
+import { useNativeValidation } from "@/features/policy/use-native-validation";
 import { cn } from "@/lib/utils";
 import {
   IconLayoutColumns,

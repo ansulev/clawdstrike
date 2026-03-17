@@ -9,8 +9,8 @@ import { describe, it, expect } from "vitest";
 // We also re-implement the internal logic for extractGuardId and
 // parseValidationResponse in a test-friendly way to verify the parsing logic.
 
-import { countNativeErrors } from "../use-native-validation";
-import type { NativeValidationState } from "../policy-store";
+import { countNativeErrors } from "@/features/policy/use-native-validation";
+import type { NativeValidationState } from "@/features/policy/stores/policy-store";
 
 
 const GUARD_IDS = [

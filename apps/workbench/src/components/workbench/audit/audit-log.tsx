@@ -20,12 +20,12 @@ import {
   SelectContent,
   SelectItem,
 } from "@/components/ui/select";
-import { useFleetConnection } from "@/lib/workbench/use-fleet-connection";
+import { useFleetConnection } from "@/features/fleet/use-fleet-connection";
 import {
   fetchAuditEvents,
   type AuditEvent,
   type AuditFilters,
-} from "@/lib/workbench/fleet-client";
+} from "@/features/fleet/fleet-client";
 import { useLocalAudit, type LocalAuditEvent } from "@/lib/workbench/local-audit";
 import { Link } from "react-router-dom";
 

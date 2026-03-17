@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from "react";
-import { useWorkbench } from "@/lib/workbench/multi-policy-store";
+import { useWorkbench } from "@/features/policy/stores/multi-policy-store";
 import type { WorkbenchPolicy } from "@/lib/workbench/types";
 import { PolicySelector } from "./policy-selector";
 import { YamlDiffView } from "./yaml-diff-view";

@@ -21,16 +21,16 @@ import {
   ResizablePanel,
   ResizableHandle,
 } from "@/components/ui/resizable";
-import { useMultiPolicy } from "@/lib/workbench/multi-policy-store";
-import { useWorkbench } from "@/lib/workbench/multi-policy-store";
-import { buildFileTree, useProject } from "@/lib/workbench/project-store";
+import { useMultiPolicy } from "@/features/policy/stores/multi-policy-store";
+import { useWorkbench } from "@/features/policy/stores/multi-policy-store";
+import { buildFileTree, useProject } from "@/features/project/stores/project-store";
 import { useVersionHistory } from "@/lib/workbench/use-version-history";
-import { useAutoVersion } from "@/lib/workbench/use-auto-version";
+import { useAutoVersion } from "@/features/policy/use-auto-version";
 import type { PolicyVersion } from "@/lib/workbench/version-store";
 import { getPrimaryExtension, isPolicyFileType, sanitizeFilenameStem, basenameFromPath } from "@/lib/workbench/file-type-registry";
 import { isDesktop } from "@/lib/tauri-bridge";
-import { policyToYaml } from "@/lib/workbench/yaml-utils";
-import { triggerNativeValidation } from "@/lib/workbench/use-native-validation";
+import { policyToYaml } from "@/features/policy/yaml-utils";
+import { triggerNativeValidation } from "@/features/policy/use-native-validation";
 import {
   IconWand,
   IconHistory,

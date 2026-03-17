@@ -17,10 +17,10 @@ import {
 } from "@tabler/icons-react";
 import { cn } from "@/lib/utils";
 import { ClaudeCodeHint } from "@/components/workbench/shared/claude-code-hint";
-import { useWorkbench, useMultiPolicy } from "@/lib/workbench/multi-policy-store";
-import { useFleetConnection } from "@/lib/workbench/use-fleet-connection";
-import { useSentinels } from "@/lib/workbench/sentinel-store";
-import { useFindings } from "@/lib/workbench/finding-store";
+import { useWorkbench, useMultiPolicy } from "@/features/policy/stores/multi-policy-store";
+import { useFleetConnection } from "@/features/fleet/use-fleet-connection";
+import { useSentinels } from "@/features/sentinels/stores/sentinel-store";
+import { useFindings } from "@/features/findings/stores/finding-store";
 import { GUARD_REGISTRY } from "@/lib/workbench/guard-registry";
 import { SEVERITY_COLORS } from "@/lib/workbench/finding-constants";
 import type { GuardId } from "@/lib/workbench/types";

@@ -4,7 +4,7 @@ import {
   IconFolderOpen,
 } from "@tabler/icons-react";
 import { FILE_TYPE_REGISTRY } from "@/lib/workbench/file-type-registry";
-import type { ProjectFile } from "@/lib/workbench/project-store";
+import type { ProjectFile } from "@/features/project/stores/project-store";
 import { cn } from "@/lib/utils";
 
 // ---- Props ----

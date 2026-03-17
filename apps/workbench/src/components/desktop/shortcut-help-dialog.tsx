@@ -1,3 +1,4 @@
+import { useMemo, useSyncExternalStore } from "react";
 import {
   Dialog,
   DialogContent,
@@ -5,7 +6,7 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
-import { SHORTCUT_DEFINITIONS } from "./shortcut-provider";
+import { commandRegistry, type Command, type CommandCategory } from "@/lib/command-registry";
 
 interface ShortcutHelpDialogProps {
   open: boolean;
@@ -16,34 +17,73 @@ interface ShortcutHelpDialogProps {
 const isMac =
   typeof navigator !== "undefined" && /Mac|iPod|iPhone|iPad/.test(navigator.platform);
 
-function formatKeybinding(def: { key: string; meta: boolean; shift?: boolean }): string {
-  const parts: string[] = [];
-  if (def.meta) parts.push(isMac ? "\u2318" : "Ctrl");
-  if (def.shift) parts.push(isMac ? "\u21e7" : "Shift");
-  // Prettify special keys
-  const displayKey = def.key === "/" ? "?" : def.key.toUpperCase();
-  parts.push(displayKey);
-  return parts.join(isMac ? "" : "+");
+function formatKeybinding(binding: string): string {
+  const parts = binding.split("+");
+  const formatted: string[] = [];
+  for (const part of parts) {
+    if (part === "Meta") formatted.push(isMac ? "\u2318" : "Ctrl");
+    else if (part === "Shift") formatted.push(isMac ? "\u21e7" : "Shift");
+    else if (part === "Alt") formatted.push(isMac ? "\u2325" : "Alt");
+    else if (part === "ArrowLeft") formatted.push(isMac ? "\u2190" : "Left");
+    else if (part === "ArrowRight") formatted.push(isMac ? "\u2192" : "Right");
+    else if (part === "ArrowUp") formatted.push(isMac ? "\u2191" : "Up");
+    else if (part === "ArrowDown") formatted.push(isMac ? "\u2193" : "Down");
+    else {
+      const displayKey = part === "/" ? "?" : part.toUpperCase();
+      formatted.push(displayKey);
+    }
+  }
+  return formatted.join(isMac ? "" : "+");
 }
 
-const CATEGORY_ORDER = ["File", "Edit", "Policy", "Navigate", "Help"] as const;
+const CATEGORY_ORDER: CommandCategory[] = [
+  "File",
+  "Edit",
+  "Policy",
+  "Navigate",
+  "Guard",
+  "Sentinel",
+  "Fleet",
+  "Test",
+  "Receipt",
+  "View",
+  "Help",
+];
 
-type Category = (typeof CATEGORY_ORDER)[number];
+type CommandWithKeybinding = Command & { keybinding: string };
 
-function groupByCategory() {
-  const groups = new Map<Category, typeof SHORTCUT_DEFINITIONS[number][]>();
+function groupByCategory(commands: CommandWithKeybinding[]): Map<CommandCategory, CommandWithKeybinding[]> {
+  const groups = new Map<CommandCategory, CommandWithKeybinding[]>();
   for (const cat of CATEGORY_ORDER) {
     groups.set(cat, []);
   }
-  for (const def of SHORTCUT_DEFINITIONS) {
-    const list = groups.get(def.category as Category);
-    if (list) list.push(def);
+  for (const cmd of commands) {
+    const list = groups.get(cmd.category);
+    if (list) list.push(cmd);
   }
   return groups;
 }
 
 export function ShortcutHelpDialog({ open, onOpenChange }: ShortcutHelpDialogProps) {
-  const groups = groupByCategory();
+  // Subscribe to the registry so the dialog updates when commands change
+  const registryVersion = useSyncExternalStore(
+    (cb) => commandRegistry.subscribe(cb),
+    () => commandRegistry.getVersion(),
+  );
+
+  const commandsWithKeybindings = useMemo(
+    () =>
+      commandRegistry
+        .getAll()
+        .filter((cmd): cmd is Command & { keybinding: string } => !!cmd.keybinding),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [registryVersion],
+  );
+
+  const groups = useMemo(
+    () => groupByCategory(commandsWithKeybindings),
+    [commandsWithKeybindings],
+  );
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -70,16 +110,16 @@ export function ShortcutHelpDialog({ open, onOpenChange }: ShortcutHelpDialogPro
                   {category}
                 </h3>
                 <div className="grid gap-1">
-                  {items.map((def) => (
+                  {items.map((cmd) => (
                     <div
-                      key={`${def.key}-${def.shift ?? false}`}
+                      key={cmd.id}
                       className="flex items-center justify-between py-1.5 px-2 rounded-md hover:bg-[#131721]/60 transition-colors"
                     >
                       <span className="text-[12px] text-[#ece7dc]/80">
-                        {def.description}
+                        {cmd.title}
                       </span>
                       <kbd className="inline-flex items-center gap-0.5 rounded border border-[#2d3240] bg-[#131721] px-2 py-0.5 text-[11px] font-mono text-[#d4a84b]">
-                        {formatKeybinding(def)}
+                        {formatKeybinding(cmd.keybinding)}
                       </kbd>
                     </div>
                   ))}

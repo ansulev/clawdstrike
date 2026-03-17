@@ -18,7 +18,7 @@ import {
   IconSitemap,
 } from "@tabler/icons-react";
 import { ClawLogo } from "@/components/brand/claw-logo";
-import { useWorkbench } from "@/lib/workbench/multi-policy-store";
+import { useWorkbench } from "@/features/policy/stores/multi-policy-store";
 import { cn } from "@/lib/utils";
 
 interface NavItem {

@@ -1,18 +1,27 @@
 import { describe, it, expect } from "vitest";
-import { policyToYaml, yamlToPolicy, validatePolicy } from "../yaml-utils";
+import {
+  policyToYaml,
+  yamlToPolicy,
+  validatePolicy,
+} from "@/features/policy/yaml-utils";
 import type {
   WorkbenchPolicy,
   SavedPolicy,
   GuardId,
-} from "../types";
+} from "@/lib/workbench/types";
 
 // Since the reducer and DEFAULT_POLICY are exported from a .tsx file that uses
 // React, we import them directly. The reducer is a pure function so it can be
 // tested without rendering any components.
 
 // We replicate the state type and import the reducer + defaults.
-import { DEFAULT_POLICY, type WorkbenchState, type WorkbenchAction, type PolicySnapshot } from "../policy-store";
-import type { ValidationResult } from "../types";
+import {
+  DEFAULT_POLICY,
+  type WorkbenchState,
+  type WorkbenchAction,
+  type PolicySnapshot,
+} from "@/features/policy/stores/policy-store";
+import type { ValidationResult } from "@/lib/workbench/types";
 
 // We need access to the reducer — it is not exported, so we reconstruct it
 // locally using the same logic. To avoid this, we test through a thin wrapper.

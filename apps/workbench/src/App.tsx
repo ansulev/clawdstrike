@@ -1,145 +1,14 @@
-import { Component, lazy, Suspense, useEffect } from "react";
+import { Component, Suspense, useEffect } from "react";
 import type { ErrorInfo, ReactNode } from "react";
-import { HashRouter, Routes, Route, Navigate } from "react-router-dom";
-import { MultiPolicyProvider } from "@/lib/workbench/multi-policy-store";
-import { ProjectProvider } from "@/lib/workbench/project-store";
-import { FleetConnectionProvider } from "@/lib/workbench/use-fleet-connection";
-import { GeneralSettingsProvider } from "@/lib/workbench/use-general-settings";
-import { HintSettingsProvider } from "@/lib/workbench/use-hint-settings";
-import { SwarmProvider } from "@/lib/workbench/swarm-store";
-import { SentinelProvider } from "@/lib/workbench/sentinel-store";
-import { FindingProvider } from "@/lib/workbench/finding-store";
-import { SignalProvider } from "@/lib/workbench/signal-store";
-import { IntelProvider } from "@/lib/workbench/intel-store";
-import { MissionProvider } from "@/lib/workbench/mission-store";
-import { OperatorProvider } from "@/lib/workbench/operator-store";
-import { ReputationProvider } from "@/lib/workbench/reputation-store";
-import { SwarmFeedProvider } from "@/lib/workbench/swarm-feed-store";
+import { HashRouter, useRoutes } from "react-router-dom";
 import { ToastProvider } from "@/components/ui/toast";
 import { DesktopLayout } from "@/components/desktop/desktop-layout";
 import { IdentityPrompt } from "@/components/workbench/identity/identity-prompt";
-import { secureStore, migrateCredentialsToStronghold } from "@/lib/workbench/secure-store";
-
-
-const PolicyEditor = lazy(() =>
-  import("@/components/workbench/editor/policy-editor").then((m) => ({
-    default: m.PolicyEditor,
-  })),
-);
-
-const LabLayout = lazy(() =>
-  import("@/components/workbench/lab/lab-layout").then((m) => ({
-    default: m.LabLayout,
-  })),
-);
-
-const TopologyLayout = lazy(() =>
-  import("@/components/workbench/topology/topology-layout").then((m) => ({
-    default: m.TopologyLayout,
-  })),
-);
-
-const ComplianceDashboard = lazy(() =>
-  import("@/components/workbench/compliance/compliance-dashboard").then(
-    (m) => ({ default: m.ComplianceDashboard }),
-  ),
-);
-
-const ReceiptInspector = lazy(() =>
-  import("@/components/workbench/receipts/receipt-inspector").then((m) => ({
-    default: m.ReceiptInspector,
-  })),
-);
-
-const LibraryGallery = lazy(() =>
-  import("@/components/workbench/library/library-gallery").then((m) => ({
-    default: m.LibraryGallery,
-  })),
-);
-
-const SettingsPage = lazy(() =>
-  import("@/components/workbench/settings/settings-page").then((m) => ({
-    default: m.SettingsPage,
-  })),
-);
-
-const ApprovalQueue = lazy(() =>
-  import("@/components/workbench/approvals/approval-queue").then((m) => ({
-    default: m.ApprovalQueue,
-  })),
-);
-
-const FleetDashboard = lazy(() =>
-  import("@/components/workbench/fleet/fleet-dashboard").then((m) => ({
-    default: m.FleetDashboard,
-  })),
-);
-
-const AuditLog = lazy(() =>
-  import("@/components/workbench/audit/audit-log").then((m) => ({
-    default: m.AuditLog,
-  })),
-);
-
-const HomePage = lazy(() =>
-  import("@/components/workbench/home/home-page").then((m) => ({
-    default: m.HomePage,
-  })),
-);
-
-const SentinelsPage = lazy(() =>
-  import("@/components/workbench/sentinel-swarm-pages").then((m) => ({
-    default: m.SentinelsPage,
-  })),
-);
-
-const SentinelCreatePage = lazy(() =>
-  import("@/components/workbench/sentinel-swarm-pages").then((m) => ({
-    default: m.SentinelCreatePage,
-  })),
-);
-
-const SentinelDetailPage = lazy(() =>
-  import("@/components/workbench/sentinel-swarm-pages").then((m) => ({
-    default: m.SentinelDetailPage,
-  })),
-);
-
-const FindingsPage = lazy(() =>
-  import("@/components/workbench/sentinel-swarm-pages").then((m) => ({
-    default: m.FindingsPage,
-  })),
-);
-
-const FindingDetailPage = lazy(() =>
-  import("@/components/workbench/sentinel-swarm-pages").then((m) => ({
-    default: m.FindingDetailPage,
-  })),
-);
-
-const IntelDetailPage = lazy(() =>
-  import("@/components/workbench/sentinel-swarm-pages").then((m) => ({
-    default: m.IntelDetailPage,
-  })),
-);
-
-const SwarmPage = lazy(() =>
-  import("@/components/workbench/swarms/swarm-page").then((m) => ({
-    default: m.SwarmPage,
-  })),
-);
-
-const SwarmDetail = lazy(() =>
-  import("@/components/workbench/swarms/swarm-detail").then((m) => ({
-    default: m.SwarmDetail,
-  })),
-);
-
-const MissionControlPage = lazy(() =>
-  import("@/components/workbench/missions/mission-control-page").then((m) => ({
-    default: m.MissionControlPage,
-  })),
-);
+import { useOperator } from "@/features/operator/stores/operator-store";
+import { useFleetConnection } from "@/features/fleet/use-fleet-connection";
+import { useHintSettingsSafe } from "@/features/settings/use-hint-settings";
+import { useMultiPolicyBootstrap } from "@/features/policy/stores/multi-policy-store";
+import { secureStore, migrateCredentialsToStronghold } from "@/features/settings/secure-store";
 
 function LoadingFallback() {
   return (
@@ -189,6 +58,23 @@ function LoadingFallback() {
       `}</style>
     </div>
   );
+}
+
+function WorkbenchBootstraps() {
+  useOperator();
+  useFleetConnection();
+  useHintSettingsSafe();
+  useMultiPolicyBootstrap();
+  return null;
+}
+
+function WorkbenchRouter() {
+  return useRoutes([
+    {
+      path: "*",
+      element: <DesktopLayout />,
+    },
+  ]);
 }
 
 
@@ -286,37 +172,7 @@ class ErrorBoundary extends Component<{ children: ReactNode }, ErrorBoundaryStat
 }
 
 function AppProviders({ children }: { children: ReactNode }) {
-  return (
-    <OperatorProvider>
-      <ReputationProvider>
-        <ToastProvider>
-          <GeneralSettingsProvider>
-            <HintSettingsProvider>
-              <ProjectProvider>
-                <MultiPolicyProvider>
-                  <SentinelProvider>
-                    <FindingProvider>
-                      <SignalProvider>
-                        <IntelProvider>
-                          <MissionProvider>
-                            <SwarmFeedProvider>
-                              <SwarmProvider>
-                                <FleetConnectionProvider>{children}</FleetConnectionProvider>
-                              </SwarmProvider>
-                            </SwarmFeedProvider>
-                          </MissionProvider>
-                        </IntelProvider>
-                      </SignalProvider>
-                    </FindingProvider>
-                  </SentinelProvider>
-                </MultiPolicyProvider>
-              </ProjectProvider>
-            </HintSettingsProvider>
-          </GeneralSettingsProvider>
-        </ToastProvider>
-      </ReputationProvider>
-    </OperatorProvider>
-  );
+  return <ToastProvider>{children}</ToastProvider>;
 }
 
 /**
@@ -338,106 +194,9 @@ export function App() {
       <ErrorBoundary>
         <AppProviders>
           <Suspense fallback={<LoadingFallback />}>
+            <WorkbenchBootstraps />
             <IdentityPrompt />
-            <Routes>
-              <Route element={<DesktopLayout />}>
-                {/* Default redirect */}
-                <Route index element={<Navigate to="/home" replace />} />
-
-                {/* Core pages */}
-                <Route path="home" element={<HomePage />} />
-                <Route path="editor" element={<PolicyEditor />} />
-                <Route path="compliance" element={<ComplianceDashboard />} />
-                <Route path="receipts" element={<ReceiptInspector />} />
-                <Route path="library" element={<LibraryGallery />} />
-                <Route path="settings" element={<SettingsPage />} />
-                <Route path="approvals" element={<ApprovalQueue />} />
-                <Route path="fleet" element={<FleetDashboard />} />
-                <Route path="audit" element={<AuditLog />} />
-
-                {/* Sentinel Swarm pages */}
-                <Route path="sentinels" element={<SentinelsPage />} />
-                <Route path="sentinels/create" element={<SentinelCreatePage />} />
-                <Route path="sentinels/:id" element={<SentinelDetailPage />} />
-                <Route path="findings" element={<FindingsPage />} />
-                <Route path="findings/:id" element={<FindingDetailPage />} />
-                <Route path="intel/:id" element={<IntelDetailPage />} />
-                <Route path="missions" element={<MissionControlPage />} />
-                <Route path="swarms" element={<SwarmPage />} />
-                <Route path="swarms/:id" element={<SwarmDetail />} />
-                <Route path="swarm-board" element={<Navigate to="/lab" replace />} />
-
-                {/* Merged pages */}
-                <Route path="lab" element={<LabLayout />} />
-                <Route path="topology" element={<TopologyLayout />} />
-
-                {/* Redirects for bookmark compatibility */}
-                <Route
-                  path="intel"
-                  element={
-                    <Navigate
-                      to={{ pathname: "/findings", search: "?tab=intel" }}
-                      replace
-                    />
-                  }
-                />
-                <Route
-                  path="hunt"
-                  element={
-                    <Navigate to={{ pathname: "/lab", search: "?tab=hunt" }} replace />
-                  }
-                />
-                <Route
-                  path="simulator"
-                  element={
-                    <Navigate
-                      to={{ pathname: "/lab", search: "?tab=simulate" }}
-                      replace
-                    />
-                  }
-                />
-                <Route
-                  path="guards"
-                  element={
-                    <Navigate
-                      to={{ pathname: "/editor", search: "?panel=guards" }}
-                      replace
-                    />
-                  }
-                />
-                <Route
-                  path="compare"
-                  element={
-                    <Navigate
-                      to={{ pathname: "/editor", search: "?panel=compare" }}
-                      replace
-                    />
-                  }
-                />
-                <Route
-                  path="delegation"
-                  element={
-                    <Navigate
-                      to={{ pathname: "/topology", search: "?tab=delegation" }}
-                      replace
-                    />
-                  }
-                />
-                <Route
-                  path="hierarchy"
-                  element={
-                    <Navigate
-                      to={{ pathname: "/topology", search: "?tab=hierarchy" }}
-                      replace
-                    />
-                  }
-                />
-                <Route path="overview" element={<Navigate to="/home" replace />} />
-
-                {/* Catch-all */}
-                <Route path="*" element={<Navigate to="/home" replace />} />
-              </Route>
-            </Routes>
+            <WorkbenchRouter />
           </Suspense>
         </AppProviders>
       </ErrorBoundary>

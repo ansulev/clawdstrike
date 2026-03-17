@@ -9,8 +9,8 @@ import { memo, useState, useCallback, useRef, useEffect } from "react";
 import { NodeResizer, type NodeProps } from "@xyflow/react";
 import { IconPencil, IconCheck } from "@tabler/icons-react";
 import { cn } from "@/lib/utils";
-import { useSwarmBoard } from "@/lib/workbench/swarm-board-store";
-import type { SwarmBoardNodeData } from "@/lib/workbench/swarm-board-types";
+import { useSwarmBoard } from "@/features/swarm/stores/swarm-board-store";
+import type { SwarmBoardNodeData } from "@/features/swarm/swarm-board-types";
 
 function NoteNodeInner({ id, data, selected }: NodeProps) {
   const d = data as SwarmBoardNodeData;

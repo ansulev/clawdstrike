@@ -7,9 +7,9 @@ import {
   computeStreamStats,
   timeRangeToSince,
 } from "@/lib/workbench/hunt-engine";
-import { useFleetConnection } from "@/lib/workbench/use-fleet-connection";
-import { fetchAuditEvents } from "@/lib/workbench/fleet-client";
-import { useMultiPolicy } from "@/lib/workbench/multi-policy-store";
+import { useFleetConnection } from "@/features/fleet/use-fleet-connection";
+import { fetchAuditEvents } from "@/features/fleet/fleet-client";
+import { useMultiPolicy } from "@/features/policy/stores/multi-policy-store";
 import { useDraftDetection } from "@/lib/workbench/detection-workflow/use-draft-detection";
 import { buildOpenDocumentCoverage } from "@/lib/workbench/detection-workflow/coverage-projection";
 import { usePublishedCoverage } from "@/lib/workbench/detection-workflow/use-published-coverage";

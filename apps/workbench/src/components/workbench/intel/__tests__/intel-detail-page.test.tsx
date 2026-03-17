@@ -2,18 +2,18 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { IntelDetailPage } from "../../sentinel-swarm-pages";
-import { IntelProvider, useIntel } from "@/lib/workbench/intel-store";
-import { SwarmFeedProvider, useSwarmFeed } from "@/lib/workbench/swarm-feed-store";
-import { SwarmProvider, createSwarm } from "@/lib/workbench/swarm-store";
-import { OperatorProvider } from "@/lib/workbench/operator-store";
+import { useIntel, useIntelStore } from "@/features/findings/stores/intel-store";
+import { useSwarmFeed } from "@/features/swarm/stores/swarm-feed-store";
+import { createSwarm } from "@/features/swarm/stores/swarm-store";
+import { OperatorProvider } from "@/features/operator/stores/operator-store";
 import { createOperatorIdentity } from "@/lib/workbench/operator-crypto";
 import { signIntel } from "@/lib/workbench/intel-forge";
-import { FleetConnectionProvider } from "@/lib/workbench/use-fleet-connection";
-import { hashRawBytesSha256 } from "@/lib/workbench/swarm-blob-client";
+import { FleetConnectionProvider } from "@/features/fleet/use-fleet-connection";
+import { hashRawBytesSha256 } from "@/features/swarm/swarm-blob-client";
 import type { Intel } from "@/lib/workbench/sentinel-types";
-import { useSwarms } from "@/lib/workbench/swarm-store";
+import { useSwarms } from "@/features/swarm/stores/swarm-store";
 import type { OperatorIdentity } from "@/lib/workbench/operator-types";
-import { FAIL_CLOSED_HUB_TRUST_POLICY } from "@/lib/workbench/swarm-trust-policy";
+import { FAIL_CLOSED_HUB_TRUST_POLICY } from "@/features/swarm/swarm-trust-policy";
 import {
   FINDING_BLOB_SCHEMA,
   FINDING_ENVELOPE_SCHEMA,
@@ -26,7 +26,7 @@ import {
   type FindingEnvelope,
   type HubConfig,
   type RevocationEnvelope,
-} from "@/lib/workbench/swarm-protocol";
+} from "@/features/swarm/swarm-protocol";
 
 const INTEL_STORAGE_KEY = "clawdstrike_workbench_intel";
 const SWARM_STORAGE_KEY = "clawdstrike_workbench_swarms";
@@ -158,16 +158,10 @@ function renderIntelDetailPage(intelId = "int_share_01") {
     <MemoryRouter initialEntries={[`/intel/${intelId}`]}>
       <OperatorProvider>
         <FleetConnectionProvider>
-          <IntelProvider>
-            <SwarmFeedProvider>
-              <SwarmProvider>
-                <Snapshot />
-                <Routes>
-                  <Route path="/intel/:id" element={<IntelDetailPage />} />
-                </Routes>
-              </SwarmProvider>
-            </SwarmFeedProvider>
-          </IntelProvider>
+          <Snapshot />
+          <Routes>
+            <Route path="/intel/:id" element={<IntelDetailPage />} />
+          </Routes>
         </FleetConnectionProvider>
       </OperatorProvider>
     </MemoryRouter>,
@@ -631,6 +625,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
   localStorage.clear();
   sessionStorage.clear();
+  useIntelStore.setState({ localIntel: [], swarmIntel: [], activeIntelId: null });
 });
 
 describe("IntelDetailPage", () => {

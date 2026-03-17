@@ -1,9 +1,12 @@
 import React from "react";
+import { useEffect } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, screen } from "@testing-library/react";
 import { ShortcutProvider } from "../shortcut-provider";
+import { InitCommands } from "@/lib/commands/init-commands";
+import { usePaneStore } from "@/features/panes/pane-store";
 import { renderWithProviders } from "@/test/test-helpers";
-import { useWorkbench } from "@/lib/workbench/multi-policy-store";
+import { useWorkbench } from "@/features/policy/stores/multi-policy-store";
 import { isDesktop } from "@/lib/tauri-bridge";
 
 vi.mock("@/lib/tauri-bridge", () => ({
@@ -17,6 +20,10 @@ vi.mock("@/lib/tauri-bridge", () => ({
 function PolicyValidateShortcutHarness() {
   const { dispatch, state } = useWorkbench();
 
+  useEffect(() => {
+    usePaneStore.getState().syncRoute("/editor");
+  }, []);
+
   return (
     <>
       <button
@@ -29,6 +36,8 @@ function PolicyValidateShortcutHarness() {
       <span data-testid="policy-name">{state.activePolicy.name}</span>
       <span data-testid="sync-direction">{state.ui.editorSyncDirection ?? ""}</span>
       <span data-testid="dirty">{String(state.dirty)}</span>
+      <div data-testid="terminal-context" data-shortcut-context="terminal" tabIndex={-1} />
+      <InitCommands />
       <ShortcutProvider />
     </>
   );
@@ -52,5 +61,17 @@ describe("ShortcutProvider", () => {
 
     expect(screen.getByTestId("yaml").textContent).toContain('name: "Shortcut Rename"');
     expect(screen.getByTestId("sync-direction").textContent).toBe("yaml");
+  });
+
+  it("does not fire editor-only shortcuts while terminal context is focused", () => {
+    renderWithProviders(<PolicyValidateShortcutHarness />);
+
+    fireEvent.click(screen.getByRole("button", { name: "rename-policy" }));
+
+    const terminalContext = screen.getByTestId("terminal-context");
+    terminalContext.focus();
+    fireEvent.keyDown(terminalContext, { key: "v", metaKey: true, shiftKey: true });
+
+    expect(screen.getByTestId("sync-direction").textContent).toBe("");
   });
 });

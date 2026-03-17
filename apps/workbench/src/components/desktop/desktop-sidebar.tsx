@@ -22,13 +22,13 @@ import {
   SigilSettings,
   type SigilProps,
 } from "./sidebar-icons";
-import { useWorkbench } from "@/lib/workbench/multi-policy-store";
-import { useOperator } from "@/lib/workbench/operator-store";
-import { useFleetConnection } from "@/lib/workbench/use-fleet-connection";
-import { useSentinels } from "@/lib/workbench/sentinel-store";
-import { useFindings } from "@/lib/workbench/finding-store";
+import { useWorkbench } from "@/features/policy/stores/multi-policy-store";
+import { useOperator } from "@/features/operator/stores/operator-store";
+import { useFleetConnection } from "@/features/fleet/use-fleet-connection";
+import { useSentinels } from "@/features/sentinels/stores/sentinel-store";
+import { useFindings } from "@/features/findings/stores/finding-store";
 import { cn } from "@/lib/utils";
-import { fleetClient } from "@/lib/workbench/fleet-client";
+import { fleetClient } from "@/features/fleet/fleet-client";
 import { DEMO_APPROVAL_REQUESTS } from "@/lib/workbench/approval-demo-data";
 import { SIGIL_SYMBOLS } from "@/components/workbench/settings/identity-settings";
 import type { SigilType } from "@/lib/workbench/sentinel-manager";

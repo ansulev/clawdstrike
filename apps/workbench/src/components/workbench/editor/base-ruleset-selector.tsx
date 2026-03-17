@@ -1,4 +1,4 @@
-import { useWorkbench } from "@/lib/workbench/multi-policy-store";
+import { useWorkbench } from "@/features/policy/stores/multi-policy-store";
 import {
   Select,
   SelectContent,

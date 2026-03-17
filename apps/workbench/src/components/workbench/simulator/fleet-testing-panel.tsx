@@ -1,15 +1,15 @@
 import { useState, useCallback, useMemo, useRef } from "react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { VerdictBadge } from "@/components/workbench/shared/verdict-badge";
-import { useFleetConnection } from "@/lib/workbench/use-fleet-connection";
-import { useWorkbench } from "@/lib/workbench/multi-policy-store";
+import { useFleetConnection } from "@/features/fleet/use-fleet-connection";
+import { useWorkbench } from "@/features/policy/stores/multi-policy-store";
 import { useToast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
 import { simulatePolicy } from "@/lib/workbench/simulation-engine";
 import {
   fetchAuditEvents,
   type AuditEvent,
-} from "@/lib/workbench/fleet-client";
+} from "@/features/fleet/fleet-client";
 import {
   auditEventsToScenarios,
   summarizeTraffic,

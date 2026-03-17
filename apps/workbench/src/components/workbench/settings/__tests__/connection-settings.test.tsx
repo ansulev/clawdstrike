@@ -23,7 +23,7 @@ const useFleetConnectionMock = vi.hoisted(() => ({
 
 const emitAuditEventMock = vi.hoisted(() => vi.fn());
 
-vi.mock("@/lib/workbench/use-fleet-connection", () => ({
+vi.mock("@/features/fleet/use-fleet-connection", () => ({
   useFleetConnection: () => ({
     connection: {
       connected: false,

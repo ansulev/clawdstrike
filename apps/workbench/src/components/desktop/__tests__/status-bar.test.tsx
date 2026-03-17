@@ -4,7 +4,7 @@ import { fireEvent, screen } from "@testing-library/react";
 import { StatusBar } from "../status-bar";
 import { renderWithProviders } from "@/test/test-helpers";
 import { GUARD_REGISTRY } from "@/lib/workbench/guard-registry";
-import { useMultiPolicy, useWorkbench } from "@/lib/workbench/multi-policy-store";
+import { useMultiPolicy, useWorkbench } from "@/features/policy/stores/multi-policy-store";
 import { isDesktop } from "@/lib/tauri-bridge";
 
 vi.mock("@/lib/tauri-bridge", () => ({

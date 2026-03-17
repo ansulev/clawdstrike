@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { App } from "../App";
 
 // Mock tauri bridge
@@ -61,7 +61,12 @@ vi.mock("@/components/workbench/missions/mission-control-page", () => ({
   MissionControlPage: () => <div data-testid="page-missions">MissionControlPage</div>,
 }));
 
+vi.mock("@/components/workbench/identity/identity-prompt", () => ({
+  IdentityPrompt: () => null,
+}));
+
 afterEach(() => {
+  cleanup();
   window.location.hash = "";
 });
 
@@ -70,8 +75,10 @@ describe("App", () => {
     render(<App />);
 
     // Brand should be visible in the titlebar (split into two spans)
-    expect(screen.getByText("Clawdstrike")).toBeTruthy();
-    expect(screen.getByText("Workbench")).toBeTruthy();
+    return waitFor(() => {
+      expect(screen.getByText("Clawdstrike")).toBeTruthy();
+      expect(screen.getByText("Workbench")).toBeTruthy();
+    });
   });
 
   it("default route redirects to /home", async () => {
@@ -158,10 +165,10 @@ describe("App", () => {
     });
   });
 
-  it("wraps routes in WorkbenchProvider (sidebar can read context)", async () => {
+  it("keeps workbench state available to the shell", async () => {
     render(<App />);
 
-    // If WorkbenchProvider is missing, the sidebar would throw.
+    // If workbench state bootstrapping is broken, the sidebar would throw.
     // The sidebar nav items prove the context is available.
     await waitFor(() => {
       expect(screen.getByText("Editor")).toBeTruthy();

@@ -13,7 +13,7 @@ import {
   SelectContent,
   SelectItem,
 } from "@/components/ui/select";
-import { useWorkbench } from "@/lib/workbench/multi-policy-store";
+import { useWorkbench } from "@/features/policy/stores/multi-policy-store";
 import {
   ORIGIN_ACTOR_TYPE_OPTIONS as ACTOR_TYPE_OPTIONS,
   ORIGIN_DEFAULT_BEHAVIOR_OPTIONS as DEFAULT_BEHAVIOR_OPTIONS,

@@ -32,7 +32,7 @@ import {
   MAX_ACTIVE_TERMINALS,
   type SpawnSessionOptions,
   type SpawnClaudeSessionOptions,
-} from "@/lib/workbench/swarm-board-store";
+} from "@/features/swarm/stores/swarm-board-store";
 import { useTerminalSessions } from "@/lib/workbench/use-terminal-sessions";
 
 // ---------------------------------------------------------------------------

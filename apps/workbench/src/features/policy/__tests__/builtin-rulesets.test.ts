@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { BUILTIN_RULESETS } from "../builtin-rulesets";
-import { yamlToPolicy } from "../yaml-utils";
+import { BUILTIN_RULESETS } from "@/features/policy/builtin-rulesets";
+import { yamlToPolicy } from "@/features/policy/yaml-utils";
 
 
 function parseRuleset(yaml: string) {

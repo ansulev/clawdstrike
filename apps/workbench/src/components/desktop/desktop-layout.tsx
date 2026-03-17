@@ -1,20 +1,34 @@
-import { useEffect } from "react";
-import { Outlet, useLocation } from "react-router-dom";
-import { motion } from "motion/react";
+import { useEffect, useLayoutEffect } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { Titlebar } from "@/components/desktop/titlebar";
 import { StatusBar } from "@/components/desktop/status-bar";
 import { DesktopSidebar } from "@/components/desktop/desktop-sidebar";
 import { ShortcutProvider } from "@/components/desktop/shortcut-provider";
 import { CommandPalette } from "@/components/desktop/command-palette";
 import { CrashRecoveryBanner } from "@/components/desktop/crash-recovery-banner";
-import { useMultiPolicy } from "@/lib/workbench/multi-policy-store";
+import { BottomPane } from "@/features/bottom-pane/bottom-pane";
+import { useBottomPaneStore } from "@/features/bottom-pane/bottom-pane-store";
+import { PaneRoot } from "@/features/panes/pane-root";
+import { getActivePaneRoute, usePaneStore } from "@/features/panes/pane-store";
+import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
+import { InitCommands } from "@/lib/commands/init-commands";
+import { useMultiPolicy } from "@/features/policy/stores/multi-policy-store";
 import { useAutoSave } from "@/lib/workbench/use-auto-save";
+import { normalizeWorkbenchRoute } from "./workbench-routes";
 
 export function DesktopLayout() {
   const { tabs } = useMultiPolicy();
   const { pendingRecovery, dismissRecovery, restoreRecovery } = useAutoSave();
   const location = useLocation();
+  const navigate = useNavigate();
+  const bottomPaneOpen = useBottomPaneStore((state) => state.isOpen);
+  const bottomPaneSize = useBottomPaneStore((state) => state.size);
+  const activePaneRoute = usePaneStore((state) =>
+    getActivePaneRoute(state.root, state.activePaneId),
+  );
   const hasDirtyTabs = tabs.some((tab) => tab.dirty);
+  const rawRoute = `${location.pathname}${location.search}` || "/";
+  const currentRoute = normalizeWorkbenchRoute(rawRoute);
 
   // Warn on window close / reload when there are unsaved changes
   useEffect(() => {
@@ -28,9 +42,33 @@ export function DesktopLayout() {
     return () => window.removeEventListener("beforeunload", handler);
   }, [hasDirtyTabs]);
 
+  useLayoutEffect(() => {
+    usePaneStore.getState().syncRoute(currentRoute);
+  }, [currentRoute]);
+
+  useEffect(() => {
+    if (rawRoute === currentRoute) return;
+    navigate(currentRoute, { replace: true });
+  }, [currentRoute, navigate, rawRoute]);
+
+  useEffect(() => {
+    if (!activePaneRoute) return;
+    const latestActivePaneRoute = getActivePaneRoute(
+      usePaneStore.getState().root,
+      usePaneStore.getState().activePaneId,
+    );
+    if (activePaneRoute !== latestActivePaneRoute) {
+      return;
+    }
+    if (rawRoute !== currentRoute) return;
+    if (activePaneRoute === rawRoute) return;
+    navigate(activePaneRoute);
+  }, [activePaneRoute, currentRoute, rawRoute, navigate]);
+
   return (
     <div className="flex flex-col h-screen w-screen overflow-hidden bg-[#05060a]">
-      {/* Global keyboard shortcuts */}
+      {/* Command registry initialization + global keyboard shortcuts */}
+      <InitCommands />
       <ShortcutProvider />
       <CommandPalette />
 
@@ -50,16 +88,28 @@ export function DesktopLayout() {
       <div className="flex flex-1 min-h-0">
         <DesktopSidebar />
 
-        <main className="flex-1 min-w-0 overflow-hidden select-text">
-          <motion.div
-            key={location.pathname}
-            initial={{ opacity: 0, y: 6 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.15, ease: "easeOut" }}
-            className="h-full overflow-auto"
-          >
-            <Outlet />
-          </motion.div>
+        <main className="flex flex-1 min-w-0 flex-col overflow-hidden select-text">
+          {bottomPaneOpen ? (
+            <ResizablePanelGroup
+              direction="vertical"
+              className="h-full w-full"
+              onLayout={(sizes) => {
+                if (sizes.length >= 2) {
+                  useBottomPaneStore.getState().setSize(sizes[1]);
+                }
+              }}
+            >
+              <ResizablePanel defaultSize={100 - bottomPaneSize} minSize={30}>
+                <PaneRoot />
+              </ResizablePanel>
+              <ResizableHandle withHandle />
+              <ResizablePanel defaultSize={bottomPaneSize} minSize={16}>
+                <BottomPane />
+              </ResizablePanel>
+            </ResizablePanelGroup>
+          ) : (
+            <PaneRoot />
+          )}
         </main>
       </div>
 

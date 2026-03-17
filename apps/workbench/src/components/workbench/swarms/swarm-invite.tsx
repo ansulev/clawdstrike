@@ -16,8 +16,8 @@ import {
 } from "@tabler/icons-react";
 import { cn } from "@/lib/utils";
 import { SubTabBar, type SubTab } from "../shared/sub-tab-bar";
-import { useOperator } from "@/lib/workbench/operator-store";
-import { useSwarms } from "@/lib/workbench/swarm-store";
+import { useOperator } from "@/features/operator/stores/operator-store";
+import { useSwarms } from "@/features/swarm/stores/swarm-store";
 import type { SwarmOperatorRole } from "@/lib/workbench/operator-types";
 import { ROLE_HIERARCHY } from "@/lib/workbench/operator-types";
 import {

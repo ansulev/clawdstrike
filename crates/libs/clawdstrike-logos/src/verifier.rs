@@ -190,7 +190,7 @@ impl VerificationReport {
                 || self.inheritance.outcome == CheckOutcome::Skipped)
     }
 
-    /// JSON value for [`Receipt::merge_metadata`].
+    /// JSON value suitable for [`hush_core::receipt::Receipt::merge_metadata`].
     #[must_use]
     pub fn to_receipt_metadata(&self) -> serde_json::Value {
         serde_json::json!({
@@ -532,17 +532,19 @@ impl PolicyVerifier {
 
     fn check_policy_inheritance(
         &self,
-        parent: &Policy,
-        merged: &Policy,
+        parent_policy: &Policy,
+        effective_policy: &Policy,
         _parent_formulas: &[Formula],
-        _merged_formulas: &[Formula],
+        _effective_formulas: &[Formula],
     ) -> (InheritanceResult, bool) {
         #[allow(unused_mut)]
-        let mut inspected = check_policy_inheritance(merged, parent);
+        let mut inspected =
+            inspect_policy_inheritance_against_parent(effective_policy, parent_policy);
 
         #[cfg(feature = "z3")]
         if let Some(z3_checker) = self.z3_checker.as_ref() {
-            return match z3_checker.check_inheritance_soundness(_parent_formulas, _merged_formulas)
+            return match z3_checker
+                .check_inheritance_soundness(_parent_formulas, _effective_formulas)
             {
                 ProofResult::Valid(_) => (inspected, true),
                 ProofResult::Invalid(counterexample) => {
@@ -849,29 +851,32 @@ fn normative_formula_atom(formula: &Formula) -> Option<String> {
     }
 }
 
-fn check_policy_inheritance(child: &Policy, base: &Policy) -> InheritanceResult {
+fn inspect_policy_inheritance_against_parent(
+    child_policy: &Policy,
+    parent_policy: &Policy,
+) -> InheritanceResult {
     let mut weakened = Vec::new();
     weakened.extend(check_forbidden_path_inheritance(
-        base.guards.forbidden_path.as_ref(),
-        child.guards.forbidden_path.as_ref(),
+        parent_policy.guards.forbidden_path.as_ref(),
+        child_policy.guards.forbidden_path.as_ref(),
     ));
     weakened.extend(check_path_allowlist_inheritance(
-        base.guards.path_allowlist.as_ref(),
-        child.guards.path_allowlist.as_ref(),
+        parent_policy.guards.path_allowlist.as_ref(),
+        child_policy.guards.path_allowlist.as_ref(),
     ));
     weakened.extend(check_egress_inheritance(
-        base.guards.egress_allowlist.as_ref(),
-        child.guards.egress_allowlist.as_ref(),
+        parent_policy.guards.egress_allowlist.as_ref(),
+        child_policy.guards.egress_allowlist.as_ref(),
     ));
     weakened.extend(check_mcp_inheritance(
-        base.guards.mcp_tool.as_ref(),
-        child.guards.mcp_tool.as_ref(),
+        parent_policy.guards.mcp_tool.as_ref(),
+        child_policy.guards.mcp_tool.as_ref(),
     ));
     weakened.extend(check_shell_command_inheritance(
-        base.guards.shell_command.as_ref(),
-        child.guards.shell_command.as_ref(),
-        base.guards.forbidden_path.as_ref(),
-        child.guards.forbidden_path.as_ref(),
+        parent_policy.guards.shell_command.as_ref(),
+        child_policy.guards.shell_command.as_ref(),
+        parent_policy.guards.forbidden_path.as_ref(),
+        child_policy.guards.forbidden_path.as_ref(),
     ));
 
     weakened.sort_by(|a, b| a.atom.cmp(&b.atom));
@@ -1977,7 +1982,7 @@ mod tests {
         EgressAllowlistConfig, ForbiddenPathConfig, McpToolConfig, PathAllowlistConfig,
         ShellCommandConfig,
     };
-    use clawdstrike::policy::{GuardConfigs, Policy, VerificationSettings};
+    use clawdstrike::policy::{GuardConfigs, Policy, RuleSet, VerificationSettings};
     use hush_proxy::policy::PolicyAction;
     use logos_ffi::AgentId;
 
@@ -2171,6 +2176,30 @@ mod tests {
             agent(),
         );
         assert!(report.inheritance.outcome.is_pass(), "{report:?}");
+    }
+
+    #[test]
+    fn origin_enclaves_ruleset_reports_expected_egress_widening() {
+        let (parent_yaml, _) = RuleSet::yaml_by_name("default").unwrap();
+        let parent = Policy::from_yaml(parent_yaml).unwrap();
+
+        let (child_yaml, _) = RuleSet::yaml_by_name("origin-enclaves-example").unwrap();
+        let child = Policy::from_yaml(child_yaml).unwrap();
+        let effective = parent.merge(&child);
+
+        let report = formula_verifier().verify_policy_with_parent_and_source(
+            &parent,
+            &child,
+            &effective,
+            agent(),
+        );
+
+        assert_eq!(report.inheritance.outcome, CheckOutcome::Fail);
+        assert!(report
+            .inheritance
+            .weakened
+            .iter()
+            .any(|item| item.atom == "egress(x.internal.corp)"));
     }
 
     #[test]

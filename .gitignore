@@ -86,3 +86,5 @@ infra/vendor/regorus/**/obj/
 
 # Vendored dependencies (local)
 vendor/
+!infra/vendor/
+!infra/vendor/**

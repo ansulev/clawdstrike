@@ -7,7 +7,7 @@
 #   (no flag): regenerate in-place, overwriting committed Impl/ files
 #
 # Prerequisites (install once):
-#   - Charon: cargo install --git https://github.com/AeneasVerif/charon charon
+#   - Charon: cargo +nightly-2026-03-01 install --git https://github.com/AeneasVerif/charon --locked charon
 #   - Aeneas: see https://github.com/AeneasVerif/aeneas#installation
 #
 # The script is idempotent and safe to run multiple times.
@@ -50,7 +50,7 @@ CHARON=$(find_binary charon "$HOME/.cargo/bin/charon") || {
     echo "error: charon not found in PATH or ~/.cargo/bin/charon"
     echo ""
     echo "Install with:"
-    echo "  cargo install --git https://github.com/AeneasVerif/charon charon"
+    echo "  cargo +nightly-2026-03-01 install --git https://github.com/AeneasVerif/charon --locked charon"
     exit 1
 }
 

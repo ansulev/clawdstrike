@@ -13,7 +13,7 @@
 //! custom("my_action")       -- custom action type
 //! ```
 //!
-//! In the Logos AST these are represented as [`Formula::Atom(String)`] with the
+//! In the Logos AST these are represented as [`Formula::Atom`] values with the
 //! format `"type(param)"`.
 
 use logos_ffi::Formula;

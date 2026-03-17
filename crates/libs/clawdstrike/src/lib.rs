@@ -220,15 +220,9 @@ pub mod crypto {
     pub use hush_core::*;
 }
 
-#[path = "core/mod.rs"]
-mod formal_core;
-
 /// Preserves the historical `hush_core::*` re-export while adding the
 /// pure decision core (`CoreSeverity`, `CoreVerdict`, etc.).
-pub mod core {
-    pub use crate::formal_core::*;
-    pub use hush_core::*;
-}
+pub mod core;
 
 #[cfg(test)]
 mod tests {

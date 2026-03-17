@@ -131,9 +131,57 @@ jobs:
             echo "Falling back to formula inspection backend."
           fi
 
+          # Some example rulesets intentionally widen a parent policy. Those
+          # should still remain internally consistent and complete, but they are
+          # not expected to pass inheritance soundness.
+          expected_inheritance_failures=(
+            "rulesets/origin-enclaves-example.yaml"
+          )
+
+          is_expected_inheritance_failure() {
+            local candidate="$1"
+            for expected in "${expected_inheritance_failures[@]}"; do
+              if [[ "$expected" == "$candidate" ]]; then
+                return 0
+              fi
+            done
+            return 1
+          }
+
           for f in rulesets/*.yaml; do
             echo "==> Verifying $f"
-            "${cargo_args[@]}" policy verify "$f" || exit 1
+            report_file="$(mktemp)"
+
+            if "${cargo_args[@]}" policy verify --json "$f" >"$report_file"; then
+              verify_exit=0
+            else
+              verify_exit=$?
+            fi
+
+            consistency="$(jq -r '.report.consistency.outcome // empty' "$report_file")"
+            completeness="$(jq -r '.report.completeness.outcome // empty' "$report_file")"
+            inheritance="$(jq -r '.report.inheritance.outcome // empty' "$report_file")"
+
+            if [[ "$consistency" != "pass" || "$completeness" != "pass" ]]; then
+              cat "$report_file"
+              echo "Policy verification failed consistency/completeness checks for $f"
+              exit 1
+            fi
+
+            if [[ $verify_exit -eq 0 ]]; then
+              echo "  PASS: all checks passed"
+              continue
+            fi
+
+            if [[ "$inheritance" == "fail" ]] && is_expected_inheritance_failure "$f"; then
+              echo "  INFO: expected inheritance widening in $f"
+              jq -r '.report.inheritance.weakened[]?.atom' "$report_file" | sed 's/^/    - /'
+              continue
+            fi
+
+            cat "$report_file"
+            echo "Unexpected verification failure for $f"
+            exit "$verify_exit"
           done
 
           echo "All policy rulesets verified."
@@ -324,6 +372,8 @@ jobs:
 
       - name: Install Rust nightly toolchain
         uses: dtolnay/rust-toolchain@nightly
+        with:
+          toolchain: nightly-2026-03-01
 
       - name: Install OCaml toolchain
         uses: ocaml/setup-ocaml@v3
@@ -354,7 +404,7 @@ jobs:
           if command -v charon &>/dev/null; then
             echo "Charon already available"
           else
-            cargo install --git https://github.com/AeneasVerif/charon charon
+            cargo +nightly-2026-03-01 install --git https://github.com/AeneasVerif/charon --locked charon
           fi
 
       - name: Install Aeneas

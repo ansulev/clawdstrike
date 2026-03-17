@@ -3,6 +3,8 @@
 //! The existing `engine.rs` and `policy.rs` delegate to these functions,
 //! keeping the original public API unchanged.
 
+pub use hush_core::*;
+
 pub mod aggregate;
 pub mod cycle;
 pub mod merge;

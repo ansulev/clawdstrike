@@ -91,15 +91,17 @@ echo "==> Running Charon to extract LLBC..."
 
 LLBC_FILE="$WORK_DIR/clawdstrike.llbc"
 
-# Run charon from the crate directory, outputting LLBC to our work dir.
-# --preset=aeneas tells Charon to produce Aeneas-compatible output.
-# --start-from restricts extraction to the core module.
+# Run charon from the crate directory, outputting LLBC to a stable file path.
+# Current Charon releases expose extraction options on the `cargo` subcommand.
+# `--preset=aeneas` produces Aeneas-compatible output and `--start-from`
+# restricts extraction to the core module.
 (
     cd "$CRATE_DIR"
-    "$CHARON" \
+    "$CHARON" cargo \
         --preset=aeneas \
         --start-from 'crate::core' \
-        --dest "$WORK_DIR"
+        --dest-file "$LLBC_FILE" \
+        -- --lib --quiet
 )
 
 if [[ ! -f "$LLBC_FILE" ]]; then
@@ -121,8 +123,10 @@ AENEAS_OUT="$WORK_DIR/lean_out"
 mkdir -p "$AENEAS_OUT"
 
 "$AENEAS" \
-    --backend lean4 \
-    --dest "$AENEAS_OUT" \
+    -backend lean \
+    -dest "$AENEAS_OUT" \
+    -split-files \
+    -gen-lib-entry \
     "$LLBC_FILE"
 
 echo "   Lean files generated in $AENEAS_OUT"

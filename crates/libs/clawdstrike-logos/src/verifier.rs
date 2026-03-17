@@ -315,19 +315,22 @@ impl PolicyVerifier {
     }
 
     pub fn verify_policy(&self, policy: &Policy, agent: AgentId) -> VerificationReport {
+        let start = Instant::now();
         let compiler = DefaultPolicyCompiler::new(agent);
         let formulas = compiler.compile_policy(policy);
         let (consistency, consistency_z3) = self.check_consistency_internal(&formulas);
         let expected = expected_action_types_for_policy(policy);
         let (completeness, completeness_z3) =
             self.check_completeness_for_expected(&formulas, &expected);
+        let backend = report_backend(consistency_z3, completeness_z3, None);
 
         build_policy_report(
             &formulas,
             None,
             consistency,
             completeness,
-            report_backend(consistency_z3, completeness_z3, None),
+            backend,
+            start.elapsed().as_millis() as u64,
         )
     }
 
@@ -337,6 +340,7 @@ impl PolicyVerifier {
         effective: &Policy,
         agent: AgentId,
     ) -> VerificationReport {
+        let start = Instant::now();
         let compiler = DefaultPolicyCompiler::new(agent);
         let parent_formulas = compiler.compile_policy(parent);
         let effective_formulas = compiler.compile_policy(effective);
@@ -346,13 +350,15 @@ impl PolicyVerifier {
             self.check_completeness_for_expected(&effective_formulas, &expected);
         let (inheritance, inheritance_z3) =
             self.check_policy_inheritance(parent, effective, &parent_formulas, &effective_formulas);
+        let backend = report_backend(consistency_z3, completeness_z3, Some(inheritance_z3));
 
         build_policy_report(
             &effective_formulas,
             Some(inheritance),
             consistency,
             completeness,
-            report_backend(consistency_z3, completeness_z3, Some(inheritance_z3)),
+            backend,
+            start.elapsed().as_millis() as u64,
         )
     }
 
@@ -363,6 +369,7 @@ impl PolicyVerifier {
         effective: &Policy,
         agent: AgentId,
     ) -> VerificationReport {
+        let start = Instant::now();
         let compiler = DefaultPolicyCompiler::new(agent);
         let parent_formulas = compiler.compile_policy(parent);
         let effective_formulas = compiler.compile_policy(effective);
@@ -378,13 +385,15 @@ impl PolicyVerifier {
             &parent_formulas,
             &inherited_formulas,
         );
+        let backend = report_backend(consistency_z3, completeness_z3, Some(inheritance_z3));
 
         build_policy_report(
             &effective_formulas,
             Some(inheritance),
             consistency,
             completeness,
-            report_backend(consistency_z3, completeness_z3, Some(inheritance_z3)),
+            backend,
+            start.elapsed().as_millis() as u64,
         )
     }
 
@@ -582,8 +591,8 @@ fn build_policy_report(
     consistency: ConsistencyResult,
     completeness: CompletenessResult,
     backend: VerificationBackend,
+    verification_time_ms: u64,
 ) -> VerificationReport {
-    let start = Instant::now();
     let atoms = collect_atoms(formulas);
     let atom_count = atoms.len();
     let inheritance = inheritance.unwrap_or(InheritanceResult {
@@ -606,7 +615,7 @@ fn build_policy_report(
         consistency,
         completeness,
         inheritance,
-        verification_time_ms: start.elapsed().as_millis() as u64,
+        verification_time_ms,
         properties_checked,
         attestation_level,
     }
@@ -1297,27 +1306,62 @@ fn default_domain_probe(base_policy: &DomainPolicy) -> String {
 }
 
 fn default_mcp_probe(base_cfg: &McpToolConfig, child_cfg: Option<&McpToolConfig>) -> String {
-    let mut idx = 0usize;
-    loop {
-        let candidate = if idx == 0 {
-            "__clawdstrike_inheritance_probe__".to_string()
-        } else {
-            format!("__clawdstrike_inheritance_probe_{idx}__")
-        };
+    let seed = "__clawdstrike_inheritance_probe__";
+    if !mcp_probe_in_use(base_cfg, child_cfg, seed) {
+        return seed.to_string();
+    }
 
-        let used_in_base = base_cfg.allow.contains(&candidate)
-            || base_cfg.block.contains(&candidate)
-            || base_cfg.require_confirmation.contains(&candidate);
-        let used_in_child = child_cfg.is_some_and(|cfg| {
-            cfg.allow.contains(&candidate)
-                || cfg.block.contains(&candidate)
-                || cfg.require_confirmation.contains(&candidate)
-        });
-        if !used_in_base && !used_in_child {
+    for idx in 0..32 {
+        let candidate = format!("__clawdstrike_inheritance_probe_{idx}__");
+        if !mcp_probe_in_use(base_cfg, child_cfg, &candidate) {
             return candidate;
         }
-        idx += 1;
     }
+
+    let mut used = BTreeSet::new();
+    extend_mcp_probe_names(&mut used, base_cfg);
+    if let Some(cfg) = child_cfg {
+        extend_mcp_probe_names(&mut used, cfg);
+    }
+
+    let joined = used.into_iter().collect::<Vec<_>>().join("\n");
+    let digest = hush_core::hashing::sha256(joined.as_bytes()).to_hex();
+    for suffix in [&digest[..16], &digest[..24]] {
+        let candidate = format!("__clawdstrike_inheritance_probe_{suffix}__");
+        if !mcp_probe_in_use(base_cfg, child_cfg, &candidate) {
+            return candidate;
+        }
+    }
+
+    seed.to_string()
+}
+
+fn mcp_probe_in_use(
+    base_cfg: &McpToolConfig,
+    child_cfg: Option<&McpToolConfig>,
+    candidate: &str,
+) -> bool {
+    let used_in_base = base_cfg.allow.iter().any(|tool| tool == candidate)
+        || base_cfg.block.iter().any(|tool| tool == candidate)
+        || base_cfg
+            .require_confirmation
+            .iter()
+            .any(|tool| tool == candidate);
+    let used_in_child = child_cfg.is_some_and(|cfg| {
+        cfg.allow.iter().any(|tool| tool == candidate)
+            || cfg.block.iter().any(|tool| tool == candidate)
+            || cfg
+                .require_confirmation
+                .iter()
+                .any(|tool| tool == candidate)
+    });
+    used_in_base || used_in_child
+}
+
+fn extend_mcp_probe_names(out: &mut BTreeSet<String>, cfg: &McpToolConfig) {
+    out.extend(cfg.allow.iter().cloned());
+    out.extend(cfg.block.iter().cloned());
+    out.extend(cfg.require_confirmation.iter().cloned());
 }
 
 fn representative_path(pattern: &str) -> String {
@@ -2006,6 +2050,31 @@ mod tests {
     }
 
     #[test]
+    fn build_policy_report_preserves_caller_timing() {
+        let report = build_policy_report(
+            &[Formula::prohibition(
+                agent(),
+                Formula::atom("access(/etc/shadow)"),
+            )],
+            None,
+            ConsistencyResult {
+                outcome: CheckOutcome::Pass,
+                conflict_count: 0,
+                conflicts: Vec::new(),
+            },
+            CompletenessResult {
+                outcome: CheckOutcome::Pass,
+                covered: vec!["access".to_string()],
+                missing: Vec::new(),
+            },
+            VerificationBackend::FormulaInspection,
+            37,
+        );
+
+        assert_eq!(report.verification_time_ms, 37);
+    }
+
+    #[test]
     fn forbidden_path_exception_weakening_is_detected_semantically() {
         let mut parent = Policy::default();
         parent.guards.forbidden_path = Some(ForbiddenPathConfig {
@@ -2178,6 +2247,30 @@ mod tests {
             .weakened
             .iter()
             .any(|item| item.atom == "exec(touches /etc/shadow)"));
+    }
+
+    #[test]
+    fn default_mcp_probe_returns_unused_fallback_when_probe_space_is_exhausted() {
+        let mut cfg = McpToolConfig {
+            enabled: true,
+            allow: vec!["__clawdstrike_inheritance_probe__".to_string()],
+            block: Vec::new(),
+            require_confirmation: Vec::new(),
+            default_action: None,
+            max_args_size: None,
+            additional_allow: Vec::new(),
+            remove_allow: Vec::new(),
+            additional_block: Vec::new(),
+            remove_block: Vec::new(),
+        };
+        cfg.allow
+            .extend((0..32).map(|idx| format!("__clawdstrike_inheritance_probe_{idx}__")));
+
+        let probe = default_mcp_probe(&cfg, None);
+        assert!(!probe.is_empty());
+        assert!(!cfg.allow.contains(&probe));
+        assert!(!cfg.block.contains(&probe));
+        assert!(!cfg.require_confirmation.contains(&probe));
     }
 
     #[test]

@@ -5,7 +5,7 @@
 //! inheritance checks, because compiled formulas alone do not carry enough
 //! information to model guard-specific override behavior soundly.
 
-use std::collections::{BTreeSet, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet, VecDeque};
 use std::time::Instant;
 
 use clawdstrike::guards::{
@@ -996,7 +996,7 @@ where
 {
     let mut candidates = BTreeSet::new();
     for pattern in child_patterns {
-        candidates.insert(representative_path(pattern));
+        candidates.extend(representative_path_samples(pattern));
     }
     candidates.insert(default_path_probe(base_guard, &is_allowed));
 
@@ -1019,20 +1019,17 @@ fn check_egress_inheritance(
         return Vec::new();
     };
 
+    let child_cfg = child_cfg.filter(|cfg| cfg.enabled);
     let base_policy = domain_policy_from_config(base_cfg);
-    let child_policy = domain_policy_from_config(
-        &child_cfg
-            .filter(|cfg| cfg.enabled)
-            .cloned()
-            .unwrap_or_else(disabled_egress_config),
-    );
+    let child_policy =
+        domain_policy_from_config(&child_cfg.cloned().unwrap_or_else(disabled_egress_config));
 
     let mut candidates = BTreeSet::new();
     for blocked in &base_cfg.block {
         candidates.insert(representative_domain(blocked));
     }
 
-    if child_cfg.filter(|cfg| cfg.enabled).is_some_and(|cfg| {
+    if child_cfg.is_none_or(|cfg| {
         matches!(
             cfg.default_action,
             None | Some(PolicyAction::Allow) | Some(PolicyAction::Log)
@@ -1041,7 +1038,7 @@ fn check_egress_inheritance(
         candidates.insert(default_domain_probe(&base_policy));
     }
 
-    if let Some(child_cfg) = child_cfg.filter(|cfg| cfg.enabled) {
+    if let Some(child_cfg) = child_cfg {
         for allowed in &child_cfg.allow {
             candidates.insert(representative_domain(allowed));
             for blocked in &base_cfg.block {
@@ -1096,11 +1093,20 @@ fn check_mcp_inheritance(
         candidates.insert(default_mcp_probe(base_cfg, child_cfg));
     }
 
+    let Some(block_probe) = base_cfg.block.first().cloned().or_else(|| {
+        (!base_cfg.allow.is_empty()
+            || matches!(base_cfg.default_action, Some(McpDefaultAction::Block)))
+        .then(|| default_mcp_probe(base_cfg, child_cfg))
+    }) else {
+        return Vec::new();
+    };
+    let blocked_decision = std::mem::discriminant(&base_guard.is_allowed(&block_probe));
+
     candidates
         .into_iter()
         .filter(|candidate| {
-            tool_action(&base_guard, candidate) == "Block"
-                && tool_action(&child_guard, candidate) != "Block"
+            std::mem::discriminant(&base_guard.is_allowed(candidate)) == blocked_decision
+                && std::mem::discriminant(&child_guard.is_allowed(candidate)) != blocked_decision
         })
         .map(|candidate| WeakenedProhibition {
             atom: format!("mcp({candidate})"),
@@ -1266,10 +1272,6 @@ fn domain_action(policy: &DomainPolicy, domain: &str) -> PolicyAction {
     policy.evaluate_detailed(domain).action
 }
 
-fn tool_action(guard: &McpToolGuard, tool_name: &str) -> String {
-    format!("{:?}", guard.is_allowed(tool_name))
-}
-
 fn default_path_probe<F>(base_guard: &PathAllowlistGuard, is_allowed: F) -> String
 where
     F: Fn(&PathAllowlistGuard, &str) -> bool,
@@ -1365,6 +1367,17 @@ fn extend_mcp_probe_names(out: &mut BTreeSet<String>, cfg: &McpToolConfig) {
 }
 
 fn representative_path(pattern: &str) -> String {
+    representative_path_with_fill(pattern, "x")
+}
+
+fn representative_path_samples(pattern: &str) -> BTreeSet<String> {
+    ["x", "a", "0", "z"]
+        .into_iter()
+        .map(|fill| representative_path_with_fill(pattern, fill))
+        .collect()
+}
+
+fn representative_path_with_fill(pattern: &str, wildcard_fill: &str) -> String {
     let absolute = pattern.starts_with('/');
     let mut segments = Vec::new();
     for segment in pattern.split('/') {
@@ -1372,9 +1385,9 @@ fn representative_path(pattern: &str) -> String {
             continue;
         }
         if segment == "**" {
-            segments.push("x".to_string());
+            segments.push(wildcard_fill.to_string());
         } else {
-            segments.push(representative_token(segment));
+            segments.push(representative_token_with_fill(segment, wildcard_fill));
         }
     }
 
@@ -1492,46 +1505,7 @@ fn literal_path_suffix(pattern: &str) -> Vec<String> {
 }
 
 fn literal_segment(pattern: &str) -> String {
-    let mut literal = String::new();
-    let mut chars = pattern.chars().peekable();
-
-    while let Some(ch) = chars.next() {
-        match ch {
-            '*' | '?' => {}
-            '[' => {
-                let mut saw_literal = None;
-                for inner in chars.by_ref() {
-                    if inner == ']' {
-                        break;
-                    }
-                    if saw_literal.is_none() && !matches!(inner, '^' | '!') {
-                        saw_literal = Some(inner);
-                    }
-                }
-                literal.push(saw_literal.unwrap_or('x'));
-            }
-            '{' => {
-                let mut branch = String::new();
-                for inner in chars.by_ref() {
-                    if matches!(inner, ',' | '}') {
-                        break;
-                    }
-                    branch.push(inner);
-                }
-                if branch.is_empty() {
-                    literal.push('x');
-                } else {
-                    literal.push_str(&branch);
-                }
-            }
-            '\\' => {
-                if let Some(escaped) = chars.next() {
-                    literal.push(escaped);
-                }
-            }
-            _ => literal.push(ch),
-        }
-    }
+    let literal = render_literal_segment(pattern, 'x');
 
     if literal.is_empty() {
         "x".to_string()
@@ -1577,36 +1551,25 @@ fn prefix_suffix_token_candidate(left: &str, right: &str) -> Option<String> {
 }
 
 fn representative_token(pattern: &str) -> String {
+    representative_token_with_fill(pattern, "x")
+}
+
+fn representative_token_with_fill(pattern: &str, wildcard_fill: &str) -> String {
+    let wildcard_char = wildcard_fill.chars().next().unwrap_or('x');
     let mut out = String::new();
     let mut chars = pattern.chars().peekable();
 
     while let Some(ch) = chars.next() {
         match ch {
-            '*' | '?' => out.push('x'),
-            '[' => {
-                let mut saw_literal = None;
-                for inner in chars.by_ref() {
-                    if inner == ']' {
-                        break;
-                    }
-                    if saw_literal.is_none() && !matches!(inner, '^' | '!') {
-                        saw_literal = Some(inner);
-                    }
-                }
-                out.push(saw_literal.unwrap_or('x'));
-            }
+            '*' | '?' => out.push_str(wildcard_fill),
+            '[' => out.push(consume_char_class_literal(&mut chars, wildcard_char)),
             '{' => {
-                let mut branch = String::new();
-                for inner in chars.by_ref() {
-                    if matches!(inner, ',' | '}') {
-                        break;
-                    }
-                    branch.push(inner);
-                }
-                if branch.is_empty() {
-                    out.push('x');
+                let branch = consume_brace_first_alternative(&mut chars).unwrap_or_default();
+                let rendered = representative_token_with_fill(&branch, wildcard_fill);
+                if rendered.is_empty() {
+                    out.push(wildcard_char);
                 } else {
-                    out.push_str(&branch);
+                    out.push_str(&rendered);
                 }
             }
             '\\' => {
@@ -1646,21 +1609,135 @@ fn literal_prefix_token(pattern: &str) -> String {
 
 fn literal_suffix_token(pattern: &str) -> String {
     let mut out = String::new();
-    let mut escape = false;
-    for ch in pattern.chars().rev() {
-        if escape {
-            out.insert(0, ch);
-            escape = false;
-            continue;
-        }
-
+    let mut chars = pattern.chars().peekable();
+    while let Some(ch) = chars.next() {
         match ch {
-            '\\' => escape = true,
-            '*' | '?' | ']' | '}' => break,
-            _ => out.insert(0, ch),
+            '*' | '?' => out.clear(),
+            '[' => {
+                out.clear();
+                let _ = consume_char_class_literal(&mut chars, 'x');
+            }
+            '{' => {
+                out.clear();
+                let _ = consume_brace_first_alternative(&mut chars);
+            }
+            '\\' => {
+                if let Some(escaped) = chars.next() {
+                    out.push(escaped);
+                }
+            }
+            _ => out.push(ch),
         }
     }
     out
+}
+
+fn render_literal_segment(pattern: &str, wildcard_char: char) -> String {
+    let mut literal = String::new();
+    let mut chars = pattern.chars().peekable();
+
+    while let Some(ch) = chars.next() {
+        match ch {
+            '*' | '?' => {}
+            '[' => literal.push(consume_char_class_literal(&mut chars, wildcard_char)),
+            '{' => {
+                let branch = consume_brace_first_alternative(&mut chars).unwrap_or_default();
+                let rendered = render_literal_segment(&branch, wildcard_char);
+                if rendered.is_empty() {
+                    literal.push(wildcard_char);
+                } else {
+                    literal.push_str(&rendered);
+                }
+            }
+            '\\' => {
+                if let Some(escaped) = chars.next() {
+                    literal.push(escaped);
+                }
+            }
+            _ => literal.push(ch),
+        }
+    }
+
+    literal
+}
+
+fn consume_char_class_literal(
+    chars: &mut std::iter::Peekable<std::str::Chars<'_>>,
+    fallback: char,
+) -> char {
+    let mut saw_literal = None;
+    let mut escaped = false;
+
+    for inner in chars.by_ref() {
+        if escaped {
+            if saw_literal.is_none() {
+                saw_literal = Some(inner);
+            }
+            escaped = false;
+            continue;
+        }
+
+        match inner {
+            ']' => break,
+            '\\' => escaped = true,
+            '^' | '!' if saw_literal.is_none() => {}
+            _ if saw_literal.is_none() => saw_literal = Some(inner),
+            _ => {}
+        }
+    }
+
+    saw_literal.unwrap_or(fallback)
+}
+
+fn consume_brace_first_alternative(
+    chars: &mut std::iter::Peekable<std::str::Chars<'_>>,
+) -> Option<String> {
+    let mut first = String::new();
+    let mut depth = 0usize;
+    let mut escaped = false;
+    let mut capturing_first = true;
+
+    for inner in chars.by_ref() {
+        if escaped {
+            if capturing_first {
+                first.push(inner);
+            }
+            escaped = false;
+            continue;
+        }
+
+        match inner {
+            '\\' => {
+                if capturing_first {
+                    first.push(inner);
+                }
+                escaped = true;
+            }
+            '{' => {
+                depth += 1;
+                if capturing_first {
+                    first.push(inner);
+                }
+            }
+            '}' => {
+                if depth == 0 {
+                    break;
+                }
+                depth -= 1;
+                if capturing_first {
+                    first.push(inner);
+                }
+            }
+            ',' if depth == 0 => capturing_first = false,
+            _ => {
+                if capturing_first {
+                    first.push(inner);
+                }
+            }
+        }
+    }
+
+    Some(first)
 }
 
 fn path_pattern_matches(pattern: &str, candidate: &str) -> bool {
@@ -1810,38 +1887,85 @@ fn load_time_verifier() -> PolicyVerifier {
 }
 
 /// Thread-safe cache keyed by policy content hash.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct VerificationCache {
-    entries: std::sync::Mutex<std::collections::HashMap<String, VerificationReport>>,
+    state: std::sync::Mutex<VerificationCacheState>,
+}
+
+#[derive(Debug, Default)]
+struct VerificationCacheState {
+    entries: HashMap<String, VerificationReport>,
+    insertion_order: VecDeque<String>,
+    max_entries: usize,
 }
 
 impl VerificationCache {
+    const DEFAULT_MAX_ENTRIES: usize = 256;
+
     #[must_use]
     pub fn new() -> Self {
+        Self::with_capacity_limit(Self::DEFAULT_MAX_ENTRIES)
+    }
+
+    #[must_use]
+    pub fn with_capacity_limit(max_entries: usize) -> Self {
         Self {
-            entries: std::sync::Mutex::new(std::collections::HashMap::new()),
+            state: std::sync::Mutex::new(VerificationCacheState {
+                entries: HashMap::new(),
+                insertion_order: VecDeque::new(),
+                max_entries,
+            }),
         }
     }
 
     #[must_use]
     pub fn get(&self, key: &str) -> Option<VerificationReport> {
-        let guard = self.entries.lock().ok()?;
-        guard.get(key).cloned()
+        let guard = self.state.lock().ok()?;
+        guard.get(key)
     }
 
     pub fn insert(&self, key: String, report: VerificationReport) {
-        if let Ok(mut guard) = self.entries.lock() {
+        if let Ok(mut guard) = self.state.lock() {
             guard.insert(key, report);
         }
     }
 
     #[must_use]
     pub fn len(&self) -> usize {
-        self.entries.lock().map(|g| g.len()).unwrap_or(0)
+        self.state.lock().map(|g| g.entries.len()).unwrap_or(0)
     }
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.len() == 0
+    }
+}
+
+impl Default for VerificationCache {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl VerificationCacheState {
+    fn get(&self, key: &str) -> Option<VerificationReport> {
+        self.entries.get(key).cloned()
+    }
+
+    fn insert(&mut self, key: String, report: VerificationReport) {
+        if self.max_entries == 0 {
+            return;
+        }
+
+        self.entries.insert(key.clone(), report);
+        self.insertion_order.retain(|existing| existing != &key);
+        self.insertion_order.push_back(key);
+
+        while self.entries.len() > self.max_entries {
+            let Some(oldest) = self.insertion_order.pop_front() else {
+                break;
+            };
+            self.entries.remove(&oldest);
+        }
     }
 }
 
@@ -2131,6 +2255,33 @@ mod tests {
     }
 
     #[test]
+    fn path_allowlist_widening_uses_multiple_representatives() {
+        let mut parent = Policy::default();
+        parent.guards.path_allowlist = Some(PathAllowlistConfig {
+            enabled: true,
+            file_access_allow: vec!["/workspace/*x*".to_string()],
+            file_write_allow: vec![],
+            patch_allow: vec![],
+        });
+
+        let mut merged = parent.clone();
+        merged.guards.path_allowlist = Some(PathAllowlistConfig {
+            enabled: true,
+            file_access_allow: vec!["/workspace/*".to_string()],
+            file_write_allow: vec![],
+            patch_allow: vec![],
+        });
+
+        let report = formula_verifier().verify_policy_with_parent(&parent, &merged, agent());
+        assert_eq!(report.inheritance.outcome, CheckOutcome::Fail);
+        assert!(report
+            .inheritance
+            .weakened
+            .iter()
+            .any(|item| item.atom == "access(/workspace/a)"));
+    }
+
+    #[test]
     fn egress_allow_override_is_detected_semantically() {
         let mut parent = Policy::default();
         parent.guards.egress_allowlist = Some(EgressAllowlistConfig {
@@ -2163,6 +2314,30 @@ mod tests {
             .weakened
             .iter()
             .any(|item| item.atom == "egress(db.internal)"));
+    }
+
+    #[test]
+    fn egress_default_block_without_child_guard_is_detected() {
+        let mut parent = Policy::default();
+        parent.guards.egress_allowlist = Some(EgressAllowlistConfig {
+            enabled: true,
+            allow: vec![],
+            block: vec![],
+            default_action: Some(PolicyAction::Block),
+            additional_allow: vec![],
+            remove_allow: vec![],
+            additional_block: vec![],
+            remove_block: vec![],
+        });
+
+        let child = Policy::default();
+        let report = formula_verifier().verify_policy_with_parent(&parent, &child, agent());
+        assert_eq!(report.inheritance.outcome, CheckOutcome::Fail);
+        assert!(report
+            .inheritance
+            .weakened
+            .iter()
+            .any(|item| item.atom == "egress(clawdstrike-inheritance-check.invalid)"));
     }
 
     #[test]
@@ -2247,6 +2422,18 @@ mod tests {
             .weakened
             .iter()
             .any(|item| item.atom == "exec(touches /etc/shadow)"));
+    }
+
+    #[test]
+    fn brace_alternatives_are_fully_consumed_when_generating_tokens() {
+        assert_eq!(representative_token("{alice,bob}.txt"), "alice.txt");
+        assert_eq!(literal_segment("{alice,bob}.txt"), "alice.txt");
+    }
+
+    #[test]
+    fn literal_suffix_token_keeps_escaped_meta_literals() {
+        assert_eq!(literal_suffix_token(r"abc\*def"), "abc*def");
+        assert_eq!(literal_suffix_token(r"abc\?def"), "abc?def");
     }
 
     #[test]
@@ -2427,6 +2614,21 @@ mod tests {
         assert!(!first.cache_hit);
         assert!(second.cache_hit);
         assert_eq!(cache.len(), 1);
+    }
+
+    #[test]
+    fn cache_eviction_keeps_bounded_size() {
+        let cache = VerificationCache::with_capacity_limit(2);
+        let report = formula_verifier().verify(&[], None);
+
+        cache.insert("one".to_string(), report.clone());
+        cache.insert("two".to_string(), report.clone());
+        cache.insert("three".to_string(), report);
+
+        assert_eq!(cache.len(), 2);
+        assert!(cache.get("one").is_none());
+        assert!(cache.get("two").is_some());
+        assert!(cache.get("three").is_some());
     }
 
     #[cfg(feature = "z3")]

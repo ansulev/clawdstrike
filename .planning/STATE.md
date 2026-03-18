@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: milestone
 status: in-progress
-stopped_at: Completed 07-01-PLAN.md
-last_updated: "2026-03-18T20:23:22Z"
-last_activity: 2026-03-18 -- Completed Phase 7 Plan 1 (Detection Editor Integration - Routes & Commands)
+stopped_at: Completed 07-02-PLAN.md
+last_updated: "2026-03-18T20:25:50Z"
+last_activity: 2026-03-18 -- Completed Phase 7 Plan 2 (Right Sidebar Panel Expansion)
 progress:
   total_phases: 7
   completed_phases: 5
-  total_plans: 10
-  completed_plans: 10
+  total_plans: 11
+  completed_plans: 11
   percent: 100
 ---
 
@@ -26,9 +26,9 @@ See: .planning/PROJECT.md (updated 2026-03-18)
 ## Current Position
 
 Phase: 7 of 7 (Detection Editor Integration)
-Plan: 1 of 4 COMPLETE
-Status: Phase 07 in progress, plan 1 complete
-Last activity: 2026-03-18 -- Completed Phase 7 Plan 1 (Detection Editor Integration - Routes & Commands)
+Plan: 2 of 4 COMPLETE
+Status: Phase 07 in progress, plan 2 complete
+Last activity: 2026-03-18 -- Completed Phase 7 Plan 2 (Right Sidebar Panel Expansion)
 
 Progress: [██████████] 100%
 
@@ -67,6 +67,7 @@ Summary: Delivered IDE shell — activity bar, 7 sidebar panels, pane tab system
 | Phase 02 P02 | 3min | 2 tasks | 5 files |
 | Phase 04 P02 | 3min | 2 tasks | 5 files |
 | Phase 07 P01 | 2min | 2 tasks | 2 files |
+| Phase 07 P02 | 3min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -105,6 +106,9 @@ v1.1 decisions:
 - [Phase 04]: Newly created files auto-marked as modified to demonstrate status indicators
 - [Phase 07]: MitreHeatmap standalone route uses empty tabs array (valid blank ATT&CK matrix); rich data version stays in PolicyEditor
 - [Phase 07]: /editor?panel=guards and /editor?panel=compare normalized to /guards and /compare for backward compat
+- [Phase 07]: Right sidebar tab strip uses icon-only buttons with gold #d4a84b active indicator
+- [Phase 07]: Editor-context panels wrapped in dedicated content components with no-tab fallback
+- [Phase 07]: rightSidebar.* commands use useRightSidebarStore.getState() directly (no ViewCommandDeps coupling)
 
 ### Pending Todos
 
@@ -116,6 +120,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-18T20:23:22Z
-Stopped at: Completed 07-01-PLAN.md
-Resume file: Continue with 07-02-PLAN.md (Evidence Pack, Explainability, Version History right sidebar panels)
+Last session: 2026-03-18T20:25:50Z
+Stopped at: Completed 07-02-PLAN.md
+Resume file: Continue with 07-03-PLAN.md (Visual builder and TrustPrint tool routes)

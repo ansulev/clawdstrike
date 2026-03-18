@@ -16,7 +16,6 @@ import {
   StateEffect,
   RangeSet,
   type Extension,
-  type Range,
 } from "@codemirror/state";
 import { getGuardMeta } from "@/lib/workbench/guard-registry";
 import type { GuardLineRange } from "./gutter-types";
@@ -54,7 +53,7 @@ const guardMarkerSet = StateField.define<RangeSet<GutterMarker>>({
     for (const effect of tr.effects) {
       if (effect.is(updateGuardRanges)) {
         const ranges = effect.value;
-        const markers: Range<GutterMarker>[] = [];
+        const markers: ReturnType<GutterMarker["range"]>[] = [];
         for (const range of ranges) {
           if (range.fromLine >= 1 && range.fromLine <= tr.state.doc.lines) {
             const line = tr.state.doc.line(range.fromLine);

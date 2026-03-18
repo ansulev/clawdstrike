@@ -1,4 +1,4 @@
-import { useRef, useEffect, useMemo } from "react";
+import { useRef, useEffect, useMemo, useCallback } from "react";
 import { EditorView, keymap, lineNumbers, highlightActiveLine, highlightSpecialChars, drawSelection, rectangularSelection, highlightActiveLineGutter, type ViewUpdate } from "@codemirror/view";
 import { EditorState, type Extension } from "@codemirror/state";
 import { yaml } from "@codemirror/lang-yaml";
@@ -16,6 +16,9 @@ import { ocsfJsonCompletionSource } from "@/lib/workbench/ocsf-schema";
 import { yaraLanguage } from "@/lib/workbench/yara-language";
 import type { FileType } from "@/lib/workbench/file-type-registry";
 import { useGeneralSettings, type FontSize } from "@/features/settings/use-general-settings";
+import { guardTestGutter, updateGuardRanges } from "@/lib/workbench/codemirror/guard-gutter";
+import { coverageGapGutter, updateCoverageGaps } from "@/lib/workbench/codemirror/coverage-gutter";
+import { parseGuardRanges, computeCoverageGaps } from "@/lib/workbench/codemirror/gutter-types";
 
 // ---- Active editor tracking ----
 
@@ -44,6 +47,10 @@ export interface YamlEditorProps {
   errors?: YamlEditorError[];
   className?: string;
   fileType?: FileType;
+  /** Callback when a gutter play button is clicked for a guard. */
+  onRunGuardTest?: (guardId: string) => void;
+  /** Enable detection gutters (Run Test + coverage gaps). Only for clawdstrike_policy files. */
+  showDetectionGutters?: boolean;
 }
 
 // ---- ClawdStrike brand theme ----
@@ -335,6 +342,8 @@ export function YamlEditor({
   errors = [],
   className,
   fileType,
+  onRunGuardTest,
+  showDetectionGutters = false,
 }: YamlEditorProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
@@ -342,11 +351,20 @@ export function YamlEditor({
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
 
+  // Stable ref for the guard test callback
+  const onRunGuardTestRef = useRef(onRunGuardTest);
+  onRunGuardTestRef.current = onRunGuardTest;
+
   // Read general settings for editor customization
   const { settings: generalSettings } = useGeneralSettings();
   const { fontSize, showLineNumbers } = generalSettings;
 
-  // Build the list of extensions (rebuilds when readOnly, fontSize, or showLineNumbers changes)
+  // Stable handler that delegates to the ref (avoids extension rebuilds on callback identity change)
+  const handleRunGuardTest = useCallback((guardId: string) => {
+    onRunGuardTestRef.current?.(guardId);
+  }, []);
+
+  // Build the list of extensions (rebuilds when readOnly, fontSize, showLineNumbers, or detection gutters change)
   const extensions = useMemo<Extension[]>(() => {
     const base: Extension[] = [
       getLanguageExtension(fileType),
@@ -387,6 +405,12 @@ export function YamlEditor({
       base.push(highlightActiveLineGutter());
     }
 
+    // Detection engineering gutters (only for policy files when enabled)
+    if (showDetectionGutters && fileType === "clawdstrike_policy") {
+      base.push(...guardTestGutter(handleRunGuardTest));
+      base.push(...coverageGapGutter());
+    }
+
     if (readOnly) {
       base.push(EditorState.readOnly.of(true));
       base.push(EditorView.editable.of(false));
@@ -402,7 +426,7 @@ export function YamlEditor({
     }
 
     return base;
-  }, [readOnly, fontSize, showLineNumbers, fileType]);
+  }, [readOnly, fontSize, showLineNumbers, fileType, showDetectionGutters, handleRunGuardTest]);
 
   // Create / destroy the editor view
   useEffect(() => {
@@ -483,6 +507,28 @@ export function YamlEditor({
 
     view.dispatch(setDiagnostics(view.state, diagnostics));
   }, [errors]);
+
+  // Debounced guard range parsing and coverage gap updates for detection gutters
+  useEffect(() => {
+    if (!showDetectionGutters || fileType !== "clawdstrike_policy") return;
+
+    const timer = setTimeout(() => {
+      const view = viewRef.current;
+      if (!view) return;
+
+      const guardRanges = parseGuardRanges(view.state.doc);
+      const gaps = computeCoverageGaps(guardRanges, value);
+
+      view.dispatch({
+        effects: [
+          updateGuardRanges.of(guardRanges),
+          updateCoverageGaps.of(gaps),
+        ],
+      });
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [value, showDetectionGutters, fileType]);
 
   return (
     <div

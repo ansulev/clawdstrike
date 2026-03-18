@@ -66,6 +66,14 @@
 - [x] **FLAT-07**: Dirty indicator (gold dot) on pane tabs for files with unsaved changes
 - [x] **FLAT-08**: `/editor` route removed or redirects to home; `/file/:path` route renders FileEditorShell
 
+### Default Workspace Bootstrap
+
+- [x] **BOOT-01**: On first launch with no prior project, `~/.clawdstrike/workspace/` is scaffolded with policies/, sigma/, yara/, scenarios/ dirs and example files
+- [x] **BOOT-02**: Explorer auto-mounts the default workspace on launch — no empty state
+- [x] **BOOT-03**: Built-in rulesets written as editable copies (permissive, default, strict, ai-agent, cicd) in policies/
+- [ ] **BOOT-04**: "Add Folder" button at bottom of Explorer lets users mount additional directories
+- [x] **BOOT-05**: Multi-root workspace folders persist across restarts via localStorage
+
 ## v2 Requirements
 
 ### Advanced IDE
@@ -128,8 +136,14 @@
 | FLAT-07 | Phase 8 | Complete |
 | FLAT-08 | Phase 8 | Complete |
 
+| BOOT-01 | Phase 9 | Complete |
+| BOOT-02 | Phase 9 | Complete |
+| BOOT-03 | Phase 9 | Complete |
+| BOOT-04 | Phase 9 | Pending |
+| BOOT-05 | Phase 9 | Complete |
+
 **Coverage:**
-- v1.1 requirements: 37 total
+- v1.1 requirements: 42 total
 - Mapped to phases: 37
 - Unmapped: 0
 

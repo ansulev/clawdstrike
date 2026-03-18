@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: milestone
-status: complete
-stopped_at: Completed 08-04-PLAN.md
-last_updated: "2026-03-18T21:58:17Z"
-last_activity: 2026-03-18 -- Completed Phase 8 Plan 4 (file-first editor cutover, /editor redirect, BreadcrumbBar route-aware)
+status: in_progress
+stopped_at: Completed 09-01-PLAN.md
+last_updated: "2026-03-18T22:19:37Z"
+last_activity: 2026-03-18 -- Completed Phase 9 Plan 1 (workspace bootstrap module, multi-root project store)
 progress:
-  total_phases: 8
+  total_phases: 9
   completed_phases: 8
-  total_plans: 19
-  completed_plans: 19
-  percent: 100
+  total_plans: 21
+  completed_plans: 20
+  percent: 95
 ---
 
 # Project State
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-18)
 
 **Core value:** Security operators get a professional-grade IDE with search, quick navigation, and file management
-**Current focus:** Phase 4 File Tree Mutations (complete)
+**Current focus:** Phase 9 Default Workspace Bootstrap (in progress)
 
 ## Current Position
 
-Phase: 8 of 8 (File-First Editor) COMPLETE
-Plan: 4 of 4 (all complete)
-Status: v1.1 milestone complete -- all 8 phases, 19 plans delivered
-Last activity: 2026-03-18 -- Completed Phase 8 Plan 4 (file-first editor cutover, /editor redirect, BreadcrumbBar route-aware)
+Phase: 9 of 9 (Default Workspace Bootstrap) IN PROGRESS
+Plan: 1 of 2 complete
+Status: Phase 9 Plan 1 complete -- workspace bootstrap module + multi-root store
+Last activity: 2026-03-18 -- Completed Phase 9 Plan 1 (workspace bootstrap module, multi-root project store)
 
-Progress: [██████████] 100%
+Progress: [█████████▌] 95%
 
 ## Previous Milestone (v1.0 — IDE Pivot)
 
@@ -76,6 +76,7 @@ Summary: Delivered IDE shell — activity bar, 7 sidebar panels, pane tab system
 | Phase 08 P01 | 5min | 2 tasks | 5 files |
 | Phase 08 P03 | 4min | 2 tasks | 2 files |
 | Phase 08 P04 | 7min | 2 tasks | 8 files |
+| Phase 09 P01 | 2min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -140,6 +141,10 @@ v1.1 decisions:
 - [Phase 08]: BreadcrumbBar extracts file path from route string (not from policy-tabs-store activeTab)
 - [Phase 08]: nav.editor removed entirely (Meta+1 keybinding unassigned; Cmd+P is primary file opener)
 - [Phase 08]: Legacy navigate('/editor') calls naturally redirect via route system -- no inline migration needed
+- [Phase 09]: Fail-open bootstrap: errors logged but never thrown, app works without bootstrapped workspace
+- [Phase 09]: projectRoots initialized from loadPersistedRoots() at store creation time for immediate hydration
+- [Phase 09]: loadRoot expands all directories by default for first-mount discoverability
+- [Phase 09]: Backward compat: project field always points to first root's DetectionProject
 
 ### Pending Todos
 
@@ -151,6 +156,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-18T21:58:17Z
-Stopped at: Completed 08-04-PLAN.md (v1.1 milestone complete)
-Resume file: All phases and plans complete. v2 requirements available in REQUIREMENTS.md.
+Last session: 2026-03-18T22:19:37Z
+Stopped at: Completed 09-01-PLAN.md
+Resume file: Continue with 09-02-PLAN.md (Multi-root Explorer UI, Add Folder button, app-level bootstrap hook)

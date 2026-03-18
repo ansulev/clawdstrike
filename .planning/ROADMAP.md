@@ -169,7 +169,7 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 09-01-PLAN.md — Workspace bootstrap module, Tauri fs capabilities, multi-root project store with localStorage persistence
+- [x] 09-01-PLAN.md — Workspace bootstrap module, Tauri fs capabilities, multi-root project store with localStorage persistence
 - [ ] 09-02-PLAN.md — Multi-root Explorer UI, Add Folder button with native dialog, app-level bootstrap hook
 
 ## Progress
@@ -187,4 +187,4 @@ Phases 1-2 sequential. 3, 4, 5 independent. 6 depends on 1. 7 depends on 3. Phas
 | 6. Detection Engineering Inline | 2/2 | Complete | 2026-03-18 |
 | 7. Detection Editor Integration | 4/4 | Complete | 2026-03-18 |
 | 8. File-First Editor | 4/4 | Complete | 2026-03-18 |
-| 9. Default Workspace Bootstrap | 0/2 | Not started | - |
+| 9. Default Workspace Bootstrap | 1/2 | In progress | - |

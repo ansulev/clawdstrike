@@ -64,7 +64,7 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 03-01-PLAN.md -- Trust verification module with Ed25519 signature checking via operator-crypto
+- [x] 03-01-PLAN.md -- Trust verification module with Ed25519 signature checking via operator-crypto
 - [ ] 03-02-PLAN.md -- PluginLoader with activation events, contribution routing, and trust gating
 
 ### Phase 4: Plugin SDK Package
@@ -119,7 +119,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 |-------|----------------|--------|-----------|
 | 1. Open Closed Seams | 3/3 | Complete | 2026-03-18 |
 | 2. Plugin Manifest and Registry | 0/2 | Not started | - |
-| 3. Plugin Loader and Trust | 0/2 | Not started | - |
+| 3. Plugin Loader and Trust | 1/2 | In progress | - |
 | 4. Plugin SDK Package | 0/1 | Not started | - |
 | 5. Guard-as-Plugin Proof of Concept | 0/2 | Not started | - |
 | 6. Marketplace UI | 0/3 | Not started | - |

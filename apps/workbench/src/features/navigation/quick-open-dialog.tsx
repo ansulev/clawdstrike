@@ -220,8 +220,7 @@ export function QuickOpenDialog() {
           .openTabOrSwitch(item.path, item.fileType as import("@/lib/workbench/file-type-registry").FileType, "", item.name);
       }
 
-      // Ensure the editor view is active so the opened file is visible
-      usePaneStore.getState().openApp("/editor", item.name);
+      usePaneStore.getState().openFile(item.path, item.name);
     },
     [],
   );

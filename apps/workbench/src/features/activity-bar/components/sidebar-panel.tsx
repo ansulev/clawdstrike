@@ -32,7 +32,7 @@ function ExplorerPanelConnected() {
       project={project}
       onToggleDir={actions.toggleDir}
       onOpenFile={(file) => {
-        usePaneStore.getState().openApp("/editor", file.name);
+        usePaneStore.getState().openFile(file.path, file.name);
       }}
       onExpandAll={actions.expandAll}
       onCollapseAll={actions.collapseAll}
@@ -50,7 +50,7 @@ function ExplorerPanelConnected() {
             ? savedPath.slice(project.rootPath.length).replace(/^\//, "")
             : fileName;
           actions.setFileStatus(relPath, { modified: true });
-          usePaneStore.getState().openApp("/editor", fileName);
+          usePaneStore.getState().openFile(savedPath, fileName);
         }
       }}
       onRenameFile={async (file, newName) => {

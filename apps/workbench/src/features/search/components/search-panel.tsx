@@ -327,7 +327,7 @@ export function SearchPanelConnected() {
       onOptionToggle={(key) => actions.setOption(key, !options[key])}
       onSearch={() => project && actions.performSearch(project.rootPath)}
       onResultClick={(match) => {
-        usePaneStore.getState().openApp("/editor", match.filePath);
+        usePaneStore.getState().openFile(match.filePath, match.filePath.split("/").pop() ?? match.filePath);
       }}
     />
   );

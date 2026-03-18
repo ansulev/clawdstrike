@@ -10,6 +10,7 @@ import {
 import { useFleetConnection } from "@/features/fleet/use-fleet-connection";
 import { fetchAuditEvents } from "@/features/fleet/fleet-client";
 import { useMultiPolicy } from "@/features/policy/stores/multi-policy-store";
+import { usePolicyTabsStore } from "@/features/policy/stores/policy-tabs-store";
 import { useDraftDetection } from "@/lib/workbench/detection-workflow/use-draft-detection";
 import { buildOpenDocumentCoverage } from "@/lib/workbench/detection-workflow/coverage-projection";
 import { usePublishedCoverage } from "@/lib/workbench/detection-workflow/use-published-coverage";
@@ -132,7 +133,16 @@ export function HuntLayout() {
     draftFromPattern,
   } = useDraftDetection({
     dispatch: multiDispatch,
-    onNavigateToEditor: () => usePaneStore.getState().openApp("/editor", "Editor"),
+    onNavigateToEditor: () => {
+      // After drafting a detection, the active tab in policy-tabs-store has the new policy
+      const activeTab = usePolicyTabsStore.getState().getActiveTab();
+      if (activeTab?.filePath) {
+        usePaneStore.getState().openFile(activeTab.filePath, activeTab.name);
+      } else if (activeTab) {
+        // Untitled file -- use __new__ route
+        usePaneStore.getState().openApp(`/file/__new__/${activeTab.id}`, activeTab.name);
+      }
+    },
   });
 
   // Fetch events from fleet and convert + enrich

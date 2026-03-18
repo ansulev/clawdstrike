@@ -157,6 +157,64 @@ export function registerNavigateCommands(): void {
       execute: () => usePaneStore.getState().openApp("/coverage", "Coverage"),
     },
 
+    // ---- Visual Builders (07-03) ----
+    {
+      id: "nav.visualSigma",
+      title: "Open Sigma Visual Builder",
+      category: "Navigate",
+      execute: () =>
+        usePaneStore
+          .getState()
+          .openApp("/visual-builder/sigma", "Sigma Builder"),
+    },
+    {
+      id: "nav.visualYara",
+      title: "Open YARA Visual Builder",
+      category: "Navigate",
+      execute: () =>
+        usePaneStore
+          .getState()
+          .openApp("/visual-builder/yara", "YARA Builder"),
+    },
+    {
+      id: "nav.visualOcsf",
+      title: "Open OCSF Visual Builder",
+      category: "Navigate",
+      execute: () =>
+        usePaneStore
+          .getState()
+          .openApp("/visual-builder/ocsf", "OCSF Builder"),
+    },
+
+    // ---- TrustPrint Suite (07-03) ----
+    {
+      id: "nav.trustprintPatterns",
+      title: "TrustPrint: Pattern Explorer",
+      category: "Navigate",
+      execute: () =>
+        usePaneStore
+          .getState()
+          .openApp("/trustprint/patterns", "TrustPrint Patterns"),
+    },
+    {
+      id: "nav.trustprintProviders",
+      title: "TrustPrint: Provider Wizard",
+      category: "Navigate",
+      execute: () =>
+        usePaneStore
+          .getState()
+          .openApp("/trustprint/providers", "TrustPrint Providers"),
+    },
+    {
+      id: "nav.trustprintThresholds",
+      title: "TrustPrint: Threshold Tuner",
+      category: "Navigate",
+      execute: () =>
+        usePaneStore
+          .getState()
+          .openApp("/trustprint/thresholds", "TrustPrint Thresholds"),
+    },
+
     // ---- New app.* commands (CMD-06) ----
     {
       id: "app.missions",

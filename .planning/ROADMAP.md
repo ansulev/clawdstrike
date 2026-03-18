@@ -16,7 +16,7 @@ Close the gap from "IDE scaffold" to "professional-grade detection engineering I
 - Decimal phases (e.g., 2.1): Urgent insertions (marked with INSERTED)
 
 - [x] **Phase 1: In-File Search** — Cmd+F find, Cmd+H find/replace in current CodeMirror editor (1/1 plans)
-- [ ] **Phase 2: Global Search** — Cmd+Shift+F workspace-wide search with results panel
+- [ ] **Phase 2: Global Search** — Cmd+Shift+F workspace-wide search with results panel (2 plans)
 - [ ] **Phase 3: Quick Navigation** — Cmd+P file picker, breadcrumbs, Cmd+G go-to-line (2 plans)
 - [ ] **Phase 4: File Tree Mutations** — Create/rename/delete files from Explorer with status indicators
 - [ ] **Phase 5: Tab & Terminal Polish** — Tab overflow scrolling, context menu additions, terminal splits (2 plans)
@@ -46,11 +46,11 @@ Plans:
   2. Results show file path, line number, and matching context with highlighted match text
   3. Clicking a result opens the file in an editor tab at the matching line
   4. Toggle buttons for case-sensitive, whole-word, and regex search modes
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 02-01: TBD
-- [ ] 02-02: TBD
+- [ ] 02-01-PLAN.md — Rust search_in_project command, TS wrapper, and Zustand search store
+- [ ] 02-02-PLAN.md — Search sidebar panel UI, activity bar integration, Cmd+Shift+F command
 
 ### Phase 3: Quick Navigation
 **Goal**: User can navigate files and lines with keyboard shortcuts and breadcrumbs
@@ -140,7 +140,7 @@ Phases 1-2 are sequential (global search builds on in-file search). Phases 3, 4,
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. In-File Search | 1/1 | Complete | 2026-03-18 |
-| 2. Global Search | 0/2 | Not started | - |
+| 2. Global Search | 0/2 | Planning | - |
 | 3. Quick Navigation | 0/2 | Planning | - |
 | 4. File Tree Mutations | 0/2 | Not started | - |
 | 5. Tab & Terminal Polish | 0/2 | Planning | - |

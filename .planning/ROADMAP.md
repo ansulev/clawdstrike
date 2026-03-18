@@ -15,7 +15,7 @@ Transform the ClawdStrike Workbench from a sidebar-nav dashboard into a VS Code/
 - Integer phases (1, 2, 3, 4): Planned milestone work
 - Decimal phases (e.g., 2.1): Urgent insertions (marked with INSERTED)
 
-- [ ] **Phase 1: Activity Bar + Sidebar Shell** - Decompose sidebar into activity bar + panel container, wire panel switching, new stores, basic commands
+- [x] **Phase 1: Activity Bar + Sidebar Shell** - Decompose sidebar into activity bar + panel container, wire panel switching, new stores, basic commands
 - [ ] **Phase 2: Sidebar Panels + Editor Tabs** - Build 7 sidebar panels, add openApp to pane store, render routes as editor tabs
 - [ ] **Phase 3: Right Sidebar + Bottom Panel + Commands** - Right sidebar zone with Speakeasy, audit tail tab, per-panel sidebar commands
 - [ ] **Phase 4: Lab Decomposition + App Navigation** - Break Lab into 3 independent apps, rewrite navigate commands to openApp pattern
@@ -35,8 +35,8 @@ Transform the ClawdStrike Workbench from a sidebar-nav dashboard into a VS Code/
 **Plans**: 2 plans
 
 Plans:
-- [ ] 01-01-PLAN.md -- Activity bar types, Zustand store, and all four new components (ActivityBar, ActivityBarItem, SidebarPanel, SidebarResizeHandle)
-- [ ] 01-02-PLAN.md -- Shell integration (desktop-layout.tsx), sidebar commands (Cmd+B, Cmd+Shift+E), visual verification
+- [x] 01-01-PLAN.md -- Activity bar types, Zustand store, and all four new components (ActivityBar, ActivityBarItem, SidebarPanel, SidebarResizeHandle)
+- [x] 01-02-PLAN.md -- Shell integration (desktop-layout.tsx), sidebar commands (Cmd+B, Cmd+Shift+E), visual verification
 
 ### Phase 2: Sidebar Panels + Editor Tabs
 **Goal**: Each activity bar item reveals a useful sidebar panel, and clicking items in panels opens detail views as editor tabs in the pane system
@@ -48,12 +48,12 @@ Plans:
   3. paneStore.openApp(route, label) opens a route as a new editor tab or focuses an existing tab with that route
   4. All 19 existing routes render correctly as pane tabs with a visible tab bar showing close buttons
   5. App launches with a default Home tab; pane splitting (horizontal/vertical) works for all app types
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 02-01: TBD
-- [ ] 02-02: TBD
-- [ ] 02-03: TBD
+- [ ] 02-01-PLAN.md -- Pane store enhancements (openApp, closeView, setActiveView), PaneTabBar + PaneTab components, unit tests
+- [ ] 02-02-PLAN.md -- Posture utility extraction, HeartbeatPanel, SentinelPanel, FindingsPanel
+- [ ] 02-03-PLAN.md -- LibraryPanel, FleetPanel, CompliancePanel, SidebarPanel integration, tab.close command (Cmd+W)
 
 ### Phase 3: Right Sidebar + Bottom Panel + Commands
 **Goal**: Operators have a right sidebar for Speakeasy chat, an audit tail in the bottom panel, and per-panel sidebar commands

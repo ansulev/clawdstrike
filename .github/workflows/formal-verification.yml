@@ -360,7 +360,7 @@ jobs:
         run: |
           echo "=== sorry audit (project files only) ==="
           # Strip single-line comments (--) before counting sorry to avoid false positives
-          sorry_count=$(grep -Rh --include='*.lean' '' ClawdStrike/ 2>/dev/null | sed 's/--.*$//' | grep -cE '(^|[[:space:]]|=>)sorry([[:space:]]|$)' || echo 0)
+          sorry_count=$(grep -Rh --include='*.lean' '' ClawdStrike/ 2>/dev/null | sed 's/--.*$//' | grep -cE '(^|[[:space:]]|=>)sorry([[:space:]]|$)' || true)
           theorem_count=$(grep -RcE '^[[:space:]]*theorem([[:space:]]|$)' ClawdStrike/ --include='*.lean' 2>/dev/null | awk -F: '{s+=$NF}END{print s+0}')
           echo "Total theorems: ${theorem_count}"
           echo "Remaining sorry: ${sorry_count}"

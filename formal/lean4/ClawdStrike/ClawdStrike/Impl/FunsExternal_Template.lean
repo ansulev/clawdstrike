@@ -12,12 +12,6 @@ set_option linter.unusedVariables false
 set_option maxHeartbeats 1000000
 open clawdstrike
 
-/-- [core::borrow::{core::borrow::Borrow<T> for T}::borrow]:
-    Source: '/rustc/library/core/src/borrow.rs', lines 214:4-214:26
-    Name pattern: [core::borrow::{core::borrow::Borrow<@T, @T>}::borrow] -/
-@[rust_fun "core::borrow::{core::borrow::Borrow<@T, @T>}::borrow"]
-axiom core.borrow.Borrow.Blanket.borrow {T : Type} : T → Result T
-
 /-- [core::fmt::{core::fmt::Formatter<'a>}::debug_struct_field2_finish]:
     Source: '/rustc/library/core/src/fmt/mod.rs', lines 2466:4-2473:15
     Name pattern: [core::fmt::{core::fmt::Formatter<'a>}::debug_struct_field2_finish] -/
@@ -196,14 +190,6 @@ axiom core.option.Option.or_else
   core.ops.function.FnOnce F Unit (Option T)) :
   Option T → F → Result (Option T)
 
-/-- [core::option::{core::option::Option<&0 (T)>}::copied]:
-    Source: '/rustc/library/core/src/option.rs', lines 2119:4-2121:16
-    Name pattern: [core::option::{core::option::Option<&'0 @T>}::copied] -/
-@[rust_fun "core::option::{core::option::Option<&'0 @T>}::copied"]
-axiom core.option.OptionShared0T.copied
-  {T : Type} (markerCopyInst : core.marker.Copy T) :
-  Option T → Result (Option T)
-
 /-- [core::option::{core::clone::Clone for core::option::Option<T>}::clone]:
     Source: '/rustc/library/core/src/option.rs', lines 2261:4-2261:27
     Name pattern: [core::option::{core::clone::Clone<core::option::Option<@T>>}::clone] -/
@@ -244,15 +230,6 @@ axiom core.slice.iter.Iter.Insts.CoreIterTraitsIteratorIteratorSharedAT.map
   core.slice.iter.Iter T → F → Result (core.iter.adapters.map.Map
     (core.slice.iter.Iter T) F)
 
-/-- [core::slice::iter::{core::iter::traits::collect::IntoIterator<&'a (T), core::slice::iter::Iter<'a, T>> for &'a ([T])}::into_iter]:
-    Source: '/rustc/library/core/src/slice/iter.rs', lines 25:4-25:37
-    Name pattern: [core::slice::iter::{core::iter::traits::collect::IntoIterator<&'a [@T], &'a @T, core::slice::iter::Iter<'a, @T>>}::into_iter] -/
-@[rust_fun
-  "core::slice::iter::{core::iter::traits::collect::IntoIterator<&'a [@T], &'a @T, core::slice::iter::Iter<'a, @T>>}::into_iter"]
-axiom
-  SharedASlice.Insts.CoreIterTraitsCollectIntoIteratorSharedATIter.into_iter
-  {T : Type} : Slice T → Result (core.slice.iter.Iter T)
-
 /-- [core::str::{str}::is_empty]:
     Source: '/rustc/library/core/src/str/mod.rs', lines 161:4-161:40
     Name pattern: [core::str::{str}::is_empty] -/
@@ -271,41 +248,6 @@ axiom Str.Insts.CoreCmpPartialEqStr.eq : Str → Str → Result Bool
 @[rust_fun
   "core::str::traits::{core::cmp::Eq<str>}::assert_receiver_is_total_eq"]
 axiom Str.Insts.CoreCmpEq.assert_receiver_is_total_eq : Str → Result Unit
-
-/-- [std::collections::hash::map::{std::collections::hash::map::HashMap<K, V, std::hash::random::RandomState, alloc::alloc::Global>}::new]:
-    Source: '/rustc/library/std/src/collections/hash/map.rs', lines 271:4-271:46
-    Name pattern: [std::collections::hash::map::{std::collections::hash::map::HashMap<@K, @V, std::hash::random::RandomState, alloc::alloc::Global>}::new] -/
-@[rust_fun
-  "std::collections::hash::map::{std::collections::hash::map::HashMap<@K, @V, std::hash::random::RandomState, alloc::alloc::Global>}::new"]
-axiom std.collections.hash.map.HashMapKVRandomStateGlobal.new
-  (K : Type) (V : Type) :
-  Result (std.collections.hash.map.HashMap K V std.hash.random.RandomState
-    Global)
-
-/-- [std::collections::hash::map::{std::collections::hash::map::HashMap<K, V, S, A>}::get]:
-    Source: '/rustc/library/std/src/collections/hash/map.rs', lines 997:4-1000:21
-    Name pattern: [std::collections::hash::map::{std::collections::hash::map::HashMap<@K, @V, @S, @A>}::get] -/
-@[rust_fun
-  "std::collections::hash::map::{std::collections::hash::map::HashMap<@K, @V, @S, @A>}::get"]
-axiom std.collections.hash.map.HashMap.get
-  {K : Type} {V : Type} {S : Type} {A : Type} {Q : Type} {Clause2_Hasher :
-  Type} (corecmpEqInst : core.cmp.Eq K) (corehashHashInst : core.hash.Hash K)
-  (corehashBuildHasherInst : core.hash.BuildHasher S Clause2_Hasher)
-  (coreborrowBorrowInst : core.borrow.Borrow K Q) (corehashHashInst1 :
-  core.hash.Hash Q) (corecmpEqInst1 : core.cmp.Eq Q) :
-  std.collections.hash.map.HashMap K V S A → Q → Result (Option V)
-
-/-- [std::collections::hash::map::{std::collections::hash::map::HashMap<K, V, S, A>}::insert]:
-    Source: '/rustc/library/std/src/collections/hash/map.rs', lines 1295:4-1295:53
-    Name pattern: [std::collections::hash::map::{std::collections::hash::map::HashMap<@K, @V, @S, @A>}::insert] -/
-@[rust_fun
-  "std::collections::hash::map::{std::collections::hash::map::HashMap<@K, @V, @S, @A>}::insert"]
-axiom std.collections.hash.map.HashMap.insert
-  {K : Type} {V : Type} {S : Type} {A : Type} {Clause2_Hasher : Type}
-  (corecmpEqInst : core.cmp.Eq K) (corehashHashInst : core.hash.Hash K)
-  (corehashBuildHasherInst : core.hash.BuildHasher S Clause2_Hasher) :
-  std.collections.hash.map.HashMap K V S A → K → V → Result ((Option V)
-    × (std.collections.hash.map.HashMap K V S A))
 
 /-- [std::collections::hash::set::{std::collections::hash::set::HashSet<T, S, A>}::contains]:
     Source: '/rustc/library/std/src/collections/hash/set.rs', lines 767:4-770:21
@@ -377,6 +319,14 @@ axiom alloc.string.String.Insts.CoreCmpEq.assert_receiver_is_total_eq
 @[rust_fun "alloc::string::{core::clone::Clone<alloc::string::String>}::clone"]
 axiom alloc.string.String.Insts.CoreCloneClone.clone : String → Result String
 
+/-- [alloc::string::{core::cmp::PartialEq<&'a (str)> for alloc::string::String}::eq]:
+    Source: '/rustc/library/alloc/src/string.rs', lines 2667:12-2667:46
+    Name pattern: [alloc::string::{core::cmp::PartialEq<alloc::string::String, &'a str>}::eq] -/
+@[rust_fun
+  "alloc::string::{core::cmp::PartialEq<alloc::string::String, &'a str>}::eq"]
+axiom alloc.string.String.Insts.CoreCmpPartialEqSharedAStr.eq
+  : String → Str → Result Bool
+
 /-- [alloc::string::{core::fmt::Debug for alloc::string::String}::fmt]:
     Source: '/rustc/library/alloc/src/string.rs', lines 2721:4-2721:60
     Name pattern: [alloc::string::{core::fmt::Debug<alloc::string::String>}::fmt] -/
@@ -393,6 +343,14 @@ axiom alloc.string.String.Insts.CoreFmtDebug.fmt
 axiom alloc.string.String.Insts.CoreHashHash.hash
   {H : Type} (corehashHasherInst : core.hash.Hasher H) :
   String → H → Result H
+
+/-- [alloc::string::{core::ops::deref::Deref<str> for alloc::string::String}::deref]:
+    Source: '/rustc/library/alloc/src/string.rs', lines 2824:4-2824:27
+    Name pattern: [alloc::string::{core::ops::deref::Deref<alloc::string::String, str>}::deref] -/
+@[rust_fun
+  "alloc::string::{core::ops::deref::Deref<alloc::string::String, str>}::deref"]
+axiom alloc.string.String.Insts.CoreOpsDerefDerefStr.deref
+  : String → Result Str
 
 /-- [alloc::string::{alloc::string::ToString for T}::to_string]:
     Source: '/rustc/library/alloc/src/string.rs', lines 2895:4-2895:33

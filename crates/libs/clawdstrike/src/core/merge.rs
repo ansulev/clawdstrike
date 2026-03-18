@@ -38,7 +38,11 @@ pub fn child_overrides_option<T: Clone>(base: Option<T>, child: Option<T>) -> Op
 
 /// Merge two `Vec<T>` keyed by `key_fn`. Child replaces matching base entries;
 /// new entries are appended.
-pub fn merge_keyed_vec<T: Clone, K: Eq>(base: &[T], child: &[T], key_fn: fn(&T) -> K) -> Vec<T> {
+pub fn merge_keyed_vec<T: Clone, K: Eq>(
+    base: &[T],
+    child: &[T],
+    key_fn: impl Fn(&T) -> K,
+) -> Vec<T> {
     if child.is_empty() {
         return base.to_vec();
     }
@@ -47,33 +51,24 @@ pub fn merge_keyed_vec<T: Clone, K: Eq>(base: &[T], child: &[T], key_fn: fn(&T) 
     }
 
     let mut out: Vec<T> = base.to_vec();
-    let mut keys: Vec<K> = Vec::with_capacity(out.len());
-
-    let mut i: usize = 0;
-    while i < out.len() {
-        keys.push(key_fn(&out[i]));
-        i += 1;
-    }
-
     let mut child_index: usize = 0;
     while child_index < child.len() {
         let key = key_fn(&child[child_index]);
 
         let mut existing_index: Option<usize> = None;
-        let mut out_index: usize = 0;
-        while out_index < keys.len() {
-            if keys[out_index] == key {
-                existing_index = Some(out_index);
+        let mut out_index = out.len();
+        while out_index > 0 {
+            let candidate_index = out_index - 1;
+            if key_fn(&out[candidate_index]) == key {
+                existing_index = Some(candidate_index);
                 break;
             }
-            out_index += 1;
+            out_index -= 1;
         }
 
         if let Some(position) = existing_index {
             out[position] = child[child_index].clone();
-            keys[position] = key;
         } else {
-            keys.push(key);
             out.push(child[child_index].clone());
         }
 
@@ -85,15 +80,17 @@ pub fn merge_keyed_vec<T: Clone, K: Eq>(base: &[T], child: &[T], key_fn: fn(&T) 
 
 // Aeneas-compatible merge (no HashMap, no closures)
 
-/// Linear scan for key position. Aeneas-friendly alternative to `HashMap::get`.
+/// Linear scan for the last matching key position. Aeneas-friendly alternative
+/// to the runtime helper's "last duplicate wins" behavior.
 #[must_use]
-fn find_key_position<T>(haystack: &[(String, T)], needle: &str) -> Option<usize> {
-    let mut i: usize = 0;
-    while i < haystack.len() {
-        if haystack[i].0 == needle {
-            return Some(i);
+fn find_last_key_position<T>(haystack: &[(String, T)], needle: &str) -> Option<usize> {
+    let mut i = haystack.len();
+    while i > 0 {
+        let candidate_index = i - 1;
+        if haystack[candidate_index].0 == needle {
+            return Some(candidate_index);
         }
-        i += 1;
+        i -= 1;
     }
     None
 }
@@ -117,7 +114,7 @@ pub fn merge_keyed_vec_pure<T: Clone>(
     let mut ci: usize = 0;
     while ci < child.len() {
         let key: &str = &child[ci].0;
-        match find_key_position(&out, key) {
+        match find_last_key_position(&out, key) {
             Some(pos) => {
                 out[pos] = child[ci].clone();
             }
@@ -199,6 +196,14 @@ mod tests {
     }
 
     #[test]
+    fn merge_keyed_vec_replaces_last_duplicate_key() {
+        let base = vec![(1, "a"), (1, "b"), (2, "c")];
+        let child = vec![(1, "B")];
+        let merged = merge_keyed_vec(&base, &child, |item| item.0);
+        assert_eq!(merged, vec![(1, "a"), (1, "B"), (2, "c")]);
+    }
+
+    #[test]
     fn child_overrides_option_some_beats_none() {
         assert_eq!(child_overrides_option(None::<bool>, Some(true)), Some(true));
     }
@@ -261,6 +266,25 @@ mod tests {
     }
 
     #[test]
+    fn merge_keyed_vec_pure_replaces_last_duplicate_key() {
+        let base = vec![
+            ("dup".to_string(), 1),
+            ("dup".to_string(), 2),
+            ("other".to_string(), 3),
+        ];
+        let child = vec![("dup".to_string(), 20)];
+        let merged = merge_keyed_vec_pure(&base, &child);
+        assert_eq!(
+            merged,
+            vec![
+                ("dup".to_string(), 1),
+                ("dup".to_string(), 20),
+                ("other".to_string(), 3),
+            ]
+        );
+    }
+
+    #[test]
     fn merge_keyed_vec_pure_both_empty() {
         let base: Vec<(String, i32)> = vec![];
         let child: Vec<(String, i32)> = vec![];
@@ -280,6 +304,25 @@ mod tests {
             ("beta".to_string(), 22),
             ("delta".to_string(), 4),
             ("alpha".to_string(), 11),
+        ];
+
+        let pure_result = merge_keyed_vec_pure(&base, &child);
+        let hash_result = merge_keyed_vec(&base, &child, |item| item.0.clone());
+
+        assert_eq!(pure_result, hash_result);
+    }
+
+    #[test]
+    fn merge_keyed_vec_pure_matches_hashmap_version_with_duplicate_keys() {
+        let base = vec![
+            ("alpha".to_string(), 1),
+            ("alpha".to_string(), 2),
+            ("beta".to_string(), 3),
+        ];
+        let child = vec![
+            ("alpha".to_string(), 22),
+            ("gamma".to_string(), 4),
+            ("alpha".to_string(), 23),
         ];
 
         let pure_result = merge_keyed_vec_pure(&base, &child);

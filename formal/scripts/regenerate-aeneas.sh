@@ -36,7 +36,7 @@ find_binary() {
     shift
     # Check fallback locations
     for fallback in "$@"; do
-        if [[ -x "$fallback" ]]; then
+        if [[ -x "$fallback" ]] && "$fallback" --help >/dev/null 2>&1; then
             echo "$fallback"
             return 0
         fi

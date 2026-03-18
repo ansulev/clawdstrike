@@ -8,7 +8,7 @@ repository.workspace = true
 rust-version.workspace = true
 keywords = ["security", "ai-agent", "policy", "clawdstrike"]
 categories = ["authentication", "command-line-utilities"]
-readme = "../../README.md"
+readme = "README.md"
 
 [dependencies]
 # Always available (WASM-compatible detection modules)

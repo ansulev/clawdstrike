@@ -1,9 +1,19 @@
 import { commandRegistry } from "@/lib/command-registry";
 import type { Command } from "@/lib/command-registry";
 import { usePaneStore } from "@/features/panes/pane-store";
+import { openQuickOpen } from "@/features/navigation/quick-open-dialog";
 
 export function registerNavigateCommands(): void {
   const commands: Command[] = [
+    // ---- Quick Open ----
+    {
+      id: "nav.quickOpen",
+      title: "Quick Open",
+      category: "Navigate",
+      keybinding: "Meta+P",
+      execute: () => openQuickOpen(),
+    },
+
     // ---- Existing nav.* commands (openApp pattern) ----
     {
       id: "nav.home",

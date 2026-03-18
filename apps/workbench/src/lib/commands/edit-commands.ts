@@ -5,7 +5,7 @@ import type { Command } from "@/lib/command-registry";
 import type { WorkbenchAction } from "@/features/policy/stores/policy-store";
 import type { MultiPolicyAction } from "@/features/policy/stores/multi-policy-store";
 import type { PolicyTab } from "@/features/policy/stores/multi-policy-store";
-import { openSearchPanel, searchKeymap } from "@codemirror/search";
+import { openSearchPanel, searchKeymap, gotoLine } from "@codemirror/search";
 import { getActiveEditorView } from "@/components/ui/yaml-editor";
 
 export interface EditCommandDeps {
@@ -96,6 +96,17 @@ export function registerEditCommands(deps: EditCommandDeps): void {
           // Fallback: open find-only panel
           openSearchPanel(view);
         }
+      },
+    },
+    {
+      id: "edit.goToLine",
+      title: "Go to Line",
+      category: "Edit",
+      keybinding: "Meta+G",
+      context: "editor",
+      execute: () => {
+        const view = getActiveEditorView();
+        if (view) gotoLine(view);
       },
     },
   ];

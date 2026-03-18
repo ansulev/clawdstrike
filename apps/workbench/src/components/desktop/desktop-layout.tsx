@@ -7,6 +7,7 @@ import { SidebarPanel } from "@/features/activity-bar/components/sidebar-panel";
 import { SidebarResizeHandle } from "@/features/activity-bar/components/sidebar-resize-handle";
 import { ShortcutProvider } from "@/components/desktop/shortcut-provider";
 import { CommandPalette } from "@/components/desktop/command-palette";
+import { QuickOpenDialog } from "@/features/navigation/quick-open-dialog";
 import { CrashRecoveryBanner } from "@/components/desktop/crash-recovery-banner";
 import { BottomPane } from "@/features/bottom-pane/bottom-pane";
 import { useBottomPaneStore } from "@/features/bottom-pane/bottom-pane-store";
@@ -77,6 +78,7 @@ export function DesktopLayout() {
       <InitCommands />
       <ShortcutProvider />
       <CommandPalette />
+      <QuickOpenDialog />
 
       {/* Top: custom titlebar */}
       <Titlebar />

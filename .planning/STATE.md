@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: milestone
 status: in-progress
-stopped_at: Completed 07-02-PLAN.md
-last_updated: "2026-03-18T20:25:50Z"
-last_activity: 2026-03-18 -- Completed Phase 7 Plan 2 (Right Sidebar Panel Expansion)
+stopped_at: Completed 06-01-PLAN.md
+last_updated: "2026-03-18T20:27:54Z"
+last_activity: 2026-03-18 -- Completed Phase 6 Plan 1 (Detection Gutter Extensions)
 progress:
   total_phases: 7
   completed_phases: 5
-  total_plans: 11
-  completed_plans: 11
-  percent: 100
+  total_plans: 15
+  completed_plans: 14
+  percent: 93
 ---
 
 # Project State
@@ -25,12 +25,12 @@ See: .planning/PROJECT.md (updated 2026-03-18)
 
 ## Current Position
 
-Phase: 7 of 7 (Detection Editor Integration)
-Plan: 2 of 4 COMPLETE
-Status: Phase 07 in progress, plan 2 complete
-Last activity: 2026-03-18 -- Completed Phase 7 Plan 2 (Right Sidebar Panel Expansion)
+Phase: 6 of 7 (Detection Engineering Inline)
+Plan: 1 of 2 COMPLETE
+Status: Phase 06 in progress, plan 1 complete
+Last activity: 2026-03-18 -- Completed Phase 6 Plan 1 (Detection Gutter Extensions)
 
-Progress: [██████████] 100%
+Progress: [█████████░] 93%
 
 ## Previous Milestone (v1.0 — IDE Pivot)
 
@@ -68,6 +68,7 @@ Summary: Delivered IDE shell — activity bar, 7 sidebar panels, pane tab system
 | Phase 04 P02 | 3min | 2 tasks | 5 files |
 | Phase 07 P01 | 2min | 2 tasks | 2 files |
 | Phase 07 P02 | 3min | 2 tasks | 3 files |
+| Phase 07 P04 | 1min | 1 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -109,6 +110,7 @@ v1.1 decisions:
 - [Phase 07]: Right sidebar tab strip uses icon-only buttons with gold #d4a84b active indicator
 - [Phase 07]: Editor-context panels wrapped in dedicated content components with no-tab fallback
 - [Phase 07]: rightSidebar.* commands use useRightSidebarStore.getState() directly (no ViewCommandDeps coupling)
+- [Phase 07]: Hunt onNavigateToEditor uses usePaneStore.getState().openApp() for cross-feature pane navigation
 
 ### Pending Todos
 
@@ -120,6 +122,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-18T20:25:50Z
-Stopped at: Completed 07-02-PLAN.md
-Resume file: Continue with 07-03-PLAN.md (Visual builder and TrustPrint tool routes)
+Last session: 2026-03-18T20:27:37Z
+Stopped at: Completed 07-04-PLAN.md
+Resume file: Phase 7 plans complete; Phases 3 and 6 remain in v1.1 milestone

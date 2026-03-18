@@ -51,7 +51,7 @@
 - [ ] **DINT-03**: Visual builders (Sigma, YARA, OCSF) open as editor tabs from Explorer or command palette
 - [x] **DINT-04**: Evidence Pack, Explainability, Version History render as resizable right-sidebar panels
 - [x] **DINT-05**: Live Agent Tab and SDK Integration Tab promoted to standalone pane-openable views
-- [ ] **DINT-06**: Hunt findings can draft policies (hunt → policy pipeline connected)
+- [x] **DINT-06**: Hunt findings can draft policies (hunt → policy pipeline connected)
 - [x] **DINT-07**: Coverage gap analysis accessible as a pane tab with MITRE heatmap
 - [ ] **DINT-08**: TrustPrint suite (pattern explorer, provider wizard, threshold tuner) accessible from command palette
 
@@ -104,7 +104,7 @@
 | DINT-03 | Phase 7 | Pending |
 | DINT-04 | Phase 7 | Complete |
 | DINT-05 | Phase 7 | Complete |
-| DINT-06 | Phase 7 | Pending |
+| DINT-06 | Phase 7 | Complete |
 | DINT-07 | Phase 7 | Complete |
 | DINT-08 | Phase 7 | Pending |
 

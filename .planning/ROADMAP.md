@@ -131,7 +131,7 @@ Plans:
 - [x] 07-01-PLAN.md — Promote Guards, Compare, Live Agent, SDK, Coverage to standalone pane routes with navigate commands
 - [x] 07-02-PLAN.md — Expand right sidebar with Evidence Pack, Explainability, Version History panels
 - [ ] 07-03-PLAN.md — Add visual builder and TrustPrint tool routes with command palette commands
-- [ ] 07-04-PLAN.md — Wire Hunt draft-detection pipeline to navigate to editor pane tab
+- [x] 07-04-PLAN.md — Wire Hunt draft-detection pipeline to navigate to editor pane tab
 
 ## Progress
 
@@ -146,4 +146,4 @@ Phases 1-2 are sequential (global search builds on in-file search). Phases 3, 4,
 | 4. File Tree Mutations | 2/2 | Complete | 2026-03-18 |
 | 5. Tab & Terminal Polish | 2/2 | Complete | 2026-03-18 |
 | 6. Detection Engineering Inline | 0/2 | Planned | - |
-| 7. Detection Editor Integration | 2/4 | In Progress | - |
+| 7. Detection Editor Integration | 3/4 | In Progress | - |

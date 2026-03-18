@@ -294,14 +294,15 @@ rules:
 
 #[test]
 fn validate_builtin_rulesets_pass() {
-    // All built-in rulesets must have valid, RE2-compatible regex patterns.
+    // Validate the crate's own built-in HushSpec rulesets, not ClawdStrike's
+    // higher-level policy files, which have a different top-level schema.
     let rulesets = [
-        include_str!("../../../rulesets/default.yaml"),
-        include_str!("../../../rulesets/strict.yaml"),
-        include_str!("../../../rulesets/permissive.yaml"),
-        include_str!("../../../rulesets/ai-agent.yaml"),
-        include_str!("../../../rulesets/cicd.yaml"),
-        include_str!("../../../rulesets/remote-desktop.yaml"),
+        include_str!("../rulesets/default.yaml"),
+        include_str!("../rulesets/strict.yaml"),
+        include_str!("../rulesets/permissive.yaml"),
+        include_str!("../rulesets/ai-agent.yaml"),
+        include_str!("../rulesets/cicd.yaml"),
+        include_str!("../rulesets/remote-desktop.yaml"),
     ];
     for (i, yaml) in rulesets.iter().enumerate() {
         let spec =

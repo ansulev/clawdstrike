@@ -1,6 +1,17 @@
 hushspec: "0.1.0"
 name: multi-origin-profiles
 extensions:
+  posture:
+    initial: standard
+    states:
+      standard:
+        capabilities:
+          - file_access
+      elevated:
+        capabilities:
+          - file_access
+          - tool_call
+    transitions: []
   origins:
     default_behavior: deny
     profiles:

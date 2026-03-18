@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: milestone
 status: in-progress
-stopped_at: Completed 08-01-PLAN.md
-last_updated: "2026-03-18T21:40:08Z"
-last_activity: 2026-03-18 -- Completed Phase 8 Plan 1 (FileEditorShell, /file/* route, PaneView dirty/fileType)
+stopped_at: Completed 08-03-PLAN.md
+last_updated: "2026-03-18T21:48:09Z"
+last_activity: 2026-03-18 -- Completed Phase 8 Plan 3 (FileEditorToolbar extraction, FileEditorShell integration)
 progress:
   total_phases: 8
   completed_phases: 7
   total_plans: 19
-  completed_plans: 17
-  percent: 89
+  completed_plans: 18
+  percent: 95
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-03-18)
 ## Current Position
 
 Phase: 8 of 8 (File-First Editor) IN PROGRESS
-Plan: 2 of 4 (08-01, 08-02 complete)
-Status: Phase 08 in progress, 08-01 and 08-02 done
-Last activity: 2026-03-18 -- Completed Phase 8 Plan 1 (FileEditorShell, /file/* route, PaneView dirty/fileType)
+Plan: 4 of 4 (08-01, 08-02, 08-03 complete)
+Status: Phase 08 in progress, 08-01, 08-02, 08-03 done
+Last activity: 2026-03-18 -- Completed Phase 8 Plan 3 (FileEditorToolbar extraction, FileEditorShell integration)
 
-Progress: [████████░░] 89%
+Progress: [█████████░] 95%
 
 ## Previous Milestone (v1.0 — IDE Pivot)
 
@@ -74,6 +74,7 @@ Summary: Delivered IDE shell — activity bar, 7 sidebar panels, pane tab system
 | Phase 06 P02 | 3min | 1 tasks | 3 files |
 | Phase 08 P02 | 3min | 2 tasks | 3 files |
 | Phase 08 P01 | 5min | 2 tasks | 5 files |
+| Phase 08 P03 | 4min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -130,6 +131,10 @@ v1.1 decisions:
 - [Phase 08]: Zustand basic subscribe(state, prevState) for dirty sync (no subscribeWithSelector middleware)
 - [Phase 08]: openFile delegates to openApp for route dedup, then pushRecentFile for recent tracking
 - [Phase 08]: File routes pass through normalizeWorkbenchRoute unchanged (no switch-case collapsing)
+- [Phase 08]: FileEditorToolbar shows only validate/format/test/problems for policy files; non-policy gets badge + status
+- [Phase 08]: SplitModeToggle omitted from FileEditorToolbar (FLAT-06: pane splitting replaces it)
+- [Phase 08]: Dynamic import of tauri-bridge for file loading in FileEditorShell (code-split friendly)
+- [Phase 08]: Temporary read-only <pre> for content area (CodeMirror integration deferred to avoid useMultiPolicy coupling)
 
 ### Pending Todos
 
@@ -141,6 +146,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-18T21:40:08Z
-Stopped at: Completed 08-01-PLAN.md
-Resume file: Phase 8 in progress. Continue with 08-03, 08-04.
+Last session: 2026-03-18T21:48:09Z
+Stopped at: Completed 08-03-PLAN.md
+Resume file: Phase 8 in progress. Continue with 08-04.

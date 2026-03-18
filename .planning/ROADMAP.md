@@ -96,7 +96,7 @@ Plans:
 
 Plans:
 - [ ] 05-01-PLAN.md — Tab overflow arrows, wheel scroll, and context menu with Close to the Right / Close Saved
-- [ ] 05-02-PLAN.md — Terminal split view and session tab rename via double-click
+- [x] 05-02-PLAN.md — Terminal split view and session tab rename via double-click
 
 ### Phase 6: Detection Engineering Inline
 **Goal**: Detection engineers get inline feedback in the editor — test buttons, coverage gaps, guard reorder
@@ -143,6 +143,6 @@ Phases 1-2 are sequential (global search builds on in-file search). Phases 3, 4,
 | 2. Global Search | 0/2 | Planning | - |
 | 3. Quick Navigation | 0/2 | Planning | - |
 | 4. File Tree Mutations | 0/2 | Planning | - |
-| 5. Tab & Terminal Polish | 0/2 | Planning | - |
+| 5. Tab & Terminal Polish | 1/2 | In Progress | - |
 | 6. Detection Engineering Inline | 0/2 | Not started | - |
 | 7. Detection Editor Integration | 0/3 | Not started | - |

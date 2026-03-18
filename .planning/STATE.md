@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: milestone
-status: executing
-stopped_at: Completed 01-01-PLAN.md
-last_updated: "2026-03-18T19:16:22Z"
-last_activity: 2026-03-18 -- Completed Phase 1 Plan 1 (In-File Search)
+status: completed
+stopped_at: Completed 03-02-PLAN.md
+last_updated: "2026-03-18T19:39:54.261Z"
+last_activity: 2026-03-18 -- Completed Phase 5 Plan 2 (Terminal Split & Rename)
 progress:
-  total_phases: 6
-  completed_phases: 0
-  total_plans: 11
-  completed_plans: 1
-  percent: 9
+  total_phases: 7
+  completed_phases: 2
+  total_plans: 9
+  completed_plans: 4
+  percent: 33
 ---
 
 # Project State
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-18)
 
 **Core value:** Security operators get a professional-grade IDE with search, quick navigation, and file management
-**Current focus:** Phase 1 In-File Search
+**Current focus:** Phase 5 Tab & Terminal Polish
 
 ## Current Position
 
-Phase: 1 of 6 (In-File Search)
-Plan: 1 of 1 COMPLETE
-Status: Phase 1 plans complete
-Last activity: 2026-03-18 -- Completed Phase 1 Plan 1 (In-File Search)
+Phase: 5 of 7 (Tab & Terminal Polish)
+Plan: 2 of 2 COMPLETE
+Status: Phase 5 plans complete
+Last activity: 2026-03-18 -- Completed Phase 5 Plan 2 (Terminal Split & Rename)
 
-Progress: [█░░░░░░░░░] 9%
+Progress: [███░░░░░░░] 33%
 
 ## Previous Milestone (v1.0 — IDE Pivot)
 
@@ -57,6 +57,9 @@ Summary: Delivered IDE shell — activity bar, 7 sidebar panels, pane tab system
 | Phase | Plan | Duration | Tasks | Files |
 |-------|------|----------|-------|-------|
 | Phase 01 P01 | 2min | 2 tasks | 2 files |
+| Phase 03 P02 | 2min | 2 tasks | 2 files |
+| Phase 05 P02 | 2min | 1 tasks | 3 files |
+| Phase 03 P01 | 3min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -73,6 +76,11 @@ v1.1 decisions:
 - Module-level EditorView ref for command dispatch (simpler than React context)
 - searchKeymap Mod-h handler extraction for replace mode (stable public API)
 - search({ top: true }) for IDE-standard top-positioned search panel
+- Split terminal uses [leftId, rightId] tuple (max 2 panes, simple model)
+- Split auto-creates second session if fewer than 2 exist
+- Closing split session exits split mode automatically
+- BreadcrumbBar self-hides via internal null return (consumer needs no conditional)
+- Folder breadcrumb click expands dir AND reveals Explorer sidebar via showPanel
 
 ### Pending Todos
 
@@ -84,6 +92,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-18
-Stopped at: Completed 01-01-PLAN.md
-Resume file: .planning/ROADMAP.md
+Last session: 2026-03-18T19:39:44.939Z
+Stopped at: Completed 03-02-PLAN.md
+Resume file: None

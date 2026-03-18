@@ -17,7 +17,7 @@
 
 - [ ] **NAV-01**: User can open any file by name via Cmd+P (Quick Open) with fuzzy matching
 - [ ] **NAV-02**: Quick Open shows recent files at the top when input is empty
-- [ ] **NAV-03**: Breadcrumb bar above the editor shows path (Project > Folder > File) with click navigation
+- [x] **NAV-03**: Breadcrumb bar above the editor shows path (Project > Folder > File) with click navigation
 - [ ] **NAV-04**: User can go to a specific line number via Cmd+G
 
 ### File Tree
@@ -41,8 +41,8 @@
 
 ### Terminal
 
-- [ ] **TERM-01**: User can split terminal panel horizontally to show two sessions side by side
-- [ ] **TERM-02**: User can rename terminal sessions via double-click on tab title
+- [x] **TERM-01**: User can split terminal panel horizontally to show two sessions side by side
+- [x] **TERM-02**: User can rename terminal sessions via double-click on tab title
 
 ### Detection Editor Integration
 
@@ -85,7 +85,7 @@
 | SRCH-05 | Phase 2 | Pending |
 | NAV-01 | Phase 3 | Pending |
 | NAV-02 | Phase 3 | Pending |
-| NAV-03 | Phase 3 | Pending |
+| NAV-03 | Phase 3 | Complete |
 | NAV-04 | Phase 3 | Pending |
 | TREE-01 | Phase 4 | Pending |
 | TREE-02 | Phase 4 | Pending |
@@ -97,8 +97,8 @@
 | DET-01 | Phase 6 | Pending |
 | DET-02 | Phase 6 | Pending |
 | DET-03 | Phase 6 | Pending |
-| TERM-01 | Phase 5 | Pending |
-| TERM-02 | Phase 5 | Pending |
+| TERM-01 | Phase 5 | Complete |
+| TERM-02 | Phase 5 | Complete |
 | DINT-01 | Phase 7 | Pending |
 | DINT-02 | Phase 7 | Pending |
 | DINT-03 | Phase 7 | Pending |

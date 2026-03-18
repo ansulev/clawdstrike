@@ -12,6 +12,8 @@ import { ACTIVITY_BAR_ITEMS } from "../types";
 import { ActivityBarItem } from "./activity-bar-item";
 import { PresenceActivityPills } from "@/features/presence/components/presence-activity-pills";
 import { cn } from "@/lib/utils";
+import { useObservatoryStore } from "@/features/observatory/stores/observatory-store";
+import { useObservatoryStore } from "@/features/observatory/stores/observatory-store";
 
 // ---------------------------------------------------------------------------
 // ActivityBar -- 48px vertical icon rail, far-left of the layout.
@@ -25,6 +27,10 @@ export function ActivityBar() {
   const { connection } = useFleetConnection();
   const fleetConnected = connection.connected;
   const { findings } = useFindings();
+  const seamSummary = useObservatoryStore.use.seamSummary();
+  const huntArtifactCount = seamSummary.artifactCount;
+  const seamSummary = useObservatoryStore.use.seamSummary();
+  const huntArtifactCount = seamSummary.artifactCount;
 
   const emergingFindingsCount = useMemo(
     () => findings.filter((f) => f.status === "emerging").length,
@@ -96,7 +102,7 @@ export function ActivityBar() {
             tooltip={item.tooltip}
             active={item.id === activeItem}
             onClick={() => actions.toggleItem(item.id)}
-            badge={item.id === "findings" ? emergingFindingsCount : undefined}
+            badge={item.id === "hunt" ? huntArtifactCount : undefined}
           />
         ))}
       </div>

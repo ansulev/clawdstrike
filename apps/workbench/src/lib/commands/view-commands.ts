@@ -17,6 +17,7 @@ export interface ViewCommandDeps {
   hasActiveTerminal: () => boolean;
   toggleSidebar: () => void;
   showExplorer: () => void;
+  closeActiveTab: () => void;
 }
 
 export function registerViewCommands(deps: ViewCommandDeps): void {
@@ -144,6 +145,14 @@ export function registerViewCommands(deps: ViewCommandDeps): void {
       keybinding: "Meta+Shift+E",
       context: "global",
       execute: () => deps.showExplorer(),
+    },
+    {
+      id: "tab.close",
+      title: "Close Active Tab",
+      category: "View",
+      keybinding: "Meta+W",
+      context: "pane",
+      execute: () => deps.closeActiveTab(),
     },
   ];
 

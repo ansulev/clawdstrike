@@ -1,46 +1,19 @@
 import { useActivityBarStore } from "../stores/activity-bar-store";
 import { ExplorerPanel } from "@/components/workbench/explorer/explorer-panel";
 import { useProjectStore } from "@/features/project/stores/project-store";
+import { usePaneStore } from "@/features/panes/pane-store";
+import { HeartbeatPanel } from "../panels/heartbeat-panel";
+import { SentinelPanel } from "../panels/sentinel-panel";
+import { FindingsPanel } from "../panels/findings-panel";
+import { LibraryPanel } from "../panels/library-panel";
+import { FleetPanel } from "../panels/fleet-panel";
+import { CompliancePanel } from "../panels/compliance-panel";
 import type { ActivityBarItemId } from "../types";
 
 // ---------------------------------------------------------------------------
 // SidebarPanel -- Container that renders active panel content.
 // Reads activeItem from the activity-bar store and switches panel view.
 // ---------------------------------------------------------------------------
-
-/** Panel title labels keyed by activity bar item ID. */
-const PANEL_TITLES: Record<ActivityBarItemId, string> = {
-  heartbeat: "System Status",
-  sentinels: "Sentinels",
-  findings: "Findings & Intel",
-  explorer: "Explorer",
-  library: "Library",
-  fleet: "Fleet & Topology",
-  compliance: "Compliance",
-};
-
-// ---------------------------------------------------------------------------
-// Placeholder panel for panels not yet implemented
-// ---------------------------------------------------------------------------
-
-function PlaceholderPanel({ title }: { title: string }) {
-  return (
-    <div className="flex flex-col h-full">
-      {/* Panel header */}
-      <div className="h-8 shrink-0 flex items-center px-4 border-b border-[#2d3240]/40">
-        <span className="font-display font-semibold text-sm text-[#ece7dc]">
-          {title}
-        </span>
-      </div>
-      {/* Placeholder body */}
-      <div className="flex-1 flex items-center justify-center px-4">
-        <p className="font-mono text-[10px] text-[#6f7f9a]">
-          Panel content available in a future update.
-        </p>
-      </div>
-    </div>
-  );
-}
 
 // ---------------------------------------------------------------------------
 // Explorer panel wiring -- connects ExplorerPanel to project store
@@ -56,9 +29,8 @@ function ExplorerPanelConnected() {
     <ExplorerPanel
       project={project}
       onToggleDir={actions.toggleDir}
-      onOpenFile={() => {
-        // File opening is handled by the editor/pane system.
-        // In Phase 1, the sidebar ExplorerPanel is browse-only.
+      onOpenFile={(file) => {
+        usePaneStore.getState().openApp("/editor", file.name);
       }}
       onExpandAll={actions.expandAll}
       onCollapseAll={actions.collapseAll}
@@ -71,6 +43,29 @@ function ExplorerPanelConnected() {
 }
 
 // ---------------------------------------------------------------------------
+// Panel renderer -- switches on active activity bar item
+// ---------------------------------------------------------------------------
+
+function renderPanel(activeItem: ActivityBarItemId) {
+  switch (activeItem) {
+    case "heartbeat":
+      return <HeartbeatPanel />;
+    case "sentinels":
+      return <SentinelPanel />;
+    case "findings":
+      return <FindingsPanel />;
+    case "explorer":
+      return <ExplorerPanelConnected />;
+    case "library":
+      return <LibraryPanel />;
+    case "fleet":
+      return <FleetPanel />;
+    case "compliance":
+      return <CompliancePanel />;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Main SidebarPanel component
 // ---------------------------------------------------------------------------
 
@@ -78,8 +73,6 @@ export function SidebarPanel() {
   const activeItem = useActivityBarStore.use.activeItem();
   const sidebarVisible = useActivityBarStore.use.sidebarVisible();
   const sidebarWidth = useActivityBarStore.use.sidebarWidth();
-
-  const title = PANEL_TITLES[activeItem];
 
   return (
     <div
@@ -91,11 +84,7 @@ export function SidebarPanel() {
     >
       {sidebarVisible && (
         <div className="h-full flex flex-col" style={{ width: sidebarWidth }}>
-          {activeItem === "explorer" ? (
-            <ExplorerPanelConnected />
-          ) : (
-            <PlaceholderPanel title={title} />
-          )}
+          {renderPanel(activeItem)}
         </div>
       )}
     </div>

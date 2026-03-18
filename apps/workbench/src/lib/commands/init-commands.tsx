@@ -11,6 +11,7 @@ import { useEffect, useRef, useCallback, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useBottomPaneStore } from "@/features/bottom-pane/bottom-pane-store";
 import { usePaneStore } from "@/features/panes/pane-store";
+import { getAllPaneGroups } from "@/features/panes/pane-tree";
 import { useWorkbench, useMultiPolicy } from "@/features/policy/stores/multi-policy-store";
 import { useActivityBarStore } from "@/features/activity-bar/stores/activity-bar-store";
 import { commandRegistry } from "@/lib/command-registry";
@@ -125,6 +126,14 @@ export function InitCommands() {
       hasActiveTerminal: () => !!useBottomPaneStore.getState().activeTerminalId,
       toggleSidebar: () => useActivityBarStore.getState().actions.toggleSidebar(),
       showExplorer: () => useActivityBarStore.getState().actions.showPanel("explorer"),
+      closeActiveTab: () => {
+        const { root, activePaneId } = usePaneStore.getState();
+        const allGroups = getAllPaneGroups(root);
+        const activePane = allGroups.find((g) => g.id === activePaneId);
+        if (activePane?.activeViewId) {
+          usePaneStore.getState().closeView(activePaneId, activePane.activeViewId);
+        }
+      },
     });
 
     // No cleanup needed — commands are re-registered (overwritten) when deps change.

@@ -5,7 +5,7 @@ import { yaml } from "@codemirror/lang-yaml";
 import { json } from "@codemirror/lang-json";
 import { syntaxHighlighting, HighlightStyle, foldGutter, bracketMatching, indentOnInput, foldKeymap } from "@codemirror/language";
 import { tags } from "@lezer/highlight";
-import { searchKeymap, highlightSelectionMatches } from "@codemirror/search";
+import { searchKeymap, highlightSelectionMatches, search } from "@codemirror/search";
 import { defaultKeymap, historyKeymap, history } from "@codemirror/commands";
 import { lintGutter, type Diagnostic, setDiagnostics } from "@codemirror/lint";
 import { autocompletion, closeBrackets, closeBracketsKeymap } from "@codemirror/autocomplete";
@@ -16,6 +16,19 @@ import { ocsfJsonCompletionSource } from "@/lib/workbench/ocsf-schema";
 import { yaraLanguage } from "@/lib/workbench/yara-language";
 import type { FileType } from "@/lib/workbench/file-type-registry";
 import { useGeneralSettings, type FontSize } from "@/features/settings/use-general-settings";
+
+// ---- Active editor tracking ----
+
+/**
+ * Module-level ref tracking the most recently focused EditorView.
+ * Used by command registry to dispatch search commands into the active editor.
+ */
+let _activeEditorView: import("@codemirror/view").EditorView | null = null;
+
+/** Returns the currently active (most recently focused) EditorView, or null. */
+export function getActiveEditorView(): import("@codemirror/view").EditorView | null {
+  return _activeEditorView;
+}
 
 // ---- Types ----
 
@@ -345,7 +358,13 @@ export function YamlEditor({
       rectangularSelection(),
       bracketMatching(),
       indentOnInput(),
+      search({ top: true }),
       highlightSelectionMatches(),
+      EditorView.domEventHandlers({
+        focus: (_event, view) => {
+          _activeEditorView = view;
+        },
+      }),
       foldGutter({
         openText: "\u25BE",
         closedText: "\u25B8",
@@ -402,6 +421,9 @@ export function YamlEditor({
     viewRef.current = view;
 
     return () => {
+      if (_activeEditorView === view) {
+        _activeEditorView = null;
+      }
       view.destroy();
       viewRef.current = null;
     };

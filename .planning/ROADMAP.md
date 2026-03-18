@@ -1,99 +1,148 @@
-# Roadmap: ClawdStrike Workbench IDE Pivot
+# Roadmap: ClawdStrike Workbench v1.1 — IDE Completeness
 
 ## Overview
 
-Transform the ClawdStrike Workbench from a sidebar-nav dashboard into a VS Code/Cursor-like security IDE. The workbench already has Zustand stores, command registry, binary tree pane system, bottom pane, and 19 routable pages. This roadmap layers IDE chrome (activity bar, sidebar panels, right sidebar) on top of that foundation, then rewires navigation so routes become "apps" opened in editor tabs. Four phases deliver progressively: shell structure, panel content, secondary zones, and full app-based navigation.
+Close the gap from "IDE scaffold" to "professional-grade detection engineering IDE." The v1.0 milestone delivered the IDE shell (activity bar, sidebar panels, pane system, right sidebar, commands). v1.1 adds the core IDE features users expect: search, quick open, file tree mutations, tab overflow, breadcrumbs, inline detection tools, and terminal improvements.
 
 **Canonical refs for downstream agents:**
-- `docs/plans/workbench-dev/ide-pivot.md` -- Full IDE pivot plan with component hierarchy, route migration map, file change list
-- `docs/plans/workbench-dev/patterns-reference.md` -- Athas patterns to port
-- `docs/plans/workbench-dev/INDEX.md` -- Original workbench dev roadmap (foundation context)
+- `docs/plans/workbench-dev/ide-pivot.md` — IDE pivot plan (v1.0 architecture)
+- `docs/plans/workbench-dev/patterns-reference.md` — Athas patterns
+- `.planning/phases/01-*/01-UI-SPEC.md` through `03-*/03-UI-SPEC.md` — design tokens
 
 ## Phases
 
 **Phase Numbering:**
-- Integer phases (1, 2, 3, 4): Planned milestone work
+- Integer phases (1, 2, 3...): Planned milestone work
 - Decimal phases (e.g., 2.1): Urgent insertions (marked with INSERTED)
 
-- [x] **Phase 1: Activity Bar + Sidebar Shell** - Decompose sidebar into activity bar + panel container, wire panel switching, new stores, basic commands
-- [x] **Phase 2: Sidebar Panels + Editor Tabs** - Build 7 sidebar panels, add openApp to pane store, render routes as editor tabs
-- [x] **Phase 3: Right Sidebar + Bottom Panel + Commands** - Right sidebar zone with Speakeasy, audit tail tab, per-panel sidebar commands
-- [ ] **Phase 4: Lab Decomposition + App Navigation** - Break Lab into 3 independent apps, rewrite navigate commands to openApp pattern
+- [ ] **Phase 1: In-File Search** — Cmd+F find, Cmd+H find/replace in current CodeMirror editor
+- [ ] **Phase 2: Global Search** — Cmd+Shift+F workspace-wide search with results panel
+- [ ] **Phase 3: Quick Navigation** — Cmd+P file picker, breadcrumbs, Cmd+G go-to-line
+- [ ] **Phase 4: File Tree Mutations** — Create/rename/delete files from Explorer with status indicators
+- [ ] **Phase 5: Tab & Terminal Polish** — Tab overflow scrolling, context menu additions, terminal splits
+- [ ] **Phase 6: Detection Engineering Inline** — Gutter test buttons, coverage gap indicators, guard reorder
+- [ ] **Phase 7: Detection Editor Integration** — Surface 50K LOC of orphaned detection engineering features as proper IDE panels
 
 ## Phase Details
 
-### Phase 1: Activity Bar + Sidebar Shell
-**Goal**: Operators see a VS Code-style activity bar controlling sidebar content, replacing the flat nav
-**Depends on**: Nothing (builds on existing foundation from workbench-dev Phase A/C)
-**Requirements**: ABAR-01, ABAR-02, ABAR-03, ABAR-04, ABAR-05, ABAR-06, CMD-01, CMD-02, STATE-01, STATE-03, SHELL-01, SHELL-02, SHELL-03, SHELL-04
+### Phase 1: In-File Search
+**Goal**: User can find and replace text within the current editor using standard Cmd+F / Cmd+H shortcuts
+**Depends on**: Nothing
+**Requirements**: SRCH-01, SRCH-02
 **Success Criteria** (what must be TRUE):
-  1. A 48px vertical icon rail with 7+1 icons renders to the left of the sidebar, and clicking an icon switches the sidebar to show the corresponding panel content
-  2. Clicking the already-active icon collapses the sidebar; Cmd+B toggles sidebar visibility; Cmd+Shift+E jumps to Explorer panel
-  3. The active icon is visually distinguished and icons use the existing sigil icon set from sidebar-icons.tsx
-  4. Titlebar, StatusBar, and the existing pane/bottom-pane layout continue to render correctly in the updated desktop-layout.tsx; all 11 existing Zustand stores work unchanged
-  5. activity-bar-store (Zustand) tracks activeItem, sidebarVisible, and sidebarWidth with createSelectors pattern
-**Plans**: 2 plans
+  1. Cmd+F opens a search bar overlay in the active CodeMirror editor with match highlighting and prev/next navigation
+  2. Cmd+H opens find-and-replace with replace-one and replace-all buttons
+**Plans**: 1 plan
 
 Plans:
-- [x] 01-01-PLAN.md -- Activity bar types, Zustand store, and all four new components (ActivityBar, ActivityBarItem, SidebarPanel, SidebarResizeHandle)
-- [x] 01-02-PLAN.md -- Shell integration (desktop-layout.tsx), sidebar commands (Cmd+B, Cmd+Shift+E), visual verification
+- [ ] 01-01-PLAN.md — Add search() extension to CodeMirror and register find/replace commands
 
-### Phase 2: Sidebar Panels + Editor Tabs
-**Goal**: Each activity bar item reveals a useful sidebar panel, and clicking items in panels opens detail views as editor tabs in the pane system
+### Phase 2: Global Search
+**Goal**: User can search across all workspace files with results displayed in a dedicated panel
 **Depends on**: Phase 1
-**Requirements**: SIDE-01, SIDE-02, SIDE-03, SIDE-04, SIDE-05, SIDE-06, SIDE-07, SIDE-08, SIDE-09, SIDE-10, PANE-01, PANE-02, PANE-03, PANE-04, PANE-05
+**Requirements**: SRCH-03, SRCH-04, SRCH-05
 **Success Criteria** (what must be TRUE):
-  1. Seven sidebar panels render real content: HeartbeatPanel (posture ring + counts), SentinelPanel (filterable list), FindingsPanel (severity badges + intel), ExplorerPanel (file tree), LibraryPanel (catalog browser), FleetPanel (agent summary + topology link), CompliancePanel (framework selector + scores)
-  2. The sidebar is resizable with a drag handle and collapses at a threshold
-  3. paneStore.openApp(route, label) opens a route as a new editor tab or focuses an existing tab with that route
-  4. All 19 existing routes render correctly as pane tabs with a visible tab bar showing close buttons
-  5. App launches with a default Home tab; pane splitting (horizontal/vertical) works for all app types
-**Plans**: 3 plans
+  1. Cmd+Shift+F opens a search panel (sidebar or bottom) with input field and results list
+  2. Results show file path, line number, and matching context with highlighted match text
+  3. Clicking a result opens the file in an editor tab at the matching line
+  4. Toggle buttons for case-sensitive, whole-word, and regex search modes
+**Plans**: TBD
 
 Plans:
-- [x] 02-01-PLAN.md -- Pane store enhancements (openApp, closeView, setActiveView), PaneTabBar + PaneTab components, unit tests
-- [x] 02-02-PLAN.md -- Posture utility extraction, HeartbeatPanel, SentinelPanel, FindingsPanel
-- [x] 02-03-PLAN.md -- LibraryPanel, FleetPanel, CompliancePanel, SidebarPanel integration, tab.close command (Cmd+W)
+- [ ] 02-01: TBD
+- [ ] 02-02: TBD
 
-### Phase 3: Right Sidebar + Bottom Panel + Commands
-**Goal**: Operators have a right sidebar for Speakeasy chat, an audit tail in the bottom panel, and per-panel sidebar commands
-**Depends on**: Phase 2
-**Requirements**: RBAR-01, RBAR-02, RBAR-03, RBAR-04, BPAN-01, BPAN-02, BPAN-03, CMD-03, CMD-04, STATE-02
+### Phase 3: Quick Navigation
+**Goal**: User can navigate files and lines with keyboard shortcuts and breadcrumbs
+**Depends on**: Nothing
+**Requirements**: NAV-01, NAV-02, NAV-03, NAV-04
 **Success Criteria** (what must be TRUE):
-  1. A resizable, collapsible right sidebar renders to the right of the editor area with SpeakeasyPanel inside it
-  2. Cmd+Shift+B toggles right sidebar visibility; right-sidebar-store tracks visible, activePanel, and width
-  3. AuditTailPanel appears as a 4th tab in the bottom panel showing last N audit entries with auto-refresh
-  4. Sidebar commands for each panel (sentinels, findings, library, fleet, compliance, heartbeat) are registered and discoverable via command palette
-  5. Existing Terminal, Problems, and Output bottom panel tabs continue to work unchanged
-**Plans**: 2 plans
+  1. Cmd+P opens a Quick Open dialog with fuzzy file name matching across the detection project
+  2. Recent files appear at the top when the input is empty; selecting opens the file in active pane
+  3. Breadcrumb bar renders above the editor showing Project > Folder > File with click navigation
+  4. Cmd+G opens a go-to-line input that jumps to the specified line number
+**Plans**: TBD
 
 Plans:
-- [x] 03-01-PLAN.md -- Right sidebar store + components (RightSidebar, RightSidebarResizeHandle), AuditTailPanel, bottom pane Audit tab integration
-- [x] 03-02-PLAN.md -- Desktop layout integration (right sidebar in flex row), 8 new commands (sidebar.toggleRight, 6 panel commands, view.toggleAudit)
+- [ ] 03-01: TBD
+- [ ] 03-02: TBD
 
-### Phase 4: Lab Decomposition + App Navigation
-**Goal**: Lab is decomposed into independent apps and all navigation uses the openApp pattern, completing the IDE pivot
-**Depends on**: Phase 3
-**Requirements**: LAB-01, LAB-02, LAB-03, LAB-04, CMD-05, CMD-06
+### Phase 4: File Tree Mutations
+**Goal**: User can create, rename, and delete detection files from the Explorer panel
+**Depends on**: Nothing
+**Requirements**: TREE-01, TREE-02, TREE-03, TREE-04
 **Success Criteria** (what must be TRUE):
-  1. Swarm Board, Threat Hunt, and Simulator are each openable as independent editor tabs without going through the Lab container
-  2. Lab container is preserved as an optional convenience grouping but is no longer the only way to access its sub-apps
-  3. Navigate commands (Mission Control, Approvals, Audit, Receipts, Topology, Swarm Board, Hunt, Simulator) use paneStore.openApp() to open routes as pane tabs
-  4. All app-opening commands are registered, categorized, and discoverable via command palette
-**Plans**: 2 plans
+  1. Explorer toolbar has a "New File" button; right-click context menu offers "New File" with inline name input
+  2. Right-click > Rename (or F2) enables inline editing of the file name
+  3. Right-click > Delete shows a confirmation dialog and removes the file via Tauri fs API
+  4. Explorer file entries show modified-dot and error-badge status decorations
+**Plans**: TBD
 
 Plans:
-- [ ] 04-01-PLAN.md -- Lab route decomposition: direct routes for /swarm-board, /hunt, /simulator; updated normalization and labels; openApp integration tests
-- [ ] 04-02-PLAN.md -- Navigate commands rewrite to openApp pattern; 8 new app-opening commands; init-commands wiring update
+- [ ] 04-01: TBD
+- [ ] 04-02: TBD
+
+### Phase 5: Tab & Terminal Polish
+**Goal**: Tab system handles overflow gracefully and terminal supports splits and naming
+**Depends on**: Nothing
+**Requirements**: TAB-01, TAB-02, TAB-03, TERM-01, TERM-02
+**Success Criteria** (what must be TRUE):
+  1. When tabs exceed the tab bar width, left/right navigation arrows appear for scrolling
+  2. Mouse scroll wheel on the tab bar scrolls tabs horizontally
+  3. Tab context menu includes "Close to the Right" and "Close Saved" options
+  4. Terminal panel can be split horizontally to show two sessions side by side
+  5. Terminal session tabs can be renamed by double-clicking the tab title
+**Plans**: TBD
+
+Plans:
+- [ ] 05-01: TBD
+- [ ] 05-02: TBD
+
+### Phase 6: Detection Engineering Inline
+**Goal**: Detection engineers get inline feedback in the editor — test buttons, coverage gaps, guard reorder
+**Depends on**: Phase 1
+**Requirements**: DET-01, DET-02, DET-03
+**Success Criteria** (what must be TRUE):
+  1. Hovering over a guard config section in the YAML editor shows a "Run Test" gutter icon that executes the guard
+  2. Gutter shows colored indicators for uncovered MITRE ATT&CK techniques based on the active policy
+  3. Guard configuration panel displays execution order with drag-to-reorder capability
+**Plans**: TBD
+
+Plans:
+- [ ] 06-01: TBD
+- [ ] 06-02: TBD
+
+### Phase 7: Detection Editor Integration
+**Goal**: Surface the 50K+ LOC of orphaned detection engineering features as proper IDE panels and pane-openable views
+**Depends on**: Phase 3 (needs breadcrumbs for navigation context)
+**Requirements**: DINT-01, DINT-02, DINT-03, DINT-04, DINT-05, DINT-06, DINT-07, DINT-08
+**Success Criteria** (what must be TRUE):
+  1. Guards browser opens as a pane tab (not full-page overlay) — side-by-side with policy editor
+  2. Compare/diff view opens as a pane tab (not overlay) — supports split-pane comparison
+  3. Visual builders (Sigma, YARA, OCSF) accessible from Explorer file click or command palette — open as editor tabs
+  4. Evidence Pack, Explainability, Version History render as resizable right-sidebar panels (not squeezed 280px sidebar)
+  5. Live Agent Tab and SDK Integration Tab promoted to standalone pane-openable views
+  6. Hunt findings can draft policies (hunt → policy pipeline connected)
+  7. Coverage gap analysis accessible as a pane tab with MITRE heatmap
+  8. TrustPrint suite (pattern explorer, provider wizard, threshold tuner) accessible from command palette
+**Plans**: TBD
+
+Plans:
+- [ ] 07-01: TBD
+- [ ] 07-02: TBD
+- [ ] 07-03: TBD
 
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 -> 2 -> 3 -> 4
+Phases 1-2 are sequential (global search builds on in-file search). Phases 3, 4, 5 are independent. Phase 6 depends on Phase 1. Phase 7 depends on Phase 3.
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Activity Bar + Sidebar Shell | 2/2 | Complete | 2026-03-18 |
-| 2. Sidebar Panels + Editor Tabs | 3/3 | Complete | 2026-03-18 |
-| 3. Right Sidebar + Bottom Panel + Commands | 2/2 | Complete | 2026-03-18 |
-| 4. Lab Decomposition + App Navigation | 0/2 | Not started | - |
+| 1. In-File Search | 0/1 | Planning | - |
+| 2. Global Search | 0/2 | Not started | - |
+| 3. Quick Navigation | 0/2 | Not started | - |
+| 4. File Tree Mutations | 0/2 | Not started | - |
+| 5. Tab & Terminal Polish | 0/2 | Not started | - |
+| 6. Detection Engineering Inline | 0/2 | Not started | - |
+| 7. Detection Editor Integration | 0/3 | Not started | - |

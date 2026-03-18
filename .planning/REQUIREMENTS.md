@@ -57,14 +57,14 @@
 
 ### File-First Editor (Option C Flatten)
 
-- [ ] **FLAT-01**: Opening a file from Explorer creates a pane tab directly (no "Editor" container tab)
+- [x] **FLAT-01**: Opening a file from Explorer creates a pane tab directly (no "Editor" container tab)
 - [ ] **FLAT-02**: FileEditorShell component wraps each file tab with file-type-specific chrome (toolbar, visual/yaml toggle)
 - [ ] **FLAT-03**: Policy files show contextual toolbar (validate, format, test, deploy, publish) inside FileEditorShell
 - [x] **FLAT-04**: PolicyTabBar removed — PaneTabBar is the sole tab bar for files and apps
-- [ ] **FLAT-05**: Multi-policy-store state keyed by file path, bridged to pane view IDs
+- [x] **FLAT-05**: Multi-policy-store state keyed by file path, bridged to pane view IDs
 - [ ] **FLAT-06**: Pane splitting replaces Editor's internal split mode (two files side-by-side)
 - [x] **FLAT-07**: Dirty indicator (gold dot) on pane tabs for files with unsaved changes
-- [ ] **FLAT-08**: `/editor` route removed or redirects to home; `/file/:path` route renders FileEditorShell
+- [x] **FLAT-08**: `/editor` route removed or redirects to home; `/file/:path` route renders FileEditorShell
 
 ## v2 Requirements
 
@@ -119,14 +119,14 @@
 | DINT-07 | Phase 7 | Complete |
 | DINT-08 | Phase 7 | Complete |
 
-| FLAT-01 | Phase 8 | Pending |
+| FLAT-01 | Phase 8 | Complete |
 | FLAT-02 | Phase 8 | Pending |
 | FLAT-03 | Phase 8 | Pending |
 | FLAT-04 | Phase 8 | Complete |
-| FLAT-05 | Phase 8 | Pending |
+| FLAT-05 | Phase 8 | Complete |
 | FLAT-06 | Phase 8 | Pending |
 | FLAT-07 | Phase 8 | Complete |
-| FLAT-08 | Phase 8 | Pending |
+| FLAT-08 | Phase 8 | Complete |
 
 **Coverage:**
 - v1.1 requirements: 37 total

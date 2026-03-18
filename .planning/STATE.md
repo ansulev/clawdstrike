@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: milestone
 status: in-progress
-stopped_at: Completed 08-02-PLAN.md
-last_updated: "2026-03-18T21:38:32Z"
-last_activity: 2026-03-18 -- Completed Phase 8 Plan 2 (PaneTab Dirty/FileType Indicators + New-File Button)
+stopped_at: Completed 08-01-PLAN.md
+last_updated: "2026-03-18T21:40:08Z"
+last_activity: 2026-03-18 -- Completed Phase 8 Plan 1 (FileEditorShell, /file/* route, PaneView dirty/fileType)
 progress:
   total_phases: 8
   completed_phases: 7
   total_plans: 19
-  completed_plans: 16
-  percent: 84
+  completed_plans: 17
+  percent: 89
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-03-18)
 ## Current Position
 
 Phase: 8 of 8 (File-First Editor) IN PROGRESS
-Plan: 2 of 4 (08-02 complete)
-Status: Phase 08 in progress, 08-02 done
-Last activity: 2026-03-18 -- Completed Phase 8 Plan 2 (PaneTab Dirty/FileType Indicators + New-File Button)
+Plan: 2 of 4 (08-01, 08-02 complete)
+Status: Phase 08 in progress, 08-01 and 08-02 done
+Last activity: 2026-03-18 -- Completed Phase 8 Plan 1 (FileEditorShell, /file/* route, PaneView dirty/fileType)
 
-Progress: [████████░░] 84%
+Progress: [████████░░] 89%
 
 ## Previous Milestone (v1.0 — IDE Pivot)
 
@@ -73,6 +73,7 @@ Summary: Delivered IDE shell — activity bar, 7 sidebar panels, pane tab system
 | Phase 07 P03 | 3min | 2 tasks | 4 files |
 | Phase 06 P02 | 3min | 1 tasks | 3 files |
 | Phase 08 P02 | 3min | 2 tasks | 3 files |
+| Phase 08 P01 | 5min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -125,6 +126,10 @@ v1.1 decisions:
 - [Phase 08]: FILE_TYPE_COLORS map uses direct hex values matching PolicyTabBar precedent (cyan/purple/green/amber)
 - [Phase 08]: Close button dirty-dot uses group-hover/tab CSS toggle (VS Code pattern)
 - [Phase 08]: New-file button uses usePolicyTabsStore.newTab() with /file/__new__/{tabId} route convention
+- [Phase 08]: useParams("*") splat for file path extraction in FileEditorShell (standard react-router pattern)
+- [Phase 08]: Zustand basic subscribe(state, prevState) for dirty sync (no subscribeWithSelector middleware)
+- [Phase 08]: openFile delegates to openApp for route dedup, then pushRecentFile for recent tracking
+- [Phase 08]: File routes pass through normalizeWorkbenchRoute unchanged (no switch-case collapsing)
 
 ### Pending Todos
 
@@ -136,6 +141,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-18T21:38:32Z
-Stopped at: Completed 08-02-PLAN.md
-Resume file: Phase 8 in progress. Continue with 08-01, 08-03, 08-04.
+Last session: 2026-03-18T21:40:08Z
+Stopped at: Completed 08-01-PLAN.md
+Resume file: Phase 8 in progress. Continue with 08-03, 08-04.

@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: executing
-stopped_at: Completed 02-03-PLAN.md
-last_updated: "2026-03-18T15:27:00Z"
-last_activity: 2026-03-18 -- Completed 02-03 sidebar integration (library, fleet, compliance, tab.close)
+status: in-progress
+stopped_at: Completed 03-01-PLAN.md
+last_updated: "2026-03-18T17:22:20.725Z"
+last_activity: 2026-03-18 -- Completed 03-01 right sidebar infra + audit tail panel
 progress:
   total_phases: 4
   completed_phases: 2
-  total_plans: 5
-  completed_plans: 5
-  percent: 100
+  total_plans: 7
+  completed_plans: 6
+  percent: 86
 ---
 
 # Project State
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-17)
 
 **Core value:** Security operators can work across multiple views simultaneously with a folder-first, IDE-grade navigation model
-**Current focus:** Phase 2: Sidebar Panels + Editor Tabs
+**Current focus:** Phase 3: Right Sidebar + Bottom Panel + Commands
 
 ## Current Position
 
-Phase: 2 of 4 (Sidebar Panels + Editor Tabs) -- COMPLETE
-Plan: 3 of 3 in current phase (Plan 03 complete -- phase done)
-Status: Phase 02 Complete
-Last activity: 2026-03-18 -- Completed 02-03 sidebar integration (library, fleet, compliance, tab.close)
+Phase: 3 of 4 (Right Sidebar + Bottom Panel + Commands)
+Plan: 1 of 2 in current phase (Plan 01 complete)
+Status: In Progress
+Last activity: 2026-03-18 -- Completed 03-01 right sidebar infra + audit tail panel
 
-Progress: [██████████] 100%
+Progress: [████████░░] 86%
 
 ## Performance Metrics
 
@@ -55,6 +55,7 @@ Progress: [██████████] 100%
 | Phase 02 P01 | 5min | 2 tasks | 6 files |
 | Phase 02 P02 | 10min | 2 tasks | 5 files |
 | Phase 02 P03 | 7min | 2 tasks | 7 files |
+| Phase 03 P01 | 4min | 2 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -79,6 +80,8 @@ Recent decisions affecting current work:
 - [Phase 02]: CompliancePanel reads active policy via useWorkbench().state.activePolicy
 - [Phase 02]: Per-requirement score bars show binary 0%/100% (met/gaps not fractional)
 - [Phase 02]: tab.close command wired via closeActiveTab dep using getAllPaneGroups
+- [Phase 03]: Added inline prop to SpeakeasyPanel instead of CSS-hack approach for de-overlaying fixed positioning
+- [Phase 03]: Right sidebar uses 200px collapse threshold (higher than left sidebar's 120px) per UI-SPEC
 
 ### Pending Todos
 
@@ -90,6 +93,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-18T15:27:00Z
-Stopped at: Completed 02-03-PLAN.md
-Resume file: Phase 02 complete. Next: Phase 03 or Phase 04.
+Last session: 2026-03-18T17:22:20.725Z
+Stopped at: Completed 03-01-PLAN.md
+Resume file: .planning/phases/03-right-sidebar-bottom-panel-commands/03-02-PLAN.md

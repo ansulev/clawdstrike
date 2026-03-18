@@ -37,16 +37,16 @@
 
 ### Right Sidebar
 
-- [ ] **RBAR-01**: Right sidebar zone renders to the right of the editor area
-- [ ] **RBAR-02**: Right sidebar is resizable and collapsible
-- [ ] **RBAR-03**: SpeakeasyPanel renders in the right sidebar (moved from current location)
+- [x] **RBAR-01**: Right sidebar zone renders to the right of the editor area
+- [x] **RBAR-02**: Right sidebar is resizable and collapsible
+- [x] **RBAR-03**: SpeakeasyPanel renders in the right sidebar (moved from current location)
 - [ ] **RBAR-04**: Right sidebar toggleable via Cmd+Shift+B
 
 ### Bottom Panel
 
-- [ ] **BPAN-01**: AuditTailPanel added as 4th bottom panel tab
-- [ ] **BPAN-02**: AuditTailPanel shows last N audit entries with auto-refresh
-- [ ] **BPAN-03**: Existing Terminal, Problems, Output tabs continue to work
+- [x] **BPAN-01**: AuditTailPanel added as 4th bottom panel tab
+- [x] **BPAN-02**: AuditTailPanel shows last N audit entries with auto-refresh
+- [x] **BPAN-03**: Existing Terminal, Problems, Output tabs continue to work
 
 ### Lab Decomposition
 
@@ -67,7 +67,7 @@
 ### State Management
 
 - [x] **STATE-01**: activity-bar-store (Zustand) tracks activeItem, sidebarVisible, sidebarWidth
-- [ ] **STATE-02**: right-sidebar-store (Zustand) tracks visible, activePanel, width
+- [x] **STATE-02**: right-sidebar-store (Zustand) tracks visible, activePanel, width
 - [x] **STATE-03**: All 11 existing Zustand stores continue to work unchanged
 
 ### Layout Shell
@@ -130,13 +130,13 @@
 | PANE-03 | Phase 2 | Complete |
 | PANE-04 | Phase 2 | Complete |
 | PANE-05 | Phase 2 | Complete |
-| RBAR-01 | Phase 3 | Pending |
-| RBAR-02 | Phase 3 | Pending |
-| RBAR-03 | Phase 3 | Pending |
+| RBAR-01 | Phase 3 | Complete |
+| RBAR-02 | Phase 3 | Complete |
+| RBAR-03 | Phase 3 | Complete |
 | RBAR-04 | Phase 3 | Pending |
-| BPAN-01 | Phase 3 | Pending |
-| BPAN-02 | Phase 3 | Pending |
-| BPAN-03 | Phase 3 | Pending |
+| BPAN-01 | Phase 3 | Complete |
+| BPAN-02 | Phase 3 | Complete |
+| BPAN-03 | Phase 3 | Complete |
 | LAB-01 | Phase 4 | Pending |
 | LAB-02 | Phase 4 | Pending |
 | LAB-03 | Phase 4 | Pending |
@@ -148,7 +148,7 @@
 | CMD-05 | Phase 4 | Pending |
 | CMD-06 | Phase 4 | Pending |
 | STATE-01 | Phase 1 | Complete |
-| STATE-02 | Phase 3 | Pending |
+| STATE-02 | Phase 3 | Complete |
 | STATE-03 | Phase 1 | Complete |
 | SHELL-01 | Phase 1 | Complete |
 | SHELL-02 | Phase 1 | Complete |

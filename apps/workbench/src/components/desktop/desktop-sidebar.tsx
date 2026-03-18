@@ -113,7 +113,7 @@ const POSTURE_BREATH: Record<SystemPosture, number> = {
   offline: 0, // no breathing when offline
 };
 
-function SystemHeartbeat({
+export function SystemHeartbeat({
   collapsed,
   active,
   fleetOnline,

@@ -4,6 +4,7 @@ import {
   IconPackage,
   IconBulb,
   IconHistory,
+  IconSparkles,
 } from "@tabler/icons-react";
 import { useRightSidebarStore } from "../stores/right-sidebar-store";
 import type { RightSidebarPanel } from "../types";
@@ -16,6 +17,7 @@ import { usePolicyEditStore } from "@/features/policy/stores/policy-edit-store";
 import { useLabExecution } from "@/lib/workbench/detection-workflow/use-lab-execution";
 import type { TabMeta } from "@/features/policy/stores/policy-tabs-store";
 import type { Icon } from "@tabler/icons-react";
+import { SpiritCompanionCanvas } from "@/features/spirit/components/spirit-companion-canvas";
 
 // ---------------------------------------------------------------------------
 // Tab strip configuration
@@ -30,6 +32,7 @@ const PANEL_TABS: ReadonlyArray<{
   { id: "evidence", icon: IconPackage, label: "Evidence" },
   { id: "explain", icon: IconBulb, label: "Explain" },
   { id: "history", icon: IconHistory, label: "History" },
+  { id: "spirit", icon: IconSparkles, label: "Spirit" },
 ];
 
 // ---------------------------------------------------------------------------
@@ -144,8 +147,8 @@ function HistoryContent() {
 
 export function RightSidebar() {
   const width = useRightSidebarStore.use.width();
-  const actions = useRightSidebarStore.use.actions();
   const activePanel = useRightSidebarStore.use.activePanel();
+  const actions = useRightSidebarStore.use.actions();
 
   const activePanelLabel =
     PANEL_TABS.find((t) => t.id === activePanel)?.label ?? "Speakeasy";
@@ -195,7 +198,6 @@ export function RightSidebar() {
           );
         })}
       </div>
-
       {/* Panel body */}
       {activePanel === "speakeasy" && (
         <SpeakeasyPanel
@@ -208,6 +210,12 @@ export function RightSidebar() {
       {activePanel === "evidence" && <EvidenceContent />}
       {activePanel === "explain" && <ExplainContent />}
       {activePanel === "history" && <HistoryContent />}
+      {activePanel === "spirit" && (
+        <div className="flex flex-1 flex-col items-center justify-center gap-3">
+          <SpiritCompanionCanvas />
+          {/* Shown when no spirit bound (SpiritCompanionCanvas returns null) */}
+        </div>
+      )}
     </aside>
   );
 }

@@ -1,1 +1,6 @@
-export type RightSidebarPanel = "speakeasy" | "evidence" | "explain" | "history";
+export type RightSidebarPanel =
+  | "speakeasy"
+  | "evidence"
+  | "explain"
+  | "history"
+  | "spirit";

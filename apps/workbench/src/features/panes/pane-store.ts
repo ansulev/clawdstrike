@@ -205,34 +205,56 @@ export const usePaneStore = create<PaneStore>((set, get) => ({
   },
 
   closeViewsToRight: (paneId, viewId) => {
-    const group = findPaneGroup(get().root, paneId);
-    if (!group) return;
-    const idx = group.views.findIndex((v) => v.id === viewId);
-    if (idx < 0) return;
-    // Iterate in reverse to avoid index shifting
-    const toClose = group.views.slice(idx + 1);
-    for (let i = toClose.length - 1; i >= 0; i--) {
-      get().closeView(paneId, toClose[i].id);
-    }
+    set((state) => {
+      const group = findPaneGroup(state.root, paneId);
+      if (!group) return state;
+      const idx = group.views.findIndex((v) => v.id === viewId);
+      if (idx < 0) return state;
+      const kept = group.views.slice(0, idx + 1);
+      if (kept.length === group.views.length) return state;
+      const nextActiveId = kept.find((v) => v.id === group.activeViewId)
+        ? group.activeViewId
+        : kept[kept.length - 1]?.id ?? null;
+      return {
+        root: replaceNode(state.root, paneId, (node) =>
+          node.type === "group"
+            ? { ...node, views: kept, activeViewId: nextActiveId }
+            : node,
+        ),
+      };
+    });
   },
 
   closeSavedViews: (paneId) => {
-    const group = findPaneGroup(get().root, paneId);
-    if (!group) return;
-    // Close all views except the active one
-    const toClose = group.views.filter((v) => v.id !== group.activeViewId);
-    for (let i = toClose.length - 1; i >= 0; i--) {
-      get().closeView(paneId, toClose[i].id);
-    }
+    set((state) => {
+      const group = findPaneGroup(state.root, paneId);
+      if (!group) return state;
+      const kept = group.views.filter((v) => v.id === group.activeViewId);
+      if (kept.length === group.views.length) return state;
+      return {
+        root: replaceNode(state.root, paneId, (node) =>
+          node.type === "group"
+            ? { ...node, views: kept, activeViewId: group.activeViewId }
+            : node,
+        ),
+      };
+    });
   },
 
   closeOtherViews: (paneId, viewId) => {
-    const group = findPaneGroup(get().root, paneId);
-    if (!group) return;
-    const toClose = group.views.filter((v) => v.id !== viewId);
-    for (let i = toClose.length - 1; i >= 0; i--) {
-      get().closeView(paneId, toClose[i].id);
-    }
+    set((state) => {
+      const group = findPaneGroup(state.root, paneId);
+      if (!group) return state;
+      const kept = group.views.filter((v) => v.id === viewId);
+      if (kept.length === group.views.length) return state;
+      return {
+        root: replaceNode(state.root, paneId, (node) =>
+          node.type === "group"
+            ? { ...node, views: kept, activeViewId: viewId }
+            : node,
+        ),
+      };
+    });
   },
 
   _reset: () => {

@@ -40,7 +40,7 @@
 - [x] **RBAR-01**: Right sidebar zone renders to the right of the editor area
 - [x] **RBAR-02**: Right sidebar is resizable and collapsible
 - [x] **RBAR-03**: SpeakeasyPanel renders in the right sidebar (moved from current location)
-- [ ] **RBAR-04**: Right sidebar toggleable via Cmd+Shift+B
+- [x] **RBAR-04**: Right sidebar toggleable via Cmd+Shift+B
 
 ### Bottom Panel
 
@@ -59,8 +59,8 @@
 
 - [x] **CMD-01**: sidebar.toggle command (Cmd+B) shows/hides entire sidebar
 - [x] **CMD-02**: sidebar.explorer command (Cmd+Shift+E) switches to Explorer panel
-- [ ] **CMD-03**: Sidebar commands for each panel (sentinels, findings, library, fleet, compliance, heartbeat)
-- [ ] **CMD-04**: sidebar.toggleRight command (Cmd+Shift+B) toggles right sidebar
+- [x] **CMD-03**: Sidebar commands for each panel (sentinels, findings, library, fleet, compliance, heartbeat)
+- [x] **CMD-04**: sidebar.toggleRight command (Cmd+Shift+B) toggles right sidebar
 - [ ] **CMD-05**: Navigate commands use openApp pattern to open routes as pane tabs
 - [ ] **CMD-06**: App-opening commands (Mission Control, Approvals, Audit, Receipts, Topology, Swarm Board, Hunt, Simulator)
 
@@ -133,7 +133,7 @@
 | RBAR-01 | Phase 3 | Complete |
 | RBAR-02 | Phase 3 | Complete |
 | RBAR-03 | Phase 3 | Complete |
-| RBAR-04 | Phase 3 | Pending |
+| RBAR-04 | Phase 3 | Complete |
 | BPAN-01 | Phase 3 | Complete |
 | BPAN-02 | Phase 3 | Complete |
 | BPAN-03 | Phase 3 | Complete |
@@ -143,8 +143,8 @@
 | LAB-04 | Phase 4 | Pending |
 | CMD-01 | Phase 1 | Complete |
 | CMD-02 | Phase 1 | Complete |
-| CMD-03 | Phase 3 | Pending |
-| CMD-04 | Phase 3 | Pending |
+| CMD-03 | Phase 3 | Complete |
+| CMD-04 | Phase 3 | Complete |
 | CMD-05 | Phase 4 | Pending |
 | CMD-06 | Phase 4 | Pending |
 | STATE-01 | Phase 1 | Complete |

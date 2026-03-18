@@ -1,4 +1,4 @@
-import { lazy } from "react";
+import { lazy, Suspense } from "react";
 import { Navigate, type RouteObject } from "react-router-dom";
 
 const PolicyEditor = lazy(() =>
@@ -11,6 +11,22 @@ const LabLayout = lazy(() =>
   import("@/components/workbench/lab/lab-layout").then((m) => ({
     default: m.LabLayout,
   })),
+);
+
+const HuntLayout = lazy(() =>
+  import("@/components/workbench/hunt/hunt-layout").then((m) => ({
+    default: m.HuntLayout,
+  })),
+);
+
+const SimulatorLayout = lazy(() =>
+  import("@/components/workbench/simulator/simulator-layout").then((m) => ({
+    default: m.SimulatorLayout,
+  })),
+);
+
+const SwarmBoardPage = lazy(() =>
+  import("@/components/workbench/swarm-board/swarm-board-page"),
 );
 
 const TopologyLayout = lazy(() =>
@@ -135,10 +151,6 @@ export function normalizeWorkbenchRoute(route: string): string {
       return "/home";
     case "/intel":
       return "/findings?tab=intel";
-    case "/hunt":
-      return "/lab?tab=hunt";
-    case "/simulator":
-      return "/lab?tab=simulate";
     case "/guards":
       return "/editor?panel=guards";
     case "/compare":
@@ -147,8 +159,6 @@ export function normalizeWorkbenchRoute(route: string): string {
       return "/topology?tab=delegation";
     case "/hierarchy":
       return "/topology?tab=hierarchy";
-    case "/swarm-board":
-      return "/lab";
     default:
       return `${url.pathname}${url.search}` || "/home";
   }
@@ -164,6 +174,9 @@ export function getWorkbenchRouteLabel(route: string): string {
     if (panel === "compare") return "Compare";
     return "Editor";
   }
+  if (url.pathname === "/swarm-board") return "Swarm Board";
+  if (url.pathname === "/hunt") return "Hunt";
+  if (url.pathname === "/simulator") return "Simulator";
   if (url.pathname === "/lab") {
     const tab = url.searchParams.get("tab");
     if (tab === "hunt") return "Hunt";
@@ -215,7 +228,7 @@ export const WORKBENCH_ROUTE_OBJECTS: RouteObject[] = [
   { path: "missions", element: <MissionControlPage /> },
   { path: "swarms", element: <SwarmPage /> },
   { path: "swarms/:id", element: <SwarmDetail /> },
-  { path: "swarm-board", element: <Navigate to="/lab" replace /> },
+  { path: "swarm-board", element: <Suspense fallback={<div className="flex-1" />}><SwarmBoardPage /></Suspense> },
   { path: "lab", element: <LabLayout /> },
   { path: "topology", element: <TopologyLayout /> },
   {
@@ -227,19 +240,8 @@ export const WORKBENCH_ROUTE_OBJECTS: RouteObject[] = [
       />
     ),
   },
-  {
-    path: "hunt",
-    element: <Navigate to={{ pathname: "/lab", search: "?tab=hunt" }} replace />,
-  },
-  {
-    path: "simulator",
-    element: (
-      <Navigate
-        to={{ pathname: "/lab", search: "?tab=simulate" }}
-        replace
-      />
-    ),
-  },
+  { path: "hunt", element: <Suspense fallback={<div className="flex-1" />}><HuntLayout /></Suspense> },
+  { path: "simulator", element: <Suspense fallback={<div className="flex-1" />}><SimulatorLayout /></Suspense> },
   {
     path: "guards",
     element: (

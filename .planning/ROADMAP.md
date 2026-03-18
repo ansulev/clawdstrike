@@ -17,7 +17,7 @@ Transform the ClawdStrike Workbench from a sidebar-nav dashboard into a VS Code/
 
 - [x] **Phase 1: Activity Bar + Sidebar Shell** - Decompose sidebar into activity bar + panel container, wire panel switching, new stores, basic commands
 - [x] **Phase 2: Sidebar Panels + Editor Tabs** - Build 7 sidebar panels, add openApp to pane store, render routes as editor tabs
-- [ ] **Phase 3: Right Sidebar + Bottom Panel + Commands** - Right sidebar zone with Speakeasy, audit tail tab, per-panel sidebar commands
+- [x] **Phase 3: Right Sidebar + Bottom Panel + Commands** - Right sidebar zone with Speakeasy, audit tail tab, per-panel sidebar commands
 - [ ] **Phase 4: Lab Decomposition + App Navigation** - Break Lab into 3 independent apps, rewrite navigate commands to openApp pattern
 
 ## Phase Details
@@ -68,8 +68,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 03-01-PLAN.md -- Right sidebar store + components (RightSidebar, RightSidebarResizeHandle), AuditTailPanel, bottom pane Audit tab integration
-- [ ] 03-02-PLAN.md -- Desktop layout integration (right sidebar in flex row), 8 new commands (sidebar.toggleRight, 6 panel commands, view.toggleAudit)
+- [x] 03-01-PLAN.md -- Right sidebar store + components (RightSidebar, RightSidebarResizeHandle), AuditTailPanel, bottom pane Audit tab integration
+- [x] 03-02-PLAN.md -- Desktop layout integration (right sidebar in flex row), 8 new commands (sidebar.toggleRight, 6 panel commands, view.toggleAudit)
 
 ### Phase 4: Lab Decomposition + App Navigation
 **Goal**: Lab is decomposed into independent apps and all navigation uses the openApp pattern, completing the IDE pivot
@@ -80,11 +80,11 @@ Plans:
   2. Lab container is preserved as an optional convenience grouping but is no longer the only way to access its sub-apps
   3. Navigate commands (Mission Control, Approvals, Audit, Receipts, Topology, Swarm Board, Hunt, Simulator) use paneStore.openApp() to open routes as pane tabs
   4. All app-opening commands are registered, categorized, and discoverable via command palette
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 04-01: TBD
-- [ ] 04-02: TBD
+- [ ] 04-01-PLAN.md -- Lab route decomposition: direct routes for /swarm-board, /hunt, /simulator; updated normalization and labels; openApp integration tests
+- [ ] 04-02-PLAN.md -- Navigate commands rewrite to openApp pattern; 8 new app-opening commands; init-commands wiring update
 
 ## Progress
 
@@ -95,5 +95,5 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 |-------|----------------|--------|-----------|
 | 1. Activity Bar + Sidebar Shell | 2/2 | Complete | 2026-03-18 |
 | 2. Sidebar Panels + Editor Tabs | 3/3 | Complete | 2026-03-18 |
-| 3. Right Sidebar + Bottom Panel + Commands | 0/2 | Not started | - |
+| 3. Right Sidebar + Bottom Panel + Commands | 2/2 | Complete | 2026-03-18 |
 | 4. Lab Decomposition + App Navigation | 0/2 | Not started | - |

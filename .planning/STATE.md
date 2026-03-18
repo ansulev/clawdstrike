@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: milestone
-status: in-progress
-stopped_at: Completed 08-03-PLAN.md
-last_updated: "2026-03-18T21:48:09Z"
-last_activity: 2026-03-18 -- Completed Phase 8 Plan 3 (FileEditorToolbar extraction, FileEditorShell integration)
+status: complete
+stopped_at: Completed 08-04-PLAN.md
+last_updated: "2026-03-18T21:58:17Z"
+last_activity: 2026-03-18 -- Completed Phase 8 Plan 4 (file-first editor cutover, /editor redirect, BreadcrumbBar route-aware)
 progress:
   total_phases: 8
-  completed_phases: 7
+  completed_phases: 8
   total_plans: 19
-  completed_plans: 18
-  percent: 95
+  completed_plans: 19
+  percent: 100
 ---
 
 # Project State
@@ -25,12 +25,12 @@ See: .planning/PROJECT.md (updated 2026-03-18)
 
 ## Current Position
 
-Phase: 8 of 8 (File-First Editor) IN PROGRESS
-Plan: 4 of 4 (08-01, 08-02, 08-03 complete)
-Status: Phase 08 in progress, 08-01, 08-02, 08-03 done
-Last activity: 2026-03-18 -- Completed Phase 8 Plan 3 (FileEditorToolbar extraction, FileEditorShell integration)
+Phase: 8 of 8 (File-First Editor) COMPLETE
+Plan: 4 of 4 (all complete)
+Status: v1.1 milestone complete -- all 8 phases, 19 plans delivered
+Last activity: 2026-03-18 -- Completed Phase 8 Plan 4 (file-first editor cutover, /editor redirect, BreadcrumbBar route-aware)
 
-Progress: [█████████░] 95%
+Progress: [██████████] 100%
 
 ## Previous Milestone (v1.0 — IDE Pivot)
 
@@ -75,6 +75,7 @@ Summary: Delivered IDE shell — activity bar, 7 sidebar panels, pane tab system
 | Phase 08 P02 | 3min | 2 tasks | 3 files |
 | Phase 08 P01 | 5min | 2 tasks | 5 files |
 | Phase 08 P03 | 4min | 2 tasks | 2 files |
+| Phase 08 P04 | 7min | 2 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -135,6 +136,10 @@ v1.1 decisions:
 - [Phase 08]: SplitModeToggle omitted from FileEditorToolbar (FLAT-06: pane splitting replaces it)
 - [Phase 08]: Dynamic import of tauri-bridge for file loading in FileEditorShell (code-split friendly)
 - [Phase 08]: Temporary read-only <pre> for content area (CodeMirror integration deferred to avoid useMultiPolicy coupling)
+- [Phase 08]: Hunt onNavigateToEditor checks getActiveTab for filePath vs __new__ tab ID for correct route
+- [Phase 08]: BreadcrumbBar extracts file path from route string (not from policy-tabs-store activeTab)
+- [Phase 08]: nav.editor removed entirely (Meta+1 keybinding unassigned; Cmd+P is primary file opener)
+- [Phase 08]: Legacy navigate('/editor') calls naturally redirect via route system -- no inline migration needed
 
 ### Pending Todos
 
@@ -146,6 +151,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-18T21:48:09Z
-Stopped at: Completed 08-03-PLAN.md
-Resume file: Phase 8 in progress. Continue with 08-04.
+Last session: 2026-03-18T21:58:17Z
+Stopped at: Completed 08-04-PLAN.md (v1.1 milestone complete)
+Resume file: All phases and plans complete. v2 requirements available in REQUIREMENTS.md.

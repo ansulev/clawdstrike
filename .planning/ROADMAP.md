@@ -22,7 +22,7 @@ Close the gap from "IDE scaffold" to "professional-grade detection engineering I
 - [x] **Phase 5: Tab & Terminal Polish** — Tab overflow scrolling, context menu additions, terminal splits (2 plans)
 - [x] **Phase 6: Detection Engineering Inline** — Gutter test buttons, coverage gap indicators, guard reorder (2 plans)
 - [ ] **Phase 7: Detection Editor Integration** — Surface 50K LOC of orphaned detection engineering features as proper IDE panels
-- [ ] **Phase 8: File-First Editor** — Files are pane tabs, FileEditorShell wraps per-file chrome, kill PolicyTabBar (4 plans)
+- [x] **Phase 8: File-First Editor** — Files are pane tabs, FileEditorShell wraps per-file chrome, kill PolicyTabBar (4 plans)
 
 ## Phase Details
 
@@ -153,7 +153,7 @@ Plans:
 - [x] 08-01-PLAN.md — FileEditorShell component, /file/* route, PaneView dirty/fileType extension, pane-store openFile bridge
 - [x] 08-02-PLAN.md — PaneTab dirty dot + file-type color indicators, PaneTabBar new-file button
 - [x] 08-03-PLAN.md — FileEditorToolbar extraction from PolicyEditor, FileEditorShell toolbar + content integration
-- [ ] 08-04-PLAN.md — Rewire Explorer/QuickOpen/Search/Hunt to /file/ routes, redirect /editor, remove nav.editor, update BreadcrumbBar
+- [x] 08-04-PLAN.md — Rewire Explorer/QuickOpen/Search/Hunt to /file/ routes, redirect /editor, remove nav.editor, update BreadcrumbBar
 
 ## Progress
 
@@ -169,4 +169,4 @@ Phases 1-2 sequential. 3, 4, 5 independent. 6 depends on 1. 7 depends on 3. Phas
 | 5. Tab & Terminal Polish | 2/2 | Complete | 2026-03-18 |
 | 6. Detection Engineering Inline | 2/2 | Complete | 2026-03-18 |
 | 7. Detection Editor Integration | 4/4 | Complete | 2026-03-18 |
-| 8. File-First Editor | 3/4 | In progress | - |
+| 8. File-First Editor | 4/4 | Complete | 2026-03-18 |

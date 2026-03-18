@@ -5,7 +5,7 @@
 //! inheritance checks, because compiled formulas alone do not carry enough
 //! information to model guard-specific override behavior soundly.
 
-use std::collections::{BTreeSet, HashMap, HashSet, VecDeque};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::sync::{Once, OnceLock};
 use std::time::Instant;
 
@@ -1481,6 +1481,10 @@ fn representative_shell_command_samples(pattern: &str) -> BTreeSet<String> {
 }
 
 fn regex_hir_samples_from_pattern(pattern: &str, limit: usize) -> Vec<String> {
+    if limit == 0 {
+        return Vec::new();
+    }
+
     let Ok(hir) = Parser::new().parse(pattern) else {
         return Vec::new();
     };
@@ -1499,12 +1503,14 @@ fn regex_hir_samples(hir: &Hir, limit: usize) -> Vec<String> {
             let repeated = regex_hir_samples(&repetition.sub, limit);
             if repetition.min == 0 {
                 vec![String::new()]
+            } else if repeated.is_empty() {
+                Vec::new()
             } else {
                 let mut out = vec![String::new()];
-                for _ in 0..repetition.min.min(limit as u32) {
+                for _ in 0..repetition.min as usize {
                     out = regex_sample_cross_product(out, repeated.clone(), limit);
                     if out.is_empty() {
-                        break;
+                        return Vec::new();
                     }
                 }
                 out
@@ -2414,7 +2420,7 @@ pub struct VerificationCache {
 #[derive(Debug, Default)]
 struct VerificationCacheState {
     entries: HashMap<String, VerificationReport>,
-    insertion_order: VecDeque<String>,
+    insertion_order: std::collections::VecDeque<String>,
     max_entries: usize,
 }
 
@@ -2431,7 +2437,7 @@ impl VerificationCache {
         Self {
             state: std::sync::Mutex::new(VerificationCacheState {
                 entries: HashMap::new(),
-                insertion_order: VecDeque::new(),
+                insertion_order: std::collections::VecDeque::new(),
                 max_entries,
             }),
         }
@@ -3103,6 +3109,20 @@ mod tests {
     fn literal_suffix_token_keeps_escaped_meta_literals() {
         assert_eq!(literal_suffix_token(r"abc\*def"), "abc*def");
         assert_eq!(literal_suffix_token(r"abc\?def"), "abc?def");
+    }
+
+    #[test]
+    fn regex_repetition_samples_respect_positive_minimum() {
+        assert_eq!(regex_hir_samples_from_pattern("a{4}", 1), vec!["aaaa"]);
+    }
+
+    #[test]
+    fn regex_repetition_samples_do_not_emit_empty_for_nonempty_plus_class() {
+        let compiled = Regex::new(r"\s+").expect("valid regex");
+        let samples = regex_hir_samples_from_pattern(r"\s+", 16);
+        assert!(!samples.is_empty());
+        assert!(samples.iter().all(|sample| !sample.is_empty()));
+        assert!(samples.iter().all(|sample| compiled.is_match(sample)));
     }
 
     #[test]

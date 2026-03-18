@@ -359,8 +359,14 @@ mod tests {
         let formula = Formula::necessity(Formula::atom("p"));
         let receipt = ProofReceipt::new(formula, vec![]);
 
-        let json = serde_json::to_string(&receipt).unwrap();
-        let recovered: ProofReceipt = serde_json::from_str(&json).unwrap();
+        let json = match serde_json::to_string(&receipt) {
+            Ok(json) => json,
+            Err(err) => panic!("failed to serialize proof receipt: {err}"),
+        };
+        let recovered: ProofReceipt = match serde_json::from_str(&json) {
+            Ok(recovered) => recovered,
+            Err(err) => panic!("failed to deserialize proof receipt: {err}"),
+        };
 
         assert_eq!(receipt.proof_id, recovered.proof_id);
     }

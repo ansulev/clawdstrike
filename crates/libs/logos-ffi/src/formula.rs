@@ -533,8 +533,14 @@ mod tests {
             Formula::eventually(Formula::atom("q")),
         );
 
-        let json = serde_json::to_string(&formula).unwrap();
-        let recovered: Formula = serde_json::from_str(&json).unwrap();
+        let json = match serde_json::to_string(&formula) {
+            Ok(json) => json,
+            Err(err) => panic!("failed to serialize formula: {err}"),
+        };
+        let recovered: Formula = match serde_json::from_str(&json) {
+            Ok(recovered) => recovered,
+            Err(err) => panic!("failed to deserialize formula: {err}"),
+        };
 
         assert_eq!(formula, recovered);
     }

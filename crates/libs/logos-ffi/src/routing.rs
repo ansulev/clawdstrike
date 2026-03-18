@@ -357,7 +357,10 @@ mod tests {
         let result = spec.verify_completeness();
         assert!(result.is_err());
 
-        let gaps = result.unwrap_err();
+        let gaps = match result {
+            Ok(_) => panic!("expected completeness verification to report gaps"),
+            Err(gaps) => gaps,
+        };
         assert_eq!(gaps.len(), 1);
         assert_eq!(gaps[0].issue_type, "is_refactor");
     }
@@ -377,7 +380,10 @@ mod tests {
         let result = spec.verify_consistency();
         assert!(result.is_err());
 
-        let conflicts = result.unwrap_err();
+        let conflicts = match result {
+            Ok(_) => panic!("expected consistency verification to report conflicts"),
+            Err(conflicts) => conflicts,
+        };
         assert_eq!(conflicts.len(), 1);
     }
 
@@ -400,6 +406,9 @@ mod tests {
         // Should match high priority rule
         let matched = spec.match_rule(&state);
         assert!(matched.is_some());
-        assert_eq!(matched.unwrap().name, "high_priority");
+        match matched {
+            Some(rule) => assert_eq!(rule.name, "high_priority"),
+            None => panic!("expected high priority rule to match"),
+        }
     }
 }

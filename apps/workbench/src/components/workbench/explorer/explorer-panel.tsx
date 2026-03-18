@@ -1,4 +1,4 @@
-import { useMemo, useCallback, useState } from "react";
+import React, { useMemo, useCallback, useState } from "react";
 import {
   IconFolderOpen,
   IconRefresh,
@@ -343,19 +343,6 @@ export function ExplorerPanel({
       {/* Tree */}
       <ScrollArea className="flex-1">
         <div className="py-1">
-          {/* Inline name input for new file creation at root level */}
-          {creatingInDir !== null && (
-            <div className="px-2 py-1">
-              <InlineNameInput
-                placeholder="filename.yaml"
-                onSubmit={(name) => {
-                  onCreateFile?.(creatingInDir, name);
-                  setCreatingInDir(null);
-                }}
-                onCancel={() => setCreatingInDir(null)}
-              />
-            </div>
-          )}
           {visibleItems.length === 0 && creatingInDir === null ? (
             <div className="flex flex-col items-center justify-center py-8 text-center">
               <p className="text-[10px] font-mono text-[#6f7f9a]/50">
@@ -365,34 +352,102 @@ export function ExplorerPanel({
               </p>
             </div>
           ) : (
-            visibleItems.map((file) => {
-              const status = fileStatuses?.get(file.path);
-              return (
-                <ExplorerTreeItem
-                  key={file.path}
-                  file={file}
-                  isExpanded={project.expandedDirs.has(file.path)}
-                  onToggle={() => onToggleDir(file.path)}
-                  onOpen={() => onOpenFile(file)}
-                  isActive={
-                    !file.isDirectory && activeFilePath === file.path
-                  }
-                  onContextMenu={(e) => {
-                    e.preventDefault();
-                    setContextMenu({ file, x: e.clientX, y: e.clientY });
-                  }}
-                  isRenaming={renamingFilePath === file.path}
-                  onRenameSubmit={(newName) => {
-                    onRenameFile?.(file, newName);
-                    setRenamingFilePath(null);
-                  }}
-                  onRenameCancel={() => setRenamingFilePath(null)}
-                  onStartRename={() => setRenamingFilePath(file.path)}
-                  isModified={status?.modified}
-                  hasError={status?.hasError}
-                />
+            (() => {
+              // Resolve creatingInDir to a relative path for matching against the tree.
+              const creatingInRelDir =
+                creatingInDir === null
+                  ? null
+                  : creatingInDir === project.rootPath
+                    ? ""
+                    : creatingInDir.startsWith(project.rootPath + "/")
+                      ? creatingInDir.slice(project.rootPath.length + 1)
+                      : creatingInDir;
+
+              // Determine the depth for the inline input.
+              const inputDepth = creatingInRelDir === null
+                ? 0
+                : creatingInRelDir === ""
+                  ? 0
+                  : creatingInRelDir.split("/").filter(Boolean).length;
+
+              const renderInlineInput = () => (
+                <div className="py-1" style={{ paddingLeft: inputDepth * 16 + 4 }}>
+                  <InlineNameInput
+                    placeholder="filename.yaml"
+                    onSubmit={(name) => {
+                      onCreateFile?.(creatingInDir!, name);
+                      setCreatingInDir(null);
+                    }}
+                    onCancel={() => setCreatingInDir(null)}
+                  />
+                </div>
               );
-            })
+
+              // For root-level creation, render input at the top.
+              const isRootCreation = creatingInRelDir === "";
+
+              const items: React.ReactNode[] = [];
+
+              if (creatingInDir !== null && isRootCreation) {
+                items.push(
+                  <React.Fragment key="__new-file-input">{renderInlineInput()}</React.Fragment>,
+                );
+              }
+
+              for (let i = 0; i < visibleItems.length; i++) {
+                const file = visibleItems[i];
+                const status = fileStatuses?.get(file.path);
+                items.push(
+                  <ExplorerTreeItem
+                    key={file.path}
+                    file={file}
+                    isExpanded={project.expandedDirs.has(file.path)}
+                    onToggle={() => onToggleDir(file.path)}
+                    onOpen={() => onOpenFile(file)}
+                    isActive={
+                      !file.isDirectory && activeFilePath === file.path
+                    }
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      setContextMenu({ file, x: e.clientX, y: e.clientY });
+                    }}
+                    isRenaming={renamingFilePath === file.path}
+                    onRenameSubmit={(newName) => {
+                      onRenameFile?.(file, newName);
+                      setRenamingFilePath(null);
+                    }}
+                    onRenameCancel={() => setRenamingFilePath(null)}
+                    onStartRename={() => setRenamingFilePath(file.path)}
+                    isModified={status?.modified}
+                    hasError={status?.hasError}
+                  />,
+                );
+
+                // Render inline input after the target directory's children.
+                if (
+                  creatingInDir !== null &&
+                  !isRootCreation &&
+                  creatingInRelDir !== null
+                ) {
+                  // Check if this item is the target directory, or a child of it,
+                  // and the next item is NOT a child of the target directory.
+                  const isTargetOrChild =
+                    file.path === creatingInRelDir ||
+                    file.path.startsWith(creatingInRelDir + "/");
+                  const nextFile = visibleItems[i + 1];
+                  const nextIsChild =
+                    nextFile?.path.startsWith(creatingInRelDir + "/");
+
+                  if (isTargetOrChild && !nextIsChild) {
+                    items.push(
+                      <React.Fragment key="__new-file-input">{renderInlineInput()}</React.Fragment>,
+                    );
+                  }
+                }
+              }
+
+              return items;
+            })()
           )}
         </div>
       </ScrollArea>

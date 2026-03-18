@@ -15,11 +15,11 @@ Close the gap from "IDE scaffold" to "professional-grade detection engineering I
 - Integer phases (1, 2, 3...): Planned milestone work
 - Decimal phases (e.g., 2.1): Urgent insertions (marked with INSERTED)
 
-- [ ] **Phase 1: In-File Search** — Cmd+F find, Cmd+H find/replace in current CodeMirror editor
+- [x] **Phase 1: In-File Search** — Cmd+F find, Cmd+H find/replace in current CodeMirror editor (1/1 plans)
 - [ ] **Phase 2: Global Search** — Cmd+Shift+F workspace-wide search with results panel
-- [ ] **Phase 3: Quick Navigation** — Cmd+P file picker, breadcrumbs, Cmd+G go-to-line
+- [ ] **Phase 3: Quick Navigation** — Cmd+P file picker, breadcrumbs, Cmd+G go-to-line (2 plans)
 - [ ] **Phase 4: File Tree Mutations** — Create/rename/delete files from Explorer with status indicators
-- [ ] **Phase 5: Tab & Terminal Polish** — Tab overflow scrolling, context menu additions, terminal splits
+- [ ] **Phase 5: Tab & Terminal Polish** — Tab overflow scrolling, context menu additions, terminal splits (2 plans)
 - [ ] **Phase 6: Detection Engineering Inline** — Gutter test buttons, coverage gap indicators, guard reorder
 - [ ] **Phase 7: Detection Editor Integration** — Surface 50K LOC of orphaned detection engineering features as proper IDE panels
 
@@ -35,7 +35,7 @@ Close the gap from "IDE scaffold" to "professional-grade detection engineering I
 **Plans**: 1 plan
 
 Plans:
-- [ ] 01-01-PLAN.md — Add search() extension to CodeMirror and register find/replace commands
+- [x] 01-01-PLAN.md — Add search() extension to CodeMirror and register find/replace commands
 
 ### Phase 2: Global Search
 **Goal**: User can search across all workspace files with results displayed in a dedicated panel
@@ -61,11 +61,11 @@ Plans:
   2. Recent files appear at the top when the input is empty; selecting opens the file in active pane
   3. Breadcrumb bar renders above the editor showing Project > Folder > File with click navigation
   4. Cmd+G opens a go-to-line input that jumps to the specified line number
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 03-01: TBD
-- [ ] 03-02: TBD
+- [ ] 03-01-PLAN.md — Quick Open dialog (Cmd+P) with fuzzy file matching, recent files, and Go-to-Line (Cmd+G)
+- [ ] 03-02-PLAN.md — Breadcrumb bar above editor with clickable path segments
 
 ### Phase 4: File Tree Mutations
 **Goal**: User can create, rename, and delete detection files from the Explorer panel
@@ -92,11 +92,11 @@ Plans:
   3. Tab context menu includes "Close to the Right" and "Close Saved" options
   4. Terminal panel can be split horizontally to show two sessions side by side
   5. Terminal session tabs can be renamed by double-clicking the tab title
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 05-01: TBD
-- [ ] 05-02: TBD
+- [ ] 05-01-PLAN.md — Tab overflow arrows, wheel scroll, and context menu with Close to the Right / Close Saved
+- [ ] 05-02-PLAN.md — Terminal split view and session tab rename via double-click
 
 ### Phase 6: Detection Engineering Inline
 **Goal**: Detection engineers get inline feedback in the editor — test buttons, coverage gaps, guard reorder
@@ -139,10 +139,10 @@ Phases 1-2 are sequential (global search builds on in-file search). Phases 3, 4,
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. In-File Search | 0/1 | Planning | - |
+| 1. In-File Search | 1/1 | Complete | 2026-03-18 |
 | 2. Global Search | 0/2 | Not started | - |
-| 3. Quick Navigation | 0/2 | Not started | - |
+| 3. Quick Navigation | 0/2 | Planning | - |
 | 4. File Tree Mutations | 0/2 | Not started | - |
-| 5. Tab & Terminal Polish | 0/2 | Not started | - |
+| 5. Tab & Terminal Polish | 0/2 | Planning | - |
 | 6. Detection Engineering Inline | 0/2 | Not started | - |
 | 7. Detection Editor Integration | 0/3 | Not started | - |

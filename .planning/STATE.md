@@ -1,55 +1,48 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.0
+milestone: v1.1
 milestone_name: milestone
-status: completed
-stopped_at: Completed 04-02-PLAN.md (all phases complete)
-last_updated: "2026-03-18T18:16:20.979Z"
-last_activity: 2026-03-18 -- Completed 04-02 navigate commands + app opening commands
+status: executing
+stopped_at: Completed 01-01-PLAN.md
+last_updated: "2026-03-18T19:16:22Z"
+last_activity: 2026-03-18 -- Completed Phase 1 Plan 1 (In-File Search)
 progress:
-  total_phases: 4
-  completed_phases: 4
-  total_plans: 9
-  completed_plans: 9
-  percent: 100
+  total_phases: 6
+  completed_phases: 0
+  total_plans: 11
+  completed_plans: 1
+  percent: 9
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-03-17)
+See: .planning/PROJECT.md (updated 2026-03-18)
 
-**Core value:** Security operators can work across multiple views simultaneously with a folder-first, IDE-grade navigation model
-**Current focus:** Phase 4 Lab Decomposition + App Navigation
+**Core value:** Security operators get a professional-grade IDE with search, quick navigation, and file management
+**Current focus:** Phase 1 In-File Search
 
 ## Current Position
 
-Phase: 4 of 4 (Lab Decomposition + App Navigation)
-Plan: 2 of 2 in current phase (04-02 complete -- all plans complete)
-Status: Complete
-Last activity: 2026-03-18 -- Completed 04-02 navigate commands + app opening commands
+Phase: 1 of 6 (In-File Search)
+Plan: 1 of 1 COMPLETE
+Status: Phase 1 plans complete
+Last activity: 2026-03-18 -- Completed Phase 1 Plan 1 (In-File Search)
 
-Progress: [██████████] 100%
+Progress: [█░░░░░░░░░] 9%
+
+## Previous Milestone (v1.0 — IDE Pivot)
+
+Completed: 2026-03-18
+Phases: 4/4 | Plans: 9/9 | Requirements: 45/45
+Summary: Delivered IDE shell — activity bar, 7 sidebar panels, pane tab system, right sidebar, bottom panels, 80+ commands, lab decomposition
 
 ## Performance Metrics
 
-**Velocity:**
-- Total plans completed: 0
-- Average duration: -
-- Total execution time: 0 hours
-
-**By Phase:**
-
-| Phase | Plans | Total | Avg/Plan |
-|-------|-------|-------|----------|
-| - | - | - | - |
-
-**Recent Trend:**
-- Last 5 plans: -
-- Trend: -
-
-*Updated after each plan completion*
+**v1.0 Velocity:**
+| Phase | Plan | Duration | Tasks | Files |
+|-------|------|----------|-------|-------|
 | Phase 01 P01 | 5min | 2 tasks | 7 files |
 | Phase 01 P02 | 14min | 3 tasks | 5 files |
 | Phase 02 P01 | 5min | 2 tasks | 6 files |
@@ -60,35 +53,26 @@ Progress: [██████████] 100%
 | Phase 04 P01 | 2min | 2 tasks | 2 files |
 | Phase 04 P02 | 2min | 2 tasks | 2 files |
 
+**v1.1 Velocity:**
+| Phase | Plan | Duration | Tasks | Files |
+|-------|------|----------|-------|-------|
+| Phase 01 P01 | 2min | 2 tasks | 2 files |
+
 ## Accumulated Context
 
 ### Decisions
 
-Decisions are logged in PROJECT.md Key Decisions table.
-Recent decisions affecting current work:
+Key v1.0 decisions carried forward:
+- SpeakeasyPanel uses `inline` prop for right sidebar rendering
+- openApp searches all pane groups for route dedup
+- navigate-commands uses Zustand getState() (no react-router dependency)
+- Gold border removed from pane container (too prominent for IDE)
+- Lab sub-apps independently routable at /swarm-board, /hunt, /simulator
 
-- [Roadmap]: 4-phase IDE pivot structure derived from 42 requirements across 8 categories
-- [Roadmap]: Phase structure follows ide-pivot.md phasing (activity bar shell -> panels -> right sidebar -> lab decomp)
-- [Phase 01]: Exported SystemHeartbeat from desktop-sidebar.tsx for activity bar reuse
-- [Phase 01]: ExplorerPanel in sidebar uses browse-only mode; full file-opening wiring deferred to Plan 02
-- [Phase 01]: Replaced DesktopSidebar with ActivityBar + SidebarPanel + SidebarResizeHandle in desktop-layout flex row
-- [Phase 01]: Moved sidebar toggle from edit-commands to view-commands via activityBarStore
-- [Phase 01]: sidebar.toggle uses View category; sidebar.explorer uses new Sidebar category
-- [Phase 02]: Exported replaceNode from pane-tree.ts for addViewToGroup/removeViewFromGroup
-- [Phase 02]: openApp searches all pane groups for route dedup, not just the active pane
-- [Phase 02]: closeView on empty pane with siblings delegates to closePane
-- [Phase 02]: Extracted posture logic to shared/posture-utils.ts for reuse across HomePage and HeartbeatPanel
-- [Phase 02]: Intel items use Intel.title (actual field) not Intel.label (plan spec was incorrect)
-- [Phase 02]: Approval count shows "---" in HeartbeatPanel since no approval store exists
-- [Phase 02]: CompliancePanel reads active policy via useWorkbench().state.activePolicy
-- [Phase 02]: Per-requirement score bars show binary 0%/100% (met/gaps not fractional)
-- [Phase 02]: tab.close command wired via closeActiveTab dep using getAllPaneGroups
-- [Phase 03]: Added inline prop to SpeakeasyPanel instead of CSS-hack approach for de-overlaying fixed positioning
-- [Phase 03]: Right sidebar uses 200px collapse threshold (higher than left sidebar's 120px) per UI-SPEC
-- [Phase 04]: Kept /lab route and LabLayout unchanged as convenience grouping; sub-apps are independently routable but Lab still works
-- [Phase 04]: Used Suspense wrappers at route level for lazy-loaded HuntLayout, SimulatorLayout, SwarmBoardPage
-- [Phase 04]: Kept all 16 existing nav.* commands for backward compatibility while adding 8 new app.* commands
-- [Phase 04]: navigate-commands.ts no longer depends on react-router; uses Zustand getState() pattern directly
+v1.1 decisions:
+- Module-level EditorView ref for command dispatch (simpler than React context)
+- searchKeymap Mod-h handler extraction for replace mode (stable public API)
+- search({ top: true }) for IDE-standard top-positioned search panel
 
 ### Pending Todos
 
@@ -100,6 +84,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-18T18:16:20.977Z
-Stopped at: Completed 04-02-PLAN.md (all phases complete)
-Resume file: None
+Last session: 2026-03-18
+Stopped at: Completed 01-01-PLAN.md
+Resume file: .planning/ROADMAP.md

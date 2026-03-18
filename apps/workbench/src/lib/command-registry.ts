@@ -16,6 +16,7 @@ export type CommandCategory =
   | "Sentinel"
   | "Receipt"
   | "View"
+  | "Sidebar"
   | "Help";
 
 export type CommandContext = "global" | "editor" | "terminal" | "pane";

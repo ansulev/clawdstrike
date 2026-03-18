@@ -15,6 +15,8 @@ export interface ViewCommandDeps {
   newTerminal: () => Promise<void>;
   closeTerminal: () => Promise<void>;
   hasActiveTerminal: () => boolean;
+  toggleSidebar: () => void;
+  showExplorer: () => void;
 }
 
 export function registerViewCommands(deps: ViewCommandDeps): void {
@@ -126,6 +128,22 @@ export function registerViewCommands(deps: ViewCommandDeps): void {
       context: "terminal",
       when: () => deps.hasActiveTerminal(),
       execute: () => deps.closeTerminal(),
+    },
+    {
+      id: "sidebar.toggle",
+      title: "Toggle Sidebar",
+      category: "View",
+      keybinding: "Meta+B",
+      context: "global",
+      execute: () => deps.toggleSidebar(),
+    },
+    {
+      id: "sidebar.explorer",
+      title: "Show Explorer",
+      category: "Sidebar",
+      keybinding: "Meta+Shift+E",
+      context: "global",
+      execute: () => deps.showExplorer(),
     },
   ];
 

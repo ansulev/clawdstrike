@@ -12,12 +12,11 @@ export interface EditCommandDeps {
   multiDispatch: React.Dispatch<MultiPolicyAction>;
   undo: () => void;
   redo: () => void;
-  getSidebarCollapsed: () => boolean;
   getActiveTab: () => PolicyTab | undefined;
 }
 
 export function registerEditCommands(deps: EditCommandDeps): void {
-  const { navigate, dispatch, multiDispatch, undo, redo, getSidebarCollapsed, getActiveTab } = deps;
+  const { navigate, dispatch, multiDispatch, undo, redo, getActiveTab } = deps;
 
   const commands: Command[] = [
     {
@@ -35,19 +34,6 @@ export function registerEditCommands(deps: EditCommandDeps): void {
       keybinding: "Meta+Shift+Z",
       context: "editor",
       execute: () => redo(),
-    },
-    {
-      id: "edit.toggleSidebar",
-      title: "Toggle Sidebar",
-      category: "Edit",
-      keybinding: "Meta+B",
-      context: "editor",
-      execute: () => {
-        dispatch({
-          type: "SET_SIDEBAR_COLLAPSED",
-          collapsed: !getSidebarCollapsed(),
-        });
-      },
     },
     {
       id: "edit.newTab",

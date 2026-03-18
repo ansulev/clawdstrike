@@ -12,6 +12,7 @@ import { useNavigate } from "react-router-dom";
 import { useBottomPaneStore } from "@/features/bottom-pane/bottom-pane-store";
 import { usePaneStore } from "@/features/panes/pane-store";
 import { useWorkbench, useMultiPolicy } from "@/features/policy/stores/multi-policy-store";
+import { useActivityBarStore } from "@/features/activity-bar/stores/activity-bar-store";
 import { commandRegistry } from "@/lib/command-registry";
 import {
   registerNavigateCommands,
@@ -90,7 +91,6 @@ export function InitCommands() {
       multiDispatch,
       undo,
       redo,
-      getSidebarCollapsed: () => stateRef.current.ui.sidebarCollapsed,
       getActiveTab: () => activeTabRef.current,
     });
 
@@ -123,6 +123,8 @@ export function InitCommands() {
         return useBottomPaneStore.getState().closeTerminal(activeTerminalId);
       },
       hasActiveTerminal: () => !!useBottomPaneStore.getState().activeTerminalId,
+      toggleSidebar: () => useActivityBarStore.getState().actions.toggleSidebar(),
+      showExplorer: () => useActivityBarStore.getState().actions.showPanel("explorer"),
     });
 
     // No cleanup needed — commands are re-registered (overwritten) when deps change.

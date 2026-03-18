@@ -7,10 +7,12 @@ export function PaneTab({
   view,
   isActive,
   paneId,
+  onContextMenu,
 }: {
   view: PaneView;
   isActive: boolean;
   paneId: string;
+  onContextMenu?: (e: React.MouseEvent) => void;
 }) {
   return (
     <button
@@ -31,6 +33,7 @@ export function PaneTab({
           usePaneStore.getState().closeView(paneId, view.id);
         }
       }}
+      onContextMenu={onContextMenu}
     >
       <span className="min-w-0 truncate text-[11px] font-mono font-medium tracking-[0.04em]">
         {view.label}

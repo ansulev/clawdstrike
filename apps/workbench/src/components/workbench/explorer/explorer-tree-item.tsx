@@ -16,6 +16,7 @@ interface ExplorerTreeItemProps {
   onOpen: () => void;
   isActive?: boolean;
   style?: React.CSSProperties;
+  onContextMenu?: (e: React.MouseEvent) => void;
 }
 
 // ---- Component ----
@@ -27,6 +28,7 @@ export function ExplorerTreeItem({
   onOpen,
   isActive,
   style,
+  onContextMenu,
 }: ExplorerTreeItemProps) {
   const indent = file.depth * 16;
   const descriptor = FILE_TYPE_REGISTRY[file.fileType];
@@ -61,6 +63,7 @@ export function ExplorerTreeItem({
       type="button"
       onClick={handleClick}
       onKeyDown={handleKeyDown}
+      onContextMenu={onContextMenu}
       style={{
         paddingLeft: indent + 4,
         ...style,

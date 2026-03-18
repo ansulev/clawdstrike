@@ -1,15 +1,18 @@
-import { useMemo, useCallback } from "react";
+import { useMemo, useCallback, useState } from "react";
 import {
   IconFolderOpen,
   IconRefresh,
   IconArrowsMaximize,
   IconArrowsMinimize,
   IconSearch,
+  IconFilePlus,
 } from "@tabler/icons-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { FILE_TYPE_REGISTRY, type FileType } from "@/lib/workbench/file-type-registry";
 import type { DetectionProject, ProjectFile } from "@/features/project/stores/project-store";
 import { ExplorerTreeItem } from "./explorer-tree-item";
+import { ExplorerContextMenu } from "./explorer-context-menu";
+import { InlineNameInput } from "./inline-name-input";
 import { cn } from "@/lib/utils";
 
 // ---- Types ----
@@ -28,6 +31,9 @@ interface ExplorerPanelProps {
   onOpenFolder?: () => void;
   activeFilePath?: string | null;
   className?: string;
+  onCreateFile?: (parentPath: string, fileName: string) => void;
+  onRenameFile?: (file: ProjectFile) => void;
+  onDeleteFile?: (file: ProjectFile) => void;
 }
 
 // ---- Filter logic ----
@@ -151,7 +157,15 @@ export function ExplorerPanel({
   onOpenFolder,
   activeFilePath,
   className,
+  onCreateFile,
+  onRenameFile,
+  onDeleteFile,
 }: ExplorerPanelProps) {
+  // Context menu state
+  const [contextMenu, setContextMenu] = useState<{ file: ProjectFile; x: number; y: number } | null>(null);
+  // Inline new-file creation state: the directory path where a file is being created.
+  const [creatingInDir, setCreatingInDir] = useState<string | null>(null);
+
   // Apply filters to the tree
   const filteredFiles = useMemo(() => {
     if (!project) return [];
@@ -232,6 +246,14 @@ export function ExplorerPanel({
 
           {/* Toolbar */}
           <div className="ml-auto flex items-center gap-0.5">
+            <button
+              type="button"
+              onClick={() => project && setCreatingInDir(project.rootPath)}
+              title="New File"
+              className="p-1 rounded text-[#6f7f9a]/60 hover:text-[#ece7dc] hover:bg-[#131721]/40 transition-colors"
+            >
+              <IconFilePlus size={12} stroke={1.5} />
+            </button>
             {onRefresh && (
               <button
                 type="button"
@@ -314,7 +336,20 @@ export function ExplorerPanel({
       {/* Tree */}
       <ScrollArea className="flex-1">
         <div className="py-1">
-          {visibleItems.length === 0 ? (
+          {/* Inline name input for new file creation at root level */}
+          {creatingInDir !== null && (
+            <div className="px-2 py-1">
+              <InlineNameInput
+                placeholder="filename.yaml"
+                onSubmit={(name) => {
+                  onCreateFile?.(creatingInDir, name);
+                  setCreatingInDir(null);
+                }}
+                onCancel={() => setCreatingInDir(null)}
+              />
+            </div>
+          )}
+          {visibleItems.length === 0 && creatingInDir === null ? (
             <div className="flex flex-col items-center justify-center py-8 text-center">
               <p className="text-[10px] font-mono text-[#6f7f9a]/50">
                 {filter || formatFilter
@@ -333,11 +368,41 @@ export function ExplorerPanel({
                 isActive={
                   !file.isDirectory && activeFilePath === file.path
                 }
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  setContextMenu({ file, x: e.clientX, y: e.clientY });
+                }}
               />
             ))
           )}
         </div>
       </ScrollArea>
+
+      {/* Context menu overlay */}
+      {contextMenu && (
+        <ExplorerContextMenu
+          menu={contextMenu}
+          onClose={() => setContextMenu(null)}
+          onNewFile={() => {
+            // If the context target is a directory, create in it. Otherwise use parent dir.
+            const targetPath = contextMenu.file.isDirectory
+              ? contextMenu.file.path
+              : contextMenu.file.path.substring(0, contextMenu.file.path.lastIndexOf("/")) || project.rootPath;
+            // For relative paths, resolve to absolute for the store action.
+            const absPath = targetPath.startsWith("/") ? targetPath : `${project.rootPath}/${targetPath}`;
+            setCreatingInDir(absPath);
+            setContextMenu(null);
+          }}
+          onRename={() => {
+            onRenameFile?.(contextMenu.file);
+            setContextMenu(null);
+          }}
+          onDelete={() => {
+            onDeleteFile?.(contextMenu.file);
+            setContextMenu(null);
+          }}
+        />
+      )}
 
       {/* Footer status bar */}
       <div className="shrink-0 px-3 py-1.5 border-t border-[#2d3240] flex items-center gap-2">

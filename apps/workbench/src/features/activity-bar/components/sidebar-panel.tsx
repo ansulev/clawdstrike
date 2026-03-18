@@ -38,6 +38,18 @@ function ExplorerPanelConnected() {
       onFilterChange={actions.setFilter}
       formatFilter={formatFilter}
       onFormatFilterChange={actions.setFormatFilter}
+      onCreateFile={async (parentPath, fileName) => {
+        const savedPath = await actions.createFile(parentPath, fileName, "clawdstrike_policy");
+        if (savedPath) {
+          usePaneStore.getState().openApp("/editor", fileName);
+        }
+      }}
+      onRenameFile={() => {
+        // Plan 02 implements inline rename
+      }}
+      onDeleteFile={() => {
+        // Plan 02 implements confirmation dialog
+      }}
     />
   );
 }

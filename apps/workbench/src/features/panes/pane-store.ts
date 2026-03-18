@@ -59,6 +59,12 @@ export interface PaneStore {
   closeView: (paneId: string, viewId: string) => void;
   /** Switch to a specific view (tab) within a pane group. */
   setActiveView: (paneId: string, viewId: string) => void;
+  /** Close all views to the right of the given view in a pane group. */
+  closeViewsToRight: (paneId: string, viewId: string) => void;
+  /** Close all views except the active one (non-active = "saved"). */
+  closeSavedViews: (paneId: string) => void;
+  /** Close all views in a pane group except the one with the given viewId. */
+  closeOtherViews: (paneId: string, viewId: string) => void;
   _reset: () => void;
 }
 
@@ -196,6 +202,37 @@ export const usePaneStore = create<PaneStore>((set, get) => ({
       activePaneId: paneId,
       root: setActivePaneView(state.root, paneId, viewId),
     }));
+  },
+
+  closeViewsToRight: (paneId, viewId) => {
+    const group = findPaneGroup(get().root, paneId);
+    if (!group) return;
+    const idx = group.views.findIndex((v) => v.id === viewId);
+    if (idx < 0) return;
+    // Iterate in reverse to avoid index shifting
+    const toClose = group.views.slice(idx + 1);
+    for (let i = toClose.length - 1; i >= 0; i--) {
+      get().closeView(paneId, toClose[i].id);
+    }
+  },
+
+  closeSavedViews: (paneId) => {
+    const group = findPaneGroup(get().root, paneId);
+    if (!group) return;
+    // Close all views except the active one
+    const toClose = group.views.filter((v) => v.id !== group.activeViewId);
+    for (let i = toClose.length - 1; i >= 0; i--) {
+      get().closeView(paneId, toClose[i].id);
+    }
+  },
+
+  closeOtherViews: (paneId, viewId) => {
+    const group = findPaneGroup(get().root, paneId);
+    if (!group) return;
+    const toClose = group.views.filter((v) => v.id !== viewId);
+    for (let i = toClose.length - 1; i >= 0; i--) {
+      get().closeView(paneId, toClose[i].id);
+    }
   },
 
   _reset: () => {

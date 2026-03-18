@@ -388,23 +388,28 @@ const useProjectStoreBase = create<ProjectStoreState>()((set, get) => ({
       const { project } = get();
       if (!project) return false;
 
+      // oldPath may be relative; resolve to absolute for Tauri APIs.
+      const oldAbsPath = oldPath.startsWith("/")
+        ? oldPath
+        : `${project.rootPath}/${oldPath}`;
+
       // Compute new absolute path by replacing the last segment.
-      const lastSlash = oldPath.lastIndexOf("/");
-      const newPath = lastSlash >= 0
-        ? oldPath.substring(0, lastSlash + 1) + newName
-        : newName;
+      const lastSlash = oldAbsPath.lastIndexOf("/");
+      const newAbsPath = lastSlash >= 0
+        ? oldAbsPath.substring(0, lastSlash + 1) + newName
+        : `${project.rootPath}/${newName}`;
 
       const { renameDetectionFile } = await import("@/lib/tauri-bridge");
-      const ok = await renameDetectionFile(oldPath, newPath);
+      const ok = await renameDetectionFile(oldAbsPath, newAbsPath);
       if (!ok) return false;
 
       // Compute relative paths.
-      const oldRelPath = oldPath.startsWith(project.rootPath)
-        ? oldPath.slice(project.rootPath.length).replace(/^\//, "")
+      const oldRelPath = oldAbsPath.startsWith(project.rootPath)
+        ? oldAbsPath.slice(project.rootPath.length).replace(/^\//, "")
         : oldPath;
-      const newRelPath = newPath.startsWith(project.rootPath)
-        ? newPath.slice(project.rootPath.length).replace(/^\//, "")
-        : newPath;
+      const newRelPath = newAbsPath.startsWith(project.rootPath)
+        ? newAbsPath.slice(project.rootPath.length).replace(/^\//, "")
+        : newName;
 
       const newFiles = mutateTree(project.files, oldRelPath, (siblings, idx) => {
         siblings[idx] = {
@@ -416,7 +421,15 @@ const useProjectStoreBase = create<ProjectStoreState>()((set, get) => ({
         return sortChildren(siblings);
       });
 
-      set({ project: { ...project, files: newFiles } });
+      // Migrate file status entry from old to new path.
+      const fileStatuses = new Map(get().fileStatuses);
+      const oldStatus = fileStatuses.get(oldRelPath);
+      if (oldStatus) {
+        fileStatuses.delete(oldRelPath);
+        fileStatuses.set(newRelPath, oldStatus);
+      }
+
+      set({ project: { ...project, files: newFiles }, fileStatuses });
       return true;
     },
 
@@ -424,13 +437,18 @@ const useProjectStoreBase = create<ProjectStoreState>()((set, get) => ({
       const { project } = get();
       if (!project) return false;
 
+      // filePath may be relative; resolve to absolute for Tauri APIs.
+      const absPath = filePath.startsWith("/")
+        ? filePath
+        : `${project.rootPath}/${filePath}`;
+
       const { deleteDetectionFile } = await import("@/lib/tauri-bridge");
-      const ok = await deleteDetectionFile(filePath);
+      const ok = await deleteDetectionFile(absPath);
       if (!ok) return false;
 
       // Compute relative path.
-      const relPath = filePath.startsWith(project.rootPath)
-        ? filePath.slice(project.rootPath.length).replace(/^\//, "")
+      const relPath = absPath.startsWith(project.rootPath)
+        ? absPath.slice(project.rootPath.length).replace(/^\//, "")
         : filePath;
 
       const newFiles = mutateTree(project.files, relPath, (siblings, idx) => {
@@ -438,7 +456,11 @@ const useProjectStoreBase = create<ProjectStoreState>()((set, get) => ({
         return siblings;
       });
 
-      set({ project: { ...project, files: newFiles } });
+      // Remove stale file status entry.
+      const fileStatuses = new Map(get().fileStatuses);
+      fileStatuses.delete(relPath);
+
+      set({ project: { ...project, files: newFiles }, fileStatuses });
       return true;
     },
 

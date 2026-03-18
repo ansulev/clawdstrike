@@ -49,6 +49,59 @@ interface ProjectState {
   formatFilter: FileType | null;
   /** Per-file status map (keyed by relative file path). */
   fileStatuses: Map<string, FileStatus>;
+  /** Absolute paths of mounted workspace roots (multi-root support). */
+  projectRoots: string[];
+  /** DetectionProject instances keyed by rootPath (one per mounted root). */
+  projects: Map<string, DetectionProject>;
+}
+
+// ---------------------------------------------------------------------------
+// Multi-root persistence helpers
+// ---------------------------------------------------------------------------
+
+const STORAGE_KEY = "clawdstrike_workspace_roots";
+
+/** Read persisted workspace roots from localStorage. */
+function loadPersistedRoots(): string[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Persist workspace roots to localStorage. */
+function persistRoots(roots: string[]): void {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(roots));
+  } catch {
+    // localStorage may be unavailable in some environments.
+  }
+}
+
+/**
+ * Recursively scan a directory via Tauri fs readDir and collect relative paths.
+ * Directories get a trailing "/" to distinguish them from files.
+ */
+async function scanDir(dirPath: string, basePath: string): Promise<string[]> {
+  const { readDir } = await import("@tauri-apps/plugin-fs");
+  const entries = await readDir(dirPath);
+  const paths: string[] = [];
+  for (const entry of entries) {
+    const fullPath = `${dirPath}/${entry.name}`;
+    const relPath = fullPath.slice(basePath.length + 1);
+    if (entry.isDirectory) {
+      paths.push(relPath + "/");
+      const subPaths = await scanDir(fullPath, basePath);
+      paths.push(...subPaths);
+    } else {
+      paths.push(relPath);
+    }
+  }
+  return paths;
 }
 
 // ---- Helpers ----
@@ -276,6 +329,16 @@ interface ProjectStoreState extends ProjectState {
     setFileStatus: (filePath: string, status: FileStatus) => void;
     /** Clear file status for a given file path. */
     clearFileStatus: (filePath: string) => void;
+    /** Add a root folder to the multi-root workspace. */
+    addRoot: (rootPath: string) => void;
+    /** Remove a root folder from the multi-root workspace. */
+    removeRoot: (rootPath: string) => void;
+    /** Scan a root directory and populate its DetectionProject. */
+    loadRoot: (rootPath: string) => Promise<void>;
+    /** Initialize the store from persisted workspace roots. */
+    initFromPersistedRoots: () => Promise<void>;
+    /** Toggle expand/collapse for a directory within a specific root. */
+    toggleDirForRoot: (rootPath: string, dirPath: string) => void;
   };
 }
 
@@ -286,6 +349,8 @@ const useProjectStoreBase = create<ProjectStoreState>()((set, get) => ({
   filter: "",
   formatFilter: null,
   fileStatuses: new Map<string, FileStatus>(),
+  projectRoots: loadPersistedRoots(),
+  projects: new Map<string, DetectionProject>(),
 
   actions: {
     setProject: (project: DetectionProject) => {
@@ -474,6 +539,90 @@ const useProjectStoreBase = create<ProjectStoreState>()((set, get) => ({
       const next = new Map(get().fileStatuses);
       next.delete(filePath);
       set({ fileStatuses: next });
+    },
+
+    addRoot: (rootPath: string) => {
+      const { projectRoots } = get();
+      if (projectRoots.includes(rootPath)) return;
+      const newRoots = [...projectRoots, rootPath];
+      persistRoots(newRoots);
+      set({ projectRoots: newRoots });
+      // Trigger async scan (fire-and-forget from the synchronous action).
+      get().actions.loadRoot(rootPath);
+    },
+
+    removeRoot: (rootPath: string) => {
+      const { projectRoots, projects } = get();
+      const newRoots = projectRoots.filter((r) => r !== rootPath);
+      persistRoots(newRoots);
+      const newProjects = new Map(projects);
+      newProjects.delete(rootPath);
+      // Update backward-compat `project` field.
+      const firstProject = newRoots.length > 0 ? newProjects.get(newRoots[0]) ?? null : null;
+      set({
+        projectRoots: newRoots,
+        projects: newProjects,
+        project: firstProject,
+      });
+    },
+
+    loadRoot: async (rootPath: string) => {
+      try {
+        const paths = await scanDir(rootPath, rootPath);
+        const files = buildFileTree(rootPath, paths);
+        const name = rootPath.split("/").filter(Boolean).pop() ?? "workspace";
+        const allDirs = collectDirPaths(files);
+
+        const dp: DetectionProject = {
+          rootPath,
+          name,
+          files,
+          expandedDirs: new Set(allDirs),
+        };
+
+        const newProjects = new Map(get().projects);
+        newProjects.set(rootPath, dp);
+
+        // Backward compat: set `project` to the first root's DetectionProject.
+        const { projectRoots } = get();
+        const firstRoot = projectRoots.length > 0 ? projectRoots[0] : rootPath;
+        const firstProject = newProjects.get(firstRoot) ?? dp;
+
+        set({ projects: newProjects, project: firstProject });
+      } catch (err) {
+        console.error("[project-store] Failed to load root:", rootPath, err);
+      }
+    },
+
+    initFromPersistedRoots: async () => {
+      const roots = loadPersistedRoots();
+      if (roots.length === 0) return;
+      set({ projectRoots: roots });
+      for (const root of roots) {
+        await get().actions.loadRoot(root);
+      }
+    },
+
+    toggleDirForRoot: (rootPath: string, dirPath: string) => {
+      const { projects } = get();
+      const dp = projects.get(rootPath);
+      if (!dp) return;
+      const next = new Set(dp.expandedDirs);
+      if (next.has(dirPath)) {
+        next.delete(dirPath);
+      } else {
+        next.add(dirPath);
+      }
+      const updated = { ...dp, expandedDirs: next };
+      const newProjects = new Map(projects);
+      newProjects.set(rootPath, updated);
+      // If this is the first root, also update backward-compat `project`.
+      const { projectRoots } = get();
+      const isFirstRoot = projectRoots.length > 0 && projectRoots[0] === rootPath;
+      set({
+        projects: newProjects,
+        ...(isFirstRoot ? { project: updated } : {}),
+      });
     },
   },
 }));

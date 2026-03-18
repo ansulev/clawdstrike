@@ -43,7 +43,10 @@ pub(super) fn stable_token(value: &str) -> String {
     }
 
     if value.is_empty() {
-        hush_core::hashing::sha256(value.as_bytes()).to_hex()
+        format!(
+            "empty_{}",
+            hush_core::hashing::sha256(value.as_bytes()).to_hex()
+        )
     } else {
         let mut token = String::from("hex_");
         for byte in value.as_bytes() {
@@ -71,5 +74,15 @@ mod tests {
         assert_ne!(stable_token("_5f_"), stable_token("_"));
         assert_eq!(stable_token("keyboard"), "keyboard");
         assert_eq!(stable_token("KeyBoard"), "hex_4b6579426f617264");
+    }
+
+    #[test]
+    fn stable_token_avoids_empty_hash_collision() {
+        let empty = stable_token("");
+        let sha256_empty = hush_core::hashing::sha256(b"").to_hex();
+
+        assert_ne!(empty, sha256_empty);
+        assert_eq!(empty, format!("empty_{sha256_empty}"));
+        assert_eq!(stable_token(&sha256_empty), sha256_empty);
     }
 }

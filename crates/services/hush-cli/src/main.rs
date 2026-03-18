@@ -65,7 +65,9 @@ mod policy_verify;
 mod policy_version;
 mod registry_config;
 mod remote_extends;
+#[cfg(unix)]
 mod sandbox_nono;
+#[cfg(unix)]
 mod supervised_exec;
 mod tui;
 mod ui;

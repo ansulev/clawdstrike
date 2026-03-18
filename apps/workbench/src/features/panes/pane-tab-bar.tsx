@@ -1,4 +1,7 @@
+import { useState, useRef, useEffect, useCallback } from "react";
 import {
+  IconChevronLeft,
+  IconChevronRight,
   IconLayoutColumns,
   IconLayoutRows,
   IconX,
@@ -15,6 +18,41 @@ export function PaneTabBar({
   active: boolean;
 }) {
   const paneCount = usePaneStore((state) => state.paneCount());
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
+
+  const checkOverflow = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    setCanScrollLeft(el.scrollLeft > 0);
+    setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 1);
+  }, []);
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+
+    const observer = new ResizeObserver(() => checkOverflow());
+    observer.observe(el);
+    el.addEventListener("scroll", checkOverflow);
+
+    // Initial check
+    checkOverflow();
+
+    return () => {
+      observer.disconnect();
+      el.removeEventListener("scroll", checkOverflow);
+    };
+  }, [checkOverflow]);
+
+  const handleWheel = useCallback((e: React.WheelEvent<HTMLDivElement>) => {
+    const el = scrollRef.current;
+    if (!el) return;
+    if (el.scrollWidth <= el.clientWidth) return;
+    e.preventDefault();
+    el.scrollLeft += e.deltaY;
+  }, []);
 
   return (
     <div
@@ -23,7 +61,25 @@ export function PaneTabBar({
       aria-orientation="horizontal"
       className="flex h-[36px] shrink-0 items-stretch border-b border-[#202531] bg-[#0b0d13]"
     >
-      <div className="flex min-w-0 flex-1 items-stretch overflow-x-auto scrollbar-hide">
+      {canScrollLeft && (
+        <button
+          type="button"
+          className="shrink-0 flex items-center justify-center w-6 text-[#6f7f9a] hover:text-[#ece7dc] hover:bg-[#131721] transition-colors border-r border-[#202531]"
+          onClick={() =>
+            scrollRef.current?.scrollBy({ left: -120, behavior: "smooth" })
+          }
+          title="Scroll tabs left"
+          aria-label="Scroll tabs left"
+        >
+          <IconChevronLeft size={14} stroke={1.8} />
+        </button>
+      )}
+
+      <div
+        ref={scrollRef}
+        className="flex min-w-0 flex-1 items-stretch overflow-x-auto scrollbar-hide"
+        onWheel={handleWheel}
+      >
         {pane.views.map((view) => (
           <PaneTab
             key={view.id}
@@ -33,6 +89,20 @@ export function PaneTabBar({
           />
         ))}
       </div>
+
+      {canScrollRight && (
+        <button
+          type="button"
+          className="shrink-0 flex items-center justify-center w-6 text-[#6f7f9a] hover:text-[#ece7dc] hover:bg-[#131721] transition-colors border-l border-[#202531]"
+          onClick={() =>
+            scrollRef.current?.scrollBy({ left: 120, behavior: "smooth" })
+          }
+          title="Scroll tabs right"
+          aria-label="Scroll tabs right"
+        >
+          <IconChevronRight size={14} stroke={1.8} />
+        </button>
+      )}
 
       <div className="flex shrink-0 items-center gap-1 px-2">
         <button

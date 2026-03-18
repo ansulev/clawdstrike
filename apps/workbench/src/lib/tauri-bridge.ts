@@ -237,6 +237,75 @@ export async function readPolicyFileByPath(filePath: string): Promise<OpenFileRe
   return readDetectionFileByPath(filePath);
 }
 
+/**
+ * Create a new detection file with default content in the given directory.
+ *
+ * @param dirPath  - Absolute path to the parent directory.
+ * @param fileName - The file name (e.g. "my-policy.yaml").
+ * @param fileType - The detection file type to determine default content.
+ * @returns The saved file path, or null on failure / non-desktop.
+ */
+export async function createDetectionFile(
+  dirPath: string,
+  fileName: string,
+  fileType: FileType,
+): Promise<string | null> {
+  if (!isDesktop()) return null;
+
+  try {
+    const fullPath = `${dirPath}/${fileName}`;
+    const defaultContent = FILE_TYPE_REGISTRY[fileType].defaultContent;
+    return await saveDetectionFile(defaultContent, fileType, fullPath);
+  } catch (err) {
+    console.error("[tauri-bridge] Failed to create file:", err);
+    return null;
+  }
+}
+
+/**
+ * Rename a file on disk.
+ *
+ * @param oldPath - Current absolute path.
+ * @param newPath - Desired absolute path.
+ * @returns true on success, false on failure / non-desktop.
+ */
+export async function renameDetectionFile(
+  oldPath: string,
+  newPath: string,
+): Promise<boolean> {
+  if (!isDesktop()) return false;
+
+  try {
+    const { rename } = await import("@tauri-apps/plugin-fs");
+    await rename(oldPath, newPath);
+    return true;
+  } catch (err) {
+    console.error("[tauri-bridge] Failed to rename file:", oldPath, "->", newPath, err);
+    return false;
+  }
+}
+
+/**
+ * Delete a file from disk.
+ *
+ * @param filePath - Absolute path to remove.
+ * @returns true on success, false on failure / non-desktop.
+ */
+export async function deleteDetectionFile(
+  filePath: string,
+): Promise<boolean> {
+  if (!isDesktop()) return false;
+
+  try {
+    const { remove } = await import("@tauri-apps/plugin-fs");
+    await remove(filePath);
+    return true;
+  } catch (err) {
+    console.error("[tauri-bridge] Failed to delete file:", filePath, err);
+    return false;
+  }
+}
+
 export async function savePolicyFile(
   content: string,
   filePath?: string | null,

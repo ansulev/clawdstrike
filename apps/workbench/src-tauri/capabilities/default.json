@@ -21,6 +21,8 @@
     "stronghold:default",
     "fs:default",
     "fs:allow-read-text-file",
-    "fs:allow-write-text-file"
+    "fs:allow-write-text-file",
+    "fs:allow-rename",
+    "fs:allow-remove"
   ]
 }

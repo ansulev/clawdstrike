@@ -149,6 +149,71 @@ export function buildFileTree(rootPath: string, paths: string[]): ProjectFile[] 
   return convert(root);
 }
 
+// ---- Tree mutation helpers ----
+
+/**
+ * Recursively walk a ProjectFile[] tree and apply a mutator when the target
+ * node is found. Returns a new tree (shallow copies along the path).
+ *
+ * The mutator receives the parent's children array and the index of the
+ * matching node, and must return the replacement children array.
+ */
+function mutateTree(
+  files: ProjectFile[],
+  targetPath: string,
+  mutator: (siblings: ProjectFile[], index: number) => ProjectFile[],
+): ProjectFile[] {
+  for (let i = 0; i < files.length; i++) {
+    if (files[i].path === targetPath) {
+      return mutator([...files], i);
+    }
+    if (files[i].isDirectory && files[i].children) {
+      const mutated = mutateTree(files[i].children!, targetPath, mutator);
+      if (mutated !== files[i].children) {
+        const copy = [...files];
+        copy[i] = { ...copy[i], children: mutated };
+        return copy;
+      }
+    }
+  }
+  return files;
+}
+
+/** Sort children: directories first, then alphabetical by name. */
+function sortChildren(children: ProjectFile[]): ProjectFile[] {
+  return [...children].sort((a, b) => {
+    if (a.isDirectory !== b.isDirectory) return a.isDirectory ? -1 : 1;
+    return a.name.localeCompare(b.name);
+  });
+}
+
+/**
+ * Insert a new ProjectFile into a directory node's children. Returns new tree.
+ */
+function insertIntoDir(
+  files: ProjectFile[],
+  parentPath: string,
+  newNode: ProjectFile,
+): ProjectFile[] {
+  for (let i = 0; i < files.length; i++) {
+    if (files[i].path === parentPath && files[i].isDirectory) {
+      const copy = [...files];
+      const updatedChildren = sortChildren([...(copy[i].children ?? []), newNode]);
+      copy[i] = { ...copy[i], children: updatedChildren };
+      return copy;
+    }
+    if (files[i].isDirectory && files[i].children) {
+      const mutated = insertIntoDir(files[i].children!, parentPath, newNode);
+      if (mutated !== files[i].children) {
+        const copy = [...files];
+        copy[i] = { ...copy[i], children: mutated };
+        return copy;
+      }
+    }
+  }
+  return files;
+}
+
 /**
  * Infer a FileType from a path string. For unambiguous extensions (.yar, .json)
  * the result is deterministic. For YAML files we use path-segment heuristics.
@@ -191,6 +256,12 @@ interface ProjectStoreState extends ProjectState {
     expandAll: () => void;
     /** Collapse all directories. */
     collapseAll: () => void;
+    /** Create a new file in the given directory. Returns the new file path or null. */
+    createFile: (parentDirPath: string, fileName: string, fileType: FileType) => Promise<string | null>;
+    /** Rename a file. Returns true on success. */
+    renameFile: (oldPath: string, newName: string) => Promise<boolean>;
+    /** Delete a file. Returns true on success. */
+    deleteFile: (filePath: string) => Promise<boolean>;
   };
 }
 
@@ -249,6 +320,111 @@ const useProjectStoreBase = create<ProjectStoreState>()((set, get) => ({
       const { project } = get();
       if (!project) return;
       set({ project: { ...project, expandedDirs: new Set<string>() } });
+    },
+
+    createFile: async (parentDirPath: string, fileName: string, fileType: FileType): Promise<string | null> => {
+      const { project } = get();
+      if (!project) return null;
+
+      const { createDetectionFile } = await import("@/lib/tauri-bridge");
+      const savedPath = await createDetectionFile(parentDirPath, fileName, fileType);
+      if (!savedPath) return null;
+
+      // Compute the relative path within the project.
+      const relPath = savedPath.startsWith(project.rootPath)
+        ? savedPath.slice(project.rootPath.length).replace(/^\//, "")
+        : fileName;
+
+      // Compute parent relative path.
+      const parentRelPath = parentDirPath.startsWith(project.rootPath)
+        ? parentDirPath.slice(project.rootPath.length).replace(/^\//, "")
+        : parentDirPath;
+
+      // Compute depth from relative path segments.
+      const depth = relPath.split("/").filter(Boolean).length - 1;
+
+      const newNode: ProjectFile = {
+        path: relPath,
+        name: fileName,
+        fileType: inferFileTypeFromPath(relPath, fileName),
+        isDirectory: false,
+        depth,
+      };
+
+      // Insert into tree and auto-expand the parent directory.
+      let newFiles: ProjectFile[];
+      if (parentRelPath === "" || parentDirPath === project.rootPath) {
+        // Inserting at root level.
+        newFiles = sortChildren([...project.files, newNode]);
+      } else {
+        newFiles = insertIntoDir(project.files, parentRelPath, newNode);
+      }
+
+      const expandedDirs = new Set(project.expandedDirs);
+      if (parentRelPath) {
+        expandedDirs.add(parentRelPath);
+      }
+
+      set({ project: { ...project, files: newFiles, expandedDirs } });
+      return savedPath;
+    },
+
+    renameFile: async (oldPath: string, newName: string): Promise<boolean> => {
+      const { project } = get();
+      if (!project) return false;
+
+      // Compute new absolute path by replacing the last segment.
+      const lastSlash = oldPath.lastIndexOf("/");
+      const newPath = lastSlash >= 0
+        ? oldPath.substring(0, lastSlash + 1) + newName
+        : newName;
+
+      const { renameDetectionFile } = await import("@/lib/tauri-bridge");
+      const ok = await renameDetectionFile(oldPath, newPath);
+      if (!ok) return false;
+
+      // Compute relative paths.
+      const oldRelPath = oldPath.startsWith(project.rootPath)
+        ? oldPath.slice(project.rootPath.length).replace(/^\//, "")
+        : oldPath;
+      const newRelPath = newPath.startsWith(project.rootPath)
+        ? newPath.slice(project.rootPath.length).replace(/^\//, "")
+        : newPath;
+
+      const newFiles = mutateTree(project.files, oldRelPath, (siblings, idx) => {
+        siblings[idx] = {
+          ...siblings[idx],
+          name: newName,
+          path: newRelPath,
+          fileType: inferFileTypeFromPath(newRelPath, newName),
+        };
+        return sortChildren(siblings);
+      });
+
+      set({ project: { ...project, files: newFiles } });
+      return true;
+    },
+
+    deleteFile: async (filePath: string): Promise<boolean> => {
+      const { project } = get();
+      if (!project) return false;
+
+      const { deleteDetectionFile } = await import("@/lib/tauri-bridge");
+      const ok = await deleteDetectionFile(filePath);
+      if (!ok) return false;
+
+      // Compute relative path.
+      const relPath = filePath.startsWith(project.rootPath)
+        ? filePath.slice(project.rootPath.length).replace(/^\//, "")
+        : filePath;
+
+      const newFiles = mutateTree(project.files, relPath, (siblings, idx) => {
+        siblings.splice(idx, 1);
+        return siblings;
+      });
+
+      set({ project: { ...project, files: newFiles } });
+      return true;
     },
   },
 }));

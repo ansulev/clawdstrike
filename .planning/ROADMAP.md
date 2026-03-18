@@ -30,7 +30,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   2. A test can call `registerFileType()` with a custom file type (e.g., `"snort_rule"`), and it appears in file type detection, command palette new-file options, and tab bar
   3. A test can call `statusBarRegistry.register()` with a custom segment, and it renders in the status bar alongside built-in segments
   4. All existing workbench functionality works identically after the seam changes -- built-in guards, file types, sidebar items, and status bar render as before
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
 - [ ] 01-01: Open guard pipeline seams (GuardId, GUARD_REGISTRY, GuardCategory, ConfigFieldType)

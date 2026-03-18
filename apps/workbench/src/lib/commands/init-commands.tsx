@@ -127,6 +127,7 @@ export function InitCommands() {
       hasActiveTerminal: () => !!useBottomPaneStore.getState().activeTerminalId,
       toggleSidebar: () => useActivityBarStore.getState().actions.toggleSidebar(),
       showExplorer: () => useActivityBarStore.getState().actions.showPanel("explorer"),
+      showSearch: () => useActivityBarStore.getState().actions.showPanel("search"),
       closeActiveTab: () => {
         const { root, activePaneId } = usePaneStore.getState();
         const allGroups = getAllPaneGroups(root);

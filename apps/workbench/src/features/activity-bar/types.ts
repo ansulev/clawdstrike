@@ -8,6 +8,7 @@ import {
   SigilFleet,
   SigilCompliance,
 } from "@/components/desktop/sidebar-icons";
+import { IconSearch } from "@tabler/icons-react";
 
 /**
  * Panel IDs for the activity bar. Each maps to a sidebar panel view.
@@ -20,6 +21,7 @@ export type ActivityBarItemId =
   | "sentinels"
   | "findings"
   | "explorer"
+  | "search"
   | "library"
   | "fleet"
   | "compliance";
@@ -40,6 +42,7 @@ export const ACTIVITY_BAR_ITEMS: readonly ActivityBarItemConfig[] = [
   { id: "sentinels", label: "Sentinels", tooltip: "Sentinels", icon: SigilSentinel },
   { id: "findings", label: "Findings & Intel", tooltip: "Findings & Intel", icon: SigilFindings },
   { id: "explorer", label: "Explorer", tooltip: "Explorer (Cmd+Shift+E)", icon: SigilEditor },
+  { id: "search", label: "Search", tooltip: "Search (Cmd+Shift+F)", icon: IconSearch },
   { id: "library", label: "Library", tooltip: "Library", icon: SigilLibrary },
   { id: "fleet", label: "Fleet & Topology", tooltip: "Fleet & Topology", icon: SigilFleet },
   { id: "compliance", label: "Compliance", tooltip: "Compliance", icon: SigilCompliance },

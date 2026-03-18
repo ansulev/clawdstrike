@@ -8,6 +8,7 @@ import { FindingsPanel } from "../panels/findings-panel";
 import { LibraryPanel } from "../panels/library-panel";
 import { FleetPanel } from "../panels/fleet-panel";
 import { CompliancePanel } from "../panels/compliance-panel";
+import { SearchPanelConnected } from "@/features/search/components/search-panel";
 import type { ActivityBarItemId } from "../types";
 
 // ---------------------------------------------------------------------------
@@ -68,6 +69,8 @@ function renderPanel(activeItem: ActivityBarItemId) {
       return <FindingsPanel />;
     case "explorer":
       return <ExplorerPanelConnected />;
+    case "search":
+      return <SearchPanelConnected />;
     case "library":
       return <LibraryPanel />;
     case "fleet":

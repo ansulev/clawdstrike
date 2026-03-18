@@ -17,6 +17,7 @@ export interface ViewCommandDeps {
   hasActiveTerminal: () => boolean;
   toggleSidebar: () => void;
   showExplorer: () => void;
+  showSearch: () => void;
   closeActiveTab: () => void;
   toggleRightSidebar: () => void;
   showSentinels: () => void;
@@ -153,6 +154,14 @@ export function registerViewCommands(deps: ViewCommandDeps): void {
       keybinding: "Meta+Shift+E",
       context: "global",
       execute: () => deps.showExplorer(),
+    },
+    {
+      id: "sidebar.search",
+      title: "Search in Files",
+      category: "Sidebar",
+      keybinding: "Meta+Shift+F",
+      context: "global",
+      execute: () => deps.showSearch(),
     },
     {
       id: "tab.close",

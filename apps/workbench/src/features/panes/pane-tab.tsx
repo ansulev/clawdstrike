@@ -3,6 +3,13 @@ import { cn } from "@/lib/utils";
 import { usePaneStore } from "./pane-store";
 import type { PaneView } from "./pane-types";
 
+const FILE_TYPE_COLORS: Record<string, string> = {
+  clawdstrike_policy: "#5eead4",
+  sigma_rule: "#a78bfa",
+  yara_rule: "#86efac",
+  ocsf_event: "#fbbf24",
+};
+
 export function PaneTab({
   view,
   isActive,
@@ -35,6 +42,24 @@ export function PaneTab({
       }}
       onContextMenu={onContextMenu}
     >
+      {view.dirty && (
+        <span
+          className={cn(
+            "h-2 w-2 shrink-0 rounded-full",
+            isActive ? "bg-[#d4a84b]" : "bg-[#d4a84b]/50",
+          )}
+          aria-label="Unsaved changes"
+        />
+      )}
+
+      {view.fileType && view.route.startsWith("/file/") && (
+        <span
+          className="h-1.5 w-1.5 shrink-0 rounded-full"
+          style={{ backgroundColor: FILE_TYPE_COLORS[view.fileType] ?? "#6f7f9a" }}
+          aria-label={`File type: ${view.fileType}`}
+        />
+      )}
+
       <span className="min-w-0 truncate text-[11px] font-mono font-medium tracking-[0.04em]">
         {view.label}
       </span>
@@ -54,7 +79,10 @@ export function PaneTab({
           usePaneStore.getState().closeView(paneId, view.id);
         }}
       >
-        <IconX size={14} stroke={1.8} />
+        {view.dirty && isActive ? (
+          <span className="h-2 w-2 rounded-full bg-[#d4a84b] group-hover/tab:hidden" />
+        ) : null}
+        <IconX size={14} stroke={1.8} className={view.dirty && isActive ? "hidden group-hover/tab:block" : ""} />
       </span>
 
       {isActive && (

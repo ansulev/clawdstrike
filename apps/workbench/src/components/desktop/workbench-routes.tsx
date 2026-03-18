@@ -198,6 +198,12 @@ const TrustprintThresholdsPage = lazy(() =>
   })),
 );
 
+const FileEditorShell = lazy(() =>
+  import("@/features/editor/file-editor-shell").then((m) => ({
+    default: m.FileEditorShell,
+  })),
+);
+
 function parseRoute(route: string): URL {
   const normalized = route.startsWith("/") ? route : `/${route}`;
   return new URL(normalized, "https://clawdstrike.local");
@@ -205,6 +211,11 @@ function parseRoute(route: string): URL {
 
 export function normalizeWorkbenchRoute(route: string): string {
   const url = parseRoute(route);
+
+  // File routes pass through unchanged (they contain the actual file path)
+  if (url.pathname.startsWith("/file/")) {
+    return `${url.pathname}${url.search}` || "/home";
+  }
 
   // Redirect /editor?panel=guards and /editor?panel=compare to standalone routes
   if (url.pathname === "/editor") {
@@ -285,6 +296,10 @@ export function getWorkbenchRouteLabel(route: string): string {
   if (url.pathname === "/trustprint/patterns") return "TrustPrint Patterns";
   if (url.pathname === "/trustprint/providers") return "TrustPrint Providers";
   if (url.pathname === "/trustprint/thresholds") return "TrustPrint Thresholds";
+  if (url.pathname.startsWith("/file/")) {
+    const segments = url.pathname.split("/").filter(Boolean);
+    return segments[segments.length - 1] ?? "File";
+  }
   return "Workbench";
 }
 
@@ -352,5 +367,6 @@ export const WORKBENCH_ROUTE_OBJECTS: RouteObject[] = [
   { path: "trustprint/providers", element: <TrustprintProvidersPage /> },
   { path: "trustprint/thresholds", element: <TrustprintThresholdsPage /> },
   { path: "overview", element: <Navigate to="/home" replace /> },
+  { path: "file/*", element: <FileEditorShell /> },
   { path: "*", element: <Navigate to="/home" replace /> },
 ];

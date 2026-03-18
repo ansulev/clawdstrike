@@ -19,6 +19,7 @@ import {
   splitPane as splitPaneNode,
   updatePaneSizes,
 } from "./pane-tree";
+import { usePolicyTabsStore, pushRecentFile } from "@/features/policy/stores/policy-tabs-store";
 import type { PaneFocusDirection, PaneGroup, PaneNode, PaneSplitDirection, PaneView } from "./pane-types";
 
 function createPaneView(route: string): PaneView {
@@ -65,6 +66,8 @@ export interface PaneStore {
   closeSavedViews: (paneId: string) => void;
   /** Close all views in a pane group except the one with the given viewId. */
   closeOtherViews: (paneId: string, viewId: string) => void;
+  /** Open a file as a pane tab. Bridges to policy-tabs-store for content loading. */
+  openFile: (filePath: string, label?: string, fileType?: string) => void;
   _reset: () => void;
 }
 
@@ -257,6 +260,12 @@ export const usePaneStore = create<PaneStore>((set, get) => ({
     });
   },
 
+  openFile: (filePath, label, _fileType) => {
+    const route = `/file/${filePath}`;
+    get().openApp(route, label ?? filePath.split("/").pop() ?? "File");
+    pushRecentFile(filePath);
+  },
+
   _reset: () => {
     const nextRoot = createInitialRoot();
     set({
@@ -265,3 +274,47 @@ export const usePaneStore = create<PaneStore>((set, get) => ({
     });
   },
 }));
+
+// Sync dirty state from policy-tabs-store to pane views
+function subscribeToDirtySync() {
+  usePolicyTabsStore.subscribe((state, prevState) => {
+    if (state.tabs === prevState.tabs) return;
+    const tabs = state.tabs;
+
+    const paneState = usePaneStore.getState();
+    const allGroups = getAllPaneGroups(paneState.root);
+    let changed = false;
+    let nextRoot = paneState.root;
+
+    for (const group of allGroups) {
+      for (const view of group.views) {
+        if (!view.route.startsWith("/file/")) continue;
+        const filePath = view.route.slice("/file/".length);
+        const tab = tabs.find((t) => t.filePath === filePath);
+        const newDirty = tab?.dirty ?? false;
+        const newFileType = tab?.fileType;
+        if (view.dirty !== newDirty || view.fileType !== newFileType) {
+          changed = true;
+          nextRoot = replaceNode(nextRoot, group.id, (node) =>
+            node.type === "group"
+              ? {
+                  ...node,
+                  views: node.views.map((v) =>
+                    v.id === view.id
+                      ? { ...v, dirty: newDirty, fileType: newFileType }
+                      : v,
+                  ),
+                }
+              : node,
+          );
+        }
+      }
+    }
+
+    if (changed) {
+      usePaneStore.setState({ root: nextRoot });
+    }
+  });
+}
+
+subscribeToDirtySync();

@@ -225,6 +225,39 @@ describe("pane-store", () => {
     });
   });
 
+  describe("openFile", () => {
+    it("opens a file route via openFile", () => {
+      usePaneStore.getState().openFile("policies/test.yaml", "test.yaml");
+
+      const state = usePaneStore.getState();
+      const pane = findPaneGroup(state.root, state.activePaneId)!;
+      expect(pane.views).toHaveLength(2); // Home + file
+      expect(pane.views[1].route).toBe("/file/policies/test.yaml");
+      expect(pane.views[1].label).toBe("test.yaml");
+    });
+
+    it("normalizes /file/ routes without collapsing path", () => {
+      usePaneStore.getState().openApp("/file/policies/deep/nested.yaml");
+
+      const state = usePaneStore.getState();
+      const pane = findPaneGroup(state.root, state.activePaneId)!;
+      expect(pane.views).toHaveLength(2);
+      expect(pane.views[1].route).toBe("/file/policies/deep/nested.yaml");
+    });
+
+    it("deduplicates file tabs by route", () => {
+      usePaneStore.getState().openFile("policies/test.yaml", "test.yaml");
+      usePaneStore.getState().openFile("policies/test.yaml", "test.yaml");
+
+      const state = usePaneStore.getState();
+      const pane = findPaneGroup(state.root, state.activePaneId)!;
+      const fileViews = pane.views.filter((v) =>
+        v.route === "/file/policies/test.yaml",
+      );
+      expect(fileViews).toHaveLength(1);
+    });
+  });
+
   describe("setActiveView", () => {
     it("updates activeViewId within the specified pane group", () => {
       usePaneStore.getState().openApp("/editor", "Editor");

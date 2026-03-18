@@ -15,8 +15,6 @@ use tauri::Manager;
 use terminal::TerminalState;
 
 fn main() {
-    clawdstrike_logos::verifier::install_clawdstrike_policy_load_verifier();
-
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_window_state::Builder::new().build())
@@ -43,6 +41,8 @@ fn main() {
                 as TerminalState,
         )
         .setup(|app| {
+            clawdstrike_logos::verifier::install_clawdstrike_policy_load_verifier();
+
             if let Some(window) = app.get_webview_window("main") {
                 #[cfg(not(target_os = "macos"))]
                 {

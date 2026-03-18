@@ -676,12 +676,11 @@ fn expected_action_types_for_policy(policy: &Policy) -> Vec<String> {
         expected.insert("egress".to_string());
     }
 
-    if policy
-        .guards
-        .shell_command
-        .as_ref()
-        .is_some_and(|cfg| cfg.enabled && !cfg.forbidden_patterns.is_empty())
-    {
+    if policy.guards.shell_command.as_ref().is_some_and(|cfg| {
+        cfg.enabled
+            && (!cfg.forbidden_patterns.is_empty()
+                || shell_command_uses_forbidden_path_enforcement(policy))
+    }) {
         expected.insert("exec".to_string());
     }
 
@@ -696,6 +695,14 @@ fn expected_action_types_for_policy(policy: &Policy) -> Vec<String> {
 
     if policy_has_custom_runtime_guard_formulas(policy) {
         expected.insert("custom".to_string());
+    }
+
+    if policy.custom_guards.iter().any(|guard| guard.enabled) {
+        expected.insert("unsupported_policy_custom_guards".to_string());
+    }
+
+    if policy.guards.custom.iter().any(|guard| guard.enabled) {
+        expected.insert("unsupported_plugin_custom_guards".to_string());
     }
 
     expected.into_iter().collect()
@@ -752,6 +759,18 @@ fn policy_has_custom_runtime_guard_formulas(policy: &Policy) -> bool {
             .input_injection_capability
             .as_ref()
             .is_some_and(|cfg| cfg.enabled)
+}
+
+fn shell_command_uses_forbidden_path_enforcement(policy: &Policy) -> bool {
+    let Some(shell) = policy.guards.shell_command.as_ref() else {
+        return false;
+    };
+    if !shell.enabled || !shell.enforce_forbidden_paths {
+        return false;
+    }
+
+    let forbidden_path = policy.guards.forbidden_path.clone().unwrap_or_default();
+    forbidden_path.enabled && !forbidden_path.effective_patterns().is_empty()
 }
 
 fn collect_atoms_recursive(formula: &Formula, atoms: &mut BTreeSet<String>) {
@@ -2755,6 +2774,30 @@ mod tests {
     }
 
     #[test]
+    fn shell_forbidden_path_enforcement_requires_exec_coverage() {
+        let mut policy = Policy::default();
+        policy.guards.forbidden_path = Some(simple_forbidden_path("/etc/shadow"));
+        policy.guards.shell_command = Some(ShellCommandConfig {
+            enabled: true,
+            forbidden_patterns: vec![],
+            enforce_forbidden_paths: true,
+        });
+
+        assert_eq!(
+            expected_action_types_for_policy_set(&policy),
+            BTreeSet::from(["access".to_string(), "exec".to_string()])
+        );
+
+        let report = formula_verifier().verify_policy(&policy, agent());
+        assert!(report.completeness.outcome.is_pass(), "{report:?}");
+        assert!(report
+            .completeness
+            .covered
+            .iter()
+            .any(|kind| kind == "exec"));
+    }
+
+    #[test]
     fn runtime_only_guards_contribute_custom_action_coverage() {
         let mut policy = Policy::default();
         policy.guards.secret_leak = Some(SecretLeakConfig::default());
@@ -2768,6 +2811,52 @@ mod tests {
             .iter()
             .any(|action_type| action_type == "custom"));
         assert!(report.completeness.missing.is_empty(), "{report:?}");
+    }
+
+    #[test]
+    fn policy_custom_guards_downgrade_attestation_to_heuristic() {
+        let mut policy = Policy::default();
+        policy
+            .custom_guards
+            .push(clawdstrike::policy::PolicyCustomGuardSpec {
+                id: "demo-guard".to_string(),
+                enabled: true,
+                config: serde_json::json!({}),
+            });
+
+        let report = formula_verifier().verify_policy(&policy, agent());
+        assert_eq!(report.completeness.outcome, CheckOutcome::Fail);
+        assert!(report
+            .completeness
+            .missing
+            .iter()
+            .any(|kind| kind == "unsupported_policy_custom_guards"));
+        assert_eq!(report.attestation_level, AttestationLevel::Heuristic);
+    }
+
+    #[test]
+    fn plugin_custom_guards_downgrade_attestation_to_heuristic() {
+        let mut policy = Policy::default();
+        policy
+            .guards
+            .custom
+            .push(clawdstrike::policy::CustomGuardSpec {
+                package: "demo-plugin".to_string(),
+                registry: None,
+                version: None,
+                enabled: true,
+                config: serde_json::json!({}),
+                async_config: None,
+            });
+
+        let report = formula_verifier().verify_policy(&policy, agent());
+        assert_eq!(report.completeness.outcome, CheckOutcome::Fail);
+        assert!(report
+            .completeness
+            .missing
+            .iter()
+            .any(|kind| kind == "unsupported_plugin_custom_guards"));
+        assert_eq!(report.attestation_level, AttestationLevel::Heuristic);
     }
 
     #[test]

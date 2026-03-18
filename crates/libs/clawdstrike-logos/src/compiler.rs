@@ -3,7 +3,7 @@
 use clawdstrike::policy::{GuardConfigs, Policy};
 use logos_ffi::{AgentId, Formula};
 
-use crate::guards::GuardFormulas;
+use crate::guards::{shell_command_formulas, GuardFormulas};
 
 pub trait PolicyCompiler {
     fn compile_guards(&self, guards: &GuardConfigs) -> Vec<Formula>;
@@ -52,7 +52,11 @@ impl PolicyCompiler for DefaultPolicyCompiler {
         }
 
         if let Some(ref cfg) = guards.shell_command {
-            formulas.extend(cfg.to_formulas(&self.agent));
+            formulas.extend(shell_command_formulas(
+                cfg,
+                guards.forbidden_path.as_ref(),
+                &self.agent,
+            ));
         }
 
         if let Some(ref cfg) = guards.mcp_tool {
@@ -155,10 +159,10 @@ mod tests {
         // 1 forbidden_path prohibition
         // + 1 path_allowlist permission
         // + 1 egress permission + 1 egress default permission
-        // + 1 shell prohibition
+        // + 1 shell regex prohibition + 1 shell forbidden-path prohibition
         // + 1 mcp prohibition + 1 mcp default permission
-        // = 7 formulas
-        assert_eq!(formulas.len(), 7);
+        // = 8 formulas
+        assert_eq!(formulas.len(), 8);
 
         // Verify we have a mix of Prohibition and Permission
         let prohibition_count = formulas
@@ -169,7 +173,7 @@ mod tests {
             .iter()
             .filter(|f| matches!(f, Formula::Permission(_, _)))
             .count();
-        assert_eq!(prohibition_count, 3);
+        assert_eq!(prohibition_count, 4);
         assert_eq!(permission_count, 4);
     }
 
@@ -257,5 +261,39 @@ mod tests {
         assert!(rendered
             .iter()
             .any(|formula| formula == "P_test-agent(custom(guard:prompt_injection:enabled))"));
+    }
+
+    #[test]
+    fn shell_forbidden_path_enforcement_emits_exec_formulas() {
+        let compiler = DefaultPolicyCompiler::new(test_agent());
+        let guards = GuardConfigs {
+            forbidden_path: Some(ForbiddenPathConfig {
+                enabled: true,
+                patterns: Some(vec!["/etc/shadow".to_string()]),
+                exceptions: vec![],
+                additional_patterns: vec![],
+                remove_patterns: vec![],
+            }),
+            shell_command: Some(ShellCommandConfig {
+                enabled: true,
+                forbidden_patterns: vec![],
+                enforce_forbidden_paths: true,
+            }),
+            ..GuardConfigs::default()
+        };
+
+        let rendered: Vec<String> = compiler
+            .compile_guards(&guards)
+            .into_iter()
+            .map(|formula| formula.to_string())
+            .collect();
+
+        assert_eq!(
+            rendered,
+            vec![
+                "F_test-agent(access(/etc/shadow))".to_string(),
+                "F_test-agent(exec(touches_forbidden_path:/etc/shadow))".to_string(),
+            ]
+        );
     }
 }

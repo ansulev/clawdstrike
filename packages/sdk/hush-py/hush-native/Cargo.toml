@@ -13,6 +13,7 @@ crate-type = ["cdylib"]
 pyo3 = { version = "0.28", features = ["extension-module", "abi3-py310"] }
 hush-core = { workspace = true }
 clawdstrike = { workspace = true, features = ["full"] }
+clawdstrike-logos = { workspace = true }
 clawdstrike-policy-event = { workspace = true, features = ["simulate"] }
 futures = { workspace = true }
 base64 = { workspace = true }

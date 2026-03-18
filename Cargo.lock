@@ -3851,6 +3851,7 @@ version = "0.2.6"
 dependencies = [
  "base64 0.22.1",
  "clawdstrike",
+ "clawdstrike-logos",
  "clawdstrike-policy-event",
  "futures",
  "hex",

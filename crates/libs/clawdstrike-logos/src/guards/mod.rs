@@ -17,6 +17,8 @@ use logos_ffi::Formula;
 
 use crate::atoms::ActionAtom;
 
+pub(crate) use self::shell_command::shell_command_formulas;
+
 /// Translate a guard configuration into Logos Layer 3 normative formulas.
 pub trait GuardFormulas {
     fn to_formulas(&self, agent: &logos_ffi::AgentId) -> Vec<Formula>;

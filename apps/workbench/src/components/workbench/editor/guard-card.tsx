@@ -238,6 +238,8 @@ interface GuardCardProps {
   isDragging?: boolean;
   /** Drop position indicator: "above" or "below". */
   dropIndicator?: "above" | "below" | null;
+  /** 1-indexed execution order badge shown in custom reorder mode. */
+  executionOrder?: number;
 }
 
 const PROVENANCE_BADGE_STYLES: Record<string, string> = {
@@ -261,6 +263,7 @@ export function GuardCard({
   onDragLeave,
   isDragging,
   dropIndicator,
+  executionOrder,
 }: GuardCardProps) {
   const { state, dispatch } = useWorkbench();
   const [open, setOpen] = useState(false);
@@ -430,6 +433,15 @@ export function GuardCard({
             >
               <IconGripVertical size={14} stroke={1.5} />
             </div>
+          )}
+          {/* Execution order badge — only in custom reorder mode */}
+          {executionOrder != null && (
+            <span
+              className="text-[8px] font-mono font-bold text-[#6f7f9a] bg-[#2d3240] rounded-full w-4 h-4 flex items-center justify-center shrink-0"
+              title={`Execution order: ${executionOrder}`}
+            >
+              {executionOrder}
+            </span>
           )}
           <Icon
             size={16}

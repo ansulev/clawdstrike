@@ -4,8 +4,37 @@ import { useToast } from "@/components/ui/toast";
 import { YamlEditor, type YamlEditorError } from "@/components/ui/yaml-editor";
 import { cn } from "@/lib/utils";
 import type { FileType } from "@/lib/workbench/file-type-registry";
+import { generateScenariosFromPolicy } from "@/lib/workbench/scenario-generator";
+import { useTestRunnerOptional } from "@/lib/workbench/test-store";
+import type { SuiteScenario } from "@/lib/workbench/suite-parser";
+import type { TestScenario } from "@/lib/workbench/types";
 
 type Tab = "preview" | "edit";
+
+/** Convert a TestScenario to the SuiteScenario format used by the test runner. */
+function extractTarget(s: TestScenario): string {
+  const p = s.payload;
+  if (typeof p.path === "string") return p.path;
+  if (typeof p.host === "string") return p.host;
+  if (typeof p.command === "string") return p.command;
+  if (typeof p.tool === "string") return p.tool;
+  if (typeof p.text === "string") return p.text.slice(0, 120);
+  return JSON.stringify(p).slice(0, 120);
+}
+
+function testScenarioToSuite(s: TestScenario): SuiteScenario {
+  const suite: SuiteScenario = {
+    id: s.id,
+    name: s.name,
+    action: s.actionType,
+    target: extractTarget(s),
+    description: s.description,
+  };
+  if (s.expectedVerdict) suite.expect = s.expectedVerdict;
+  if (typeof s.payload.content === "string") suite.content = s.payload.content;
+  if (s.category) suite.tags = [s.category];
+  return suite;
+}
 
 interface YamlPreviewPanelProps {
   fileType?: FileType;
@@ -14,6 +43,7 @@ interface YamlPreviewPanelProps {
 export function YamlPreviewPanel({ fileType }: YamlPreviewPanelProps) {
   const { state, dispatch } = useWorkbench();
   const { toast } = useToast();
+  const testRunner = useTestRunnerOptional();
   const [activeTab, setActiveTab] = useState<Tab>("preview");
   const [localYaml, setLocalYaml] = useState(state.yaml);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -47,6 +77,43 @@ export function YamlPreviewPanel({ fileType }: YamlPreviewPanelProps) {
       }
     };
   }, []);
+
+  // Gutter "Run Test" callback: generates scenarios for the clicked guard and imports into test runner
+  const handleRunGuardTest = useCallback(
+    (guardId: string) => {
+      const result = generateScenariosFromPolicy(state.activePolicy);
+      const prefix = `auto-${guardId}-`;
+      const guardScenarios = result.scenarios.filter((s) => s.id.startsWith(prefix));
+
+      if (guardScenarios.length === 0) {
+        toast({
+          type: "info",
+          title: "No scenarios generated",
+          description: `No test scenarios could be generated for guard "${guardId}". Enable the guard first.`,
+        });
+        return;
+      }
+
+      if (testRunner) {
+        const suiteScenarios: SuiteScenario[] = guardScenarios.map(testScenarioToSuite);
+        testRunner.dispatch({ type: "IMPORT_SCENARIOS", scenarios: suiteScenarios });
+        toast({
+          type: "success",
+          title: "Tests imported",
+          description: `${suiteScenarios.length} scenario${suiteScenarios.length !== 1 ? "s" : ""} imported for ${guardId}`,
+        });
+      } else {
+        toast({
+          type: "info",
+          title: "Test Runner not available",
+          description: `Open Test Runner to execute tests for ${guardId}`,
+        });
+      }
+    },
+    [state.activePolicy, testRunner, toast],
+  );
+
+  const isPolicyFile = fileType === "clawdstrike_policy";
 
   const { errors, warnings } = state.validation;
   const editLabel = fileType === "yara_rule"
@@ -150,6 +217,8 @@ export function YamlPreviewPanel({ fileType }: YamlPreviewPanelProps) {
             onChange={() => {}}
             readOnly
             fileType={fileType}
+            showDetectionGutters={isPolicyFile}
+            onRunGuardTest={isPolicyFile ? handleRunGuardTest : undefined}
           />
         ) : (
           <YamlEditor
@@ -157,6 +226,8 @@ export function YamlPreviewPanel({ fileType }: YamlPreviewPanelProps) {
             onChange={handleYamlChange}
             errors={editorErrors}
             fileType={fileType}
+            showDetectionGutters={isPolicyFile}
+            onRunGuardTest={isPolicyFile ? handleRunGuardTest : undefined}
           />
         )}
       </div>

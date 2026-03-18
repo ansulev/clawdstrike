@@ -239,6 +239,7 @@ export function EditorVisualPanel() {
                 reorderable
                 isFirst={idx === 0}
                 isLast={idx === guardOrder.length - 1}
+                executionOrder={idx + 1}
                 onMoveUp={() => moveGuardUp(guardId)}
                 onMoveDown={() => moveGuardDown(guardId)}
                 onDragStart={handleDragStart(guardId)}

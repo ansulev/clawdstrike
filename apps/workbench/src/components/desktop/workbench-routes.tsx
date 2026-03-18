@@ -211,6 +211,14 @@ const FileEditorShell = lazy(() =>
   })),
 );
 
+function PlaceholderPane({ label }: { label: string }) {
+  return (
+    <div className="flex flex-1 items-center justify-center text-[#6f7f9a] text-sm font-mono">
+      {label} — coming in a later phase
+    </div>
+  );
+}
+
 function parseRoute(route: string): URL {
   const normalized = route.startsWith("/") ? route : `/${route}`;
   return new URL(normalized, "https://clawdstrike.local");
@@ -321,6 +329,9 @@ export function getWorkbenchRouteLabel(route: string): string {
   if (url.pathname === "/trustprint/patterns") return "TrustPrint Patterns";
   if (url.pathname === "/trustprint/providers") return "TrustPrint Providers";
   if (url.pathname === "/trustprint/thresholds") return "TrustPrint Thresholds";
+  if (url.pathname === "/observatory") return "Observatory";
+  if (url.pathname === "/spirit-chamber") return "Spirit Chamber";
+  if (url.pathname === "/nexus") return "Nexus";
   if (url.pathname.startsWith("/file/")) {
     const segments = url.pathname.split("/").filter(Boolean);
     return segments[segments.length - 1] ?? "File";
@@ -395,6 +406,9 @@ export const WORKBENCH_ROUTE_OBJECTS: RouteObject[] = [
   { path: "trustprint/providers", element: <TrustprintProvidersPage /> },
   { path: "trustprint/thresholds", element: <TrustprintThresholdsPage /> },
   { path: "overview", element: <Navigate to="/home" replace /> },
+  { path: "observatory", element: <PlaceholderPane label="Observatory" /> },
+  { path: "spirit-chamber", element: <PlaceholderPane label="Spirit Chamber" /> },
+  { path: "nexus", element: <PlaceholderPane label="Nexus" /> },
   { path: "file/*", element: <FeatureErrorBoundary feature="Editor"><FileEditorShell /></FeatureErrorBoundary> },
   { path: "*", element: <Navigate to="/home" replace /> },
 ];

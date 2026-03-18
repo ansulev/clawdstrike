@@ -18,6 +18,7 @@ export type CommandCategory =
   | "Swarm"
   | "View"
   | "Sidebar"
+  | "Hunt"
   | "Help";
 
 export type CommandContext = "global" | "editor" | "terminal" | "pane";

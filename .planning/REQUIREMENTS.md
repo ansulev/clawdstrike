@@ -61,8 +61,8 @@
 - [x] **CMD-02**: sidebar.explorer command (Cmd+Shift+E) switches to Explorer panel
 - [x] **CMD-03**: Sidebar commands for each panel (sentinels, findings, library, fleet, compliance, heartbeat)
 - [x] **CMD-04**: sidebar.toggleRight command (Cmd+Shift+B) toggles right sidebar
-- [ ] **CMD-05**: Navigate commands use openApp pattern to open routes as pane tabs
-- [ ] **CMD-06**: App-opening commands (Mission Control, Approvals, Audit, Receipts, Topology, Swarm Board, Hunt, Simulator)
+- [x] **CMD-05**: Navigate commands use openApp pattern to open routes as pane tabs
+- [x] **CMD-06**: App-opening commands (Mission Control, Approvals, Audit, Receipts, Topology, Swarm Board, Hunt, Simulator)
 
 ### State Management
 
@@ -145,8 +145,8 @@
 | CMD-02 | Phase 1 | Complete |
 | CMD-03 | Phase 3 | Complete |
 | CMD-04 | Phase 3 | Complete |
-| CMD-05 | Phase 4 | Pending |
-| CMD-06 | Phase 4 | Pending |
+| CMD-05 | Phase 4 | Complete |
+| CMD-06 | Phase 4 | Complete |
 | STATE-01 | Phase 1 | Complete |
 | STATE-02 | Phase 3 | Complete |
 | STATE-03 | Phase 1 | Complete |

@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: executing
-stopped_at: Completed 04-01-PLAN.md
-last_updated: "2026-03-18T18:10:41.194Z"
-last_activity: 2026-03-18 -- Completed 04-01 lab decomposition direct routes
+status: completed
+stopped_at: Completed 04-02-PLAN.md (all phases complete)
+last_updated: "2026-03-18T18:16:20.979Z"
+last_activity: 2026-03-18 -- Completed 04-02 navigate commands + app opening commands
 progress:
   total_phases: 4
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 9
-  completed_plans: 8
-  percent: 89
+  completed_plans: 9
+  percent: 100
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-03-17)
 ## Current Position
 
 Phase: 4 of 4 (Lab Decomposition + App Navigation)
-Plan: 1 of 2 in current phase (04-01 complete)
-Status: In Progress
-Last activity: 2026-03-18 -- Completed 04-01 lab decomposition direct routes
+Plan: 2 of 2 in current phase (04-02 complete -- all plans complete)
+Status: Complete
+Last activity: 2026-03-18 -- Completed 04-02 navigate commands + app opening commands
 
-Progress: [█████████░] 89%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
@@ -58,7 +58,7 @@ Progress: [█████████░] 89%
 | Phase 03 P01 | 4min | 2 tasks | 8 files |
 | Phase 03 P02 | 3min | 2 tasks | 3 files |
 | Phase 04 P01 | 2min | 2 tasks | 2 files |
-| Phase 04 P01 | 2min | 2 tasks | 2 files |
+| Phase 04 P02 | 2min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -87,6 +87,8 @@ Recent decisions affecting current work:
 - [Phase 03]: Right sidebar uses 200px collapse threshold (higher than left sidebar's 120px) per UI-SPEC
 - [Phase 04]: Kept /lab route and LabLayout unchanged as convenience grouping; sub-apps are independently routable but Lab still works
 - [Phase 04]: Used Suspense wrappers at route level for lazy-loaded HuntLayout, SimulatorLayout, SwarmBoardPage
+- [Phase 04]: Kept all 16 existing nav.* commands for backward compatibility while adding 8 new app.* commands
+- [Phase 04]: navigate-commands.ts no longer depends on react-router; uses Zustand getState() pattern directly
 
 ### Pending Todos
 
@@ -98,6 +100,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-18T18:10:40.223Z
-Stopped at: Completed 04-01-PLAN.md
+Last session: 2026-03-18T18:16:20.977Z
+Stopped at: Completed 04-02-PLAN.md (all phases complete)
 Resume file: None

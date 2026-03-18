@@ -594,10 +594,10 @@ extensions:
     let ti = det
         .threat_intel
         .expect("threat_intel should exist after decompile");
-    assert!(ti.enabled);
+    assert_eq!(ti.enabled, Some(true));
     assert_eq!(ti.pattern_db.as_deref(), Some("builtin:s2bench-v1"));
-    assert!((ti.similarity_threshold - 0.92).abs() < f64::EPSILON);
-    assert_eq!(ti.top_k, 7);
+    assert_eq!(ti.similarity_threshold, Some(0.92));
+    assert_eq!(ti.top_k, Some(7));
 }
 
 #[test]
@@ -763,15 +763,16 @@ fn compile_rejects_jailbreak_block_threshold_over_255() {
             detection: Some(hushspec::extensions::DetectionExtension {
                 prompt_injection: None,
                 jailbreak: Some(hushspec::extensions::JailbreakDetection {
-                    enabled: true,
-                    block_threshold: 300,
-                    warn_threshold: 30,
-                    max_input_bytes: 200_000,
+                    enabled: Some(true),
+                    block_threshold: Some(300),
+                    warn_threshold: Some(30),
+                    max_input_bytes: Some(200_000),
                 }),
                 threat_intel: None,
             }),
             ..Default::default()
         }),
+        metadata: None,
     };
     let err = hushspec_compiler::compile(&spec).expect_err("should reject block_threshold > 255");
     let msg = format!("{err}");
@@ -794,15 +795,16 @@ fn compile_rejects_jailbreak_warn_threshold_over_255() {
             detection: Some(hushspec::extensions::DetectionExtension {
                 prompt_injection: None,
                 jailbreak: Some(hushspec::extensions::JailbreakDetection {
-                    enabled: true,
-                    block_threshold: 70,
-                    warn_threshold: 500,
-                    max_input_bytes: 200_000,
+                    enabled: Some(true),
+                    block_threshold: Some(70),
+                    warn_threshold: Some(500),
+                    max_input_bytes: Some(200_000),
                 }),
                 threat_intel: None,
             }),
             ..Default::default()
         }),
+        metadata: None,
     };
     let err = hushspec_compiler::compile(&spec).expect_err("should reject warn_threshold > 255");
     let msg = format!("{err}");

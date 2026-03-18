@@ -325,20 +325,20 @@ pub fn decompile(policy: &Policy) -> Result<hushspec::HushSpec> {
     if let Some(pi) = &policy.guards.prompt_injection {
         has_detection = true;
         detection.prompt_injection = Some(hushspec::extensions::PromptInjectionDetection {
-            enabled: pi.enabled,
-            warn_at_or_above: prompt_level_to_detection_level(pi.warn_at_or_above),
-            block_at_or_above: prompt_level_to_detection_level(pi.block_at_or_above),
-            max_scan_bytes: pi.max_scan_bytes,
+            enabled: Some(pi.enabled),
+            warn_at_or_above: Some(prompt_level_to_detection_level(pi.warn_at_or_above)),
+            block_at_or_above: Some(prompt_level_to_detection_level(pi.block_at_or_above)),
+            max_scan_bytes: Some(pi.max_scan_bytes),
         });
     }
 
     if let Some(jb) = &policy.guards.jailbreak {
         has_detection = true;
         detection.jailbreak = Some(hushspec::extensions::JailbreakDetection {
-            enabled: jb.enabled,
-            block_threshold: u32::from(jb.detector.block_threshold),
-            warn_threshold: u32::from(jb.detector.warn_threshold),
-            max_input_bytes: jb.detector.max_input_bytes,
+            enabled: Some(jb.enabled),
+            block_threshold: Some(usize::from(jb.detector.block_threshold)),
+            warn_threshold: Some(usize::from(jb.detector.warn_threshold)),
+            max_input_bytes: Some(jb.detector.max_input_bytes),
         });
     }
 
@@ -347,14 +347,14 @@ pub fn decompile(policy: &Policy) -> Result<hushspec::HushSpec> {
         if let Some(ref ss) = policy.guards.spider_sense {
             has_detection = true;
             detection.threat_intel = Some(hushspec::extensions::ThreatIntelDetection {
-                enabled: ss.enabled,
+                enabled: Some(ss.enabled),
                 pattern_db: if ss.pattern_db_path.is_empty() {
                     None
                 } else {
                     Some(ss.pattern_db_path.clone())
                 },
-                similarity_threshold: ss.similarity_threshold,
-                top_k: ss.top_k,
+                similarity_threshold: Some(ss.similarity_threshold),
+                top_k: Some(ss.top_k),
             });
         }
     }
@@ -400,6 +400,7 @@ pub fn decompile(policy: &Policy) -> Result<hushspec::HushSpec> {
         } else {
             None
         },
+        metadata: None,
     })
 }
 
@@ -461,10 +462,10 @@ fn decompile_policy_event_threat_intel_passthrough(
         .unwrap_or(5);
 
     Some(hushspec::extensions::ThreatIntelDetection {
-        enabled,
+        enabled: Some(enabled),
         pattern_db,
-        similarity_threshold,
-        top_k,
+        similarity_threshold: Some(similarity_threshold),
+        top_k: Some(top_k),
     })
 }
 
@@ -632,12 +633,17 @@ fn compile_posture(ext: &hushspec::extensions::PostureExtension) -> posture::Pos
 }
 
 fn compile_origins(ext: &hushspec::extensions::OriginsExtension) -> OriginsConfig {
-    let default_behavior = Some(match ext.default_behavior {
-        hushspec::extensions::OriginDefaultBehavior::Deny => OriginDefaultBehavior::Deny,
-        hushspec::extensions::OriginDefaultBehavior::MinimalProfile => {
-            OriginDefaultBehavior::MinimalProfile
-        }
-    });
+    let default_behavior = Some(
+        match ext
+            .default_behavior
+            .unwrap_or(hushspec::extensions::OriginDefaultBehavior::Deny)
+        {
+            hushspec::extensions::OriginDefaultBehavior::Deny => OriginDefaultBehavior::Deny,
+            hushspec::extensions::OriginDefaultBehavior::MinimalProfile => {
+                OriginDefaultBehavior::MinimalProfile
+            }
+        },
+    );
 
     let profiles = ext
         .profiles
@@ -698,9 +704,9 @@ fn compile_origins(ext: &hushspec::extensions::OriginsExtension) -> OriginsConfi
             });
 
             let budgets = p.budgets.as_ref().map(|b| OriginBudgets {
-                mcp_tool_calls: b.tool_calls,
-                egress_calls: b.egress_calls,
-                shell_commands: b.shell_commands,
+                mcp_tool_calls: b.tool_calls.and_then(|v| u64::try_from(v).ok()),
+                egress_calls: b.egress_calls.and_then(|v| u64::try_from(v).ok()),
+                shell_commands: b.shell_commands.and_then(|v| u64::try_from(v).ok()),
             });
 
             let bridge_policy = p.bridge.as_ref().map(|b| BridgePolicy {
@@ -744,32 +750,40 @@ fn compile_detection(
 ) -> Result<()> {
     if let Some(pi) = &ext.prompt_injection {
         guards.prompt_injection = Some(PromptInjectionConfig {
-            enabled: pi.enabled,
-            warn_at_or_above: detection_level_to_prompt_level(pi.warn_at_or_above),
-            block_at_or_above: detection_level_to_prompt_level(pi.block_at_or_above),
-            max_scan_bytes: pi.max_scan_bytes,
+            enabled: pi.enabled.unwrap_or(true),
+            warn_at_or_above: detection_level_to_prompt_level(
+                pi.warn_at_or_above
+                    .unwrap_or(hushspec::extensions::DetectionLevel::Suspicious),
+            ),
+            block_at_or_above: detection_level_to_prompt_level(
+                pi.block_at_or_above
+                    .unwrap_or(hushspec::extensions::DetectionLevel::High),
+            ),
+            max_scan_bytes: pi.max_scan_bytes.unwrap_or(200_000),
         });
     }
 
     if let Some(jb) = &ext.jailbreak {
-        if jb.block_threshold > 255 {
+        let block_threshold = jb.block_threshold.unwrap_or(70);
+        if block_threshold > 255 {
             return Err(Error::ConfigError(format!(
                 "jailbreak block_threshold {} exceeds maximum value 255",
-                jb.block_threshold
+                block_threshold
             )));
         }
-        if jb.warn_threshold > 255 {
+        let warn_threshold = jb.warn_threshold.unwrap_or(30);
+        if warn_threshold > 255 {
             return Err(Error::ConfigError(format!(
                 "jailbreak warn_threshold {} exceeds maximum value 255",
-                jb.warn_threshold
+                warn_threshold
             )));
         }
         guards.jailbreak = Some(JailbreakConfig {
-            enabled: jb.enabled,
+            enabled: jb.enabled.unwrap_or(true),
             detector: JailbreakGuardConfig {
-                block_threshold: jb.block_threshold as u8,
-                warn_threshold: jb.warn_threshold as u8,
-                max_input_bytes: jb.max_input_bytes,
+                block_threshold: block_threshold as u8,
+                warn_threshold: warn_threshold as u8,
+                max_input_bytes: jb.max_input_bytes.unwrap_or(200_000),
                 ..Default::default()
             },
         });
@@ -779,10 +793,10 @@ fn compile_detection(
     #[cfg(feature = "full")]
     if let Some(ti) = &ext.threat_intel {
         let cfg = crate::async_guards::threat_intel::SpiderSensePolicyConfig {
-            enabled: ti.enabled,
+            enabled: ti.enabled.unwrap_or(true),
             pattern_db_path: ti.pattern_db.clone().unwrap_or_default(),
-            similarity_threshold: ti.similarity_threshold,
-            top_k: ti.top_k,
+            similarity_threshold: ti.similarity_threshold.unwrap_or(0.85),
+            top_k: ti.top_k.unwrap_or(5),
             ..Default::default()
         };
         guards.spider_sense = Some(cfg);
@@ -878,9 +892,9 @@ fn decompile_origins(
                 .budgets
                 .as_ref()
                 .map(|b| hushspec::extensions::OriginBudgets {
-                    tool_calls: b.mcp_tool_calls,
-                    egress_calls: b.egress_calls,
-                    shell_commands: b.shell_commands,
+                    tool_calls: b.mcp_tool_calls.and_then(|v| usize::try_from(v).ok()),
+                    egress_calls: b.egress_calls.and_then(|v| usize::try_from(v).ok()),
+                    shell_commands: b.shell_commands.and_then(|v| usize::try_from(v).ok()),
                 });
 
             let bridge = p
@@ -916,7 +930,7 @@ fn decompile_origins(
         .collect::<Result<Vec<_>>>()?;
 
     Ok(hushspec::extensions::OriginsExtension {
-        default_behavior,
+        default_behavior: Some(default_behavior),
         profiles,
     })
 }
@@ -1090,6 +1104,7 @@ mod tests {
             merge_strategy: None,
             rules: None,
             extensions: None,
+            metadata: None,
         };
 
         let policy = compile(&spec).expect("compile should succeed");
@@ -1117,6 +1132,7 @@ mod tests {
                 ..Default::default()
             }),
             extensions: None,
+            metadata: None,
         };
 
         let policy = compile(&spec).expect("compile should succeed");
@@ -1146,6 +1162,7 @@ mod tests {
                 ..Default::default()
             }),
             extensions: None,
+            metadata: None,
         };
 
         let policy = compile(&spec).expect("compile should succeed");
@@ -1201,15 +1218,16 @@ mod tests {
                 detection: Some(hushspec::extensions::DetectionExtension {
                     prompt_injection: None,
                     jailbreak: Some(hushspec::extensions::JailbreakDetection {
-                        enabled: true,
-                        block_threshold: 70,
-                        warn_threshold: 30,
-                        max_input_bytes: 200_000,
+                        enabled: Some(true),
+                        block_threshold: Some(70),
+                        warn_threshold: Some(30),
+                        max_input_bytes: Some(200_000),
                     }),
                     threat_intel: None,
                 }),
                 ..Default::default()
             }),
+            metadata: None,
         };
 
         let policy = compile(&spec).expect("compile should succeed");
@@ -1230,16 +1248,17 @@ mod tests {
             extensions: Some(hushspec::Extensions {
                 detection: Some(hushspec::extensions::DetectionExtension {
                     prompt_injection: Some(hushspec::extensions::PromptInjectionDetection {
-                        enabled: true,
-                        warn_at_or_above: hushspec::extensions::DetectionLevel::Suspicious,
-                        block_at_or_above: hushspec::extensions::DetectionLevel::High,
-                        max_scan_bytes: 100_000,
+                        enabled: Some(true),
+                        warn_at_or_above: Some(hushspec::extensions::DetectionLevel::Suspicious),
+                        block_at_or_above: Some(hushspec::extensions::DetectionLevel::High),
+                        max_scan_bytes: Some(100_000),
                     }),
                     jailbreak: None,
                     threat_intel: None,
                 }),
                 ..Default::default()
             }),
+            metadata: None,
         };
 
         let policy = compile(&spec).expect("compile should succeed");
@@ -1262,11 +1281,11 @@ mod tests {
             .expect("prompt_injection should be set");
         assert_eq!(
             pi_rt.warn_at_or_above,
-            hushspec::extensions::DetectionLevel::Suspicious
+            Some(hushspec::extensions::DetectionLevel::Suspicious)
         );
         assert_eq!(
             pi_rt.block_at_or_above,
-            hushspec::extensions::DetectionLevel::High
+            Some(hushspec::extensions::DetectionLevel::High)
         );
     }
 
@@ -1297,6 +1316,7 @@ mod tests {
                 }),
                 ..Default::default()
             }),
+            metadata: None,
         };
 
         let policy = compile(&spec).expect("compile should succeed");
@@ -1322,13 +1342,19 @@ mod tests {
             rules: None,
             extensions: Some(hushspec::Extensions {
                 origins: Some(hushspec::extensions::OriginsExtension {
-                    default_behavior: hushspec::extensions::OriginDefaultBehavior::Deny,
+                    default_behavior: Some(hushspec::extensions::OriginDefaultBehavior::Deny),
                     profiles: vec![hushspec::extensions::OriginProfile {
                         id: "slack-internal".to_string(),
                         match_rules: Some(hushspec::extensions::OriginMatch {
                             provider: Some("slack".to_string()),
+                            tenant_id: None,
+                            space_id: None,
+                            space_type: None,
                             visibility: Some("internal".to_string()),
-                            ..Default::default()
+                            external_participants: None,
+                            tags: vec![],
+                            sensitivity: None,
+                            actor_role: None,
                         }),
                         posture: Some("elevated".to_string()),
                         tool_access: None,
@@ -1341,6 +1367,7 @@ mod tests {
                 }),
                 ..Default::default()
             }),
+            metadata: None,
         };
 
         let policy = compile(&spec).expect("compile should succeed");
@@ -1379,14 +1406,15 @@ mod tests {
                     prompt_injection: None,
                     jailbreak: None,
                     threat_intel: Some(hushspec::extensions::ThreatIntelDetection {
-                        enabled: true,
+                        enabled: Some(true),
                         pattern_db: Some("builtin:s2bench-v1".to_string()),
-                        similarity_threshold: 0.90,
-                        top_k: 3,
+                        similarity_threshold: Some(0.90),
+                        top_k: Some(3),
                     }),
                 }),
                 ..Default::default()
             }),
+            metadata: None,
         };
 
         let policy = compile(&spec).expect("compile should succeed");
@@ -1405,10 +1433,10 @@ mod tests {
         let ext = roundtrip.extensions.expect("extensions should be set");
         let det = ext.detection.expect("detection should be set");
         let ti = det.threat_intel.expect("threat_intel should be set");
-        assert!(ti.enabled);
+        assert_eq!(ti.enabled, Some(true));
         assert_eq!(ti.pattern_db.as_deref(), Some("builtin:s2bench-v1"));
-        assert!((ti.similarity_threshold - 0.90).abs() < f64::EPSILON);
-        assert_eq!(ti.top_k, 3);
+        assert_eq!(ti.similarity_threshold, Some(0.90));
+        assert_eq!(ti.top_k, Some(3));
     }
 
     #[test]
@@ -1424,15 +1452,16 @@ mod tests {
                 detection: Some(hushspec::extensions::DetectionExtension {
                     prompt_injection: None,
                     jailbreak: Some(hushspec::extensions::JailbreakDetection {
-                        enabled: true,
-                        block_threshold: 256,
-                        warn_threshold: 30,
-                        max_input_bytes: 200_000,
+                        enabled: Some(true),
+                        block_threshold: Some(256),
+                        warn_threshold: Some(30),
+                        max_input_bytes: Some(200_000),
                     }),
                     threat_intel: None,
                 }),
                 ..Default::default()
             }),
+            metadata: None,
         };
 
         let err = compile(&spec).expect_err("should reject block_threshold > 255");

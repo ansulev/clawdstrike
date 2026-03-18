@@ -184,7 +184,8 @@ pub fn build_attestation(
             .collect(),
         network_mode: format!("{}", caps.network_mode()),
         proxy_port,
-        signal_mode: format!("{:?}", caps.signal_mode()),
+        // The crates.io nono 0.11.0 surface does not expose signal-mode accessors.
+        signal_mode: "unknown".to_string(),
         blocked_commands: caps.blocked_commands().to_vec(),
         extensions_enabled: caps.extensions_enabled(),
     };

@@ -47,6 +47,8 @@ const coverageMarkerSet = StateField.define<RangeSet<GutterMarker>>({
     return RangeSet.empty;
   },
   update(value, tr) {
+    // Keep marker positions in sync with document edits
+    if (tr.docChanged) value = value.map(tr.changes);
     for (const effect of tr.effects) {
       if (effect.is(updateCoverageGaps)) {
         const gaps = effect.value;
@@ -75,6 +77,13 @@ const coverageMarkerSet = StateField.define<RangeSet<GutterMarker>>({
 class CoverageGapMarker extends GutterMarker {
   constructor(readonly uncoveredTechniques: string[]) {
     super();
+  }
+
+  override eq(other: GutterMarker): boolean {
+    if (!(other instanceof CoverageGapMarker)) return false;
+    const a = this.uncoveredTechniques;
+    const b = other.uncoveredTechniques;
+    return a.length === b.length && a.every((t, i) => t === b[i]);
   }
 
   override toDOM(): HTMLElement {

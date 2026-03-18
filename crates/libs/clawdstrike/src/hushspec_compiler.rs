@@ -19,6 +19,7 @@ use crate::policy::{
     POLICY_SCHEMA_VERSION,
 };
 use crate::posture;
+use std::collections::BTreeSet;
 
 use hush_proxy::policy::PolicyAction;
 
@@ -431,12 +432,26 @@ fn decompile_egress_default_action(
 fn compile_policy_event_threat_intel_passthrough(
     ti: &hushspec::extensions::ThreatIntelDetection,
 ) -> serde_json::Value {
-    serde_json::json!({
-        "enabled": ti.enabled,
-        "pattern_db_path": ti.pattern_db.clone().unwrap_or_default(),
-        "similarity_threshold": ti.similarity_threshold,
-        "top_k": ti.top_k,
-    })
+    let mut map = serde_json::Map::new();
+    if let Some(enabled) = ti.enabled {
+        map.insert("enabled".to_string(), serde_json::Value::Bool(enabled));
+    }
+    if let Some(pattern_db) = &ti.pattern_db {
+        map.insert(
+            "pattern_db_path".to_string(),
+            serde_json::Value::String(pattern_db.clone()),
+        );
+    }
+    if let Some(similarity_threshold) = ti.similarity_threshold {
+        map.insert(
+            "similarity_threshold".to_string(),
+            serde_json::json!(similarity_threshold),
+        );
+    }
+    if let Some(top_k) = ti.top_k {
+        map.insert("top_k".to_string(), serde_json::json!(top_k));
+    }
+    serde_json::Value::Object(map)
 }
 
 #[cfg(all(feature = "policy-event", not(feature = "full")))]
@@ -445,28 +460,62 @@ fn decompile_policy_event_threat_intel_passthrough(
 ) -> Option<hushspec::extensions::ThreatIntelDetection> {
     let obj = spider_sense.as_object()?;
 
-    let enabled = obj.get("enabled").and_then(|v| v.as_bool()).unwrap_or(true);
+    let enabled = obj.get("enabled").and_then(|v| v.as_bool());
     let pattern_db = obj
         .get("pattern_db_path")
         .and_then(|v| v.as_str())
         .filter(|value| !value.is_empty())
         .map(ToOwned::to_owned);
-    let similarity_threshold = obj
-        .get("similarity_threshold")
-        .and_then(|v| v.as_f64())
-        .unwrap_or(0.85);
+    let similarity_threshold = obj.get("similarity_threshold").and_then(|v| v.as_f64());
     let top_k = obj
         .get("top_k")
         .and_then(|v| v.as_u64())
-        .and_then(|v| usize::try_from(v).ok())
-        .unwrap_or(5);
+        .and_then(|v| usize::try_from(v).ok());
 
     Some(hushspec::extensions::ThreatIntelDetection {
-        enabled: Some(enabled),
+        enabled,
         pattern_db,
-        similarity_threshold: Some(similarity_threshold),
-        top_k: Some(top_k),
+        similarity_threshold,
+        top_k,
     })
+}
+
+fn prompt_injection_present_fields(
+    prompt_injection: &hushspec::extensions::PromptInjectionDetection,
+) -> BTreeSet<String> {
+    let mut fields = BTreeSet::new();
+    if prompt_injection.enabled.is_some() {
+        fields.insert("enabled".to_string());
+    }
+    if prompt_injection.warn_at_or_above.is_some() {
+        fields.insert("warn_at_or_above".to_string());
+    }
+    if prompt_injection.block_at_or_above.is_some() {
+        fields.insert("block_at_or_above".to_string());
+    }
+    if prompt_injection.max_scan_bytes.is_some() {
+        fields.insert("max_scan_bytes".to_string());
+    }
+    fields
+}
+
+fn jailbreak_present_fields(
+    jailbreak: &hushspec::extensions::JailbreakDetection,
+) -> BTreeSet<String> {
+    let mut fields = BTreeSet::new();
+    if jailbreak.enabled.is_some() {
+        fields.insert("enabled".to_string());
+    }
+    if jailbreak.block_threshold.is_some() {
+        fields.insert("block_threshold".to_string());
+    }
+    if jailbreak.warn_threshold.is_some() {
+        fields.insert("warn_threshold".to_string());
+    }
+    if jailbreak.max_input_bytes.is_some() {
+        fields.insert("max_input_bytes".to_string());
+    }
+    fields
 }
 
 fn compile_rules(rules: &hushspec::rules::Rules, guards: &mut GuardConfigs) {
@@ -633,17 +682,15 @@ fn compile_posture(ext: &hushspec::extensions::PostureExtension) -> posture::Pos
 }
 
 fn compile_origins(ext: &hushspec::extensions::OriginsExtension) -> OriginsConfig {
-    let default_behavior = Some(
-        match ext
-            .default_behavior
-            .unwrap_or(hushspec::extensions::OriginDefaultBehavior::Deny)
-        {
+    let default_behavior = ext
+        .default_behavior
+        .as_ref()
+        .map(|behavior| match behavior {
             hushspec::extensions::OriginDefaultBehavior::Deny => OriginDefaultBehavior::Deny,
             hushspec::extensions::OriginDefaultBehavior::MinimalProfile => {
                 OriginDefaultBehavior::MinimalProfile
             }
-        },
-    );
+        });
 
     let profiles = ext
         .profiles
@@ -749,6 +796,7 @@ fn compile_detection(
     guards: &mut GuardConfigs,
 ) -> Result<()> {
     if let Some(pi) = &ext.prompt_injection {
+        guards.prompt_injection_present_fields = prompt_injection_present_fields(pi);
         guards.prompt_injection = Some(PromptInjectionConfig {
             enabled: pi.enabled.unwrap_or(true),
             warn_at_or_above: detection_level_to_prompt_level(
@@ -764,6 +812,7 @@ fn compile_detection(
     }
 
     if let Some(jb) = &ext.jailbreak {
+        guards.jailbreak_present_fields = jailbreak_present_fields(jb);
         let block_threshold = jb.block_threshold.unwrap_or(70);
         if block_threshold > 255 {
             return Err(Error::ConfigError(format!(
@@ -1290,6 +1339,106 @@ mod tests {
     }
 
     #[test]
+    fn test_compile_detection_prompt_injection_preserves_partial_overrides_on_merge() {
+        let base = Policy {
+            guards: GuardConfigs {
+                prompt_injection: Some(PromptInjectionConfig {
+                    enabled: false,
+                    warn_at_or_above: PromptInjectionLevel::High,
+                    block_at_or_above: PromptInjectionLevel::Critical,
+                    max_scan_bytes: 80_000,
+                }),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        let child = compile(&hushspec::HushSpec {
+            hushspec: "0.1.0".to_string(),
+            name: None,
+            description: None,
+            extends: None,
+            merge_strategy: None,
+            rules: None,
+            extensions: Some(hushspec::Extensions {
+                detection: Some(hushspec::extensions::DetectionExtension {
+                    prompt_injection: Some(hushspec::extensions::PromptInjectionDetection {
+                        enabled: None,
+                        warn_at_or_above: None,
+                        block_at_or_above: None,
+                        max_scan_bytes: Some(120_000),
+                    }),
+                    jailbreak: None,
+                    threat_intel: None,
+                }),
+                ..Default::default()
+            }),
+            metadata: None,
+        })
+        .expect("compile should succeed");
+
+        let merged = base.merge(&child);
+        let prompt = merged
+            .guards
+            .prompt_injection
+            .expect("prompt injection should be merged");
+        assert!(!prompt.enabled);
+        assert_eq!(prompt.warn_at_or_above, PromptInjectionLevel::High);
+        assert_eq!(prompt.block_at_or_above, PromptInjectionLevel::Critical);
+        assert_eq!(prompt.max_scan_bytes, 120_000);
+    }
+
+    #[test]
+    fn test_compile_detection_jailbreak_preserves_partial_overrides_on_merge() {
+        let base = Policy {
+            guards: GuardConfigs {
+                jailbreak: Some(JailbreakConfig {
+                    enabled: false,
+                    detector: JailbreakGuardConfig {
+                        block_threshold: 90,
+                        warn_threshold: 45,
+                        max_input_bytes: 50_000,
+                        ..Default::default()
+                    },
+                }),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        let child = compile(&hushspec::HushSpec {
+            hushspec: "0.1.0".to_string(),
+            name: None,
+            description: None,
+            extends: None,
+            merge_strategy: None,
+            rules: None,
+            extensions: Some(hushspec::Extensions {
+                detection: Some(hushspec::extensions::DetectionExtension {
+                    prompt_injection: None,
+                    jailbreak: Some(hushspec::extensions::JailbreakDetection {
+                        enabled: None,
+                        block_threshold: None,
+                        warn_threshold: None,
+                        max_input_bytes: Some(125_000),
+                    }),
+                    threat_intel: None,
+                }),
+                ..Default::default()
+            }),
+            metadata: None,
+        })
+        .expect("compile should succeed");
+
+        let merged = base.merge(&child);
+        let jailbreak = merged.guards.jailbreak.expect("jailbreak should be merged");
+        assert!(!jailbreak.enabled);
+        assert_eq!(jailbreak.detector.block_threshold, 90);
+        assert_eq!(jailbreak.detector.warn_threshold, 45);
+        assert_eq!(jailbreak.detector.max_input_bytes, 125_000);
+    }
+
+    #[test]
     fn test_compile_posture() {
         let mut states = std::collections::BTreeMap::new();
         states.insert(
@@ -1389,6 +1538,54 @@ mod tests {
         let ext = roundtrip.extensions.expect("extensions should be set");
         let origins_rt = ext.origins.expect("origins should be set");
         assert_eq!(origins_rt.profiles[0].id, "slack-internal");
+    }
+
+    #[test]
+    fn test_compile_origins_preserves_base_default_behavior_when_omitted() {
+        let base = Policy {
+            origins: Some(OriginsConfig {
+                default_behavior: Some(OriginDefaultBehavior::MinimalProfile),
+                profiles: vec![],
+            }),
+            ..Default::default()
+        };
+
+        let child = compile(&hushspec::HushSpec {
+            hushspec: "0.1.0".to_string(),
+            name: None,
+            description: None,
+            extends: None,
+            merge_strategy: None,
+            rules: None,
+            extensions: Some(hushspec::Extensions {
+                origins: Some(hushspec::extensions::OriginsExtension {
+                    default_behavior: None,
+                    profiles: vec![hushspec::extensions::OriginProfile {
+                        id: "chat".to_string(),
+                        match_rules: None,
+                        posture: None,
+                        tool_access: None,
+                        egress: None,
+                        data: None,
+                        budgets: None,
+                        bridge: None,
+                        explanation: None,
+                    }],
+                }),
+                ..Default::default()
+            }),
+            metadata: None,
+        })
+        .expect("compile should succeed");
+
+        let merged = base.merge(&child);
+        let origins = merged.origins.expect("origins should be merged");
+        assert_eq!(
+            origins.default_behavior,
+            Some(OriginDefaultBehavior::MinimalProfile)
+        );
+        assert_eq!(origins.profiles.len(), 1);
+        assert_eq!(origins.profiles[0].id, "chat");
     }
 
     #[cfg(feature = "full")]

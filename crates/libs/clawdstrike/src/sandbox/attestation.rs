@@ -6,6 +6,19 @@
 
 use serde::{Deserialize, Serialize};
 
+#[cfg(has_nono_signal_mode)]
+fn signal_mode_label(caps: &nono::CapabilitySet) -> &'static str {
+    match caps.signal_mode() {
+        nono::SignalMode::Isolated => "isolated",
+        nono::SignalMode::AllowAll => "allow_all",
+    }
+}
+
+#[cfg(not(has_nono_signal_mode))]
+fn signal_mode_label(_: &nono::CapabilitySet) -> &'static str {
+    "isolated"
+}
+
 /// Complete sandbox attestation for receipt metadata.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SandboxAttestation {
@@ -184,8 +197,7 @@ pub fn build_attestation(
             .collect(),
         network_mode: format!("{}", caps.network_mode()),
         proxy_port,
-        // The crates.io nono 0.11.0 surface does not expose signal-mode accessors.
-        signal_mode: "unknown".to_string(),
+        signal_mode: signal_mode_label(caps).to_string(),
         blocked_commands: caps.blocked_commands().to_vec(),
         extensions_enabled: caps.extensions_enabled(),
     };
@@ -242,9 +254,23 @@ mod tests {
         let attestation = build_attestation(&caps, SandboxRuntimeState::static_mode(true, None));
         assert!(!attestation.capabilities.fs.is_empty());
         assert_eq!(attestation.capabilities.network_mode, "blocked");
+        assert_eq!(attestation.capabilities.signal_mode, "isolated");
         assert!(attestation.denials.is_empty());
         assert!(attestation.supervisor.is_none());
         assert!(attestation.runtime.applied);
+    }
+
+    #[cfg(has_nono_signal_mode)]
+    #[test]
+    fn test_build_attestation_preserves_signal_mode() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let caps = CapabilitySet::new()
+            .allow_path(tmp.path(), AccessMode::Read)
+            .unwrap()
+            .allow_signals();
+
+        let attestation = build_attestation(&caps, SandboxRuntimeState::static_mode(true, None));
+        assert_eq!(attestation.capabilities.signal_mode, "allow_all");
     }
 
     #[test]

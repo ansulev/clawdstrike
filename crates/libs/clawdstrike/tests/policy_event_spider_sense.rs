@@ -108,8 +108,61 @@ guards:
         .expect("detection extension should be present")
         .threat_intel
         .expect("threat_intel should be preserved");
-    assert!(ti.enabled);
+    assert_eq!(ti.enabled, Some(true));
     assert_eq!(ti.pattern_db.as_deref(), Some("builtin:s2bench-v1"));
-    assert_eq!(ti.similarity_threshold, 0.9);
-    assert_eq!(ti.top_k, 3);
+    assert_eq!(ti.similarity_threshold, Some(0.9));
+    assert_eq!(ti.top_k, Some(3));
+}
+
+#[test]
+fn policy_event_threat_intel_passthrough_preserves_unset_fields() {
+    let yaml = r#"
+hushspec: "0.1.0"
+extensions:
+  detection:
+    threat_intel:
+      pattern_db: "builtin:s2bench-v1"
+"#;
+
+    let policy = hushspec_compiler::compile_hushspec(yaml)
+        .expect("policy-event build should preserve sparse threat_intel passthrough");
+    let spider = policy
+        .guards
+        .spider_sense
+        .as_ref()
+        .expect("spider_sense should be preserved");
+    assert!(spider.get("enabled").is_none());
+    assert!(spider.get("similarity_threshold").is_none());
+    assert!(spider.get("top_k").is_none());
+    assert_eq!(
+        spider
+            .pointer("/pattern_db_path")
+            .and_then(|value| value.as_str()),
+        Some("builtin:s2bench-v1")
+    );
+
+    let spec = hushspec_compiler::decompile(
+        &Policy::from_yaml(
+            r#"
+version: "1.3.0"
+name: SpiderSenseSparseRoundtrip
+guards:
+  spider_sense:
+    pattern_db_path: "builtin:s2bench-v1"
+"#,
+        )
+        .expect("policy should parse under policy-event build"),
+    )
+    .expect("decompile should succeed");
+    let ti = spec
+        .extensions
+        .expect("extensions should be present")
+        .detection
+        .expect("detection extension should be present")
+        .threat_intel
+        .expect("threat_intel should be preserved");
+    assert_eq!(ti.enabled, None);
+    assert_eq!(ti.pattern_db.as_deref(), Some("builtin:s2bench-v1"));
+    assert_eq!(ti.similarity_threshold, None);
+    assert_eq!(ti.top_k, None);
 }

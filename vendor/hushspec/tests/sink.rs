@@ -97,10 +97,7 @@ fn filtered_sink_deny_only_forwards_deny() {
     let collected_clone = Arc::clone(&collected);
 
     let callback = CallbackSink::new(move |receipt: &DecisionReceipt| {
-        collected_clone
-            .lock()
-            .unwrap()
-            .push(receipt.decision.clone());
+        collected_clone.lock().unwrap().push(receipt.decision);
         Ok(())
     });
 
@@ -128,10 +125,7 @@ fn filtered_sink_allow_only() {
     let collected_clone = Arc::clone(&collected);
 
     let callback = CallbackSink::new(move |receipt: &DecisionReceipt| {
-        collected_clone
-            .lock()
-            .unwrap()
-            .push(receipt.decision.clone());
+        collected_clone.lock().unwrap().push(receipt.decision);
         Ok(())
     });
 
@@ -180,10 +174,7 @@ fn multi_sink_continues_after_error() {
     let c = Arc::clone(&count);
 
     let failing_sink = CallbackSink::new(|_: &DecisionReceipt| {
-        Err(SinkError::Io(std::io::Error::new(
-            std::io::ErrorKind::Other,
-            "test error",
-        )))
+        Err(SinkError::Io(std::io::Error::other("test error")))
     });
 
     let counting_sink = CallbackSink::new(move |_: &DecisionReceipt| {

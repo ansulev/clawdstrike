@@ -18,9 +18,9 @@
 
 - [ ] **SIDE-01**: Sidebar renders the panel corresponding to the active activity bar item
 - [ ] **SIDE-02**: Sidebar is resizable with drag handle and collapse threshold
-- [ ] **SIDE-03**: HeartbeatPanel shows system status (posture ring, sentinel/finding/approval/fleet counts, quick links)
-- [ ] **SIDE-04**: SentinelPanel shows filterable sentinel list with status dots and create button
-- [ ] **SIDE-05**: FindingsPanel shows findings list with severity badges and intel section
+- [x] **SIDE-03**: HeartbeatPanel shows system status (posture ring, sentinel/finding/approval/fleet counts, quick links)
+- [x] **SIDE-04**: SentinelPanel shows filterable sentinel list with status dots and create button
+- [x] **SIDE-05**: FindingsPanel shows findings list with severity badges and intel section
 - [ ] **SIDE-06**: ExplorerPanel shows detection project file tree (existing component, integrated as sidebar panel)
 - [ ] **SIDE-07**: LibraryPanel shows policy catalog browser adapted for sidebar width
 - [ ] **SIDE-08**: FleetPanel shows connection status, agent summary list, and topology minimap link
@@ -117,9 +117,9 @@
 | ABAR-06 | Phase 1 | Complete |
 | SIDE-01 | Phase 2 | Pending |
 | SIDE-02 | Phase 2 | Pending |
-| SIDE-03 | Phase 2 | Pending |
-| SIDE-04 | Phase 2 | Pending |
-| SIDE-05 | Phase 2 | Pending |
+| SIDE-03 | Phase 2 | Complete |
+| SIDE-04 | Phase 2 | Complete |
+| SIDE-05 | Phase 2 | Complete |
 | SIDE-06 | Phase 2 | Pending |
 | SIDE-07 | Phase 2 | Pending |
 | SIDE-08 | Phase 2 | Pending |

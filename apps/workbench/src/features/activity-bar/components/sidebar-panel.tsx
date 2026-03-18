@@ -1,6 +1,7 @@
 import { useActivityBarStore } from "../stores/activity-bar-store";
 import { ExplorerPanel } from "@/components/workbench/explorer/explorer-panel";
 import { useProjectStore } from "@/features/project/stores/project-store";
+import type { DetectionProject } from "@/features/project/stores/project-store";
 import { usePaneStore } from "@/features/panes/pane-store";
 import { HeartbeatPanel } from "../panels/heartbeat-panel";
 import { SentinelPanel } from "../panels/sentinel-panel";
@@ -10,6 +11,7 @@ import { FleetPanel } from "../panels/fleet-panel";
 import { CompliancePanel } from "../panels/compliance-panel";
 import { SearchPanelConnected } from "@/features/search/components/search-panel";
 import type { ActivityBarItemId } from "../types";
+import { useMemo } from "react";
 
 // ---------------------------------------------------------------------------
 // SidebarPanel -- Container that renders active panel content.
@@ -21,16 +23,26 @@ import type { ActivityBarItemId } from "../types";
 // ---------------------------------------------------------------------------
 
 function ExplorerPanelConnected() {
-  const project = useProjectStore.use.project();
+  const projectRoots = useProjectStore.use.projectRoots();
+  const projectsMap = useProjectStore.use.projects();
   const filter = useProjectStore.use.filter();
   const formatFilter = useProjectStore.use.formatFilter();
   const fileStatuses = useProjectStore.use.fileStatuses();
   const actions = useProjectStore.use.actions();
 
+  // Build ordered projects array from roots.
+  const projects = useMemo(() => {
+    return projectRoots
+      .map((root) => projectsMap.get(root))
+      .filter((p): p is DetectionProject => p != null);
+  }, [projectRoots, projectsMap]);
+
   return (
     <ExplorerPanel
-      project={project}
-      onToggleDir={actions.toggleDir}
+      projects={projects}
+      onToggleDir={(rootPath, dirPath) => {
+        actions.toggleDirForRoot(rootPath, dirPath);
+      }}
       onOpenFile={(file) => {
         usePaneStore.getState().openFile(file.path, file.name);
       }}
@@ -41,6 +53,20 @@ function ExplorerPanelConnected() {
       formatFilter={formatFilter}
       onFormatFilterChange={actions.setFormatFilter}
       fileStatuses={fileStatuses}
+      onAddFolder={async () => {
+        const { isDesktop } = await import("@/lib/tauri-bridge");
+        if (!isDesktop()) return;
+        const { open } = await import("@tauri-apps/plugin-dialog");
+        const selected = await open({ directory: true, multiple: false, title: "Add Folder to Workspace" });
+        if (selected && typeof selected === "string") {
+          // addRoot internally triggers loadRoot (fire-and-forget).
+          const storeActions = useProjectStore.getState().actions;
+          storeActions.addRoot(selected);
+        }
+      }}
+      onRemoveRoot={(rootPath) => {
+        actions.removeRoot(rootPath);
+      }}
       onCreateFile={async (parentPath, fileName) => {
         const savedPath = await actions.createFile(parentPath, fileName, "clawdstrike_policy");
         if (savedPath) {

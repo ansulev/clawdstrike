@@ -61,11 +61,11 @@ Plans:
   2. A plugin with an invalid or missing Ed25519 signature is rejected at load time with a clear error message
   3. When two plugins are loaded simultaneously and one throws during activation, the other still activates successfully
   4. A plugin with `activationEvents: ["onFileType:sigma_rule"]` does not activate until a Sigma file is opened
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 03-01: PluginLoader with activation events and contribution routing
-- [ ] 03-02: Trust verification using existing Ed25519 primitives from operator-crypto
+- [ ] 03-01-PLAN.md -- Trust verification module with Ed25519 signature checking via operator-crypto
+- [ ] 03-02-PLAN.md -- PluginLoader with activation events, contribution routing, and trust gating
 
 ### Phase 4: Plugin SDK Package
 **Goal**: Plugin authors can import `@clawdstrike/plugin-sdk` and write a type-safe plugin with IDE autocompletion for all contribution points

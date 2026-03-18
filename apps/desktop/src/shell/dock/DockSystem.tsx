@@ -20,8 +20,9 @@ import { createPortal } from "react-dom";
 import { Capsule } from "./Capsule";
 import { useDock } from "./DockContext";
 import { SessionRail } from "./SessionRail";
-import type { CapsuleViewMode, DockCapsuleState, ShelfMode } from "./types";
+import type { CapsuleContentProps, CapsuleViewMode, DockCapsuleState, ShelfMode } from "./types";
 import { useDockDemo } from "./useDockDemo";
+import { registerCapsuleRenderer, getCapsuleRenderer } from "./capsule-renderer-registry";
 
 // =============================================================================
 // Design Tokens
@@ -646,10 +647,6 @@ function getDemoShelfContent(mode: ShelfMode) {
 // Capsule Content Renderers
 // =============================================================================
 
-interface CapsuleContentProps {
-  capsule: DockCapsuleState;
-}
-
 function OutputContent({ capsule }: CapsuleContentProps) {
   const output = capsule.sourceData as string | undefined;
   return (
@@ -936,31 +933,29 @@ function SeasonPassContent({ capsule }: CapsuleContentProps) {
   );
 }
 
+// Register built-in capsule renderers
+registerCapsuleRenderer("output", OutputContent);
+registerCapsuleRenderer("events", EventsContent);
+registerCapsuleRenderer("artifact", ArtifactContent);
+registerCapsuleRenderer("inspector", InspectorContent);
+registerCapsuleRenderer("terminal", TerminalContent);
+registerCapsuleRenderer("action", ActionContent);
+registerCapsuleRenderer("chat", ChatContent);
+registerCapsuleRenderer("social", SocialContent);
+registerCapsuleRenderer("season_pass", SeasonPassContent);
+// kernel_agent uses an inline fallback (no dedicated component)
+
 function getCapsuleContent(capsule: DockCapsuleState): ReactNode {
-  switch (capsule.kind) {
-    case "output":
-      return <OutputContent capsule={capsule} />;
-    case "events":
-      return <EventsContent capsule={capsule} />;
-    case "artifact":
-      return <ArtifactContent capsule={capsule} />;
-    case "inspector":
-      return <InspectorContent capsule={capsule} />;
-    case "terminal":
-      return <TerminalContent capsule={capsule} />;
-    case "action":
-      return <ActionContent capsule={capsule} />;
-    case "chat":
-      return <ChatContent capsule={capsule} />;
-    case "social":
-      return <SocialContent capsule={capsule} />;
-    case "season_pass":
-      return <SeasonPassContent capsule={capsule} />;
-    case "kernel_agent":
-      return <div className="capsule-empty">Kernel agent capsule is not wired yet.</div>;
-    default:
-      return null;
+  const Renderer = getCapsuleRenderer(capsule.kind);
+  if (Renderer) {
+    return <Renderer capsule={capsule} isExpanded={false} />;
   }
+  // Fallback for unregistered kinds (e.g. kernel_agent or future plugin kinds
+  // that haven't registered yet)
+  if (capsule.kind === "kernel_agent") {
+    return <div className="capsule-empty">Kernel agent capsule is not wired yet.</div>;
+  }
+  return null;
 }
 
 // =============================================================================

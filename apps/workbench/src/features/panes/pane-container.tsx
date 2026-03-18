@@ -22,10 +22,7 @@ export function PaneContainer({
   return (
     <section
       className={cn(
-        "flex h-full min-h-0 flex-col overflow-hidden rounded-[14px] border bg-[#07090f]",
-        active
-          ? "border-[#d4a84b]/45 shadow-[0_0_0_1px_rgba(212,168,75,0.08)]"
-          : "border-[#202531]",
+        "flex h-full min-h-0 flex-col overflow-hidden border border-[#1a1d27] bg-[#07090f]",
       )}
       onMouseDownCapture={() => {
         if (!active) {

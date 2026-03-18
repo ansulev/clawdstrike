@@ -16,16 +16,16 @@
 
 ### Sidebar Panels
 
-- [ ] **SIDE-01**: Sidebar renders the panel corresponding to the active activity bar item
-- [ ] **SIDE-02**: Sidebar is resizable with drag handle and collapse threshold
+- [x] **SIDE-01**: Sidebar renders the panel corresponding to the active activity bar item
+- [x] **SIDE-02**: Sidebar is resizable with drag handle and collapse threshold
 - [x] **SIDE-03**: HeartbeatPanel shows system status (posture ring, sentinel/finding/approval/fleet counts, quick links)
 - [x] **SIDE-04**: SentinelPanel shows filterable sentinel list with status dots and create button
 - [x] **SIDE-05**: FindingsPanel shows findings list with severity badges and intel section
-- [ ] **SIDE-06**: ExplorerPanel shows detection project file tree (existing component, integrated as sidebar panel)
-- [ ] **SIDE-07**: LibraryPanel shows policy catalog browser adapted for sidebar width
-- [ ] **SIDE-08**: FleetPanel shows connection status, agent summary list, and topology minimap link
-- [ ] **SIDE-09**: CompliancePanel shows framework selector and compliance score summary
-- [ ] **SIDE-10**: Clicking items in sidebar panels opens detail views as editor tabs via openApp
+- [x] **SIDE-06**: ExplorerPanel shows detection project file tree (existing component, integrated as sidebar panel)
+- [x] **SIDE-07**: LibraryPanel shows policy catalog browser adapted for sidebar width
+- [x] **SIDE-08**: FleetPanel shows connection status, agent summary list, and topology minimap link
+- [x] **SIDE-09**: CompliancePanel shows framework selector and compliance score summary
+- [x] **SIDE-10**: Clicking items in sidebar panels opens detail views as editor tabs via openApp
 
 ### Editor Area (Pane System)
 
@@ -115,16 +115,16 @@
 | ABAR-04 | Phase 1 | Complete |
 | ABAR-05 | Phase 1 | Complete |
 | ABAR-06 | Phase 1 | Complete |
-| SIDE-01 | Phase 2 | Pending |
-| SIDE-02 | Phase 2 | Pending |
+| SIDE-01 | Phase 2 | Complete |
+| SIDE-02 | Phase 2 | Complete |
 | SIDE-03 | Phase 2 | Complete |
 | SIDE-04 | Phase 2 | Complete |
 | SIDE-05 | Phase 2 | Complete |
-| SIDE-06 | Phase 2 | Pending |
-| SIDE-07 | Phase 2 | Pending |
-| SIDE-08 | Phase 2 | Pending |
-| SIDE-09 | Phase 2 | Pending |
-| SIDE-10 | Phase 2 | Pending |
+| SIDE-06 | Phase 2 | Complete |
+| SIDE-07 | Phase 2 | Complete |
+| SIDE-08 | Phase 2 | Complete |
+| SIDE-09 | Phase 2 | Complete |
+| SIDE-10 | Phase 2 | Complete |
 | PANE-01 | Phase 2 | Complete |
 | PANE-02 | Phase 2 | Complete |
 | PANE-03 | Phase 2 | Complete |

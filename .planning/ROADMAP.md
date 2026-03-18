@@ -20,7 +20,7 @@ Close the gap from "IDE scaffold" to "professional-grade detection engineering I
 - [ ] **Phase 3: Quick Navigation** — Cmd+P file picker, breadcrumbs, Cmd+G go-to-line (2 plans)
 - [x] **Phase 4: File Tree Mutations** — Create/rename/delete files from Explorer with status indicators (2 plans)
 - [x] **Phase 5: Tab & Terminal Polish** — Tab overflow scrolling, context menu additions, terminal splits (2 plans)
-- [ ] **Phase 6: Detection Engineering Inline** — Gutter test buttons, coverage gap indicators, guard reorder
+- [ ] **Phase 6: Detection Engineering Inline** — Gutter test buttons, coverage gap indicators, guard reorder (2 plans)
 - [ ] **Phase 7: Detection Editor Integration** — Surface 50K LOC of orphaned detection engineering features as proper IDE panels
 
 ## Phase Details
@@ -106,11 +106,11 @@ Plans:
   1. Hovering over a guard config section in the YAML editor shows a "Run Test" gutter icon that executes the guard
   2. Gutter shows colored indicators for uncovered MITRE ATT&CK techniques based on the active policy
   3. Guard configuration panel displays execution order with drag-to-reorder capability
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 06-01: TBD
-- [ ] 06-02: TBD
+- [ ] 06-01-PLAN.md — CodeMirror gutter extensions for Run Test buttons and MITRE coverage gap indicators
+- [ ] 06-02-PLAN.md — Execution order badges on guard cards, wire gutter test button to simulation engine
 
 ### Phase 7: Detection Editor Integration
 **Goal**: Surface the 50K+ LOC of orphaned detection engineering features as proper IDE panels and pane-openable views
@@ -144,5 +144,5 @@ Phases 1-2 are sequential (global search builds on in-file search). Phases 3, 4,
 | 3. Quick Navigation | 0/2 | Planning | - |
 | 4. File Tree Mutations | 2/2 | Complete | 2026-03-18 |
 | 5. Tab & Terminal Polish | 2/2 | Complete | 2026-03-18 |
-| 6. Detection Engineering Inline | 0/2 | Not started | - |
+| 6. Detection Engineering Inline | 0/2 | Planned | - |
 | 7. Detection Editor Integration | 0/3 | Not started | - |

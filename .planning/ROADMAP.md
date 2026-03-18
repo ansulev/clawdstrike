@@ -46,11 +46,11 @@ Plans:
   2. The `PluginRegistry` singleton accepts a valid manifest via `register()`, rejects a malformed manifest with a descriptive error, and returns the plugin via `get()` and `getAll()`
   3. Registry state transitions (registered -> activating -> activated -> deactivated) fire events that a subscriber receives
   4. `getByContributionType("guards")` returns only plugins that declare guard contributions
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 02-01: PluginManifest type with security-domain contribution points
-- [ ] 02-02: PluginRegistry singleton with lifecycle state machine and event emission
+- [ ] 02-01-PLAN.md -- PluginManifest type with security-domain contribution points and manifest validation
+- [ ] 02-02-PLAN.md -- PluginRegistry singleton with lifecycle state machine and event emission
 
 ### Phase 3: Plugin Loader and Trust
 **Goal**: Plugins can be loaded into the running workbench with their contributions routed to the correct registries, and only trusted plugins are allowed to load

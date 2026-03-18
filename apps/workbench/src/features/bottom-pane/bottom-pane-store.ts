@@ -27,6 +27,7 @@ export interface BottomPaneStore {
   size: number;
   terminalSessions: TerminalSession[];
   activeTerminalId: string | null;
+  splitTerminalIds: [string, string] | null;
   outputEntries: OutputEntry[];
   toggleTab: (tab: BottomPaneTab) => void;
   setActiveTab: (tab: BottomPaneTab) => void;
@@ -34,6 +35,9 @@ export interface BottomPaneStore {
   newTerminal: () => Promise<void>;
   closeTerminal: (id: string) => Promise<void>;
   setActiveTerminal: (id: string) => void;
+  renameTerminal: (id: string, title: string) => void;
+  splitTerminal: () => Promise<void>;
+  unsplitTerminal: () => void;
   appendOutput: (entry: Omit<OutputEntry, "id" | "timestamp"> & { timestamp?: number }) => void;
   clearOutput: () => void;
   _reset: () => void;
@@ -78,6 +82,7 @@ export const useBottomPaneStore = create<BottomPaneStore>((set, get) => ({
   size: 28,
   terminalSessions: [],
   activeTerminalId: null,
+  splitTerminalIds: null,
   outputEntries: [],
 
   toggleTab: (tab) => {
@@ -132,10 +137,14 @@ export const useBottomPaneStore = create<BottomPaneStore>((set, get) => ({
 
     set((state) => {
       const remaining = state.terminalSessions.filter((entry) => entry.id !== id);
+      const exitSplit =
+        state.splitTerminalIds != null &&
+        (state.splitTerminalIds[0] === id || state.splitTerminalIds[1] === id);
       return {
         terminalSessions: remaining,
         activeTerminalId:
           state.activeTerminalId === id ? (remaining[0]?.id ?? null) : state.activeTerminalId,
+        splitTerminalIds: exitSplit ? null : state.splitTerminalIds,
       };
     });
     if (session) {
@@ -148,6 +157,43 @@ export const useBottomPaneStore = create<BottomPaneStore>((set, get) => ({
 
   setActiveTerminal: (id) => {
     set({ activeTerminalId: id, isOpen: true, activeTab: "terminal" });
+  },
+
+  renameTerminal: (id, title) => {
+    set((state) => ({
+      terminalSessions: state.terminalSessions.map((s) =>
+        s.id === id ? { ...s, title } : s,
+      ),
+    }));
+  },
+
+  splitTerminal: async () => {
+    const state = get();
+    // Toggle off if already split
+    if (state.splitTerminalIds != null) {
+      set({ splitTerminalIds: null });
+      return;
+    }
+
+    let sessions = state.terminalSessions;
+    let activeId = state.activeTerminalId;
+
+    // Ensure at least 2 sessions exist
+    if (sessions.length < 2) {
+      await get().newTerminal();
+      const updated = get();
+      sessions = updated.terminalSessions;
+      activeId = updated.activeTerminalId;
+    }
+
+    const secondSession = sessions.find((s) => s.id !== activeId);
+    if (activeId && secondSession) {
+      set({ splitTerminalIds: [activeId, secondSession.id] });
+    }
+  },
+
+  unsplitTerminal: () => {
+    set({ splitTerminalIds: null });
   },
 
   appendOutput: (entry) => {
@@ -174,6 +220,7 @@ export const useBottomPaneStore = create<BottomPaneStore>((set, get) => ({
       size: 28,
       terminalSessions: [],
       activeTerminalId: null,
+      splitTerminalIds: null,
       outputEntries: [],
     });
   },

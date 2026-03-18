@@ -199,8 +199,13 @@ export function QuickOpenDialog() {
     async (item: { path: string; name: string; fileType: string }) => {
       closeQuickOpen();
 
-      // Read file content from disk via tauri-bridge
-      const result = await readDetectionFileByPath(item.path);
+      let result: Awaited<ReturnType<typeof readDetectionFileByPath>> | null = null;
+      try {
+        result = await readDetectionFileByPath(item.path);
+      } catch {
+        // Fall through to the fallback path below
+      }
+
       if (result) {
         usePolicyTabsStore
           .getState()

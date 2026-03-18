@@ -1,9 +1,15 @@
 // ---- File Type Registry ----
 // Central registry mapping detection-engineering file types to their
 // language support, validation backend, icons, and colors.
+// Supports dynamic registration of plugin file types at runtime.
 
-/** Discriminated union of all supported file types. */
-export type FileType = "clawdstrike_policy" | "sigma_rule" | "yara_rule" | "ocsf_event";
+/** File type identifier. Built-in types use BUILTIN_FILE_TYPES; plugins register arbitrary strings. */
+export type FileType = string;
+
+export const BUILTIN_FILE_TYPES = [
+  "clawdstrike_policy", "sigma_rule", "yara_rule", "ocsf_event",
+] as const;
+export type BuiltinFileType = (typeof BUILTIN_FILE_TYPES)[number];
 
 /** Descriptor for a registered file type. */
 export interface FileTypeDescriptor {
@@ -22,6 +28,12 @@ export interface FileTypeDescriptor {
   testable: boolean;
   /** File types this format can be converted to. */
   convertibleTo: FileType[];
+}
+
+/** Options for registering a file type, including an optional custom detector. */
+export interface FileTypeRegistrationOptions extends FileTypeDescriptor {
+  /** Optional custom detection function. Called by detectFileType() for plugin types. */
+  detect?: (filename: string, content: string) => boolean;
 }
 
 // ---- Default content templates ----
@@ -108,10 +120,10 @@ const OCSF_DEFAULT_CONTENT = JSON.stringify(
   2,
 ) + "\n";
 
-// ---- Registry ----
+// ---- Built-in descriptors ----
 
-export const FILE_TYPE_REGISTRY: Record<FileType, FileTypeDescriptor> = {
-  clawdstrike_policy: {
+const BUILTIN_FILE_TYPE_DESCRIPTORS: FileTypeDescriptor[] = [
+  {
     id: "clawdstrike_policy",
     label: "ClawdStrike Policy",
     shortLabel: "Policy",
@@ -121,7 +133,7 @@ export const FILE_TYPE_REGISTRY: Record<FileType, FileTypeDescriptor> = {
     testable: true,
     convertibleTo: ["sigma_rule"],
   },
-  sigma_rule: {
+  {
     id: "sigma_rule",
     label: "Sigma Rule",
     shortLabel: "Sigma",
@@ -131,7 +143,7 @@ export const FILE_TYPE_REGISTRY: Record<FileType, FileTypeDescriptor> = {
     testable: true,
     convertibleTo: ["clawdstrike_policy", "yara_rule"],
   },
-  yara_rule: {
+  {
     id: "yara_rule",
     label: "YARA Rule",
     shortLabel: "YARA",
@@ -141,7 +153,7 @@ export const FILE_TYPE_REGISTRY: Record<FileType, FileTypeDescriptor> = {
     testable: true,
     convertibleTo: ["sigma_rule"],
   },
-  ocsf_event: {
+  {
     id: "ocsf_event",
     label: "OCSF Event",
     shortLabel: "OCSF",
@@ -151,7 +163,75 @@ export const FILE_TYPE_REGISTRY: Record<FileType, FileTypeDescriptor> = {
     testable: false,
     convertibleTo: [],
   },
-};
+];
+
+// ---- Dynamic registry backing store ----
+
+const fileTypeMap = new Map<string, FileTypeDescriptor>();
+const customDetectors = new Map<string, (filename: string, content: string) => boolean>();
+
+// Auto-register all 4 built-in file types at module load
+for (const descriptor of BUILTIN_FILE_TYPE_DESCRIPTORS) {
+  fileTypeMap.set(descriptor.id, descriptor);
+}
+
+// ---- Registration API ----
+
+/**
+ * Register a file type. Returns a dispose function to unregister.
+ * Throws if a file type with the same ID is already registered.
+ */
+export function registerFileType(options: FileTypeRegistrationOptions): () => void {
+  const { detect, ...descriptor } = options;
+  if (fileTypeMap.has(descriptor.id)) {
+    throw new Error(`File type "${descriptor.id}" is already registered`);
+  }
+  fileTypeMap.set(descriptor.id, descriptor);
+  if (detect) {
+    customDetectors.set(descriptor.id, detect);
+  }
+  return () => {
+    fileTypeMap.delete(descriptor.id);
+    customDetectors.delete(descriptor.id);
+  };
+}
+
+/** Unregister a file type by ID. No-op if not found. */
+export function unregisterFileType(id: string): void {
+  fileTypeMap.delete(id);
+  customDetectors.delete(id);
+}
+
+/** Returns all registered file type descriptors. */
+export function getAllFileTypes(): FileTypeDescriptor[] {
+  return Array.from(fileTypeMap.values());
+}
+
+// ---- Backward-compatible FILE_TYPE_REGISTRY proxy ----
+
+export const FILE_TYPE_REGISTRY: Record<string, FileTypeDescriptor> = new Proxy(
+  {} as Record<string, FileTypeDescriptor>,
+  {
+    get(_target, prop: string) {
+      if (typeof prop === "symbol") return undefined;
+      return fileTypeMap.get(prop);
+    },
+    ownKeys() {
+      return Array.from(fileTypeMap.keys());
+    },
+    getOwnPropertyDescriptor(_target, prop: string) {
+      if (typeof prop === "symbol") return undefined;
+      if (fileTypeMap.has(prop)) {
+        return { configurable: true, enumerable: true, value: fileTypeMap.get(prop) };
+      }
+      return undefined;
+    },
+    has(_target, prop: string) {
+      if (typeof prop === "symbol") return false;
+      return fileTypeMap.has(prop);
+    },
+  },
+);
 
 // ---- Detection helpers ----
 
@@ -160,7 +240,9 @@ export function isPolicyFileType(fileType: FileType): boolean {
 }
 
 export function getPrimaryExtension(fileType: FileType): string {
-  const [primary] = FILE_TYPE_REGISTRY[fileType].extensions;
+  const desc = fileTypeMap.get(fileType);
+  if (!desc) return ".yaml";
+  const [primary] = desc.extensions;
   return primary ?? ".yaml";
 }
 
@@ -179,13 +261,27 @@ export function sanitizeFilenameStem(name: string, fallback: string): string {
  * Returns the file type based solely on file extension, or null if
  * the extension is ambiguous (e.g. `.yaml` could be policy or sigma,
  * `.json` could be an OCSF event or a policy export).
+ * Also checks plugin-registered file types with unambiguous extensions.
  */
 export function getFileTypeByExtension(filename: string): FileType | null {
   const lower = filename.toLowerCase();
 
+  // Built-in unambiguous extension checks
   if (lower.endsWith(".yar") || lower.endsWith(".yara")) {
     return "yara_rule";
   }
+
+  // Check plugin-registered file types for unique extension matches
+  for (const [id, desc] of fileTypeMap) {
+    // Skip built-in types that share ambiguous extensions
+    if ((BUILTIN_FILE_TYPES as readonly string[]).includes(id)) continue;
+    for (const ext of desc.extensions) {
+      if (lower.endsWith(ext)) {
+        return id;
+      }
+    }
+  }
+
   // .yaml / .yml are ambiguous between policy and sigma.
   // .json is ambiguous between policy exports, OCSF events, and
   // arbitrary JSON files that should fall back to content heuristics.
@@ -235,6 +331,7 @@ function looksLikeOcsfJson(content: string): boolean {
  * 1. Unambiguous extensions resolve immediately (.yar/.yara -> yara_rule).
  * 2. Content heuristics disambiguate JSON policy exports / OCSF events.
  * 3. YAML content heuristics disambiguate policy vs sigma.
+ * 3.5. Plugin-registered custom detectors are checked.
  * 4. Unknown extensions fall back to clawdstrike_policy.
  */
 export function detectFileType(filename: string, content: string): FileType {
@@ -263,20 +360,31 @@ export function detectFileType(filename: string, content: string): FileType {
     return "sigma_rule";
   }
 
+  // Step 3.5 -- plugin-registered custom detectors
+  for (const [id, detect] of customDetectors) {
+    if (detect(filename, content)) {
+      return id;
+    }
+  }
+
   // Step 4 -- default fallback
   return "clawdstrike_policy";
 }
 
 /**
- * Returns the descriptor for a given FileType. Since the registry is
- * exhaustive over the FileType union this always succeeds.
+ * Returns the descriptor for a given FileType.
+ * Throws if the file type is not registered.
  */
 export function getDescriptor(fileType: FileType): FileTypeDescriptor {
-  return FILE_TYPE_REGISTRY[fileType];
+  const desc = fileTypeMap.get(fileType);
+  if (!desc) {
+    throw new Error(`Unknown file type: ${fileType}`);
+  }
+  return desc;
 }
 
 export function isRegisteredFileType(value: unknown): value is FileType {
-  return typeof value === "string" && value in FILE_TYPE_REGISTRY;
+  return typeof value === "string" && fileTypeMap.has(value);
 }
 
 export function coerceFileType(

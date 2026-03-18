@@ -9,6 +9,7 @@ import { useFleetConnection } from "@/features/fleet/use-fleet-connection";
 import { useHintSettingsSafe } from "@/features/settings/use-hint-settings";
 import { useMultiPolicyBootstrap } from "@/features/policy/stores/multi-policy-store";
 import { secureStore, migrateCredentialsToStronghold } from "@/features/settings/secure-store";
+import { useProjectStore } from "@/features/project/stores/project-store";
 
 function LoadingFallback() {
   return (
@@ -60,11 +61,50 @@ function LoadingFallback() {
   );
 }
 
+/**
+ * Bootstrap the workspace on first launch or restore persisted roots.
+ *
+ * - If persisted roots exist (subsequent launches), restores them so the
+ *   Explorer is immediately populated.
+ * - If no roots exist (first launch), scaffolds the default workspace
+ *   at ~/.clawdstrike/workspace/ and mounts it.
+ *
+ * Fire-and-forget: errors are logged but never thrown.
+ */
+function useWorkspaceBootstrap() {
+  useEffect(() => {
+    async function init() {
+      const { isDesktop } = await import("@/lib/tauri-bridge");
+      if (!isDesktop()) return;
+
+      const store = useProjectStore.getState();
+      const roots = store.projectRoots;
+
+      if (roots.length > 0) {
+        // Restore persisted workspace roots
+        await store.actions.initFromPersistedRoots();
+      } else {
+        // First launch: bootstrap default workspace
+        const { bootstrapDefaultWorkspace } = await import("@/features/project/workspace-bootstrap");
+        const workspacePath = await bootstrapDefaultWorkspace();
+        if (workspacePath) {
+          store.actions.addRoot(workspacePath);
+          await store.actions.loadRoot(workspacePath);
+        }
+      }
+    }
+    init().catch((err) => {
+      console.warn("[workspace-bootstrap] Init failed:", err);
+    });
+  }, []);
+}
+
 function WorkbenchBootstraps() {
   useOperator();
   useFleetConnection();
   useHintSettingsSafe();
   useMultiPolicyBootstrap();
+  useWorkspaceBootstrap();
   return null;
 }
 

@@ -49,6 +49,8 @@ const guardMarkerSet = StateField.define<RangeSet<GutterMarker>>({
     return RangeSet.empty;
   },
   update(value, tr) {
+    // Keep marker positions in sync with document edits
+    if (tr.docChanged) value = value.map(tr.changes);
     // Rebuild when guard ranges change
     for (const effect of tr.effects) {
       if (effect.is(updateGuardRanges)) {
@@ -74,6 +76,10 @@ const guardMarkerSet = StateField.define<RangeSet<GutterMarker>>({
 class RunTestMarker extends GutterMarker {
   constructor(readonly guardId: string) {
     super();
+  }
+
+  override eq(other: GutterMarker): boolean {
+    return other instanceof RunTestMarker && other.guardId === this.guardId;
   }
 
   override toDOM(): HTMLElement {

@@ -43,11 +43,39 @@ impl PolicyCompiler for DefaultPolicyCompiler {
             formulas.extend(cfg.to_formulas(&self.agent));
         }
 
+        if let Some(ref cfg) = guards.secret_leak {
+            formulas.extend(cfg.to_formulas(&self.agent));
+        }
+
+        if let Some(ref cfg) = guards.patch_integrity {
+            formulas.extend(cfg.to_formulas(&self.agent));
+        }
+
         if let Some(ref cfg) = guards.shell_command {
             formulas.extend(cfg.to_formulas(&self.agent));
         }
 
         if let Some(ref cfg) = guards.mcp_tool {
+            formulas.extend(cfg.to_formulas(&self.agent));
+        }
+
+        if let Some(ref cfg) = guards.prompt_injection {
+            formulas.extend(cfg.to_formulas(&self.agent));
+        }
+
+        if let Some(ref cfg) = guards.jailbreak {
+            formulas.extend(cfg.to_formulas(&self.agent));
+        }
+
+        if let Some(ref cfg) = guards.computer_use {
+            formulas.extend(cfg.to_formulas(&self.agent));
+        }
+
+        if let Some(ref cfg) = guards.remote_desktop_side_channel {
+            formulas.extend(cfg.to_formulas(&self.agent));
+        }
+
+        if let Some(ref cfg) = guards.input_injection_capability {
             formulas.extend(cfg.to_formulas(&self.agent));
         }
 
@@ -60,7 +88,7 @@ mod tests {
     use super::*;
     use clawdstrike::guards::{
         EgressAllowlistConfig, ForbiddenPathConfig, McpToolConfig, PathAllowlistConfig,
-        ShellCommandConfig,
+        PromptInjectionConfig, SecretLeakConfig, ShellCommandConfig,
     };
 
     fn test_agent() -> AgentId {
@@ -205,5 +233,29 @@ mod tests {
 
         let formulas = compiler.compile_guards(&guards);
         assert!(formulas.is_empty());
+    }
+
+    #[test]
+    fn runtime_only_guards_compile_to_custom_formulas() {
+        let compiler = DefaultPolicyCompiler::new(test_agent());
+        let guards = GuardConfigs {
+            secret_leak: Some(SecretLeakConfig::default()),
+            prompt_injection: Some(PromptInjectionConfig::default()),
+            ..GuardConfigs::default()
+        };
+
+        let rendered: Vec<String> = compiler
+            .compile_guards(&guards)
+            .into_iter()
+            .map(|formula| formula.to_string())
+            .collect();
+
+        assert!(rendered.iter().any(|formula| formula.contains("custom(")));
+        assert!(rendered
+            .iter()
+            .any(|formula| formula == "P_test-agent(custom(guard:secret_leak:enabled))"));
+        assert!(rendered
+            .iter()
+            .any(|formula| formula == "P_test-agent(custom(guard:prompt_injection:enabled))"));
     }
 }

@@ -694,6 +694,10 @@ fn expected_action_types_for_policy(policy: &Policy) -> Vec<String> {
         expected.insert("mcp".to_string());
     }
 
+    if policy_has_custom_runtime_guard_formulas(policy) {
+        expected.insert("custom".to_string());
+    }
+
     expected.into_iter().collect()
 }
 
@@ -710,6 +714,44 @@ fn collect_atoms(formulas: &[Formula]) -> BTreeSet<String> {
         collect_atoms_recursive(formula, &mut atoms);
     }
     atoms
+}
+
+fn policy_has_custom_runtime_guard_formulas(policy: &Policy) -> bool {
+    policy
+        .guards
+        .secret_leak
+        .as_ref()
+        .is_some_and(|cfg| cfg.enabled)
+        || policy
+            .guards
+            .patch_integrity
+            .as_ref()
+            .is_some_and(|cfg| cfg.enabled)
+        || policy
+            .guards
+            .prompt_injection
+            .as_ref()
+            .is_some_and(|cfg| cfg.enabled)
+        || policy
+            .guards
+            .jailbreak
+            .as_ref()
+            .is_some_and(|cfg| cfg.enabled)
+        || policy
+            .guards
+            .computer_use
+            .as_ref()
+            .is_some_and(|cfg| cfg.enabled)
+        || policy
+            .guards
+            .remote_desktop_side_channel
+            .as_ref()
+            .is_some_and(|cfg| cfg.enabled)
+        || policy
+            .guards
+            .input_injection_capability
+            .as_ref()
+            .is_some_and(|cfg| cfg.enabled)
 }
 
 fn collect_atoms_recursive(formula: &Formula, atoms: &mut BTreeSet<String>) {
@@ -1057,9 +1099,10 @@ fn check_egress_inheritance(
     let base_policy = domain_policy_from_config(base_cfg);
     let child_policy =
         domain_policy_from_config(&child_cfg.cloned().unwrap_or_else(disabled_egress_config));
+    let base_block_patterns = base_cfg.effective_block_patterns();
 
     let mut candidates = BTreeSet::new();
-    for blocked in &base_cfg.block {
+    for blocked in &base_block_patterns {
         candidates.insert(representative_domain(blocked));
     }
 
@@ -1073,9 +1116,10 @@ fn check_egress_inheritance(
     }
 
     if let Some(child_cfg) = child_cfg {
-        for allowed in &child_cfg.allow {
+        let child_allow_patterns = child_cfg.effective_allow_patterns();
+        for allowed in &child_allow_patterns {
             candidates.insert(representative_domain(allowed));
-            for blocked in &base_cfg.block {
+            for blocked in &base_block_patterns {
                 if let Some(witness) = domain_intersection_witness(blocked, allowed) {
                     candidates.insert(witness);
                 }
@@ -1110,34 +1154,36 @@ fn check_mcp_inheritance(
             .cloned()
             .unwrap_or_else(disabled_mcp_config),
     );
+    let base_block_tools = base_cfg.effective_block_tools();
 
     let mut candidates = BTreeSet::new();
-    for blocked in &base_cfg.block {
+    for blocked in &base_block_tools {
         candidates.insert(blocked.clone());
     }
 
     if let Some(child_cfg) = child_cfg.filter(|cfg| cfg.enabled) {
-        candidates.extend(child_cfg.allow.iter().cloned());
+        candidates.extend(child_cfg.effective_allow_tools());
         candidates.extend(child_cfg.require_confirmation.iter().cloned());
     }
 
-    if !base_cfg.allow.is_empty()
+    let base_allow_tools = base_cfg.effective_allow_tools();
+
+    if !base_allow_tools.is_empty()
         || matches!(base_cfg.default_action, Some(McpDefaultAction::Block))
     {
         candidates.insert(default_mcp_probe(base_cfg, child_cfg));
     }
 
-    let Some(block_probe) = base_cfg.block.first().cloned().or_else(|| {
-        (!base_cfg.allow.is_empty()
+    let Some(block_probe) = base_block_tools.first().cloned().or_else(|| {
+        (!base_allow_tools.is_empty()
             || matches!(base_cfg.default_action, Some(McpDefaultAction::Block)))
         .then(|| default_mcp_probe(base_cfg, child_cfg))
     }) else {
         return Vec::new();
     };
     let blocked_decision = std::mem::discriminant(&base_guard.is_allowed(&block_probe));
-
-    candidates
-        .into_iter()
+    let mut weakened: Vec<_> = candidates
+        .iter()
         .filter(|candidate| {
             std::mem::discriminant(&base_guard.is_allowed(candidate)) == blocked_decision
                 && std::mem::discriminant(&child_guard.is_allowed(candidate)) != blocked_decision
@@ -1145,7 +1191,18 @@ fn check_mcp_inheritance(
         .map(|candidate| WeakenedProhibition {
             atom: format!("mcp({candidate})"),
         })
-        .collect()
+        .collect();
+
+    weakened.extend(check_mcp_max_args_size_inheritance(
+        base_cfg,
+        child_cfg,
+        &base_guard,
+        &child_guard,
+        &candidates,
+        &block_probe,
+    ));
+
+    weakened
 }
 
 fn check_shell_command_inheritance(
@@ -1312,6 +1369,15 @@ fn disabled_mcp_config() -> McpToolConfig {
     }
 }
 
+const DEFAULT_MCP_MAX_ARGS_SIZE: usize = 1024 * 1024;
+
+fn effective_mcp_max_args_size(cfg: Option<&McpToolConfig>) -> usize {
+    match cfg.filter(|cfg| cfg.enabled) {
+        Some(cfg) => cfg.max_args_size.unwrap_or(DEFAULT_MCP_MAX_ARGS_SIZE),
+        None => usize::MAX,
+    }
+}
+
 fn disabled_shell_config() -> ShellCommandConfig {
     ShellCommandConfig {
         enabled: false,
@@ -1323,9 +1389,43 @@ fn disabled_shell_config() -> ShellCommandConfig {
 fn domain_policy_from_config(config: &EgressAllowlistConfig) -> DomainPolicy {
     let mut policy = DomainPolicy::new();
     policy.set_default_action(config.default_action.clone().unwrap_or_default());
-    policy.extend_allow(config.allow.clone());
-    policy.extend_block(config.block.clone());
+    policy.extend_allow(config.effective_allow_patterns());
+    policy.extend_block(config.effective_block_patterns());
     policy
+}
+
+fn check_mcp_max_args_size_inheritance(
+    base_cfg: &McpToolConfig,
+    child_cfg: Option<&McpToolConfig>,
+    base_guard: &McpToolGuard,
+    child_guard: &McpToolGuard,
+    candidates: &BTreeSet<String>,
+    block_probe: &str,
+) -> Vec<WeakenedProhibition> {
+    let base_limit = effective_mcp_max_args_size(Some(base_cfg));
+    let child_limit = effective_mcp_max_args_size(child_cfg);
+
+    if child_limit <= base_limit {
+        return Vec::new();
+    }
+
+    let blocked_decision = std::mem::discriminant(&base_guard.is_allowed(block_probe));
+
+    candidates
+        .iter()
+        .find(|candidate| {
+            std::mem::discriminant(&base_guard.is_allowed(candidate)) != blocked_decision
+                && std::mem::discriminant(&child_guard.is_allowed(candidate)) != blocked_decision
+        })
+        .map(|candidate| {
+            vec![WeakenedProhibition {
+                atom: format!(
+                    "mcp({candidate},args_size={})",
+                    base_limit.saturating_add(1)
+                ),
+            }]
+        })
+        .unwrap_or_default()
 }
 
 fn domain_action(policy: &DomainPolicy, domain: &str) -> PolicyAction {
@@ -2531,7 +2631,7 @@ mod tests {
     use crate::atoms::ActionKind;
     use clawdstrike::guards::{
         EgressAllowlistConfig, ForbiddenPathConfig, McpToolConfig, PathAllowlistConfig,
-        ShellCommandConfig,
+        PromptInjectionConfig, SecretLeakConfig, ShellCommandConfig,
     };
     use clawdstrike::policy::{GuardConfigs, Policy, RuleSet, VerificationSettings};
     use hush_proxy::policy::PolicyAction;
@@ -2652,6 +2752,22 @@ mod tests {
             expected_action_types_for_policy_set(&policy),
             BTreeSet::from(["egress".to_string()])
         );
+    }
+
+    #[test]
+    fn runtime_only_guards_contribute_custom_action_coverage() {
+        let mut policy = Policy::default();
+        policy.guards.secret_leak = Some(SecretLeakConfig::default());
+        policy.guards.prompt_injection = Some(PromptInjectionConfig::default());
+
+        let report = formula_verifier().verify_policy(&policy, agent());
+        assert!(report.formula_count > 0, "{report:?}");
+        assert!(report
+            .completeness
+            .covered
+            .iter()
+            .any(|action_type| action_type == "custom"));
+        assert!(report.completeness.missing.is_empty(), "{report:?}");
     }
 
     #[test]
@@ -2932,6 +3048,41 @@ mod tests {
     }
 
     #[test]
+    fn egress_modifier_weakening_uses_effective_patterns() {
+        let mut parent = Policy::default();
+        parent.guards.egress_allowlist = Some(EgressAllowlistConfig {
+            enabled: true,
+            allow: vec![],
+            block: vec![],
+            default_action: Some(PolicyAction::Allow),
+            additional_allow: vec![],
+            remove_allow: vec![],
+            additional_block: vec!["*.internal".to_string()],
+            remove_block: vec![],
+        });
+
+        let mut merged = Policy::default();
+        merged.guards.egress_allowlist = Some(EgressAllowlistConfig {
+            enabled: true,
+            allow: vec![],
+            block: vec![],
+            default_action: Some(PolicyAction::Allow),
+            additional_allow: vec!["db.internal".to_string()],
+            remove_allow: vec![],
+            additional_block: vec![],
+            remove_block: vec!["*.internal".to_string()],
+        });
+
+        let report = formula_verifier().verify_policy_with_parent(&parent, &merged, agent());
+        assert_eq!(report.inheritance.outcome, CheckOutcome::Fail);
+        assert!(report
+            .inheritance
+            .weakened
+            .iter()
+            .any(|item| item.atom == "egress(db.internal)"));
+    }
+
+    #[test]
     fn mcp_allow_override_is_detected_semantically() {
         let mut parent = Policy::default();
         parent.guards.mcp_tool = Some(McpToolConfig {
@@ -2968,6 +3119,45 @@ mod tests {
             .weakened
             .iter()
             .any(|item| item.atom == "mcp(shell_exec)"));
+    }
+
+    #[test]
+    fn mcp_max_args_size_weakening_is_detected() {
+        let mut parent = Policy::default();
+        parent.guards.mcp_tool = Some(McpToolConfig {
+            enabled: true,
+            allow: vec!["safe_tool".to_string()],
+            block: vec![],
+            require_confirmation: vec![],
+            default_action: Some(clawdstrike::guards::McpDefaultAction::Allow),
+            max_args_size: Some(32),
+            additional_allow: vec![],
+            remove_allow: vec![],
+            additional_block: vec![],
+            remove_block: vec![],
+        });
+
+        let mut merged = parent.clone();
+        merged.guards.mcp_tool = Some(McpToolConfig {
+            enabled: true,
+            allow: vec!["safe_tool".to_string()],
+            block: vec![],
+            require_confirmation: vec![],
+            default_action: Some(clawdstrike::guards::McpDefaultAction::Allow),
+            max_args_size: Some(128),
+            additional_allow: vec![],
+            remove_allow: vec![],
+            additional_block: vec![],
+            remove_block: vec![],
+        });
+
+        let report = formula_verifier().verify_policy_with_parent(&parent, &merged, agent());
+        assert_eq!(report.inheritance.outcome, CheckOutcome::Fail);
+        assert!(report
+            .inheritance
+            .weakened
+            .iter()
+            .any(|item| item.atom == "mcp(safe_tool,args_size=33)"));
     }
 
     #[test]

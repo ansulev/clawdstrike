@@ -227,6 +227,17 @@ export type ExplainabilityTrace =
       caseId: string;
       guardResults: GuardSimResult[];
       evaluationPath?: EvaluationPathStep[];
+    }
+  | {
+      id: string;
+      kind: "plugin_trace";
+      caseId: string;
+      /** The plugin-specific trace type, e.g. "snort_match" or "kql_result". */
+      traceType: string;
+      /** Arbitrary plugin-specific trace data. */
+      data: Record<string, unknown>;
+      /** Optional source line hints for editor highlighting. */
+      sourceLineHints?: number[];
     };
 
 export interface EvaluationPathStep {

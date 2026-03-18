@@ -75,7 +75,7 @@ export function InitCommands() {
   );
 
   useEffect(() => {
-    registerNavigateCommands(navigate);
+    registerNavigateCommands();
 
     registerFileCommands({
       navigate,

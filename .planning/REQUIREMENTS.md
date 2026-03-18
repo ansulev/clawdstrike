@@ -74,11 +74,11 @@ Enable third-party and internal extension of the ClawdStrike workbench through a
 |-------------|-------|--------|
 | SEAM-01 | Phase 1 | Pending |
 | SEAM-02 | Phase 1 | Pending |
-| SEAM-03 | Phase 1 | Pending |
-| SEAM-04 | Phase 1 | Pending |
+| SEAM-03 | Phase 1 | Complete |
+| SEAM-04 | Phase 1 | Complete |
 | SEAM-05 | Phase 1 | Pending |
 | SEAM-06 | Phase 1 | Pending |
-| SEAM-07 | Phase 1 | Pending |
+| SEAM-07 | Phase 1 | Complete |
 | SEAM-08 | Phase 1 | Pending |
 | SEAM-09 | Phase 1 | Pending |
 | SEAM-10 | Phase 1 | Pending |

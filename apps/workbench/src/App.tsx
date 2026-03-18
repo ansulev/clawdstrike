@@ -64,8 +64,11 @@ function LoadingFallback() {
 /**
  * Bootstrap the workspace on first launch or restore persisted roots.
  *
- * - If persisted roots exist (subsequent launches), restores them so the
- *   Explorer is immediately populated.
+ * - Always ensures ~/.clawdstrike/workspace/ exists (creates it if missing).
+ * - If persisted roots exist (subsequent launches), restores them. If the
+ *   default workspace path is not among the persisted roots it is added
+ *   automatically so the Explorer never shows the raw ~/.clawdstrike config
+ *   directory.
  * - If no roots exist (first launch), scaffolds the default workspace
  *   at ~/.clawdstrike/workspace/ and mounts it.
  *
@@ -77,20 +80,30 @@ function useWorkspaceBootstrap() {
       const { isDesktop } = await import("@/lib/tauri-bridge");
       if (!isDesktop()) return;
 
+      // Always ensure the default workspace directory structure exists.
+      const { bootstrapDefaultWorkspace, getDefaultWorkspacePath } = await import(
+        "@/features/project/workspace-bootstrap"
+      );
+      const workspacePath = await bootstrapDefaultWorkspace();
+      const defaultPath = workspacePath ?? await getDefaultWorkspacePath();
+
       const store = useProjectStore.getState();
       const roots = store.projectRoots;
 
       if (roots.length > 0) {
-        // Restore persisted workspace roots
+        // Restore persisted workspace roots.
         await store.actions.initFromPersistedRoots();
-      } else {
-        // First launch: bootstrap default workspace
-        const { bootstrapDefaultWorkspace } = await import("@/features/project/workspace-bootstrap");
-        const workspacePath = await bootstrapDefaultWorkspace();
-        if (workspacePath) {
-          store.actions.addRoot(workspacePath);
-          await store.actions.loadRoot(workspacePath);
+
+        // If the default workspace path is missing from persisted roots,
+        // add it so the user always sees the workspace (not the raw config dir).
+        const currentRoots = useProjectStore.getState().projectRoots;
+        if (!currentRoots.includes(defaultPath)) {
+          store.actions.addRoot(defaultPath);
         }
+      } else {
+        // First launch: mount the default workspace.
+        store.actions.addRoot(defaultPath);
+        await store.actions.loadRoot(defaultPath);
       }
     }
     init().catch((err) => {

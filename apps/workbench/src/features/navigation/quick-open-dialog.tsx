@@ -13,6 +13,7 @@ import { useProjectStore, type ProjectFile } from "@/features/project/stores/pro
 import { getRecentFiles } from "@/features/policy/stores/policy-store";
 import { usePolicyTabsStore, pushRecentFile } from "@/features/policy/stores/policy-tabs-store";
 import { readDetectionFileByPath } from "@/lib/tauri-bridge";
+import { usePaneStore } from "@/features/panes/pane-store";
 
 // ---- Visibility state (module-level, no separate store file) ----
 
@@ -218,6 +219,9 @@ export function QuickOpenDialog() {
           .getState()
           .openTabOrSwitch(item.path, item.fileType as import("@/lib/workbench/file-type-registry").FileType, "", item.name);
       }
+
+      // Ensure the editor view is active so the opened file is visible
+      usePaneStore.getState().openApp("/editor", item.name);
     },
     [],
   );

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { getActivePaneRoute, usePaneStore } from "../pane-store";
 import { findPaneGroup, getAllPaneGroups, getPaneActiveView } from "../pane-tree";
+import { normalizeWorkbenchRoute } from "@/components/desktop/workbench-routes";
 
 describe("pane-store", () => {
   beforeEach(() => {
@@ -40,48 +41,48 @@ describe("pane-store", () => {
 
   describe("openApp", () => {
     it("adds a new tab to the active pane group", () => {
-      usePaneStore.getState().openApp("/editor", "Editor");
+      usePaneStore.getState().openApp("/settings", "Settings");
 
       const state = usePaneStore.getState();
       const pane = findPaneGroup(state.root, state.activePaneId);
       expect(pane).not.toBeNull();
       expect(pane!.views).toHaveLength(2);
-      expect(pane!.views[1].route).toBe("/editor");
-      expect(pane!.views[1].label).toBe("Editor");
+      expect(pane!.views[1].route).toBe("/settings");
+      expect(pane!.views[1].label).toBe("Settings");
       // New tab should be the active view
       expect(pane!.activeViewId).toBe(pane!.views[1].id);
     });
 
     it("focuses existing tab instead of adding duplicate when route already open in any pane", () => {
-      // Open editor in the active pane
-      usePaneStore.getState().openApp("/editor", "Editor");
+      // Open guards in the active pane
+      usePaneStore.getState().openApp("/guards", "Guards");
       const state1 = usePaneStore.getState();
       const pane1 = findPaneGroup(state1.root, state1.activePaneId)!;
-      const editorViewId = pane1.views[1].id;
+      const guardsViewId = pane1.views[1].id;
 
-      // Switch active view back to Home before splitting, so the sibling clones Home (not Editor)
+      // Switch active view back to Home before splitting, so the sibling clones Home (not Guards)
       usePaneStore.getState().setActiveView(pane1.id, pane1.views[0].id);
 
       // Split to create a second pane (focus moves to new pane, which clones Home)
       usePaneStore.getState().splitPane(pane1.id, "vertical");
 
-      // Verify the new pane has Home, not Editor
+      // Verify the new pane has Home, not Guards
       const stateAfterSplit = usePaneStore.getState();
       const siblingPane = findPaneGroup(stateAfterSplit.root, stateAfterSplit.activePaneId)!;
       expect(siblingPane.views[0].route).toBe("/home");
 
-      // Now try to open /editor from the new pane -- should focus the first pane's existing editor tab
-      usePaneStore.getState().openApp("/editor");
+      // Now try to open /guards from the new pane -- should focus the first pane's existing guards tab
+      usePaneStore.getState().openApp("/guards");
 
       const state2 = usePaneStore.getState();
-      // Should have focused back to the original pane that had the editor
+      // Should have focused back to the original pane that had guards
       const originalPane = findPaneGroup(state2.root, pane1.id)!;
-      expect(originalPane.activeViewId).toBe(editorViewId);
+      expect(originalPane.activeViewId).toBe(guardsViewId);
       expect(state2.activePaneId).toBe(pane1.id);
       // Should NOT have added a duplicate
       const allGroups = getAllPaneGroups(state2.root);
-      const totalEditorViews = allGroups.flatMap((g) => g.views).filter((v) => v.route === "/editor");
-      expect(totalEditorViews).toHaveLength(1);
+      const totalGuardsViews = allGroups.flatMap((g) => g.views).filter((v) => v.route === "/guards");
+      expect(totalGuardsViews).toHaveLength(1);
     });
 
     it("normalizes routes before comparing", () => {
@@ -156,31 +157,31 @@ describe("pane-store", () => {
 
   describe("closeView", () => {
     it("removes the specified view from the pane group", () => {
-      usePaneStore.getState().openApp("/editor", "Editor");
+      usePaneStore.getState().openApp("/guards", "Guards");
       usePaneStore.getState().openApp("/settings", "Settings");
 
       const state1 = usePaneStore.getState();
       const pane1 = findPaneGroup(state1.root, state1.activePaneId)!;
-      expect(pane1.views).toHaveLength(3); // Home + Editor + Settings
+      expect(pane1.views).toHaveLength(3); // Home + Guards + Settings
 
-      const editorViewId = pane1.views[1].id;
-      usePaneStore.getState().closeView(pane1.id, editorViewId);
+      const guardsViewId = pane1.views[1].id;
+      usePaneStore.getState().closeView(pane1.id, guardsViewId);
 
       const state2 = usePaneStore.getState();
       const pane2 = findPaneGroup(state2.root, state2.activePaneId)!;
       expect(pane2.views).toHaveLength(2);
-      expect(pane2.views.find((v) => v.id === editorViewId)).toBeUndefined();
+      expect(pane2.views.find((v) => v.id === guardsViewId)).toBeUndefined();
     });
 
     it("selects the right neighbor when closing the active view; falls back to left", () => {
-      usePaneStore.getState().openApp("/editor", "Editor");
+      usePaneStore.getState().openApp("/guards", "Guards");
       usePaneStore.getState().openApp("/settings", "Settings");
 
       const state1 = usePaneStore.getState();
       const pane1 = findPaneGroup(state1.root, state1.activePaneId)!;
-      // Views: [Home, Editor, Settings], active is Settings (last opened)
+      // Views: [Home, Guards, Settings], active is Settings (last opened)
 
-      // Set Editor as active, then close it -- should select Settings (right neighbor)
+      // Set Guards as active, then close it -- should select Settings (right neighbor)
       usePaneStore.getState().setActiveView(pane1.id, pane1.views[1].id);
       usePaneStore.getState().closeView(pane1.id, pane1.views[1].id);
 
@@ -260,15 +261,15 @@ describe("pane-store", () => {
 
   describe("setActiveView", () => {
     it("updates activeViewId within the specified pane group", () => {
-      usePaneStore.getState().openApp("/editor", "Editor");
+      usePaneStore.getState().openApp("/settings", "Settings");
 
       const state1 = usePaneStore.getState();
       const pane1 = findPaneGroup(state1.root, state1.activePaneId)!;
       const homeViewId = pane1.views[0].id;
-      const editorViewId = pane1.views[1].id;
+      const settingsViewId = pane1.views[1].id;
 
-      // Active should be editor (last opened)
-      expect(pane1.activeViewId).toBe(editorViewId);
+      // Active should be settings (last opened)
+      expect(pane1.activeViewId).toBe(settingsViewId);
 
       // Switch to home
       usePaneStore.getState().setActiveView(pane1.id, homeViewId);
@@ -291,6 +292,30 @@ describe("pane-store", () => {
       usePaneStore.getState().setActiveView(originalPaneId, originalPane.views[0].id);
 
       expect(usePaneStore.getState().activePaneId).toBe(originalPaneId);
+    });
+  });
+
+  describe("normalizeWorkbenchRoute", () => {
+    it("redirects /editor to /home", () => {
+      expect(normalizeWorkbenchRoute("/editor")).toBe("/home");
+    });
+
+    it("redirects /editor?panel=guards to /guards", () => {
+      expect(normalizeWorkbenchRoute("/editor?panel=guards")).toBe("/guards");
+    });
+
+    it("redirects /editor?panel=compare to /compare", () => {
+      expect(normalizeWorkbenchRoute("/editor?panel=compare")).toBe("/compare");
+    });
+
+    it("openApp /editor resolves to existing /home tab (no duplicate)", () => {
+      usePaneStore.getState().openApp("/editor", "Editor");
+
+      const state = usePaneStore.getState();
+      const pane = findPaneGroup(state.root, state.activePaneId)!;
+      // /editor normalizes to /home, which is already the default tab
+      expect(pane.views).toHaveLength(1);
+      expect(pane.views[0].route).toBe("/home");
     });
   });
 });

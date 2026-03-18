@@ -8,20 +8,32 @@ import { useActivityBarStore } from "@/features/activity-bar/stores/activity-bar
  *
  * Shows: Project > folder > ... > file.yaml
  * Clicking a folder segment expands it in the Explorer sidebar.
- * Only renders for editor routes with a file path on the active tab.
+ * Only renders for /file/ routes.
  */
 export function BreadcrumbBar({ route }: { route: string }) {
-  const activeTabId = usePolicyTabsStore((s) => s.activeTabId);
   const tabs = usePolicyTabsStore((s) => s.tabs);
   const project = useProjectStore((s) => s.project);
 
-  // Only show breadcrumbs for editor tabs
-  if (route !== "/editor") return null;
+  // Show breadcrumbs for file routes (not app routes like /home, /guards, etc.)
+  if (!route.startsWith("/file/")) return null;
 
-  const activeTab = tabs.find((t) => t.id === activeTabId);
-  if (!activeTab?.filePath) return null;
+  const filePath = route.slice("/file/".length);
 
-  const filePath = activeTab.filePath;
+  // Handle __new__ routes: show "Untitled" breadcrumb
+  if (filePath.startsWith("__new__/")) {
+    const tabId = filePath.split("/")[1];
+    const activeTab = tabs.find((t) => t.id === tabId);
+    return (
+      <div className="flex h-[24px] items-center gap-0 border-b border-[#1a1d27] bg-[#0b0d13] pl-4">
+        <span className="flex items-center">
+          <button type="button" className="rounded px-1.5 font-mono text-[10px] text-[#ece7dc]">
+            {activeTab?.name ?? "Untitled"}
+          </button>
+        </span>
+      </div>
+    );
+  }
+
   const segments = filePath.split("/").filter(Boolean);
 
   // Build breadcrumb segments: [projectName, ...folders, fileName]

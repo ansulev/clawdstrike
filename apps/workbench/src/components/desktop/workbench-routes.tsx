@@ -1,12 +1,6 @@
 import { lazy, Suspense } from "react";
 import { Navigate, type RouteObject } from "react-router-dom";
 
-const PolicyEditor = lazy(() =>
-  import("@/components/workbench/editor/policy-editor").then((m) => ({
-    default: m.PolicyEditor,
-  })),
-);
-
 const LabLayout = lazy(() =>
   import("@/components/workbench/lab/lab-layout").then((m) => ({
     default: m.LabLayout,
@@ -218,10 +212,12 @@ export function normalizeWorkbenchRoute(route: string): string {
   }
 
   // Redirect /editor?panel=guards and /editor?panel=compare to standalone routes
+  // FLAT-08: /editor redirects to /home
   if (url.pathname === "/editor") {
     const panel = url.searchParams.get("panel");
     if (panel === "guards") return "/guards";
     if (panel === "compare") return "/compare";
+    return "/home";
   }
 
   switch (url.pathname) {
@@ -253,7 +249,6 @@ export function getWorkbenchRouteLabel(route: string): string {
   const url = parseRoute(normalizeWorkbenchRoute(route));
 
   if (url.pathname === "/home") return "Home";
-  if (url.pathname === "/editor") return "Editor";
   if (url.pathname === "/guards") return "Guards";
   if (url.pathname === "/compare") return "Compare";
   if (url.pathname === "/live-agent") return "Live Agent";
@@ -306,7 +301,7 @@ export function getWorkbenchRouteLabel(route: string): string {
 export const WORKBENCH_ROUTE_OBJECTS: RouteObject[] = [
   { index: true, element: <Navigate to="/home" replace /> },
   { path: "home", element: <HomePage /> },
-  { path: "editor", element: <PolicyEditor /> },
+  { path: "editor", element: <Navigate to="/home" replace /> },
   { path: "compliance", element: <ComplianceDashboard /> },
   { path: "receipts", element: <ReceiptInspector /> },
   { path: "library", element: <LibraryGallery /> },

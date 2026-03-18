@@ -22,13 +22,6 @@ export function registerNavigateCommands(): void {
       execute: () => usePaneStore.getState().openApp("/home", "Home"),
     },
     {
-      id: "nav.editor",
-      title: "Policy Editor",
-      category: "Navigate",
-      keybinding: "Meta+1",
-      execute: () => usePaneStore.getState().openApp("/editor", "Editor"),
-    },
-    {
       id: "nav.lab",
       title: "Lab",
       category: "Navigate",

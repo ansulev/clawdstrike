@@ -21,6 +21,7 @@ import {
   IconCircle,
   IconAlertTriangle,
 } from "@tabler/icons-react";
+import { usePaneStore } from "@/features/panes/pane-store";
 import { cn } from "@/lib/utils";
 import { SubTabBar, type SubTab } from "../shared/sub-tab-bar";
 import { ActivityStream } from "./activity-stream";
@@ -131,7 +132,7 @@ export function HuntLayout() {
     draftFromPattern,
   } = useDraftDetection({
     dispatch: multiDispatch,
-    onNavigateToEditor: undefined, // Hunt is embedded; no navigation needed
+    onNavigateToEditor: () => usePaneStore.getState().openApp("/editor", "Editor"),
   });
 
   // Fetch events from fleet and convert + enrich

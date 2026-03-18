@@ -37,7 +37,7 @@
 
 - [x] **DET-01**: Editor gutter shows "Run Test" button on hover for testable guards
 - [x] **DET-02**: Editor gutter shows coverage gap indicators (uncovered MITRE techniques)
-- [ ] **DET-03**: Guard configuration shows execution order with drag-to-reorder
+- [x] **DET-03**: Guard configuration shows execution order with drag-to-reorder
 
 ### Terminal
 
@@ -96,7 +96,7 @@
 | TAB-03 | Phase 5 | Complete |
 | DET-01 | Phase 6 | Complete |
 | DET-02 | Phase 6 | Complete |
-| DET-03 | Phase 6 | Pending |
+| DET-03 | Phase 6 | Complete |
 | TERM-01 | Phase 5 | Complete |
 | TERM-02 | Phase 5 | Complete |
 | DINT-01 | Phase 7 | Complete |

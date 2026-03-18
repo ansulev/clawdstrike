@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: milestone
 status: in-progress
-stopped_at: Completed 07-03-PLAN.md
-last_updated: "2026-03-18T20:29:51Z"
-last_activity: 2026-03-18 -- Completed Phase 7 Plan 3 (Visual Builder & TrustPrint Routes)
+stopped_at: Completed 06-02-PLAN.md
+last_updated: "2026-03-18T20:37:00Z"
+last_activity: 2026-03-18 -- Completed Phase 6 Plan 2 (Execution Order Badges & Gutter Test Wiring)
 progress:
   total_phases: 7
-  completed_phases: 5
+  completed_phases: 6
   total_plans: 15
   completed_plans: 15
   percent: 100
@@ -25,10 +25,10 @@ See: .planning/PROJECT.md (updated 2026-03-18)
 
 ## Current Position
 
-Phase: 7 of 7 (Detection Editor Integration)
-Plan: 3 of 4 COMPLETE
-Status: Phase 07 in progress, plan 3 complete
-Last activity: 2026-03-18 -- Completed Phase 7 Plan 3 (Visual Builder & TrustPrint Routes)
+Phase: 6 of 7 (Detection Engineering Inline) COMPLETE
+Plan: 2 of 2 COMPLETE
+Status: Phase 06 complete, all plans done
+Last activity: 2026-03-18 -- Completed Phase 6 Plan 2 (Execution Order Badges & Gutter Test Wiring)
 
 Progress: [██████████] 100%
 
@@ -71,6 +71,7 @@ Summary: Delivered IDE shell — activity bar, 7 sidebar panels, pane tab system
 | Phase 07 P04 | 1min | 1 tasks | 1 files |
 | Phase 06 P01 | 7min | 2 tasks | 4 files |
 | Phase 07 P03 | 3min | 2 tasks | 4 files |
+| Phase 06 P02 | 3min | 1 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -118,6 +119,8 @@ v1.1 decisions:
 - [Phase 06]: Coverage threshold: red (#c45c5c) for >= 3 uncovered techniques, amber (#d4a84b) for 1-2
 - [Phase 07]: Hunt onNavigateToEditor uses usePaneStore.getState().openApp() for cross-feature pane navigation
 - [Phase 07]: Local useState for visual builder/TrustPrint wrapper pages (no store integration) -- keeps pages self-contained
+- [Phase 06]: Execution order badge placed between drag handle and guard icon for visual hierarchy
+- [Phase 06]: Gutter test callback uses toast feedback for both success and info states (not console.log)
 
 ### Pending Todos
 
@@ -129,6 +132,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-18T20:29:51Z
-Stopped at: Completed 07-03-PLAN.md
-Resume file: Continue with remaining plans (06-02, 07-02, 07-04, or next incomplete plan)
+Last session: 2026-03-18T20:37:00Z
+Stopped at: Completed 06-02-PLAN.md
+Resume file: Phase 6 complete. Continue with remaining incomplete plans (Phase 3 Quick Navigation).

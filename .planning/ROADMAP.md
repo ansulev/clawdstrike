@@ -20,7 +20,7 @@ Close the gap from "IDE scaffold" to "professional-grade detection engineering I
 - [ ] **Phase 3: Quick Navigation** — Cmd+P file picker, breadcrumbs, Cmd+G go-to-line (2 plans)
 - [x] **Phase 4: File Tree Mutations** — Create/rename/delete files from Explorer with status indicators (2 plans)
 - [x] **Phase 5: Tab & Terminal Polish** — Tab overflow scrolling, context menu additions, terminal splits (2 plans)
-- [ ] **Phase 6: Detection Engineering Inline** — Gutter test buttons, coverage gap indicators, guard reorder (2 plans)
+- [x] **Phase 6: Detection Engineering Inline** — Gutter test buttons, coverage gap indicators, guard reorder (2 plans)
 - [ ] **Phase 7: Detection Editor Integration** — Surface 50K LOC of orphaned detection engineering features as proper IDE panels (4 plans)
 
 ## Phase Details
@@ -110,7 +110,7 @@ Plans:
 
 Plans:
 - [x] 06-01-PLAN.md — CodeMirror gutter extensions for Run Test buttons and MITRE coverage gap indicators
-- [ ] 06-02-PLAN.md — Execution order badges on guard cards, wire gutter test button to simulation engine
+- [x] 06-02-PLAN.md — Execution order badges on guard cards, wire gutter test button to simulation engine
 
 ### Phase 7: Detection Editor Integration
 **Goal**: Surface the 50K+ LOC of orphaned detection engineering features as proper IDE panels and pane-openable views
@@ -145,5 +145,5 @@ Phases 1-2 are sequential (global search builds on in-file search). Phases 3, 4,
 | 3. Quick Navigation | 0/2 | Planning | - |
 | 4. File Tree Mutations | 2/2 | Complete | 2026-03-18 |
 | 5. Tab & Terminal Polish | 2/2 | Complete | 2026-03-18 |
-| 6. Detection Engineering Inline | 1/2 | In Progress | - |
+| 6. Detection Engineering Inline | 2/2 | Complete | 2026-03-18 |
 | 7. Detection Editor Integration | 4/4 | Complete | 2026-03-18 |

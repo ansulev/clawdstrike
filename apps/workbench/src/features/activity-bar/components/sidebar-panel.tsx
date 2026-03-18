@@ -24,6 +24,7 @@ function ExplorerPanelConnected() {
   const project = useProjectStore.use.project();
   const filter = useProjectStore.use.filter();
   const formatFilter = useProjectStore.use.formatFilter();
+  const fileStatuses = useProjectStore.use.fileStatuses();
   const actions = useProjectStore.use.actions();
 
   return (
@@ -39,9 +40,16 @@ function ExplorerPanelConnected() {
       onFilterChange={actions.setFilter}
       formatFilter={formatFilter}
       onFormatFilterChange={actions.setFormatFilter}
+      fileStatuses={fileStatuses}
       onCreateFile={async (parentPath, fileName) => {
         const savedPath = await actions.createFile(parentPath, fileName, "clawdstrike_policy");
         if (savedPath) {
+          // Compute relative path for status key.
+          const project = useProjectStore.getState().project;
+          const relPath = project && savedPath.startsWith(project.rootPath)
+            ? savedPath.slice(project.rootPath.length).replace(/^\//, "")
+            : fileName;
+          actions.setFileStatus(relPath, { modified: true });
           usePaneStore.getState().openApp("/editor", fileName);
         }
       }}

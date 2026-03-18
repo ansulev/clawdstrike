@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: milestone
-status: completed
-stopped_at: Completed 05-01-PLAN.md
-last_updated: "2026-03-18T19:43:15.031Z"
-last_activity: 2026-03-18 -- Completed Phase 4 Plan 1 (File Tree Mutations - New File)
+status: in-progress
+stopped_at: Completed 02-02-PLAN.md
+last_updated: "2026-03-18T19:48:01.641Z"
+last_activity: 2026-03-18 -- Completed Phase 2 Plan 2 (Global Search - Search Panel UI)
 progress:
   total_phases: 7
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 9
-  completed_plans: 7
-  percent: 78
+  completed_plans: 8
+  percent: 89
 ---
 
 # Project State
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-18)
 
 **Core value:** Security operators get a professional-grade IDE with search, quick navigation, and file management
-**Current focus:** Phase 4 File Tree Mutations
+**Current focus:** Phase 2 Global Search (complete)
 
 ## Current Position
 
-Phase: 4 of 7 (File Tree Mutations)
-Plan: 1 of 2 COMPLETE
-Status: Plan 04-01 complete, 04-02 next
-Last activity: 2026-03-18 -- Completed Phase 4 Plan 1 (File Tree Mutations - New File)
+Phase: 2 of 7 (Global Search) COMPLETE
+Plan: 2 of 2 COMPLETE
+Status: Phase 02 complete
+Last activity: 2026-03-18 -- Completed Phase 2 Plan 2 (Global Search - Search Panel UI)
 
-Progress: [████████░░] 78%
+Progress: [█████████░] 89%
 
 ## Previous Milestone (v1.0 — IDE Pivot)
 
@@ -64,6 +64,7 @@ Summary: Delivered IDE shell — activity bar, 7 sidebar panels, pane tab system
 | Phase 02 P01 | 5min | 2 tasks | 5 files |
 | Phase 05 P01 | 5min | 2 tasks | 3 files |
 | Phase 04 P01 | 6min | 2 tasks | 8 files |
+| Phase 02 P02 | 3min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -94,6 +95,9 @@ v1.1 decisions:
 - [Phase 04]: createDetectionFile composes saveDetectionFile with FILE_TYPE_REGISTRY defaultContent (no new Tauri command)
 - [Phase 04]: mutateTree helper uses immutable shallow-copy-on-write for Zustand state correctness
 - [Phase 04]: ExplorerContextMenu follows PaneTabContextMenu pattern for visual consistency
+- [Phase 02]: IconSearch from @tabler/icons-react used directly as activity bar icon (SigilProps compatible)
+- [Phase 02]: SearchPanel split into presentational + connected components for testability
+- [Phase 02]: 300ms debounce on search input with immediate Enter key override
 
 ### Pending Todos
 
@@ -105,6 +109,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-18T19:43:15.027Z
-Stopped at: Completed 04-01-PLAN.md
-Resume file: .planning/phases/04-file-tree-mutations/04-02-PLAN.md
+Last session: 2026-03-18T19:47:00Z
+Stopped at: Completed 02-02-PLAN.md
+Resume file: next incomplete plan

@@ -31,6 +31,14 @@ export interface DetectionProject {
   expandedDirs: Set<string>;
 }
 
+/** Per-file status flags for Explorer visual indicators. */
+export interface FileStatus {
+  /** File has unsaved modifications. */
+  modified?: boolean;
+  /** File has validation errors. */
+  hasError?: boolean;
+}
+
 interface ProjectState {
   project: DetectionProject | null;
   loading: boolean;
@@ -39,6 +47,8 @@ interface ProjectState {
   filter: string;
   /** Filter files by a specific format. */
   formatFilter: FileType | null;
+  /** Per-file status map (keyed by relative file path). */
+  fileStatuses: Map<string, FileStatus>;
 }
 
 // ---- Helpers ----
@@ -262,6 +272,10 @@ interface ProjectStoreState extends ProjectState {
     renameFile: (oldPath: string, newName: string) => Promise<boolean>;
     /** Delete a file. Returns true on success. */
     deleteFile: (filePath: string) => Promise<boolean>;
+    /** Set or merge file status flags for a given file path. */
+    setFileStatus: (filePath: string, status: FileStatus) => void;
+    /** Clear file status for a given file path. */
+    clearFileStatus: (filePath: string) => void;
   };
 }
 
@@ -271,6 +285,7 @@ const useProjectStoreBase = create<ProjectStoreState>()((set, get) => ({
   error: null,
   filter: "",
   formatFilter: null,
+  fileStatuses: new Map<string, FileStatus>(),
 
   actions: {
     setProject: (project: DetectionProject) => {
@@ -278,7 +293,7 @@ const useProjectStoreBase = create<ProjectStoreState>()((set, get) => ({
     },
 
     clearProject: () => {
-      set({ project: null, error: null, filter: "", formatFilter: null });
+      set({ project: null, error: null, filter: "", formatFilter: null, fileStatuses: new Map() });
     },
 
     setLoading: (loading: boolean) => {
@@ -426,6 +441,18 @@ const useProjectStoreBase = create<ProjectStoreState>()((set, get) => ({
       set({ project: { ...project, files: newFiles } });
       return true;
     },
+
+    setFileStatus: (filePath: string, status: FileStatus) => {
+      const next = new Map(get().fileStatuses);
+      next.set(filePath, { ...next.get(filePath), ...status });
+      set({ fileStatuses: next });
+    },
+
+    clearFileStatus: (filePath: string) => {
+      const next = new Map(get().fileStatuses);
+      next.delete(filePath);
+      set({ fileStatuses: next });
+    },
   },
 }));
 
@@ -464,7 +491,7 @@ export function useProject(): ProjectContextValue {
   const actions = useProjectStore((s) => s.actions);
 
   return {
-    state: { project, loading, error, filter, formatFilter },
+    state: { project, loading, error, filter, formatFilter, fileStatuses: new Map() },
     dispatch: undefined as never,
     toggleDir: actions.toggleDir,
     setFilter: actions.setFilter,

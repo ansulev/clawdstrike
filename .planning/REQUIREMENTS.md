@@ -48,12 +48,12 @@
 
 - [x] **DINT-01**: Guards browser opens as a pane tab (not full-page overlay) for side-by-side with policy editor
 - [x] **DINT-02**: Compare/diff view opens as a pane tab (not overlay) supporting split-pane comparison
-- [ ] **DINT-03**: Visual builders (Sigma, YARA, OCSF) open as editor tabs from Explorer or command palette
+- [x] **DINT-03**: Visual builders (Sigma, YARA, OCSF) open as editor tabs from Explorer or command palette
 - [x] **DINT-04**: Evidence Pack, Explainability, Version History render as resizable right-sidebar panels
 - [x] **DINT-05**: Live Agent Tab and SDK Integration Tab promoted to standalone pane-openable views
 - [x] **DINT-06**: Hunt findings can draft policies (hunt → policy pipeline connected)
 - [x] **DINT-07**: Coverage gap analysis accessible as a pane tab with MITRE heatmap
-- [ ] **DINT-08**: TrustPrint suite (pattern explorer, provider wizard, threshold tuner) accessible from command palette
+- [x] **DINT-08**: TrustPrint suite (pattern explorer, provider wizard, threshold tuner) accessible from command palette
 
 ## v2 Requirements
 
@@ -101,12 +101,12 @@
 | TERM-02 | Phase 5 | Complete |
 | DINT-01 | Phase 7 | Complete |
 | DINT-02 | Phase 7 | Complete |
-| DINT-03 | Phase 7 | Pending |
+| DINT-03 | Phase 7 | Complete |
 | DINT-04 | Phase 7 | Complete |
 | DINT-05 | Phase 7 | Complete |
 | DINT-06 | Phase 7 | Complete |
 | DINT-07 | Phase 7 | Complete |
-| DINT-08 | Phase 7 | Pending |
+| DINT-08 | Phase 7 | Complete |
 
 **Coverage:**
 - v1.1 requirements: 29 total

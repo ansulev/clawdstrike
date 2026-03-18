@@ -42,6 +42,11 @@ interface SpeakeasyPanelProps {
   onIntelClick?: (intelId: string) => void;
   /** Callback when the attached entity link is clicked. */
   onAttachedClick?: (entityId: string) => void;
+  /**
+   * When true, renders as an inline flex-column child (for embedding in a
+   * sidebar container) instead of a fixed overlay with backdrop.
+   */
+  inline?: boolean;
 }
 
 
@@ -205,6 +210,7 @@ export function SpeakeasyPanel({
   onFindingClick,
   onIntelClick,
   onAttachedClick,
+  inline = false,
 }: SpeakeasyPanelProps) {
   const [composeText, setComposeText] = useState("");
   const [sending, setSending] = useState(false);
@@ -318,23 +324,29 @@ export function SpeakeasyPanel({
 
   return (
     <>
-      {/* Backdrop (click to close) */}
-      <div
-        ref={backdropRef}
-        onClick={handleBackdropClick}
-        className={cn(
-          "fixed inset-0 z-40 transition-opacity duration-200",
-          "bg-black/20 opacity-100",
-        )}
-      />
+      {/* Backdrop (click to close) -- hidden in inline mode */}
+      {!inline && (
+        <div
+          ref={backdropRef}
+          onClick={handleBackdropClick}
+          className={cn(
+            "fixed inset-0 z-40 transition-opacity duration-200",
+            "bg-black/20 opacity-100",
+          )}
+        />
+      )}
 
       {/* Panel */}
       <div
         className={cn(
-          "fixed top-0 right-0 bottom-0 z-50 w-96 flex flex-col",
-          "bg-zinc-950 border-l border-[#2d3240] shadow-2xl shadow-black/50",
-          "transition-transform duration-300 ease-out",
-          "translate-x-0",
+          inline
+            ? "flex-1 min-h-0 flex flex-col bg-zinc-950"
+            : cn(
+                "fixed top-0 right-0 bottom-0 z-50 w-96 flex flex-col",
+                "bg-zinc-950 border-l border-[#2d3240] shadow-2xl shadow-black/50",
+                "transition-transform duration-300 ease-out",
+                "translate-x-0",
+              ),
         )}
       >
         {!room ? (

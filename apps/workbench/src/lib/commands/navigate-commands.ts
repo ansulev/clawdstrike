@@ -121,6 +121,42 @@ export function registerNavigateCommands(): void {
         usePaneStore.getState().openApp("/simulator", "Simulator"),
     },
 
+    // ---- Detection editor views (07-01) ----
+    {
+      id: "nav.guards",
+      title: "Guards Browser",
+      category: "Navigate",
+      execute: () => usePaneStore.getState().openApp("/guards", "Guards"),
+    },
+    {
+      id: "nav.compare",
+      title: "Compare / Diff",
+      category: "Navigate",
+      execute: () => usePaneStore.getState().openApp("/compare", "Compare"),
+    },
+    {
+      id: "nav.liveAgent",
+      title: "Live Agent Monitor",
+      category: "Navigate",
+      execute: () =>
+        usePaneStore.getState().openApp("/live-agent", "Live Agent"),
+    },
+    {
+      id: "nav.sdkIntegration",
+      title: "SDK Integration",
+      category: "Navigate",
+      execute: () =>
+        usePaneStore
+          .getState()
+          .openApp("/sdk-integration", "SDK Integration"),
+    },
+    {
+      id: "nav.coverage",
+      title: "ATT&CK Coverage Heatmap",
+      category: "Navigate",
+      execute: () => usePaneStore.getState().openApp("/coverage", "Coverage"),
+    },
+
     // ---- New app.* commands (CMD-06) ----
     {
       id: "app.missions",

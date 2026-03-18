@@ -16,7 +16,7 @@ Transform the ClawdStrike Workbench from a sidebar-nav dashboard into a VS Code/
 - Decimal phases (e.g., 2.1): Urgent insertions (marked with INSERTED)
 
 - [x] **Phase 1: Activity Bar + Sidebar Shell** - Decompose sidebar into activity bar + panel container, wire panel switching, new stores, basic commands
-- [ ] **Phase 2: Sidebar Panels + Editor Tabs** - Build 7 sidebar panels, add openApp to pane store, render routes as editor tabs
+- [x] **Phase 2: Sidebar Panels + Editor Tabs** - Build 7 sidebar panels, add openApp to pane store, render routes as editor tabs
 - [ ] **Phase 3: Right Sidebar + Bottom Panel + Commands** - Right sidebar zone with Speakeasy, audit tail tab, per-panel sidebar commands
 - [ ] **Phase 4: Lab Decomposition + App Navigation** - Break Lab into 3 independent apps, rewrite navigate commands to openApp pattern
 
@@ -51,9 +51,9 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 02-01-PLAN.md -- Pane store enhancements (openApp, closeView, setActiveView), PaneTabBar + PaneTab components, unit tests
-- [ ] 02-02-PLAN.md -- Posture utility extraction, HeartbeatPanel, SentinelPanel, FindingsPanel
-- [ ] 02-03-PLAN.md -- LibraryPanel, FleetPanel, CompliancePanel, SidebarPanel integration, tab.close command (Cmd+W)
+- [x] 02-01-PLAN.md -- Pane store enhancements (openApp, closeView, setActiveView), PaneTabBar + PaneTab components, unit tests
+- [x] 02-02-PLAN.md -- Posture utility extraction, HeartbeatPanel, SentinelPanel, FindingsPanel
+- [x] 02-03-PLAN.md -- LibraryPanel, FleetPanel, CompliancePanel, SidebarPanel integration, tab.close command (Cmd+W)
 
 ### Phase 3: Right Sidebar + Bottom Panel + Commands
 **Goal**: Operators have a right sidebar for Speakeasy chat, an audit tail in the bottom panel, and per-panel sidebar commands
@@ -65,11 +65,11 @@ Plans:
   3. AuditTailPanel appears as a 4th tab in the bottom panel showing last N audit entries with auto-refresh
   4. Sidebar commands for each panel (sentinels, findings, library, fleet, compliance, heartbeat) are registered and discoverable via command palette
   5. Existing Terminal, Problems, and Output bottom panel tabs continue to work unchanged
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 03-01: TBD
-- [ ] 03-02: TBD
+- [ ] 03-01-PLAN.md -- Right sidebar store + components (RightSidebar, RightSidebarResizeHandle), AuditTailPanel, bottom pane Audit tab integration
+- [ ] 03-02-PLAN.md -- Desktop layout integration (right sidebar in flex row), 8 new commands (sidebar.toggleRight, 6 panel commands, view.toggleAudit)
 
 ### Phase 4: Lab Decomposition + App Navigation
 **Goal**: Lab is decomposed into independent apps and all navigation uses the openApp pattern, completing the IDE pivot
@@ -94,6 +94,6 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Activity Bar + Sidebar Shell | 2/2 | Complete | 2026-03-18 |
-| 2. Sidebar Panels + Editor Tabs | 0/3 | Not started | - |
+| 2. Sidebar Panels + Editor Tabs | 3/3 | Complete | 2026-03-18 |
 | 3. Right Sidebar + Bottom Panel + Commands | 0/2 | Not started | - |
 | 4. Lab Decomposition + App Navigation | 0/2 | Not started | - |

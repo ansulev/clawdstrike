@@ -29,11 +29,11 @@
 
 ### Editor Area (Pane System)
 
-- [ ] **PANE-01**: paneStore gains openApp(route, label) that opens route as new tab or focuses existing
-- [ ] **PANE-02**: All 19 existing routes render correctly as pane tabs
-- [ ] **PANE-03**: PaneTabBar shows view tabs with close button per tab
-- [ ] **PANE-04**: Default layout opens Home tab on app launch
-- [ ] **PANE-05**: Pane splitting (horizontal/vertical) continues to work for all app types
+- [x] **PANE-01**: paneStore gains openApp(route, label) that opens route as new tab or focuses existing
+- [x] **PANE-02**: All 19 existing routes render correctly as pane tabs
+- [x] **PANE-03**: PaneTabBar shows view tabs with close button per tab
+- [x] **PANE-04**: Default layout opens Home tab on app launch
+- [x] **PANE-05**: Pane splitting (horizontal/vertical) continues to work for all app types
 
 ### Right Sidebar
 
@@ -125,11 +125,11 @@
 | SIDE-08 | Phase 2 | Pending |
 | SIDE-09 | Phase 2 | Pending |
 | SIDE-10 | Phase 2 | Pending |
-| PANE-01 | Phase 2 | Pending |
-| PANE-02 | Phase 2 | Pending |
-| PANE-03 | Phase 2 | Pending |
-| PANE-04 | Phase 2 | Pending |
-| PANE-05 | Phase 2 | Pending |
+| PANE-01 | Phase 2 | Complete |
+| PANE-02 | Phase 2 | Complete |
+| PANE-03 | Phase 2 | Complete |
+| PANE-04 | Phase 2 | Complete |
+| PANE-05 | Phase 2 | Complete |
 | RBAR-01 | Phase 3 | Pending |
 | RBAR-02 | Phase 3 | Pending |
 | RBAR-03 | Phase 3 | Pending |

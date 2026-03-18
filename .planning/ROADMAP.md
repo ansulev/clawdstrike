@@ -75,10 +75,10 @@ Plans:
   1. `import { createPlugin, PluginContext } from "@clawdstrike/plugin-sdk"` resolves and provides full TypeScript types
   2. A plugin authored with `createPlugin()` that registers a command, a guard, and a status bar item compiles without errors and loads successfully in the workbench
   3. The SDK enforces the `activate(context: PluginContext)` / `deactivate()` contract at the type level
-**Plans**: TBD
+**Plans**: 1 plan
 
 Plans:
-- [ ] 04-01: Package scaffolding with PluginContext, contribution types, and createPlugin helper
+- [ ] 04-01-PLAN.md -- @clawdstrike/plugin-sdk package with PluginContext, contribution types, and createPlugin helper
 
 ### Phase 5: Guard-as-Plugin Proof of Concept
 **Goal**: A real built-in guard works identically when loaded as a plugin, proving the end-to-end pipeline from manifest to guard evaluation to config UI

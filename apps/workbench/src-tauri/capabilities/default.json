@@ -23,6 +23,15 @@
     "fs:allow-read-text-file",
     "fs:allow-write-text-file",
     "fs:allow-rename",
-    "fs:allow-remove"
+    "fs:allow-remove",
+    "fs:allow-mkdir",
+    "fs:allow-exists",
+    "fs:allow-read-dir",
+    "fs:allow-home-read",
+    "fs:allow-home-read-recursive",
+    "fs:allow-home-write",
+    "fs:allow-home-write-recursive",
+    "fs:allow-home-meta",
+    "fs:allow-home-meta-recursive"
   ]
 }

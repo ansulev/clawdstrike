@@ -23,6 +23,7 @@ Close the gap from "IDE scaffold" to "professional-grade detection engineering I
 - [x] **Phase 6: Detection Engineering Inline** — Gutter test buttons, coverage gap indicators, guard reorder (2 plans)
 - [ ] **Phase 7: Detection Editor Integration** — Surface 50K LOC of orphaned detection engineering features as proper IDE panels
 - [x] **Phase 8: File-First Editor** — Files are pane tabs, FileEditorShell wraps per-file chrome, kill PolicyTabBar (4 plans)
+- [ ] **Phase 9: Default Workspace Bootstrap** — Auto-scaffold ~/.clawdstrike/workspace/, multi-root explorer, example content (2 plans)
 
 ## Phase Details
 
@@ -155,10 +156,26 @@ Plans:
 - [x] 08-03-PLAN.md — FileEditorToolbar extraction from PolicyEditor, FileEditorShell toolbar + content integration
 - [x] 08-04-PLAN.md — Rewire Explorer/QuickOpen/Search/Hunt to /file/ routes, redirect /editor, remove nav.editor, update BreadcrumbBar
 
+### Phase 9: Default Workspace Bootstrap
+**Goal**: First launch shows a populated Explorer with editable example content, not an empty "No project open" state. Multi-root support lets users add additional folders.
+**Depends on**: Phase 4 (file tree mutations), Phase 8 (file-first editor)
+**Requirements**: BOOT-01, BOOT-02, BOOT-03, BOOT-04, BOOT-05
+**Success Criteria** (what must be TRUE):
+  1. On first launch (no prior project), `~/.clawdstrike/workspace/` is scaffolded with policies/, sigma/, yara/, scenarios/ and example files
+  2. Explorer auto-mounts the default workspace — user sees a populated file tree immediately
+  3. Built-in rulesets (permissive, default, strict, ai-agent, cicd) written as editable copies in policies/
+  4. "Add Folder" button at bottom of Explorer lets users mount additional directories as multi-root workspace entries
+  5. Mounted folders persist across restarts via localStorage
+**Plans**: 2 plans
+
+Plans:
+- [ ] 09-01-PLAN.md — Workspace bootstrap module, Tauri fs capabilities, multi-root project store with localStorage persistence
+- [ ] 09-02-PLAN.md — Multi-root Explorer UI, Add Folder button with native dialog, app-level bootstrap hook
+
 ## Progress
 
 **Execution Order:**
-Phases 1-2 sequential. 3, 4, 5 independent. 6 depends on 1. 7 depends on 3. Phase 8 depends on 5 + 7.
+Phases 1-2 sequential. 3, 4, 5 independent. 6 depends on 1. 7 depends on 3. Phase 8 depends on 5 + 7. Phase 9 depends on 4 + 8.
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -170,3 +187,4 @@ Phases 1-2 sequential. 3, 4, 5 independent. 6 depends on 1. 7 depends on 3. Phas
 | 6. Detection Engineering Inline | 2/2 | Complete | 2026-03-18 |
 | 7. Detection Editor Integration | 4/4 | Complete | 2026-03-18 |
 | 8. File-First Editor | 4/4 | Complete | 2026-03-18 |
+| 9. Default Workspace Bootstrap | 0/2 | Not started | - |

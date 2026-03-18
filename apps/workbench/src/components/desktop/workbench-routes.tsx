@@ -137,6 +137,36 @@ const MissionControlPage = lazy(() =>
   })),
 );
 
+const GuardsPage = lazy(() =>
+  import("@/components/workbench/guards/guards-page").then((m) => ({
+    default: m.GuardsPage,
+  })),
+);
+
+const CompareLayout = lazy(() =>
+  import("@/components/workbench/compare/compare-layout").then((m) => ({
+    default: m.CompareLayout,
+  })),
+);
+
+const LiveAgentTab = lazy(() =>
+  import("@/components/workbench/editor/live-agent-tab").then((m) => ({
+    default: m.LiveAgentTab,
+  })),
+);
+
+const SdkIntegrationTab = lazy(() =>
+  import("@/components/workbench/editor/sdk-integration-tab").then((m) => ({
+    default: m.SdkIntegrationTab,
+  })),
+);
+
+const MitreHeatmap = lazy(() =>
+  import("@/components/workbench/coverage/mitre-heatmap").then((m) => ({
+    default: m.MitreHeatmap,
+  })),
+);
+
 function parseRoute(route: string): URL {
   const normalized = route.startsWith("/") ? route : `/${route}`;
   return new URL(normalized, "https://clawdstrike.local");
@@ -145,6 +175,13 @@ function parseRoute(route: string): URL {
 export function normalizeWorkbenchRoute(route: string): string {
   const url = parseRoute(route);
 
+  // Redirect /editor?panel=guards and /editor?panel=compare to standalone routes
+  if (url.pathname === "/editor") {
+    const panel = url.searchParams.get("panel");
+    if (panel === "guards") return "/guards";
+    if (panel === "compare") return "/compare";
+  }
+
   switch (url.pathname) {
     case "/":
     case "/overview":
@@ -152,9 +189,15 @@ export function normalizeWorkbenchRoute(route: string): string {
     case "/intel":
       return "/findings?tab=intel";
     case "/guards":
-      return "/editor?panel=guards";
+      return "/guards";
     case "/compare":
-      return "/editor?panel=compare";
+      return "/compare";
+    case "/live-agent":
+      return "/live-agent";
+    case "/sdk-integration":
+      return "/sdk-integration";
+    case "/coverage":
+      return "/coverage";
     case "/delegation":
       return "/topology?tab=delegation";
     case "/hierarchy":
@@ -168,12 +211,12 @@ export function getWorkbenchRouteLabel(route: string): string {
   const url = parseRoute(normalizeWorkbenchRoute(route));
 
   if (url.pathname === "/home") return "Home";
-  if (url.pathname === "/editor") {
-    const panel = url.searchParams.get("panel");
-    if (panel === "guards") return "Guards";
-    if (panel === "compare") return "Compare";
-    return "Editor";
-  }
+  if (url.pathname === "/editor") return "Editor";
+  if (url.pathname === "/guards") return "Guards";
+  if (url.pathname === "/compare") return "Compare";
+  if (url.pathname === "/live-agent") return "Live Agent";
+  if (url.pathname === "/sdk-integration") return "SDK Integration";
+  if (url.pathname === "/coverage") return "Coverage";
   if (url.pathname === "/swarm-board") return "Swarm Board";
   if (url.pathname === "/hunt") return "Hunt";
   if (url.pathname === "/simulator") return "Simulator";
@@ -242,24 +285,11 @@ export const WORKBENCH_ROUTE_OBJECTS: RouteObject[] = [
   },
   { path: "hunt", element: <Suspense fallback={<div className="flex-1" />}><HuntLayout /></Suspense> },
   { path: "simulator", element: <Suspense fallback={<div className="flex-1" />}><SimulatorLayout /></Suspense> },
-  {
-    path: "guards",
-    element: (
-      <Navigate
-        to={{ pathname: "/editor", search: "?panel=guards" }}
-        replace
-      />
-    ),
-  },
-  {
-    path: "compare",
-    element: (
-      <Navigate
-        to={{ pathname: "/editor", search: "?panel=compare" }}
-        replace
-      />
-    ),
-  },
+  { path: "guards", element: <GuardsPage /> },
+  { path: "compare", element: <CompareLayout /> },
+  { path: "live-agent", element: <LiveAgentTab /> },
+  { path: "sdk-integration", element: <SdkIntegrationTab /> },
+  { path: "coverage", element: <MitreHeatmap tabs={[]} /> },
   {
     path: "delegation",
     element: (

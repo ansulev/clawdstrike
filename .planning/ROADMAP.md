@@ -21,7 +21,7 @@ Close the gap from "IDE scaffold" to "professional-grade detection engineering I
 - [x] **Phase 4: File Tree Mutations** — Create/rename/delete files from Explorer with status indicators (2 plans)
 - [x] **Phase 5: Tab & Terminal Polish** — Tab overflow scrolling, context menu additions, terminal splits (2 plans)
 - [ ] **Phase 6: Detection Engineering Inline** — Gutter test buttons, coverage gap indicators, guard reorder (2 plans)
-- [ ] **Phase 7: Detection Editor Integration** — Surface 50K LOC of orphaned detection engineering features as proper IDE panels
+- [ ] **Phase 7: Detection Editor Integration** — Surface 50K LOC of orphaned detection engineering features as proper IDE panels (4 plans)
 
 ## Phase Details
 
@@ -125,12 +125,13 @@ Plans:
   6. Hunt findings can draft policies (hunt → policy pipeline connected)
   7. Coverage gap analysis accessible as a pane tab with MITRE heatmap
   8. TrustPrint suite (pattern explorer, provider wizard, threshold tuner) accessible from command palette
-**Plans**: TBD
+**Plans**: 4 plans
 
 Plans:
-- [ ] 07-01: TBD
-- [ ] 07-02: TBD
-- [ ] 07-03: TBD
+- [ ] 07-01-PLAN.md — Promote Guards, Compare, Live Agent, SDK, Coverage to standalone pane routes with navigate commands
+- [ ] 07-02-PLAN.md — Expand right sidebar with Evidence Pack, Explainability, Version History panels
+- [ ] 07-03-PLAN.md — Add visual builder and TrustPrint tool routes with command palette commands
+- [ ] 07-04-PLAN.md — Wire Hunt draft-detection pipeline to navigate to editor pane tab
 
 ## Progress
 
@@ -145,4 +146,4 @@ Phases 1-2 are sequential (global search builds on in-file search). Phases 3, 4,
 | 4. File Tree Mutations | 2/2 | Complete | 2026-03-18 |
 | 5. Tab & Terminal Polish | 2/2 | Complete | 2026-03-18 |
 | 6. Detection Engineering Inline | 0/2 | Planned | - |
-| 7. Detection Editor Integration | 0/3 | Not started | - |
+| 7. Detection Editor Integration | 0/4 | Planned | - |

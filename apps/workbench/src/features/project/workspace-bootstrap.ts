@@ -150,9 +150,14 @@ export async function bootstrapDefaultWorkspace(): Promise<string | null> {
       "@tauri-apps/plugin-fs"
     );
 
-    // Check if workspace already exists.
-    const alreadyExists = await exists(workspacePath);
-    if (alreadyExists) {
+    // Check if workspace has already been fully scaffolded by looking for
+    // the sentinel file (README.md).  The directory itself may exist (e.g.
+    // created by a prior `createDetectionFile` or `mkdir`) without having
+    // any of the example content, so checking the directory alone is not
+    // sufficient.
+    const sentinelPath = `${workspacePath}/README.md`;
+    const alreadyBootstrapped = await exists(sentinelPath);
+    if (alreadyBootstrapped) {
       return workspacePath;
     }
 

@@ -14,6 +14,7 @@ import { usePaneStore } from "@/features/panes/pane-store";
 import { getAllPaneGroups } from "@/features/panes/pane-tree";
 import { useWorkbench, useMultiPolicy } from "@/features/policy/stores/multi-policy-store";
 import { useActivityBarStore } from "@/features/activity-bar/stores/activity-bar-store";
+import { useRightSidebarStore } from "@/features/right-sidebar/stores/right-sidebar-store";
 import { commandRegistry } from "@/lib/command-registry";
 import {
   registerNavigateCommands,
@@ -134,6 +135,14 @@ export function InitCommands() {
           usePaneStore.getState().closeView(activePaneId, activePane.activeViewId);
         }
       },
+      toggleRightSidebar: () => useRightSidebarStore.getState().actions.toggle(),
+      showSentinels: () => useActivityBarStore.getState().actions.showPanel("sentinels"),
+      showFindings: () => useActivityBarStore.getState().actions.showPanel("findings"),
+      showLibrary: () => useActivityBarStore.getState().actions.showPanel("library"),
+      showFleet: () => useActivityBarStore.getState().actions.showPanel("fleet"),
+      showCompliance: () => useActivityBarStore.getState().actions.showPanel("compliance"),
+      showHeartbeat: () => useActivityBarStore.getState().actions.showPanel("heartbeat"),
+      toggleAudit: () => useBottomPaneStore.getState().toggleTab("audit"),
     });
 
     // No cleanup needed — commands are re-registered (overwritten) when deps change.

@@ -85,10 +85,10 @@ Enable third-party and internal extension of the ClawdStrike workbench through a
 | MFST-01 | Phase 2 | Complete |
 | MFST-02 | Phase 2 | Complete |
 | MFST-03 | Phase 2 | Complete |
-| REG-01 | Phase 2 | Pending |
-| REG-02 | Phase 2 | Pending |
-| REG-03 | Phase 2 | Pending |
-| REG-04 | Phase 2 | Pending |
+| REG-01 | Phase 2 | Complete |
+| REG-02 | Phase 2 | Complete |
+| REG-03 | Phase 2 | Complete |
+| REG-04 | Phase 2 | Complete |
 | LOAD-01 | Phase 3 | Pending |
 | LOAD-02 | Phase 3 | Pending |
 | LOAD-03 | Phase 3 | Pending |

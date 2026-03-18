@@ -867,12 +867,13 @@ fn decompile_origins(
     origins_cfg: &OriginsConfig,
 ) -> Result<hushspec::extensions::OriginsExtension> {
     let default_behavior = match origins_cfg.default_behavior {
-        Some(OriginDefaultBehavior::Deny) | None => {
-            hushspec::extensions::OriginDefaultBehavior::Deny
+        Some(OriginDefaultBehavior::Deny) => {
+            Some(hushspec::extensions::OriginDefaultBehavior::Deny)
         }
         Some(OriginDefaultBehavior::MinimalProfile) => {
-            hushspec::extensions::OriginDefaultBehavior::MinimalProfile
+            Some(hushspec::extensions::OriginDefaultBehavior::MinimalProfile)
         }
+        None => None,
     };
 
     let profiles = origins_cfg
@@ -979,7 +980,7 @@ fn decompile_origins(
         .collect::<Result<Vec<_>>>()?;
 
     Ok(hushspec::extensions::OriginsExtension {
-        default_behavior: Some(default_behavior),
+        default_behavior,
         profiles,
     })
 }
@@ -1584,6 +1585,34 @@ mod tests {
             origins.default_behavior,
             Some(OriginDefaultBehavior::MinimalProfile)
         );
+        assert_eq!(origins.profiles.len(), 1);
+        assert_eq!(origins.profiles[0].id, "chat");
+    }
+
+    #[test]
+    fn test_decompile_origins_preserves_unset_default_behavior() {
+        let policy = Policy {
+            origins: Some(OriginsConfig {
+                default_behavior: None,
+                profiles: vec![OriginProfile {
+                    id: "chat".to_string(),
+                    match_rules: OriginMatch::default(),
+                    posture: None,
+                    mcp: None,
+                    egress: None,
+                    data: None,
+                    budgets: None,
+                    bridge_policy: None,
+                    explanation: None,
+                }],
+            }),
+            ..Default::default()
+        };
+
+        let roundtrip = decompile(&policy).expect("decompile should succeed");
+        let ext = roundtrip.extensions.expect("extensions should be set");
+        let origins = ext.origins.expect("origins should be set");
+        assert_eq!(origins.default_behavior, None);
         assert_eq!(origins.profiles.len(), 1);
         assert_eq!(origins.profiles[0].id, "chat");
     }

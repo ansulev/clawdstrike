@@ -662,7 +662,7 @@ export function useProject(): ProjectContextValue {
   const actions = useProjectStore((s) => s.actions);
 
   return {
-    state: { project, loading, error, filter, formatFilter, fileStatuses: new Map() },
+    state: { project, loading, error, filter, formatFilter, fileStatuses: new Map(), projectRoots: [], projects: new Map() },
     dispatch: undefined as never,
     toggleDir: actions.toggleDir,
     setFilter: actions.setFilter,

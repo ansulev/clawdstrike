@@ -923,7 +923,7 @@ export function PolicyEditor() {
           {showExplorer && (
             <div className="w-[280px] shrink-0 border-r border-[#2d3240]">
               <ExplorerPanel
-                project={explorerProject}
+                projects={[explorerProject]}
                 onToggleDir={toggleDir}
                 onOpenFile={(file) => { void handleOpenExplorerFile(file.path); }}
                 onExpandAll={expandAll}

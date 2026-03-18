@@ -21,14 +21,28 @@ import { FileEditorToolbar } from "./file-editor-toolbar";
 
 export function FileEditorShell() {
   const params = useParams();
-  const filePath = params["*"] ?? "";
+  const rawParam = params["*"] ?? "";
+
+  // Decode URI-encoded characters (spaces, special chars) and restore the
+  // leading "/" that React Router strips from the wildcard match.  Routes
+  // are constructed as `/file/${absolutePath}` (see pane-store.ts openFile)
+  // which produces `/file//Users/...`.  React Router returns the `*` param
+  // without the leading slash, so an absolute path like
+  // "/Users/connor/.clawdstrike/workspace/sigma1.yaml" arrives as
+  // "Users/connor/...".  We detect this (not a __new__ route, doesn't
+  // start with "/") and prepend "/" to reconstruct the real path.
+  const decoded = decodeURIComponent(rawParam);
+  const isNewFile = decoded.startsWith("__new__/");
+  const filePath =
+    !isNewFile && decoded.length > 0 && !decoded.startsWith("/")
+      ? `/${decoded}`
+      : decoded;
 
   // Per-file local state for panel toggles
   const [testRunnerOpen, setTestRunnerOpen] = useState(false);
   const [showProblems, setShowProblems] = useState(false);
+  const [loadFailed, setLoadFailed] = useState(false);
 
-  // Determine whether this is a __new__ untitled file route
-  const isNewFile = filePath.startsWith("__new__/");
   const newTabId = isNewFile ? filePath.split("/")[1] : null;
 
   // Look up tab: either by __new__ tabId or by filePath match
@@ -50,8 +64,11 @@ export function FileEditorShell() {
     if (!filePath || tabMeta) return; // Already loaded or no path
     if (isNewFile) return; // Untitled file, skip loading
 
+    setLoadFailed(false);
+
     async function loadFile() {
       try {
+        console.debug("[FileEditorShell] Loading file from disk:", filePath);
         const { readDetectionFileByPath } = await import(
           "@/lib/tauri-bridge"
         );
@@ -63,9 +80,13 @@ export function FileEditorShell() {
             result.content,
             filePath.split("/").pop() ?? "File",
           );
+        } else {
+          console.warn("[FileEditorShell] readDetectionFileByPath returned null for:", filePath);
+          setLoadFailed(true);
         }
       } catch (err) {
         console.warn("[FileEditorShell] Failed to load file:", filePath, err);
+        setLoadFailed(true);
       }
     }
     loadFile();
@@ -79,6 +100,15 @@ export function FileEditorShell() {
   }, [tabMeta, activeTabId, filePath]);
 
   if (!tabMeta || !editState) {
+    // Show a loading message while the file is being fetched from disk;
+    // only show "File not found" once loading has actually failed.
+    if (!loadFailed && filePath && !isNewFile) {
+      return (
+        <div className="flex h-full items-center justify-center text-[#6f7f9a] font-mono text-sm">
+          Loading…
+        </div>
+      );
+    }
     return (
       <div className="flex h-full items-center justify-center text-[#6f7f9a] font-mono text-sm">
         File not found

@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: milestone
 status: completed
-stopped_at: Completed 03-02-PLAN.md
-last_updated: "2026-03-18T19:39:54.261Z"
+stopped_at: Completed 03-01-PLAN.md
+last_updated: "2026-03-18T19:40:07.704Z"
 last_activity: 2026-03-18 -- Completed Phase 5 Plan 2 (Terminal Split & Rename)
 progress:
   total_phases: 7
@@ -60,6 +60,7 @@ Summary: Delivered IDE shell — activity bar, 7 sidebar panels, pane tab system
 | Phase 03 P02 | 2min | 2 tasks | 2 files |
 | Phase 05 P02 | 2min | 1 tasks | 3 files |
 | Phase 03 P01 | 3min | 2 tasks | 4 files |
+| Phase 05 P02 | 2min | 1 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -81,6 +82,9 @@ v1.1 decisions:
 - Closing split session exits split mode automatically
 - BreadcrumbBar self-hides via internal null return (consumer needs no conditional)
 - Folder breadcrumb click expands dir AND reveals Explorer sidebar via showPanel
+- [Phase 03]: Used tauri-bridge readDetectionFileByPath instead of direct Tauri plugin-fs for QuickOpen file reads
+- [Phase 03]: Module-level useSyncExternalStore for QuickOpenDialog visibility (self-contained, no separate store)
+- [Phase 05]: Split terminal uses [leftId, rightId] tuple (max 2 panes, simple model)
 
 ### Pending Todos
 
@@ -92,6 +96,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-18T19:39:44.939Z
-Stopped at: Completed 03-02-PLAN.md
+Last session: 2026-03-18T19:40:03.937Z
+Stopped at: Completed 03-01-PLAN.md
 Resume file: None

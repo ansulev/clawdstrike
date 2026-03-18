@@ -15,10 +15,10 @@
 
 ### Quick Navigation
 
-- [ ] **NAV-01**: User can open any file by name via Cmd+P (Quick Open) with fuzzy matching
-- [ ] **NAV-02**: Quick Open shows recent files at the top when input is empty
+- [x] **NAV-01**: User can open any file by name via Cmd+P (Quick Open) with fuzzy matching
+- [x] **NAV-02**: Quick Open shows recent files at the top when input is empty
 - [x] **NAV-03**: Breadcrumb bar above the editor shows path (Project > Folder > File) with click navigation
-- [ ] **NAV-04**: User can go to a specific line number via Cmd+G
+- [x] **NAV-04**: User can go to a specific line number via Cmd+G
 
 ### File Tree
 
@@ -83,10 +83,10 @@
 | SRCH-03 | Phase 2 | Pending |
 | SRCH-04 | Phase 2 | Pending |
 | SRCH-05 | Phase 2 | Pending |
-| NAV-01 | Phase 3 | Pending |
-| NAV-02 | Phase 3 | Pending |
+| NAV-01 | Phase 3 | Complete |
+| NAV-02 | Phase 3 | Complete |
 | NAV-03 | Phase 3 | Complete |
-| NAV-04 | Phase 3 | Pending |
+| NAV-04 | Phase 3 | Complete |
 | TREE-01 | Phase 4 | Pending |
 | TREE-02 | Phase 4 | Pending |
 | TREE-03 | Phase 4 | Pending |

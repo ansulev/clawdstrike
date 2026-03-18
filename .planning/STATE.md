@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: milestone
 status: in-progress
-stopped_at: Completed 06-01-PLAN.md
-last_updated: "2026-03-18T20:27:54Z"
-last_activity: 2026-03-18 -- Completed Phase 6 Plan 1 (Detection Gutter Extensions)
+stopped_at: Completed 07-03-PLAN.md
+last_updated: "2026-03-18T20:29:51Z"
+last_activity: 2026-03-18 -- Completed Phase 7 Plan 3 (Visual Builder & TrustPrint Routes)
 progress:
   total_phases: 7
   completed_phases: 5
   total_plans: 15
-  completed_plans: 14
-  percent: 93
+  completed_plans: 15
+  percent: 100
 ---
 
 # Project State
@@ -25,12 +25,12 @@ See: .planning/PROJECT.md (updated 2026-03-18)
 
 ## Current Position
 
-Phase: 6 of 7 (Detection Engineering Inline)
-Plan: 1 of 2 COMPLETE
-Status: Phase 06 in progress, plan 1 complete
-Last activity: 2026-03-18 -- Completed Phase 6 Plan 1 (Detection Gutter Extensions)
+Phase: 7 of 7 (Detection Editor Integration)
+Plan: 3 of 4 COMPLETE
+Status: Phase 07 in progress, plan 3 complete
+Last activity: 2026-03-18 -- Completed Phase 7 Plan 3 (Visual Builder & TrustPrint Routes)
 
-Progress: [█████████░] 93%
+Progress: [██████████] 100%
 
 ## Previous Milestone (v1.0 — IDE Pivot)
 
@@ -69,6 +69,8 @@ Summary: Delivered IDE shell — activity bar, 7 sidebar panels, pane tab system
 | Phase 07 P01 | 2min | 2 tasks | 2 files |
 | Phase 07 P02 | 3min | 2 tasks | 3 files |
 | Phase 07 P04 | 1min | 1 tasks | 1 files |
+| Phase 06 P01 | 7min | 2 tasks | 4 files |
+| Phase 07 P03 | 3min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -110,7 +112,12 @@ v1.1 decisions:
 - [Phase 07]: Right sidebar tab strip uses icon-only buttons with gold #d4a84b active indicator
 - [Phase 07]: Editor-context panels wrapped in dedicated content components with no-tab fallback
 - [Phase 07]: rightSidebar.* commands use useRightSidebarStore.getState() directly (no ViewCommandDeps coupling)
+- [Phase 06]: RangeSet-based gutter markers via derived StateField for clean CodeMirror 6 state management
+- [Phase 06]: useCallback + ref pattern for onRunGuardTest to keep extension identity stable across renders
+- [Phase 06]: 500ms debounce on guard range parsing to balance responsiveness with performance
+- [Phase 06]: Coverage threshold: red (#c45c5c) for >= 3 uncovered techniques, amber (#d4a84b) for 1-2
 - [Phase 07]: Hunt onNavigateToEditor uses usePaneStore.getState().openApp() for cross-feature pane navigation
+- [Phase 07]: Local useState for visual builder/TrustPrint wrapper pages (no store integration) -- keeps pages self-contained
 
 ### Pending Todos
 
@@ -122,6 +129,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-18T20:27:37Z
-Stopped at: Completed 07-04-PLAN.md
-Resume file: Phase 7 plans complete; Phases 3 and 6 remain in v1.1 milestone
+Last session: 2026-03-18T20:29:51Z
+Stopped at: Completed 07-03-PLAN.md
+Resume file: Continue with remaining plans (06-02, 07-02, 07-04, or next incomplete plan)

@@ -57,8 +57,8 @@
 
 ### Commands & Navigation
 
-- [ ] **CMD-01**: sidebar.toggle command (Cmd+B) shows/hides entire sidebar
-- [ ] **CMD-02**: sidebar.explorer command (Cmd+Shift+E) switches to Explorer panel
+- [x] **CMD-01**: sidebar.toggle command (Cmd+B) shows/hides entire sidebar
+- [x] **CMD-02**: sidebar.explorer command (Cmd+Shift+E) switches to Explorer panel
 - [ ] **CMD-03**: Sidebar commands for each panel (sentinels, findings, library, fleet, compliance, heartbeat)
 - [ ] **CMD-04**: sidebar.toggleRight command (Cmd+Shift+B) toggles right sidebar
 - [ ] **CMD-05**: Navigate commands use openApp pattern to open routes as pane tabs
@@ -68,14 +68,14 @@
 
 - [x] **STATE-01**: activity-bar-store (Zustand) tracks activeItem, sidebarVisible, sidebarWidth
 - [ ] **STATE-02**: right-sidebar-store (Zustand) tracks visible, activePanel, width
-- [ ] **STATE-03**: All 11 existing Zustand stores continue to work unchanged
+- [x] **STATE-03**: All 11 existing Zustand stores continue to work unchanged
 
 ### Layout Shell
 
-- [ ] **SHELL-01**: desktop-layout.tsx updated with ActivityBar + LeftSidebar + EditorArea + RightSidebar zones
-- [ ] **SHELL-02**: desktop-sidebar.tsx decomposed into ActivityBar and SidebarPanel components
-- [ ] **SHELL-03**: StatusBar continues to render at the bottom
-- [ ] **SHELL-04**: Titlebar continues to render at the top
+- [x] **SHELL-01**: desktop-layout.tsx updated with ActivityBar + LeftSidebar + EditorArea + RightSidebar zones
+- [x] **SHELL-02**: desktop-sidebar.tsx decomposed into ActivityBar and SidebarPanel components
+- [x] **SHELL-03**: StatusBar continues to render at the bottom
+- [x] **SHELL-04**: Titlebar continues to render at the top
 
 ## v2 Requirements
 
@@ -141,19 +141,19 @@
 | LAB-02 | Phase 4 | Pending |
 | LAB-03 | Phase 4 | Pending |
 | LAB-04 | Phase 4 | Pending |
-| CMD-01 | Phase 1 | Pending |
-| CMD-02 | Phase 1 | Pending |
+| CMD-01 | Phase 1 | Complete |
+| CMD-02 | Phase 1 | Complete |
 | CMD-03 | Phase 3 | Pending |
 | CMD-04 | Phase 3 | Pending |
 | CMD-05 | Phase 4 | Pending |
 | CMD-06 | Phase 4 | Pending |
 | STATE-01 | Phase 1 | Complete |
 | STATE-02 | Phase 3 | Pending |
-| STATE-03 | Phase 1 | Pending |
-| SHELL-01 | Phase 1 | Pending |
-| SHELL-02 | Phase 1 | Pending |
-| SHELL-03 | Phase 1 | Pending |
-| SHELL-04 | Phase 1 | Pending |
+| STATE-03 | Phase 1 | Complete |
+| SHELL-01 | Phase 1 | Complete |
+| SHELL-02 | Phase 1 | Complete |
+| SHELL-03 | Phase 1 | Complete |
+| SHELL-04 | Phase 1 | Complete |
 
 **Coverage:**
 - v1 requirements: 45 total

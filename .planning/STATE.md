@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: in-progress
-stopped_at: Completed 03-01-PLAN.md
-last_updated: "2026-03-18T23:40:08Z"
+status: executing
+stopped_at: Completed 03-02-PLAN.md
+last_updated: "2026-03-18T23:47:56.157Z"
 last_activity: 2026-03-18 -- Completed 03-01 (Plugin trust verification with Ed25519 signatures)
 progress:
   total_phases: 6
-  completed_phases: 2
-  total_plans: 6
-  completed_plans: 6
+  completed_phases: 3
+  total_plans: 7
+  completed_plans: 7
   percent: 46
 ---
 
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-18)
 
 **Core value:** Security teams can extend ClawdStrike with custom guards, detection formats, intel sources, and UI panels without forking the workbench.
-**Current focus:** Phase 3: Plugin Loader and Trust
+**Current focus:** Phase 4: Plugin SDK Package
 
 ## Current Position
 
-Phase: 3 of 6 (Plugin Loader and Trust)
-Plan: 1 of 2 in current phase (03-01 complete)
-Status: In progress
-Last activity: 2026-03-18 -- Completed 03-01 (Plugin trust verification with Ed25519 signatures)
+Phase: 4 of 6 (Plugin SDK Package)
+Plan: 1 of 1 in current phase
+Status: Not started
+Last activity: 2026-03-18 -- Completed 03-02 (PluginLoader with contribution routing, trust gating, activation events)
 
-Progress: [████░░░░░░] 46%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
@@ -53,6 +53,7 @@ Progress: [████░░░░░░] 46%
 | Phase 02 P01 | 5min | 2 tasks | 3 files |
 | Phase 02 P02 | 2min | 1 tasks | 2 files |
 | Phase 03 P01 | 2min | 1 tasks | 2 files |
+| Phase 03 P02 | 4min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -82,6 +83,9 @@ Recent decisions affecting current work:
 - [Phase 03-01]: Reused operator-crypto verifyCanonical instead of custom Ed25519 -- consistent with existing crypto patterns
 - [Phase 03-01]: Signature verification removes installation.signature via structuredClone + delete (signs content, not itself)
 - [Phase 03-01]: Empty string signature treated as missing -- prevents bypass via empty signature field
+- [Phase 03]: Dependency injection via resolveModule option for testability instead of mocking dynamic import()
+- [Phase 03]: Contributions routed BEFORE activate() called -- registrations happen first, then plugin code runs
+- [Phase 03]: Activation event matching is pure functions in separate module (no side effects)
 
 ### Pending Todos
 
@@ -93,6 +97,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-18T23:40:08Z
-Stopped at: Completed 03-01-PLAN.md
+Last session: 2026-03-18T23:47:56.154Z
+Stopped at: Completed 03-02-PLAN.md
 Resume file: None

@@ -10,6 +10,9 @@ import { CommandPalette } from "@/components/desktop/command-palette";
 import { CrashRecoveryBanner } from "@/components/desktop/crash-recovery-banner";
 import { BottomPane } from "@/features/bottom-pane/bottom-pane";
 import { useBottomPaneStore } from "@/features/bottom-pane/bottom-pane-store";
+import { RightSidebar } from "@/features/right-sidebar/components/right-sidebar";
+import { RightSidebarResizeHandle } from "@/features/right-sidebar/components/right-sidebar-resize-handle";
+import { useRightSidebarStore } from "@/features/right-sidebar/stores/right-sidebar-store";
 import { PaneRoot } from "@/features/panes/pane-root";
 import { getActivePaneRoute, usePaneStore } from "@/features/panes/pane-store";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
@@ -25,6 +28,7 @@ export function DesktopLayout() {
   const navigate = useNavigate();
   const bottomPaneOpen = useBottomPaneStore((state) => state.isOpen);
   const bottomPaneSize = useBottomPaneStore((state) => state.size);
+  const rightSidebarVisible = useRightSidebarStore((state) => state.visible);
   const activePaneRoute = usePaneStore((state) =>
     getActivePaneRoute(state.root, state.activePaneId),
   );
@@ -115,6 +119,13 @@ export function DesktopLayout() {
             <PaneRoot />
           )}
         </main>
+
+        {rightSidebarVisible && (
+          <>
+            <RightSidebarResizeHandle />
+            <RightSidebar />
+          </>
+        )}
       </div>
 
       {/* Bottom: status bar */}

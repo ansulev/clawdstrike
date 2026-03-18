@@ -1,7 +1,7 @@
 import { useActivityBarStore } from "../stores/activity-bar-store";
 import { ExplorerPanel } from "@/components/workbench/explorer/explorer-panel";
 import { useProjectStore } from "@/features/project/stores/project-store";
-import type { DetectionProject } from "@/features/project/stores/project-store";
+import type { DetectionProject, ProjectFile } from "@/features/project/stores/project-store";
 import { usePaneStore } from "@/features/panes/pane-store";
 import { HeartbeatPanel } from "../panels/heartbeat-panel";
 import { SentinelPanel } from "../panels/sentinel-panel";
@@ -44,7 +44,18 @@ function ExplorerPanelConnected() {
         actions.toggleDirForRoot(rootPath, dirPath);
       }}
       onOpenFile={(file) => {
-        usePaneStore.getState().openFile(file.path, file.name);
+        // Resolve relative ProjectFile.path to absolute using the project root
+        // so that Tauri fs reads (which require absolute paths) work correctly.
+        const project = projects.find((p) =>
+          p.files.some(function findFile(f: ProjectFile): boolean {
+            if (f.path === file.path) return true;
+            return f.children?.some(findFile) ?? false;
+          }),
+        );
+        const absPath = project
+          ? `${project.rootPath}/${file.path}`
+          : file.path;
+        usePaneStore.getState().openFile(absPath, file.name);
       }}
       onExpandAll={actions.expandAll}
       onCollapseAll={actions.collapseAll}

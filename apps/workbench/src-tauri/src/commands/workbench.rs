@@ -541,7 +541,6 @@ fn parse_host_port(target: &str) -> Result<(&str, u16), String> {
 /// Load a policy from YAML using lax validation (env-var placeholders are not
 /// required to resolve on the workbench host).
 fn load_policy_lax(yaml: &str) -> Result<Policy, String> {
-    clawdstrike_logos::verifier::install_clawdstrike_policy_load_verifier();
     Policy::from_yaml_with_extends_resolver_with_validation_options(
         yaml,
         None,

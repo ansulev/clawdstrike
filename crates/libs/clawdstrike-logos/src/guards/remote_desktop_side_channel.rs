@@ -32,13 +32,50 @@ impl GuardFormulas for RemoteDesktopSideChannelConfig {
             });
         }
 
-        if let Some(limit) = self.max_transfer_size_bytes {
-            formulas.push(custom_prohibition(
-                agent,
-                format!("remote_desktop_side_channel:file_transfer:size_exceeds:{limit}"),
-            ));
+        if self.file_transfer_enabled {
+            if let Some(limit) = self.max_transfer_size_bytes {
+                formulas.push(custom_prohibition(
+                    agent,
+                    format!("remote_desktop_side_channel:file_transfer:size_exceeds:{limit}"),
+                ));
+            }
         }
 
         formulas
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn test_agent() -> AgentId {
+        AgentId::new("test-agent")
+    }
+
+    #[test]
+    fn disabled_file_transfer_omits_size_limit_formula() {
+        let cfg = RemoteDesktopSideChannelConfig {
+            enabled: true,
+            clipboard_enabled: false,
+            file_transfer_enabled: false,
+            session_share_enabled: false,
+            audio_enabled: false,
+            drive_mapping_enabled: false,
+            printing_enabled: false,
+            max_transfer_size_bytes: Some(1024),
+        };
+
+        let rendered: Vec<String> = cfg
+            .to_formulas(&test_agent())
+            .into_iter()
+            .map(|formula| formula.to_string())
+            .collect();
+
+        assert!(rendered.iter().any(|formula| formula
+            == "F_test-agent(custom(remote_desktop_side_channel:channel:file_transfer))"));
+        assert!(!rendered
+            .iter()
+            .any(|formula| formula.contains("size_exceeds")));
     }
 }

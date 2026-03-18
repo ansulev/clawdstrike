@@ -450,7 +450,6 @@ impl NativeEngine {
     #[staticmethod]
     #[pyo3(signature = (yaml_str, base_path=None))]
     fn from_yaml(yaml_str: &str, base_path: Option<&str>) -> PyResult<Self> {
-        clawdstrike_logos::verifier::install_clawdstrike_policy_load_verifier();
         let bp = base_path.map(std::path::PathBuf::from);
         let policy = clawdstrike::Policy::from_yaml_with_extends(yaml_str, bp.as_deref())
             .map_err(|e| PyValueError::new_err(e.to_string()))?;
@@ -460,7 +459,6 @@ impl NativeEngine {
 
     #[staticmethod]
     fn from_ruleset(name: &str) -> PyResult<Self> {
-        clawdstrike_logos::verifier::install_clawdstrike_policy_load_verifier();
         let engine = clawdstrike::HushEngine::from_ruleset(name)
             .map_err(|e| PyValueError::new_err(e.to_string()))?;
         Ok(Self { engine })
@@ -659,6 +657,7 @@ fn sign_message_native(py: Python<'_>, message: &[u8], private_key: &[u8]) -> Py
 /// Python module definition for `clawdstrike._native`.
 #[pymodule]
 fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    clawdstrike_logos::verifier::install_clawdstrike_policy_load_verifier();
     m.add_function(wrap_pyfunction!(verify_receipt_native, m)?)?;
     m.add_function(wrap_pyfunction!(sha256_native, m)?)?;
     m.add_function(wrap_pyfunction!(keccak256_native, m)?)?;

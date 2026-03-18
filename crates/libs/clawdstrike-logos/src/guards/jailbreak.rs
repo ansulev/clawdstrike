@@ -11,13 +11,46 @@ impl GuardFormulas for JailbreakConfig {
             return vec![];
         }
 
-        let mut formulas = vec![custom_permission(agent, "guard:jailbreak:enabled")];
+        vec![
+            custom_permission(agent, "guard:jailbreak:enabled"),
+            custom_prohibition(
+                agent,
+                format!(
+                    "jailbreak:risk_score_at_or_above:{}",
+                    self.detector.block_threshold
+                ),
+            ),
+        ]
+    }
+}
 
-        formulas.extend(
-            (self.detector.block_threshold..=100)
-                .map(|score| custom_prohibition(agent, format!("jailbreak:risk_score:{score}"))),
-        );
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-        formulas
+    fn test_agent() -> AgentId {
+        AgentId::new("test-agent")
+    }
+
+    #[test]
+    fn emits_single_threshold_prohibition() {
+        let cfg = JailbreakConfig::default();
+        let rendered: Vec<String> = cfg
+            .to_formulas(&test_agent())
+            .into_iter()
+            .map(|formula| formula.to_string())
+            .collect();
+
+        assert_eq!(rendered.len(), 2);
+        assert!(rendered
+            .iter()
+            .any(|formula| formula == "P_test-agent(custom(guard:jailbreak:enabled))"));
+        assert!(rendered.iter().any(|formula| {
+            formula.as_str()
+                == format!(
+                    "F_test-agent(custom(jailbreak:risk_score_at_or_above:{}))",
+                    cfg.detector.block_threshold
+                )
+        }));
     }
 }

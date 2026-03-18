@@ -34,27 +34,22 @@ pub(super) fn custom_prohibition(agent: &logos_ffi::AgentId, detail: impl Into<S
 }
 
 pub(super) fn stable_token(value: &str) -> String {
-    let mut token = String::new();
-    let mut utf8 = [0u8; 4];
-
-    for ch in value.chars() {
-        if ch.is_ascii_alphanumeric() {
-            token.push(ch.to_ascii_lowercase());
-            continue;
-        }
-
-        token.push('_');
-        for byte in ch.encode_utf8(&mut utf8).as_bytes() {
-            let _ = write!(&mut token, "{byte:02x}");
-        }
-        token.push('_');
+    if !value.is_empty()
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit())
+    {
+        return value.to_string();
     }
 
-    let trimmed = token.trim_matches('_');
-    if trimmed.is_empty() {
+    if value.is_empty() {
         hush_core::hashing::sha256(value.as_bytes()).to_hex()
     } else {
-        trimmed.to_string()
+        let mut token = String::from("hex_");
+        for byte in value.as_bytes() {
+            let _ = write!(&mut token, "{byte:02x}");
+        }
+        token
     }
 }
 
@@ -69,5 +64,12 @@ mod tests {
             stable_token("remote_clipboard")
         );
         assert_ne!(stable_token("foo-bar"), stable_token("foo.bar"));
+    }
+
+    #[test]
+    fn stable_token_avoids_escape_ambiguity() {
+        assert_ne!(stable_token("_5f_"), stable_token("_"));
+        assert_eq!(stable_token("keyboard"), "keyboard");
+        assert_eq!(stable_token("KeyBoard"), "hex_4b6579426f617264");
     }
 }

@@ -15,6 +15,8 @@ use tauri::Manager;
 use terminal::TerminalState;
 
 fn main() {
+    clawdstrike_logos::verifier::install_clawdstrike_policy_load_verifier();
+
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_window_state::Builder::new().build())

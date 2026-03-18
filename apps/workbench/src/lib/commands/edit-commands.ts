@@ -5,6 +5,8 @@ import type { Command } from "@/lib/command-registry";
 import type { WorkbenchAction } from "@/features/policy/stores/policy-store";
 import type { MultiPolicyAction } from "@/features/policy/stores/multi-policy-store";
 import type { PolicyTab } from "@/features/policy/stores/multi-policy-store";
+import { openSearchPanel, searchKeymap } from "@codemirror/search";
+import { getActiveEditorView } from "@/components/ui/yaml-editor";
 
 export interface EditCommandDeps {
   navigate: NavigateFunction;
@@ -62,6 +64,38 @@ export function registerEditCommands(deps: EditCommandDeps): void {
           if (!confirmed) return;
         }
         multiDispatch({ type: "CLOSE_TAB", tabId: tab.id });
+      },
+    },
+    {
+      id: "edit.find",
+      title: "Find",
+      category: "Edit",
+      keybinding: "Meta+F",
+      context: "editor",
+      execute: () => {
+        const view = getActiveEditorView();
+        if (view) openSearchPanel(view);
+      },
+    },
+    {
+      id: "edit.replace",
+      title: "Find and Replace",
+      category: "Edit",
+      keybinding: "Meta+H",
+      context: "editor",
+      execute: () => {
+        const view = getActiveEditorView();
+        if (!view) return;
+        // Find the Mod-h command from searchKeymap which opens search with replace enabled
+        const replaceCmd = searchKeymap.find(
+          (k) => k.key === "Mod-h" || k.key === "Mod-H"
+        );
+        if (replaceCmd?.run) {
+          replaceCmd.run(view);
+        } else {
+          // Fallback: open find-only panel
+          openSearchPanel(view);
+        }
       },
     },
   ];

@@ -657,6 +657,7 @@ fn sign_message_native(py: Python<'_>, message: &[u8], private_key: &[u8]) -> Py
 /// Python module definition for `clawdstrike._native`.
 #[pymodule]
 fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    clawdstrike_logos::verifier::install_clawdstrike_policy_load_verifier();
     m.add_function(wrap_pyfunction!(verify_receipt_native, m)?)?;
     m.add_function(wrap_pyfunction!(sha256_native, m)?)?;
     m.add_function(wrap_pyfunction!(keccak256_native, m)?)?;

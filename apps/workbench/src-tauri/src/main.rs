@@ -41,6 +41,8 @@ fn main() {
                 as TerminalState,
         )
         .setup(|app| {
+            clawdstrike_logos::verifier::install_clawdstrike_policy_load_verifier();
+
             if let Some(window) = app.get_webview_window("main") {
                 #[cfg(not(target_os = "macos"))]
                 {

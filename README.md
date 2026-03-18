@@ -50,6 +50,8 @@
   <picture><source media="(prefers-color-scheme: dark)" srcset=".github/assets/sigils/plugin-dark.svg"><img src=".github/assets/sigils/plugin-light.svg" width="16" height="16" alt=""  style="vertical-align:-3px;" ></picture>&nbsp;Swarm-native security
   <span style="opacity:0.55;">&nbsp;&nbsp;&middot;&nbsp;&nbsp;</span>
   <picture><source media="(prefers-color-scheme: dark)" srcset=".github/assets/sigils/registry-dark.svg"><img src=".github/assets/sigils/registry-light.svg" width="16" height="16" alt=""  style="vertical-align:-3px;" ></picture>&nbsp;AgentSec Registry
+  <span style="opacity:0.55;">&nbsp;&nbsp;&middot;&nbsp;&nbsp;</span>
+  <picture><source media="(prefers-color-scheme: dark)" srcset=".github/assets/sigils/seal-dark.svg"><img src=".github/assets/sigils/seal-light.svg" width="16" height="16" alt=""  style="vertical-align:-3px;" ></picture>&nbsp;Formally verified
 </p>
 
 <p align="center">
@@ -206,6 +208,17 @@ clawdstrike policy diff strict default
 
 # Enforce policy while running a real command
 clawdstrike run --policy clawdstrike:strict -- python my_agent.py
+```
+
+#### Verify
+
+Prove your policy is internally consistent before deploying it.
+
+```bash
+clawdstrike verify --policy strict
+# Consistency:  PASS  (47 formulas, 0 conflicts)
+# Completeness: PASS  (4/4 action types covered)
+# Inheritance:  PASS  (0 weakened prohibitions)
 ```
 
 #### Hunt
@@ -714,6 +727,38 @@ clawdstrike policy diff clawdstrike:default candidate.yaml
 ```
 
 See [Policy Schema](docs/src/reference/policy-schema.md), [Posture Schema](docs/src/reference/posture-schema.md), and [Observe -> Synth -> Tighten](docs/src/guides/observe-synth.md).
+
+### Formal Verification
+
+The policy engine's core decision logic is formally specified in Lean 4 and verified against the actual Rust implementation via the Aeneas translation pipeline.
+
+**What's proved:**
+- If any guard denies, the overall verdict denies (deny monotonicity)
+- Severity ordering is a consistent total order
+- Circular `extends` chains are always caught and rejected
+- Ed25519 sign-then-verify roundtrips succeed
+- Disabled guards produce allow (no phantom denials)
+- 39+ properties machine-checked, 44/45 core functions translated
+
+**Policy analysis** (via `clawdstrike verify`):
+- Consistency: no action is both permitted and forbidden
+- Completeness: all configured action types are covered
+- Inheritance soundness: `extends` chains don't weaken parent rules
+
+**Differential testing:** Property-based tests compare the Lean specification against the Rust implementation across millions of random inputs nightly.
+
+```bash
+# Verify a policy
+clawdstrike verify --policy strict
+
+# Run differential tests
+cargo test -p formal-diff-tests
+
+# Build the Lean specification
+cd formal/lean4/ClawdStrike && lake build
+```
+
+See the [formal verification guide](docs/src/formal-verification.md) for details.
 
 ---
 

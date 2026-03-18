@@ -61,6 +61,7 @@ mod policy_pac;
 mod policy_rego;
 mod policy_synth;
 mod policy_test;
+mod policy_verify;
 mod policy_version;
 mod registry_config;
 mod remote_extends;
@@ -460,6 +461,24 @@ enum PolicyCommands {
         /// Emit machine-readable SARIF 2.1.0 JSON.
         #[arg(long, conflicts_with = "json")]
         sarif: bool,
+    },
+
+    /// Verify policy properties (consistency, completeness, inheritance) via Logos formal analysis
+    Verify {
+        /// Policy reference (ruleset name or file path)
+        policy_ref: String,
+        /// Deprecated: verification always resolves extends transitively.
+        #[arg(long, hide = true)]
+        resolve: bool,
+        /// Emit machine-readable JSON.
+        #[arg(long)]
+        json: bool,
+        /// Show the current achievable attestation level
+        #[arg(long)]
+        attestation_level: bool,
+        /// Show detailed formula listing
+        #[arg(long)]
+        verbose: bool,
     },
 
     /// Run a policy test suite (YAML)
@@ -1318,6 +1337,8 @@ enum HuntCommands {
 
 #[tokio::main]
 async fn main() {
+    clawdstrike_logos::verifier::install_clawdstrike_policy_load_verifier();
+
     // Initialize color early so --version banner respects NO_COLOR env.
     // The --no-color flag is handled after full parse succeeds below.
     if std::env::var_os("NO_COLOR").is_some() {
@@ -2553,6 +2574,25 @@ async fn cmd_policy(
                 json,
                 sarif,
                 strict,
+            },
+            remote_extends,
+            stdout,
+            stderr,
+        )),
+
+        PolicyCommands::Verify {
+            policy_ref,
+            resolve,
+            json,
+            attestation_level,
+            verbose,
+        } => Ok(policy_verify::cmd_policy_verify(
+            policy_verify::PolicyVerifyCommand {
+                policy_ref,
+                resolve,
+                json,
+                attestation_level,
+                verbose,
             },
             remote_extends,
             stdout,

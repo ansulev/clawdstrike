@@ -89,6 +89,50 @@ fn json_size_bytes(value: &serde_json::Value) -> std::result::Result<usize, serd
 }
 
 impl McpToolConfig {
+    fn resolve_lists(
+        base_allow: &[String],
+        base_block: &[String],
+        overlay: &Self,
+    ) -> (Vec<String>, Vec<String>) {
+        let mut allow = base_allow.to_vec();
+        let mut block = base_block.to_vec();
+
+        for tool in &overlay.additional_allow {
+            if !allow.contains(tool) {
+                allow.push(tool.clone());
+            }
+        }
+        for tool in &overlay.additional_block {
+            if !block.contains(tool) {
+                block.push(tool.clone());
+            }
+        }
+
+        allow.retain(|tool| !overlay.remove_allow.contains(tool));
+        block.retain(|tool| !overlay.remove_block.contains(tool));
+
+        if !overlay.allow.is_empty() {
+            allow = overlay.allow.clone();
+        }
+        if !overlay.block.is_empty() {
+            block = overlay.block.clone();
+        }
+
+        (allow, block)
+    }
+
+    /// Return the standalone allowlist after applying merge-time modifiers.
+    pub fn effective_allow_tools(&self) -> Vec<String> {
+        let (allow, _) = Self::resolve_lists(&[], &[], self);
+        allow
+    }
+
+    /// Return the standalone blocklist after applying merge-time modifiers.
+    pub fn effective_block_tools(&self) -> Vec<String> {
+        let (_, block) = Self::resolve_lists(&[], &[], self);
+        block
+    }
+
     /// Create config with default blocked tools
     pub fn with_defaults() -> Self {
         Self {
@@ -118,33 +162,8 @@ impl McpToolConfig {
 
     /// Merge this config with a child config
     pub fn merge_with(&self, child: &Self) -> Self {
-        let mut allow = self.allow.clone();
-        let mut block = self.block.clone();
+        let (allow, block) = Self::resolve_lists(&self.allow, &self.block, child);
         let mut require_confirmation = self.require_confirmation.clone();
-
-        // Add additional tools
-        for t in &child.additional_allow {
-            if !allow.contains(t) {
-                allow.push(t.clone());
-            }
-        }
-        for t in &child.additional_block {
-            if !block.contains(t) {
-                block.push(t.clone());
-            }
-        }
-
-        // Remove specified tools
-        allow.retain(|t| !child.remove_allow.contains(t));
-        block.retain(|t| !child.remove_block.contains(t));
-
-        // Use child's lists if non-empty
-        if !child.allow.is_empty() {
-            allow = child.allow.clone();
-        }
-        if !child.block.is_empty() {
-            block = child.block.clone();
-        }
         if !child.require_confirmation.is_empty() {
             require_confirmation = child.require_confirmation.clone();
         }
@@ -183,8 +202,8 @@ impl McpToolGuard {
     /// Create with custom configuration
     pub fn with_config(config: McpToolConfig) -> Self {
         let enabled = config.enabled;
-        let allow_set: HashSet<_> = config.allow.iter().cloned().collect();
-        let block_set: HashSet<_> = config.block.iter().cloned().collect();
+        let allow_set: HashSet<_> = config.effective_allow_tools().into_iter().collect();
+        let block_set: HashSet<_> = config.effective_block_tools().into_iter().collect();
         let confirm_set: HashSet<_> = config.require_confirmation.iter().cloned().collect();
 
         Self {
@@ -361,6 +380,61 @@ mod tests {
 
         assert_eq!(guard.is_allowed("safe_tool"), ToolDecision::Allow);
         assert_eq!(guard.is_allowed("other_tool"), ToolDecision::Block);
+    }
+
+    #[test]
+    fn standalone_effective_lists_apply_merge_time_modifiers_without_explicit_override() {
+        let config = McpToolConfig {
+            enabled: true,
+            allow: vec![],
+            block: vec![],
+            require_confirmation: vec![],
+            default_action: Some(McpDefaultAction::Block),
+            max_args_size: Some(1024),
+            additional_allow: vec!["safe_tool".to_string()],
+            remove_allow: vec![],
+            additional_block: vec!["danger_tool".to_string()],
+            remove_block: vec![],
+        };
+
+        assert_eq!(
+            config.effective_allow_tools(),
+            vec!["safe_tool".to_string()]
+        );
+        assert_eq!(
+            config.effective_block_tools(),
+            vec!["danger_tool".to_string()]
+        );
+
+        let guard = McpToolGuard::with_config(config);
+        assert_eq!(guard.is_allowed("safe_tool"), ToolDecision::Allow);
+        assert_eq!(guard.is_allowed("danger_tool"), ToolDecision::Block);
+        assert_eq!(guard.is_allowed("other_tool"), ToolDecision::Block);
+    }
+
+    #[test]
+    fn explicit_lists_override_standalone_modifiers() {
+        let config = McpToolConfig {
+            enabled: true,
+            allow: vec!["safe_tool".to_string()],
+            block: vec!["danger_tool".to_string()],
+            require_confirmation: vec![],
+            default_action: Some(McpDefaultAction::Allow),
+            max_args_size: Some(1024),
+            additional_allow: vec!["ignored_tool".to_string()],
+            remove_allow: vec!["safe_tool".to_string()],
+            additional_block: vec!["also_ignored".to_string()],
+            remove_block: vec!["danger_tool".to_string()],
+        };
+
+        assert_eq!(
+            config.effective_allow_tools(),
+            vec!["safe_tool".to_string()]
+        );
+        assert_eq!(
+            config.effective_block_tools(),
+            vec!["danger_tool".to_string()]
+        );
     }
 
     #[tokio::test]

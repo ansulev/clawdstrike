@@ -106,6 +106,54 @@ describe("pane-store", () => {
     });
   });
 
+  describe("lab decomposition routes", () => {
+    it("opens swarm-board as independent tab", () => {
+      usePaneStore.getState().openApp("/swarm-board");
+      const state = usePaneStore.getState();
+      const pane = findPaneGroup(state.root, state.activePaneId)!;
+      expect(pane.views).toHaveLength(2); // Home + Swarm Board
+      expect(pane.views[1].route).toBe("/swarm-board");
+      expect(pane.views[1].label).toBe("Swarm Board");
+    });
+
+    it("opens hunt as independent tab", () => {
+      usePaneStore.getState().openApp("/hunt");
+      const state = usePaneStore.getState();
+      const pane = findPaneGroup(state.root, state.activePaneId)!;
+      expect(pane.views).toHaveLength(2);
+      expect(pane.views[1].route).toBe("/hunt");
+      expect(pane.views[1].label).toBe("Hunt");
+    });
+
+    it("opens simulator as independent tab", () => {
+      usePaneStore.getState().openApp("/simulator");
+      const state = usePaneStore.getState();
+      const pane = findPaneGroup(state.root, state.activePaneId)!;
+      expect(pane.views).toHaveLength(2);
+      expect(pane.views[1].route).toBe("/simulator");
+      expect(pane.views[1].label).toBe("Simulator");
+    });
+
+    it("swarm-board and lab are distinct tabs", () => {
+      usePaneStore.getState().openApp("/swarm-board");
+      usePaneStore.getState().openApp("/lab");
+      const state = usePaneStore.getState();
+      const pane = findPaneGroup(state.root, state.activePaneId)!;
+      expect(pane.views).toHaveLength(3); // Home + Swarm Board + Lab
+      expect(pane.views[1].route).toBe("/swarm-board");
+      expect(pane.views[2].route).toBe("/lab");
+    });
+
+    it("hunt is not folded into lab tab query param", () => {
+      usePaneStore.getState().openApp("/hunt");
+      const state = usePaneStore.getState();
+      const pane = findPaneGroup(state.root, state.activePaneId)!;
+      // Route should be /hunt, NOT /lab?tab=hunt
+      expect(pane.views[1].route).toBe("/hunt");
+      expect(pane.views[1].route).not.toContain("lab");
+    });
+  });
+
   describe("closeView", () => {
     it("removes the specified view from the pane group", () => {
       usePaneStore.getState().openApp("/editor", "Editor");

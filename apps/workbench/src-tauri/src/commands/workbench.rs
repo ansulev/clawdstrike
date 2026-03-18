@@ -1486,6 +1486,274 @@ pub async fn import_policy_file(path: String) -> Result<ImportResponse, String> 
     }
 }
 
+// ---------------------------------------------------------------------------
+// Global project search
+// ---------------------------------------------------------------------------
+
+/// A single search match within a file.
+#[derive(Debug, Clone, Serialize)]
+pub struct SearchMatch {
+    /// Relative path within the project root.
+    pub file_path: String,
+    /// 1-indexed line number.
+    pub line_number: usize,
+    /// Full line text (trimmed to 500 chars max).
+    pub line_content: String,
+    /// Byte offset of match start within `line_content`.
+    pub match_start: usize,
+    /// Byte offset of match end within `line_content`.
+    pub match_end: usize,
+}
+
+/// Aggregate search results.
+#[derive(Debug, Clone, Serialize)]
+pub struct SearchResult {
+    pub matches: Vec<SearchMatch>,
+    /// Number of files that contained at least one match.
+    pub file_count: usize,
+    /// Total match count across all files.
+    pub total_matches: usize,
+    /// True if results were capped at the maximum.
+    pub truncated: bool,
+}
+
+/// Maximum number of matches before truncation.
+const MAX_SEARCH_MATCHES: usize = 10_000;
+
+/// Maximum file size to search (1 MiB).
+const MAX_SEARCH_FILE_SIZE: u64 = 1_048_576;
+
+/// Maximum characters per line_content in a search match.
+const MAX_LINE_CONTENT_LEN: usize = 500;
+
+/// File extensions eligible for search.
+const SEARCHABLE_EXTENSIONS: &[&str] = &[
+    "yaml", "yml", "yar", "yara", "json", "toml", "md", "txt", "rs", "ts", "tsx", "js",
+];
+
+/// Directory names to skip during search.
+const SKIP_DIRS: &[&str] = &["node_modules", "target", ".git"];
+
+/// Check whether a character is a word boundary delimiter (not alphanumeric or underscore).
+fn is_word_boundary_char(c: char) -> bool {
+    !c.is_alphanumeric() && c != '_'
+}
+
+/// Walk a directory tree recursively, collecting file paths that are eligible for search.
+fn collect_search_files(root: &Path, dir: &Path, files: &mut Vec<PathBuf>) {
+    let entries = match std::fs::read_dir(dir) {
+        Ok(e) => e,
+        Err(_) => return,
+    };
+    for entry in entries {
+        let entry = match entry {
+            Ok(e) => e,
+            Err(_) => continue,
+        };
+        let name = entry.file_name();
+        let name_str = name.to_string_lossy();
+
+        // Skip hidden files/dirs.
+        if name_str.starts_with('.') {
+            continue;
+        }
+
+        // Use metadata() (follows symlinks) to get the canonical type.
+        let meta = match entry.metadata() {
+            Ok(m) => m,
+            Err(_) => continue,
+        };
+
+        if meta.is_dir() {
+            // Skip well-known large directories.
+            if SKIP_DIRS.contains(&name_str.as_ref()) {
+                continue;
+            }
+            collect_search_files(root, &entry.path(), files);
+        } else if meta.is_file() {
+            // Only include files with searchable extensions.
+            if meta.len() > MAX_SEARCH_FILE_SIZE {
+                continue;
+            }
+            let path = entry.path();
+            if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
+                if SEARCHABLE_EXTENSIONS.contains(&ext) {
+                    files.push(path);
+                }
+            }
+        }
+    }
+}
+
+/// Search for a pattern in all eligible files under `root_path`.
+#[tauri::command]
+pub async fn search_in_project(
+    root_path: String,
+    query: String,
+    case_sensitive: bool,
+    whole_word: bool,
+    use_regex: bool,
+) -> Result<SearchResult, String> {
+    // Validate root path.
+    let root = validate_file_path(&root_path)?;
+    if !root.is_dir() {
+        return Err("Root path is not a directory".into());
+    }
+
+    if query.is_empty() {
+        return Ok(SearchResult {
+            matches: Vec::new(),
+            file_count: 0,
+            total_matches: 0,
+            truncated: false,
+        });
+    }
+
+    let query_clone = query.clone();
+    tokio::task::spawn_blocking(move || {
+        // Build the regex or prepare the literal query.
+        let compiled_regex = if use_regex {
+            let pattern = if whole_word {
+                format!(r"\b{}\b", query_clone)
+            } else {
+                query_clone.clone()
+            };
+            let pattern = if !case_sensitive {
+                format!("(?i){}", pattern)
+            } else {
+                pattern
+            };
+            Some(regex::Regex::new(&pattern).map_err(|e| format!("Invalid regex: {e}"))?)
+        } else {
+            None
+        };
+
+        let literal_query = if !use_regex && !case_sensitive {
+            query_clone.to_lowercase()
+        } else {
+            query_clone.clone()
+        };
+
+        // Collect eligible files.
+        let mut file_paths = Vec::new();
+        collect_search_files(&root, &root, &mut file_paths);
+
+        let mut all_matches: Vec<SearchMatch> = Vec::new();
+        let mut files_with_matches = 0usize;
+        let mut truncated = false;
+
+        'outer: for file_path in &file_paths {
+            let content = match std::fs::read_to_string(file_path) {
+                Ok(c) => c,
+                Err(_) => continue, // skip binary/unreadable files
+            };
+
+            let rel_path = file_path
+                .strip_prefix(&root)
+                .unwrap_or(file_path)
+                .to_string_lossy()
+                .to_string();
+
+            let mut file_had_match = false;
+
+            for (line_idx, line) in content.lines().enumerate() {
+                let line_number = line_idx + 1;
+
+                // Collect matches for this line.
+                let line_matches: Vec<(usize, usize)> = if let Some(ref re) = compiled_regex {
+                    re.find_iter(line).map(|m| (m.start(), m.end())).collect()
+                } else {
+                    // Literal search.
+                    let haystack = if !case_sensitive {
+                        line.to_lowercase()
+                    } else {
+                        line.to_string()
+                    };
+                    let mut matches = Vec::new();
+                    let mut start = 0;
+                    while let Some(pos) = haystack[start..].find(&literal_query) {
+                        let abs_start = start + pos;
+                        let abs_end = abs_start + literal_query.len();
+
+                        // Whole-word check for literal mode.
+                        if whole_word {
+                            let before_ok = if abs_start == 0 {
+                                true
+                            } else {
+                                // Check the character before the match in the original line.
+                                line[..abs_start]
+                                    .chars()
+                                    .next_back()
+                                    .map_or(true, is_word_boundary_char)
+                            };
+                            let after_ok = if abs_end >= line.len() {
+                                true
+                            } else {
+                                line[abs_end..]
+                                    .chars()
+                                    .next()
+                                    .map_or(true, is_word_boundary_char)
+                            };
+                            if before_ok && after_ok {
+                                matches.push((abs_start, abs_end));
+                            }
+                        } else {
+                            matches.push((abs_start, abs_end));
+                        }
+
+                        start = abs_end.max(start + 1);
+                    }
+                    matches
+                };
+
+                for (match_start, match_end) in line_matches {
+                    if all_matches.len() >= MAX_SEARCH_MATCHES {
+                        truncated = true;
+                        break 'outer;
+                    }
+
+                    // Truncate line content to MAX_LINE_CONTENT_LEN.
+                    let line_content = if line.len() > MAX_LINE_CONTENT_LEN {
+                        line[..MAX_LINE_CONTENT_LEN].to_string()
+                    } else {
+                        line.to_string()
+                    };
+
+                    // Clamp match offsets to truncated line.
+                    let clamped_start = match_start.min(line_content.len());
+                    let clamped_end = match_end.min(line_content.len());
+
+                    file_had_match = true;
+                    all_matches.push(SearchMatch {
+                        file_path: rel_path.clone(),
+                        line_number,
+                        line_content,
+                        match_start: clamped_start,
+                        match_end: clamped_end,
+                    });
+                }
+            }
+
+            if file_had_match {
+                files_with_matches += 1;
+            }
+        }
+
+        let total_matches = all_matches.len();
+        Ok(SearchResult {
+            matches: all_matches,
+            file_count: files_with_matches,
+            total_matches,
+            truncated,
+        })
+    })
+    .await
+    .map_err(|e| {
+        eprintln!("[workbench] search task join error: {e}");
+        "Search failed".to_string()
+    })?
+}
+
 // Tests
 
 #[cfg(test)]

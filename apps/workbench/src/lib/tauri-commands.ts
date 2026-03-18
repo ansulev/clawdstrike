@@ -587,6 +587,51 @@ export async function convertSigmaRuleNative(
 }
 
 
+// ---- Global Search Types ----
+
+export interface TauriSearchMatch {
+  file_path: string;
+  line_number: number;
+  line_content: string;
+  match_start: number;
+  match_end: number;
+}
+
+export interface TauriSearchResult {
+  matches: TauriSearchMatch[];
+  file_count: number;
+  total_matches: number;
+  truncated: boolean;
+}
+
+/**
+ * Search for text across all eligible files in a project directory.
+ * Supports case-sensitive, whole-word, and regex modes.
+ * Returns null when not running inside Tauri.
+ */
+export async function searchInProjectNative(
+  rootPath: string,
+  query: string,
+  caseSensitive: boolean,
+  wholeWord: boolean,
+  useRegex: boolean,
+): Promise<TauriSearchResult | null> {
+  if (!isDesktop()) return null;
+  try {
+    return await tauriInvoke<TauriSearchResult>("search_in_project", {
+      rootPath,
+      query,
+      caseSensitive,
+      wholeWord,
+      useRegex,
+    });
+  } catch (err) {
+    console.error("[tauri-commands] search_in_project failed:", err);
+    return null;
+  }
+}
+
+
 export interface TauriMcpStatusResponse {
   url: string;
   token: string;

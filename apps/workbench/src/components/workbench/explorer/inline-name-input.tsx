@@ -21,6 +21,7 @@ export function InlineNameInput({
 }: InlineNameInputProps) {
   const [value, setValue] = useState(defaultValue);
   const inputRef = useRef<HTMLInputElement>(null);
+  const submittedRef = useRef(false);
 
   useEffect(() => {
     const el = inputRef.current;
@@ -34,10 +35,17 @@ export function InlineNameInput({
       e.preventDefault();
       const trimmed = value.trim();
       if (trimmed) {
+        submittedRef.current = true;
         onSubmit(trimmed);
       }
     } else if (e.key === "Escape") {
       e.preventDefault();
+      onCancel();
+    }
+  };
+
+  const handleBlur = () => {
+    if (!submittedRef.current) {
       onCancel();
     }
   };
@@ -49,7 +57,7 @@ export function InlineNameInput({
       value={value}
       onChange={(e) => setValue(e.target.value)}
       onKeyDown={handleKeyDown}
-      onBlur={onCancel}
+      onBlur={handleBlur}
       placeholder={placeholder}
       className={cn(
         "text-[11px] font-mono bg-[#0b0d13] border border-[#d4a84b]/40 text-[#ece7dc] rounded px-1 py-[2px] outline-none w-[120px]",

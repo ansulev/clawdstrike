@@ -5,6 +5,7 @@ import { usePaneStore } from "./pane-store";
 import { PaneRouteRenderer } from "./pane-route-renderer";
 import { PaneTabBar } from "./pane-tab-bar";
 import type { PaneGroup } from "./pane-types";
+import { BreadcrumbBar } from "@/features/navigation/breadcrumb-bar";
 
 export function PaneContainer({
   pane,
@@ -31,6 +32,7 @@ export function PaneContainer({
       }}
     >
       <PaneTabBar pane={pane} active={active} />
+      <BreadcrumbBar route={activeView.route} />
 
       <motion.div
         key={activeView.route}

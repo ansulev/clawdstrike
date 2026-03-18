@@ -5,6 +5,7 @@ import {
 } from "@tabler/icons-react";
 import { FILE_TYPE_REGISTRY } from "@/lib/workbench/file-type-registry";
 import type { ProjectFile } from "@/features/project/stores/project-store";
+import { InlineNameInput } from "./inline-name-input";
 import { cn } from "@/lib/utils";
 
 // ---- Props ----
@@ -17,6 +18,18 @@ interface ExplorerTreeItemProps {
   isActive?: boolean;
   style?: React.CSSProperties;
   onContextMenu?: (e: React.MouseEvent) => void;
+  /** Whether this item is currently being renamed inline. */
+  isRenaming?: boolean;
+  /** Called when the user submits the rename. */
+  onRenameSubmit?: (newName: string) => void;
+  /** Called when the user cancels the rename. */
+  onRenameCancel?: () => void;
+  /** Called to start the rename flow (e.g. F2 key). */
+  onStartRename?: () => void;
+  /** Whether this file has unsaved modifications. */
+  isModified?: boolean;
+  /** Whether this file has validation errors. */
+  hasError?: boolean;
 }
 
 // ---- Component ----
@@ -29,6 +42,12 @@ export function ExplorerTreeItem({
   isActive,
   style,
   onContextMenu,
+  isRenaming,
+  onRenameSubmit,
+  onRenameCancel,
+  onStartRename,
+  isModified,
+  hasError,
 }: ExplorerTreeItemProps) {
   const indent = file.depth * 16;
   const descriptor = FILE_TYPE_REGISTRY[file.fileType];
@@ -55,6 +74,11 @@ export function ExplorerTreeItem({
     if (e.key === "ArrowLeft" && file.isDirectory && isExpanded) {
       e.preventDefault();
       onToggle();
+    }
+    // F2: start inline rename (files only)
+    if (e.key === "F2" && !file.isDirectory) {
+      e.preventDefault();
+      onStartRename?.();
     }
   };
 
@@ -129,19 +153,41 @@ export function ExplorerTreeItem({
         />
       )}
 
-      {/* Name */}
-      <span
-        className={cn(
-          "text-[11px] font-mono truncate",
-          file.isDirectory
-            ? "text-[#ece7dc]"
-            : isActive
-              ? "text-[#ece7dc]"
-              : "text-[#6f7f9a]",
-        )}
-      >
-        {file.name}
-      </span>
+      {/* Name or inline rename input */}
+      {isRenaming ? (
+        <InlineNameInput
+          defaultValue={file.name}
+          onSubmit={(newName) => onRenameSubmit?.(newName)}
+          onCancel={() => onRenameCancel?.()}
+          className="flex-1 min-w-0"
+        />
+      ) : (
+        <>
+          <span
+            className={cn(
+              "text-[11px] font-mono truncate",
+              file.isDirectory
+                ? "text-[#ece7dc]"
+                : hasError
+                  ? "text-red-400"
+                  : isActive
+                    ? "text-[#ece7dc]"
+                    : "text-[#6f7f9a]",
+              !file.isDirectory && isModified && !hasError && "italic",
+            )}
+          >
+            {file.name}
+          </span>
+
+          {/* Status indicator dot (files only) */}
+          {!file.isDirectory && hasError && (
+            <span className="shrink-0 w-1 h-1 rounded-full bg-red-500 ml-auto" />
+          )}
+          {!file.isDirectory && isModified && !hasError && (
+            <span className="shrink-0 w-1 h-1 rounded-full bg-[#d4a84b] ml-auto" />
+          )}
+        </>
+      )}
     </button>
   );
 }

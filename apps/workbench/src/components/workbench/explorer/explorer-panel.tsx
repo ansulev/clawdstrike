@@ -9,9 +9,10 @@ import {
 } from "@tabler/icons-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { FILE_TYPE_REGISTRY, type FileType } from "@/lib/workbench/file-type-registry";
-import type { DetectionProject, ProjectFile } from "@/features/project/stores/project-store";
+import type { DetectionProject, ProjectFile, FileStatus } from "@/features/project/stores/project-store";
 import { ExplorerTreeItem } from "./explorer-tree-item";
 import { ExplorerContextMenu } from "./explorer-context-menu";
+import { DeleteConfirmDialog } from "./delete-confirm-dialog";
 import { InlineNameInput } from "./inline-name-input";
 import { cn } from "@/lib/utils";
 
@@ -32,8 +33,9 @@ interface ExplorerPanelProps {
   activeFilePath?: string | null;
   className?: string;
   onCreateFile?: (parentPath: string, fileName: string) => void;
-  onRenameFile?: (file: ProjectFile) => void;
+  onRenameFile?: (file: ProjectFile, newName: string) => void;
   onDeleteFile?: (file: ProjectFile) => void;
+  fileStatuses?: Map<string, FileStatus>;
 }
 
 // ---- Filter logic ----
@@ -160,11 +162,16 @@ export function ExplorerPanel({
   onCreateFile,
   onRenameFile,
   onDeleteFile,
+  fileStatuses,
 }: ExplorerPanelProps) {
   // Context menu state
   const [contextMenu, setContextMenu] = useState<{ file: ProjectFile; x: number; y: number } | null>(null);
   // Inline new-file creation state: the directory path where a file is being created.
   const [creatingInDir, setCreatingInDir] = useState<string | null>(null);
+  // Inline rename state: which file path is being renamed.
+  const [renamingFilePath, setRenamingFilePath] = useState<string | null>(null);
+  // Delete confirmation dialog state.
+  const [deletingFile, setDeletingFile] = useState<ProjectFile | null>(null);
 
   // Apply filters to the tree
   const filteredFiles = useMemo(() => {
@@ -358,22 +365,34 @@ export function ExplorerPanel({
               </p>
             </div>
           ) : (
-            visibleItems.map((file) => (
-              <ExplorerTreeItem
-                key={file.path}
-                file={file}
-                isExpanded={project.expandedDirs.has(file.path)}
-                onToggle={() => onToggleDir(file.path)}
-                onOpen={() => onOpenFile(file)}
-                isActive={
-                  !file.isDirectory && activeFilePath === file.path
-                }
-                onContextMenu={(e) => {
-                  e.preventDefault();
-                  setContextMenu({ file, x: e.clientX, y: e.clientY });
-                }}
-              />
-            ))
+            visibleItems.map((file) => {
+              const status = fileStatuses?.get(file.path);
+              return (
+                <ExplorerTreeItem
+                  key={file.path}
+                  file={file}
+                  isExpanded={project.expandedDirs.has(file.path)}
+                  onToggle={() => onToggleDir(file.path)}
+                  onOpen={() => onOpenFile(file)}
+                  isActive={
+                    !file.isDirectory && activeFilePath === file.path
+                  }
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    setContextMenu({ file, x: e.clientX, y: e.clientY });
+                  }}
+                  isRenaming={renamingFilePath === file.path}
+                  onRenameSubmit={(newName) => {
+                    onRenameFile?.(file, newName);
+                    setRenamingFilePath(null);
+                  }}
+                  onRenameCancel={() => setRenamingFilePath(null)}
+                  onStartRename={() => setRenamingFilePath(file.path)}
+                  isModified={status?.modified}
+                  hasError={status?.hasError}
+                />
+              );
+            })
           )}
         </div>
       </ScrollArea>
@@ -394,11 +413,11 @@ export function ExplorerPanel({
             setContextMenu(null);
           }}
           onRename={() => {
-            onRenameFile?.(contextMenu.file);
+            setRenamingFilePath(contextMenu.file.path);
             setContextMenu(null);
           }}
           onDelete={() => {
-            onDeleteFile?.(contextMenu.file);
+            setDeletingFile(contextMenu.file);
             setContextMenu(null);
           }}
         />
@@ -418,6 +437,19 @@ export function ExplorerPanel({
           </span>
         )}
       </div>
+
+      {/* Delete confirmation dialog */}
+      <DeleteConfirmDialog
+        file={deletingFile}
+        open={deletingFile !== null}
+        onConfirm={() => {
+          if (deletingFile) {
+            onDeleteFile?.(deletingFile);
+          }
+          setDeletingFile(null);
+        }}
+        onCancel={() => setDeletingFile(null)}
+      />
     </div>
   );
 }

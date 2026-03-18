@@ -45,11 +45,11 @@ function ExplorerPanelConnected() {
           usePaneStore.getState().openApp("/editor", fileName);
         }
       }}
-      onRenameFile={() => {
-        // Plan 02 implements inline rename
+      onRenameFile={async (file, newName) => {
+        await actions.renameFile(file.path, newName);
       }}
-      onDeleteFile={() => {
-        // Plan 02 implements confirmation dialog
+      onDeleteFile={async (file) => {
+        await actions.deleteFile(file.path);
       }}
     />
   );

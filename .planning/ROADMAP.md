@@ -18,7 +18,7 @@ Close the gap from "IDE scaffold" to "professional-grade detection engineering I
 - [x] **Phase 1: In-File Search** — Cmd+F find, Cmd+H find/replace in current CodeMirror editor (1/1 plans)
 - [ ] **Phase 2: Global Search** — Cmd+Shift+F workspace-wide search with results panel (2 plans)
 - [ ] **Phase 3: Quick Navigation** — Cmd+P file picker, breadcrumbs, Cmd+G go-to-line (2 plans)
-- [ ] **Phase 4: File Tree Mutations** — Create/rename/delete files from Explorer with status indicators
+- [ ] **Phase 4: File Tree Mutations** — Create/rename/delete files from Explorer with status indicators (2 plans)
 - [ ] **Phase 5: Tab & Terminal Polish** — Tab overflow scrolling, context menu additions, terminal splits (2 plans)
 - [ ] **Phase 6: Detection Engineering Inline** — Gutter test buttons, coverage gap indicators, guard reorder
 - [ ] **Phase 7: Detection Editor Integration** — Surface 50K LOC of orphaned detection engineering features as proper IDE panels
@@ -76,11 +76,11 @@ Plans:
   2. Right-click > Rename (or F2) enables inline editing of the file name
   3. Right-click > Delete shows a confirmation dialog and removes the file via Tauri fs API
   4. Explorer file entries show modified-dot and error-badge status decorations
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 04-01: TBD
-- [ ] 04-02: TBD
+- [ ] 04-01-PLAN.md — Tauri fs bridge wrappers, project store mutations, context menu, New File with inline input
+- [ ] 04-02-PLAN.md — Inline rename (F2 + context menu), delete confirmation dialog, file status indicators
 
 ### Phase 5: Tab & Terminal Polish
 **Goal**: Tab system handles overflow gracefully and terminal supports splits and naming
@@ -142,7 +142,7 @@ Phases 1-2 are sequential (global search builds on in-file search). Phases 3, 4,
 | 1. In-File Search | 1/1 | Complete | 2026-03-18 |
 | 2. Global Search | 0/2 | Planning | - |
 | 3. Quick Navigation | 0/2 | Planning | - |
-| 4. File Tree Mutations | 0/2 | Not started | - |
+| 4. File Tree Mutations | 0/2 | Planning | - |
 | 5. Tab & Terminal Polish | 0/2 | Planning | - |
 | 6. Detection Engineering Inline | 0/2 | Not started | - |
 | 7. Detection Editor Integration | 0/3 | Not started | - |

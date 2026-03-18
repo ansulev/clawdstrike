@@ -21,7 +21,8 @@ Close the gap from "IDE scaffold" to "professional-grade detection engineering I
 - [x] **Phase 4: File Tree Mutations** — Create/rename/delete files from Explorer with status indicators (2 plans)
 - [x] **Phase 5: Tab & Terminal Polish** — Tab overflow scrolling, context menu additions, terminal splits (2 plans)
 - [x] **Phase 6: Detection Engineering Inline** — Gutter test buttons, coverage gap indicators, guard reorder (2 plans)
-- [ ] **Phase 7: Detection Editor Integration** — Surface 50K LOC of orphaned detection engineering features as proper IDE panels (4 plans)
+- [ ] **Phase 7: Detection Editor Integration** — Surface 50K LOC of orphaned detection engineering features as proper IDE panels
+- [ ] **Phase 8: File-First Editor** — Files are pane tabs, FileEditorShell wraps per-file chrome, kill PolicyTabBar (4 plans)
 
 ## Phase Details
 
@@ -133,17 +134,39 @@ Plans:
 - [x] 07-03-PLAN.md — Add visual builder and TrustPrint tool routes with command palette commands
 - [x] 07-04-PLAN.md — Wire Hunt draft-detection pipeline to navigate to editor pane tab
 
+### Phase 8: File-First Editor (Option C Flatten)
+**Goal**: Files are first-class pane tabs — no more "Editor" container with internal tab bar. Opening a file creates a pane tab directly. The editor becomes a wrapper component (FileEditorShell) that provides file-type-specific chrome.
+**Depends on**: Phase 5 (tab system), Phase 7 (detection editor routes)
+**Requirements**: FLAT-01, FLAT-02, FLAT-03, FLAT-04, FLAT-05, FLAT-06, FLAT-07, FLAT-08
+**Success Criteria** (what must be TRUE):
+  1. Opening a file from Explorer creates a pane tab with the file name — no "Editor" intermediate tab
+  2. FileEditorShell renders contextual toolbar (validate/format/test/deploy for policies, visual builder for Sigma/YARA/OCSF)
+  3. Visual/YAML toggle works per-file within the FileEditorShell wrapper
+  4. PolicyTabBar is removed — PaneTabBar is the only tab bar
+  5. Multi-policy-store state keyed by file path, bridged to pane view IDs
+  6. Pane splitting opens two files side-by-side (replaces Editor's internal split mode)
+  7. Dirty indicator (gold dot) shows on pane tabs for unsaved files
+  8. All existing editor functionality (guard config, test runner, deploy, publish) accessible from FileEditorShell toolbar or command palette
+**Plans**: 4 plans
+
+Plans:
+- [ ] 08-01-PLAN.md — FileEditorShell component, /file/* route, PaneView dirty/fileType extension, pane-store openFile bridge
+- [ ] 08-02-PLAN.md — PaneTab dirty dot + file-type color indicators, PaneTabBar new-file button
+- [ ] 08-03-PLAN.md — FileEditorToolbar extraction from PolicyEditor, FileEditorShell toolbar + content integration
+- [ ] 08-04-PLAN.md — Rewire Explorer/QuickOpen/Search/Hunt to /file/ routes, redirect /editor, remove nav.editor, update BreadcrumbBar
+
 ## Progress
 
 **Execution Order:**
-Phases 1-2 are sequential (global search builds on in-file search). Phases 3, 4, 5 are independent. Phase 6 depends on Phase 1. Phase 7 depends on Phase 3.
+Phases 1-2 sequential. 3, 4, 5 independent. 6 depends on 1. 7 depends on 3. Phase 8 depends on 5 + 7.
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. In-File Search | 1/1 | Complete | 2026-03-18 |
 | 2. Global Search | 2/2 | Complete | 2026-03-18 |
-| 3. Quick Navigation | 0/2 | Planning | - |
+| 3. Quick Navigation | 2/2 | Complete | 2026-03-18 |
 | 4. File Tree Mutations | 2/2 | Complete | 2026-03-18 |
 | 5. Tab & Terminal Polish | 2/2 | Complete | 2026-03-18 |
 | 6. Detection Engineering Inline | 2/2 | Complete | 2026-03-18 |
 | 7. Detection Editor Integration | 4/4 | Complete | 2026-03-18 |
+| 8. File-First Editor | 0/4 | Not started | - |

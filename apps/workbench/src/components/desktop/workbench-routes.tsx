@@ -211,6 +211,18 @@ const FileEditorShell = lazy(() =>
   })),
 );
 
+const SpiritChamberTab = lazy(() =>
+  import("@/features/spirit/components/spirit-chamber-tab").then((m) => ({
+    default: m.SpiritChamberTab,
+  })),
+);
+
+const WebGLSpikeCanvas = lazy(() =>
+  import("@/features/spirit/components/webgl-spike-canvas").then((m) => ({
+    default: m.WebGLSpikeCanvas,
+  })),
+);
+
 function PlaceholderPane({ label }: { label: string }) {
   return (
     <div className="flex flex-1 items-center justify-center text-[#6f7f9a] text-sm font-mono">
@@ -406,8 +418,8 @@ export const WORKBENCH_ROUTE_OBJECTS: RouteObject[] = [
   { path: "trustprint/providers", element: <TrustprintProvidersPage /> },
   { path: "trustprint/thresholds", element: <TrustprintThresholdsPage /> },
   { path: "overview", element: <Navigate to="/home" replace /> },
-  { path: "observatory", element: <PlaceholderPane label="Observatory" /> },
-  { path: "spirit-chamber", element: <PlaceholderPane label="Spirit Chamber" /> },
+  { path: "observatory", element: <Suspense fallback={<div className="flex-1" />}><WebGLSpikeCanvas /></Suspense> },
+  { path: "spirit-chamber", element: <Suspense fallback={<div className="flex-1" />}><SpiritChamberTab /></Suspense> },
   { path: "nexus", element: <PlaceholderPane label="Nexus" /> },
   { path: "file/*", element: <FeatureErrorBoundary feature="Editor"><FileEditorShell /></FeatureErrorBoundary> },
   { path: "*", element: <Navigate to="/home" replace /> },

@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: milestone
 status: in-progress
-stopped_at: Completed 06-02-PLAN.md
-last_updated: "2026-03-18T20:37:00Z"
-last_activity: 2026-03-18 -- Completed Phase 6 Plan 2 (Execution Order Badges & Gutter Test Wiring)
+stopped_at: Completed 08-02-PLAN.md
+last_updated: "2026-03-18T21:38:32Z"
+last_activity: 2026-03-18 -- Completed Phase 8 Plan 2 (PaneTab Dirty/FileType Indicators + New-File Button)
 progress:
-  total_phases: 7
-  completed_phases: 6
-  total_plans: 15
-  completed_plans: 15
-  percent: 100
+  total_phases: 8
+  completed_phases: 7
+  total_plans: 19
+  completed_plans: 16
+  percent: 84
 ---
 
 # Project State
@@ -25,12 +25,12 @@ See: .planning/PROJECT.md (updated 2026-03-18)
 
 ## Current Position
 
-Phase: 6 of 7 (Detection Engineering Inline) COMPLETE
-Plan: 2 of 2 COMPLETE
-Status: Phase 06 complete, all plans done
-Last activity: 2026-03-18 -- Completed Phase 6 Plan 2 (Execution Order Badges & Gutter Test Wiring)
+Phase: 8 of 8 (File-First Editor) IN PROGRESS
+Plan: 2 of 4 (08-02 complete)
+Status: Phase 08 in progress, 08-02 done
+Last activity: 2026-03-18 -- Completed Phase 8 Plan 2 (PaneTab Dirty/FileType Indicators + New-File Button)
 
-Progress: [██████████] 100%
+Progress: [████████░░] 84%
 
 ## Previous Milestone (v1.0 — IDE Pivot)
 
@@ -72,6 +72,7 @@ Summary: Delivered IDE shell — activity bar, 7 sidebar panels, pane tab system
 | Phase 06 P01 | 7min | 2 tasks | 4 files |
 | Phase 07 P03 | 3min | 2 tasks | 4 files |
 | Phase 06 P02 | 3min | 1 tasks | 3 files |
+| Phase 08 P02 | 3min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -121,6 +122,9 @@ v1.1 decisions:
 - [Phase 07]: Local useState for visual builder/TrustPrint wrapper pages (no store integration) -- keeps pages self-contained
 - [Phase 06]: Execution order badge placed between drag handle and guard icon for visual hierarchy
 - [Phase 06]: Gutter test callback uses toast feedback for both success and info states (not console.log)
+- [Phase 08]: FILE_TYPE_COLORS map uses direct hex values matching PolicyTabBar precedent (cyan/purple/green/amber)
+- [Phase 08]: Close button dirty-dot uses group-hover/tab CSS toggle (VS Code pattern)
+- [Phase 08]: New-file button uses usePolicyTabsStore.newTab() with /file/__new__/{tabId} route convention
 
 ### Pending Todos
 
@@ -132,6 +136,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-18T20:37:00Z
-Stopped at: Completed 06-02-PLAN.md
-Resume file: Phase 6 complete. Continue with remaining incomplete plans (Phase 3 Quick Navigation).
+Last session: 2026-03-18T21:38:32Z
+Stopped at: Completed 08-02-PLAN.md
+Resume file: Phase 8 in progress. Continue with 08-01, 08-03, 08-04.

@@ -6,6 +6,7 @@ import {
   IconChevronRight,
   IconLayoutColumns,
   IconLayoutRows,
+  IconPlus,
   IconTrash,
   IconX,
   IconXboxX,
@@ -13,6 +14,7 @@ import {
 import { usePaneStore } from "./pane-store";
 import { findPaneGroup } from "./pane-tree";
 import { PaneTab } from "./pane-tab";
+import { usePolicyTabsStore } from "@/features/policy/stores/policy-tabs-store";
 import type { PaneGroup } from "./pane-types";
 
 /* ---- Context Menu ---- */
@@ -229,6 +231,24 @@ export function PaneTabBar({
         )}
 
         <div className="flex shrink-0 items-center gap-1 px-2">
+          <button
+            type="button"
+            className="rounded-md p-1.5 text-[#6f7f9a] transition-colors hover:bg-[#131721] hover:text-[#ece7dc]"
+            onClick={() => {
+              const tabId = usePolicyTabsStore.getState().newTab();
+              if (tabId) {
+                const tab = usePolicyTabsStore.getState().tabs.find(t => t.id === tabId);
+                if (tab) {
+                  const route = `/file/__new__/${tabId}`;
+                  usePaneStore.getState().openApp(route, tab.name);
+                }
+              }
+            }}
+            title="New file"
+            aria-label="New file"
+          >
+            <IconPlus size={14} stroke={1.8} />
+          </button>
           <button
             type="button"
             className="rounded-md p-1.5 text-[#6f7f9a] transition-colors hover:bg-[#131721] hover:text-[#ece7dc]"

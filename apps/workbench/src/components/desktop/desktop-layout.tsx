@@ -2,7 +2,9 @@ import { useEffect, useLayoutEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Titlebar } from "@/components/desktop/titlebar";
 import { StatusBar } from "@/components/desktop/status-bar";
-import { DesktopSidebar } from "@/components/desktop/desktop-sidebar";
+import { ActivityBar } from "@/features/activity-bar/components/activity-bar";
+import { SidebarPanel } from "@/features/activity-bar/components/sidebar-panel";
+import { SidebarResizeHandle } from "@/features/activity-bar/components/sidebar-resize-handle";
 import { ShortcutProvider } from "@/components/desktop/shortcut-provider";
 import { CommandPalette } from "@/components/desktop/command-palette";
 import { CrashRecoveryBanner } from "@/components/desktop/crash-recovery-banner";
@@ -86,7 +88,9 @@ export function DesktopLayout() {
 
       {/* Middle: sidebar + routed content */}
       <div className="flex flex-1 min-h-0">
-        <DesktopSidebar />
+        <ActivityBar />
+        <SidebarPanel />
+        <SidebarResizeHandle />
 
         <main className="flex flex-1 min-w-0 flex-col overflow-hidden select-text">
           {bottomPaneOpen ? (

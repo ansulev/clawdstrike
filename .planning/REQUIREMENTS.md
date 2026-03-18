@@ -9,9 +9,9 @@
 
 - [x] **SRCH-01**: User can find text in the current file via Cmd+F with match highlighting and navigation
 - [x] **SRCH-02**: User can find and replace text in the current file via Cmd+H
-- [ ] **SRCH-03**: User can search across all workspace files via Cmd+Shift+F with results list
-- [ ] **SRCH-04**: Search results show file path, line number, and matching context
-- [ ] **SRCH-05**: Search supports case-sensitive, whole-word, and regex toggles
+- [x] **SRCH-03**: User can search across all workspace files via Cmd+Shift+F with results list
+- [x] **SRCH-04**: Search results show file path, line number, and matching context
+- [x] **SRCH-05**: Search supports case-sensitive, whole-word, and regex toggles
 
 ### Quick Navigation
 
@@ -80,9 +80,9 @@
 |-------------|-------|--------|
 | SRCH-01 | Phase 1 | Complete |
 | SRCH-02 | Phase 1 | Complete |
-| SRCH-03 | Phase 2 | Pending |
-| SRCH-04 | Phase 2 | Pending |
-| SRCH-05 | Phase 2 | Pending |
+| SRCH-03 | Phase 2 | Complete |
+| SRCH-04 | Phase 2 | Complete |
+| SRCH-05 | Phase 2 | Complete |
 | NAV-01 | Phase 3 | Complete |
 | NAV-02 | Phase 3 | Complete |
 | NAV-03 | Phase 3 | Complete |

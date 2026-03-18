@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: milestone
 status: completed
-stopped_at: Completed 03-01-PLAN.md
-last_updated: "2026-03-18T19:40:07.704Z"
-last_activity: 2026-03-18 -- Completed Phase 5 Plan 2 (Terminal Split & Rename)
+stopped_at: Completed 05-01-PLAN.md
+last_updated: "2026-03-18T19:41:00Z"
+last_activity: 2026-03-18 -- Completed Phase 5 Plan 1 (Tab Overflow & Context Menu)
 progress:
   total_phases: 7
   completed_phases: 2
   total_plans: 9
-  completed_plans: 4
-  percent: 33
+  completed_plans: 6
+  percent: 46
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-03-18)
 ## Current Position
 
 Phase: 5 of 7 (Tab & Terminal Polish)
-Plan: 2 of 2 COMPLETE
-Status: Phase 5 plans complete
-Last activity: 2026-03-18 -- Completed Phase 5 Plan 2 (Terminal Split & Rename)
+Plan: 1 of 2 COMPLETE
+Status: Plan 05-01 complete, 05-02 already complete
+Last activity: 2026-03-18 -- Completed Phase 5 Plan 1 (Tab Overflow & Context Menu)
 
-Progress: [███░░░░░░░] 33%
+Progress: [████░░░░░░] 46%
 
 ## Previous Milestone (v1.0 — IDE Pivot)
 
@@ -61,6 +61,8 @@ Summary: Delivered IDE shell — activity bar, 7 sidebar panels, pane tab system
 | Phase 05 P02 | 2min | 1 tasks | 3 files |
 | Phase 03 P01 | 3min | 2 tasks | 4 files |
 | Phase 05 P02 | 2min | 1 tasks | 3 files |
+| Phase 02 P01 | 5min | 2 tasks | 5 files |
+| Phase 05 P01 | 5min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -85,6 +87,7 @@ v1.1 decisions:
 - [Phase 03]: Used tauri-bridge readDetectionFileByPath instead of direct Tauri plugin-fs for QuickOpen file reads
 - [Phase 03]: Module-level useSyncExternalStore for QuickOpenDialog visibility (self-contained, no separate store)
 - [Phase 05]: Split terminal uses [leftId, rightId] tuple (max 2 panes, simple model)
+- [Phase 02]: regex crate added as direct dep for search; 10K match cap; results grouped by file in store
 
 ### Pending Todos
 
@@ -96,6 +99,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-18T19:40:03.937Z
-Stopped at: Completed 03-01-PLAN.md
-Resume file: None
+Last session: 2026-03-18T19:41:11Z
+Stopped at: Completed 02-01-PLAN.md
+Resume file: .planning/phases/02-global-search/02-02-PLAN.md

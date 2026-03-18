@@ -23,9 +23,9 @@
 ### File Tree
 
 - [x] **TREE-01**: User can create a new file from Explorer context menu or toolbar button
-- [ ] **TREE-02**: User can rename a file via context menu or F2 key
-- [ ] **TREE-03**: User can delete a file via context menu with confirmation dialog
-- [ ] **TREE-04**: Explorer shows file status indicators (modified dot, error badge)
+- [x] **TREE-02**: User can rename a file via context menu or F2 key
+- [x] **TREE-03**: User can delete a file via context menu with confirmation dialog
+- [x] **TREE-04**: Explorer shows file status indicators (modified dot, error badge)
 
 ### Tab System
 
@@ -88,9 +88,9 @@
 | NAV-03 | Phase 3 | Complete |
 | NAV-04 | Phase 3 | Complete |
 | TREE-01 | Phase 4 | Complete |
-| TREE-02 | Phase 4 | Pending |
-| TREE-03 | Phase 4 | Pending |
-| TREE-04 | Phase 4 | Pending |
+| TREE-02 | Phase 4 | Complete |
+| TREE-03 | Phase 4 | Complete |
+| TREE-04 | Phase 4 | Complete |
 | TAB-01 | Phase 5 | Complete |
 | TAB-02 | Phase 5 | Complete |
 | TAB-03 | Phase 5 | Complete |

@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: milestone
 status: in-progress
-stopped_at: Completed 02-02-PLAN.md
-last_updated: "2026-03-18T19:48:01.641Z"
-last_activity: 2026-03-18 -- Completed Phase 2 Plan 2 (Global Search - Search Panel UI)
+stopped_at: Completed 04-02-PLAN.md
+last_updated: "2026-03-18T19:49:10Z"
+last_activity: 2026-03-18 -- Completed Phase 4 Plan 2 (File Tree Mutations - Rename, Delete, Status)
 progress:
   total_phases: 7
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 9
-  completed_plans: 8
-  percent: 89
+  completed_plans: 9
+  percent: 100
 ---
 
 # Project State
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-18)
 
 **Core value:** Security operators get a professional-grade IDE with search, quick navigation, and file management
-**Current focus:** Phase 2 Global Search (complete)
+**Current focus:** Phase 4 File Tree Mutations (complete)
 
 ## Current Position
 
-Phase: 2 of 7 (Global Search) COMPLETE
+Phase: 4 of 7 (File Tree Mutations) COMPLETE
 Plan: 2 of 2 COMPLETE
-Status: Phase 02 complete
-Last activity: 2026-03-18 -- Completed Phase 2 Plan 2 (Global Search - Search Panel UI)
+Status: Phase 04 complete, all v1.1 plans done
+Last activity: 2026-03-18 -- Completed Phase 4 Plan 2 (File Tree Mutations - Rename, Delete, Status)
 
-Progress: [█████████░] 89%
+Progress: [██████████] 100%
 
 ## Previous Milestone (v1.0 — IDE Pivot)
 
@@ -65,6 +65,7 @@ Summary: Delivered IDE shell — activity bar, 7 sidebar panels, pane tab system
 | Phase 05 P01 | 5min | 2 tasks | 3 files |
 | Phase 04 P01 | 6min | 2 tasks | 8 files |
 | Phase 02 P02 | 3min | 2 tasks | 5 files |
+| Phase 04 P02 | 3min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -98,6 +99,9 @@ v1.1 decisions:
 - [Phase 02]: IconSearch from @tabler/icons-react used directly as activity bar icon (SigilProps compatible)
 - [Phase 02]: SearchPanel split into presentational + connected components for testability
 - [Phase 02]: 300ms debounce on search input with immediate Enter key override
+- [Phase 04]: Delete confirmation uses Dialog primitives with dark IDE theme override (bg-[#131721])
+- [Phase 04]: FileStatus map keyed by relative file path, error badge takes visual priority over modified dot
+- [Phase 04]: Newly created files auto-marked as modified to demonstrate status indicators
 
 ### Pending Todos
 
@@ -109,6 +113,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-18T19:47:00Z
-Stopped at: Completed 02-02-PLAN.md
-Resume file: next incomplete plan
+Last session: 2026-03-18T19:49:10Z
+Stopped at: Completed 04-02-PLAN.md
+Resume file: All v1.1 planned phases complete

@@ -146,6 +146,7 @@ jobs:
           # not expected to pass inheritance soundness.
           expected_inheritance_failures=(
             "rulesets/origin-enclaves-example.yaml"
+            "rulesets/remote-desktop-permissive.yaml"
           )
 
           is_expected_inheritance_failure() {

@@ -3,16 +3,7 @@
 use clawdstrike::guards::JailbreakConfig;
 use logos_ffi::{AgentId, Formula};
 
-use super::GuardFormulas;
-use crate::atoms::ActionAtom;
-
-fn custom_permission(agent: &AgentId, detail: impl Into<String>) -> Formula {
-    Formula::permission(agent.clone(), ActionAtom::custom(detail).to_formula())
-}
-
-fn custom_prohibition(agent: &AgentId, detail: impl Into<String>) -> Formula {
-    Formula::prohibition(agent.clone(), ActionAtom::custom(detail).to_formula())
-}
+use super::{custom_permission, custom_prohibition, GuardFormulas};
 
 impl GuardFormulas for JailbreakConfig {
     fn to_formulas(&self, agent: &AgentId) -> Vec<Formula> {

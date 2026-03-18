@@ -3,16 +3,7 @@
 use clawdstrike::guards::{SecretLeakConfig, Severity};
 use logos_ffi::{AgentId, Formula};
 
-use super::GuardFormulas;
-use crate::atoms::ActionAtom;
-
-fn custom_permission(agent: &AgentId, detail: impl Into<String>) -> Formula {
-    Formula::permission(agent.clone(), ActionAtom::custom(detail).to_formula())
-}
-
-fn custom_prohibition(agent: &AgentId, detail: impl Into<String>) -> Formula {
-    Formula::prohibition(agent.clone(), ActionAtom::custom(detail).to_formula())
-}
+use super::{custom_permission, custom_prohibition, stable_token, GuardFormulas};
 
 fn severity_rank(severity: &Severity) -> u8 {
     match severity {
@@ -20,25 +11,6 @@ fn severity_rank(severity: &Severity) -> u8 {
         Severity::Warning => 1,
         Severity::Error => 2,
         Severity::Critical => 3,
-    }
-}
-
-fn stable_token(value: &str) -> String {
-    let token = value
-        .chars()
-        .map(|ch| {
-            if ch.is_ascii_alphanumeric() {
-                ch.to_ascii_lowercase()
-            } else {
-                '_'
-            }
-        })
-        .collect::<String>();
-    let trimmed = token.trim_matches('_');
-    if trimmed.is_empty() {
-        hush_core::hashing::sha256(value.as_bytes()).to_hex()
-    } else {
-        trimmed.to_string()
     }
 }
 

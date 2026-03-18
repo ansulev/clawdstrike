@@ -4,16 +4,7 @@ use clawdstrike::guards::PromptInjectionConfig;
 use clawdstrike::hygiene::PromptInjectionLevel;
 use logos_ffi::{AgentId, Formula};
 
-use super::GuardFormulas;
-use crate::atoms::ActionAtom;
-
-fn custom_permission(agent: &AgentId, detail: impl Into<String>) -> Formula {
-    Formula::permission(agent.clone(), ActionAtom::custom(detail).to_formula())
-}
-
-fn custom_prohibition(agent: &AgentId, detail: impl Into<String>) -> Formula {
-    Formula::prohibition(agent.clone(), ActionAtom::custom(detail).to_formula())
-}
+use super::{custom_permission, custom_prohibition, GuardFormulas};
 
 fn level_name(level: PromptInjectionLevel) -> &'static str {
     match level {

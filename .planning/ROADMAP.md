@@ -12,7 +12,7 @@ Transform the ClawdStrike workbench from a closed application into an extensible
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Open Closed Seams** - Convert static unions and const arrays into dynamic registries with register/unregister APIs
+- [x] **Phase 1: Open Closed Seams** - Convert static unions and const arrays into dynamic registries with register/unregister APIs
 - [ ] **Phase 2: Plugin Manifest and Registry** - Define the PluginManifest type and PluginRegistry singleton adapted from Athas patterns
 - [ ] **Phase 3: Plugin Loader and Trust** - Build lifecycle management with activation events, trust verification, and contribution routing
 - [ ] **Phase 4: Plugin SDK Package** - Create @clawdstrike/plugin-sdk with typed API surface for plugin authors
@@ -35,7 +35,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 Plans:
 - [ ] 01-01: Open guard pipeline seams (GuardId, GUARD_REGISTRY, GuardCategory, ConfigFieldType)
 - [ ] 01-02: Open file type and detection seams (FileType, FILE_TYPE_REGISTRY, ExplainabilityTrace)
-- [ ] 01-03: Open UI seams (StatusBarRegistry, AppId, PluginIcon, CapsuleKind, ShelfMode)
+- [x] 01-03: Open UI seams (StatusBarRegistry, AppId, PluginIcon, CapsuleKind, ShelfMode)
 
 ### Phase 2: Plugin Manifest and Registry
 **Goal**: A plugin's capabilities are fully described by a manifest, and the registry tracks all known plugins with lifecycle states
@@ -117,7 +117,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Open Closed Seams | 0/3 | Not started | - |
+| 1. Open Closed Seams | 3/3 | Complete | 2026-03-18 |
 | 2. Plugin Manifest and Registry | 0/2 | Not started | - |
 | 3. Plugin Loader and Trust | 0/2 | Not started | - |
 | 4. Plugin SDK Package | 0/1 | Not started | - |

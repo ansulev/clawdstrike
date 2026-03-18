@@ -1,7 +1,0 @@
-{
-  "git": {
-    "sha1": "2cdbea30042c816ff27a5ea137a0c035cf0e40d3",
-    "dirty": true
-  },
-  "path_in_vcs": "crates/hushspec"
-}

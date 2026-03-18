@@ -94,12 +94,16 @@ LLBC_FILE="$WORK_DIR/clawdstrike.llbc"
 # Run charon from the crate directory, outputting LLBC to a stable file path.
 # Current Charon releases expose extraction options on the `cargo` subcommand.
 # `--preset=aeneas` produces Aeneas-compatible output and `--start-from`
-# restricts extraction to the core module.
+# restricts extraction to the core module. `merge_keyed_vec` is intentionally
+# excluded because the formal pipeline uses `merge_keyed_vec_pure`; the generic
+# callback-based helper is part of the runtime API but not currently supported
+# by Aeneas' function-signature translator.
 (
     cd "$CRATE_DIR"
     "$CHARON" cargo \
         --preset=aeneas \
         --start-from 'crate::core' \
+        --exclude 'crate::core::merge::merge_keyed_vec' \
         --dest-file "$LLBC_FILE" \
         -- --lib --quiet
 )

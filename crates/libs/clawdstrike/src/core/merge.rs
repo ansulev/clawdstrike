@@ -1,7 +1,5 @@
 //! Merge strategies for policy `extends` composition (no serde, no I/O).
 
-use std::collections::HashMap;
-
 /// Merge strategy tag (mirrors `policy::MergeStrategy` without serde).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum CoreMergeStrategy {
@@ -40,11 +38,7 @@ pub fn child_overrides_option<T: Clone>(base: Option<T>, child: Option<T>) -> Op
 
 /// Merge two `Vec<T>` keyed by `key_fn`. Child replaces matching base entries;
 /// new entries are appended.
-pub fn merge_keyed_vec<T: Clone, K: Eq + std::hash::Hash>(
-    base: &[T],
-    child: &[T],
-    key_fn: impl Fn(&T) -> K,
-) -> Vec<T> {
+pub fn merge_keyed_vec<T: Clone, K: Eq>(base: &[T], child: &[T], key_fn: fn(&T) -> K) -> Vec<T> {
     if child.is_empty() {
         return base.to_vec();
     }
@@ -53,19 +47,37 @@ pub fn merge_keyed_vec<T: Clone, K: Eq + std::hash::Hash>(
     }
 
     let mut out: Vec<T> = base.to_vec();
-    let mut index: HashMap<K, usize> = HashMap::new();
-    for (i, item) in out.iter().enumerate() {
-        index.insert(key_fn(item), i);
+    let mut keys: Vec<K> = Vec::with_capacity(out.len());
+
+    let mut i: usize = 0;
+    while i < out.len() {
+        keys.push(key_fn(&out[i]));
+        i += 1;
     }
 
-    for item in child {
-        let k = key_fn(item);
-        if let Some(i) = index.get(&k).copied() {
-            out[i] = item.clone();
-        } else {
-            index.insert(k, out.len());
-            out.push(item.clone());
+    let mut child_index: usize = 0;
+    while child_index < child.len() {
+        let key = key_fn(&child[child_index]);
+
+        let mut existing_index: Option<usize> = None;
+        let mut out_index: usize = 0;
+        while out_index < keys.len() {
+            if keys[out_index] == key {
+                existing_index = Some(out_index);
+                break;
+            }
+            out_index += 1;
         }
+
+        if let Some(position) = existing_index {
+            out[position] = child[child_index].clone();
+            keys[position] = key;
+        } else {
+            keys.push(key);
+            out.push(child[child_index].clone());
+        }
+
+        child_index += 1;
     }
 
     out

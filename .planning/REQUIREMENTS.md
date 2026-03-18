@@ -22,16 +22,16 @@
 
 ### File Tree
 
-- [ ] **TREE-01**: User can create a new file from Explorer context menu or toolbar button
+- [x] **TREE-01**: User can create a new file from Explorer context menu or toolbar button
 - [ ] **TREE-02**: User can rename a file via context menu or F2 key
 - [ ] **TREE-03**: User can delete a file via context menu with confirmation dialog
 - [ ] **TREE-04**: Explorer shows file status indicators (modified dot, error badge)
 
 ### Tab System
 
-- [ ] **TAB-01**: Tab bar shows navigation arrows when tabs overflow horizontal space
-- [ ] **TAB-02**: User can scroll through tabs with scroll wheel or arrow buttons
-- [ ] **TAB-03**: Tab context menu includes "Close to the Right" and "Close Saved"
+- [x] **TAB-01**: Tab bar shows navigation arrows when tabs overflow horizontal space
+- [x] **TAB-02**: User can scroll through tabs with scroll wheel or arrow buttons
+- [x] **TAB-03**: Tab context menu includes "Close to the Right" and "Close Saved"
 
 ### Detection Engineering
 
@@ -87,13 +87,13 @@
 | NAV-02 | Phase 3 | Complete |
 | NAV-03 | Phase 3 | Complete |
 | NAV-04 | Phase 3 | Complete |
-| TREE-01 | Phase 4 | Pending |
+| TREE-01 | Phase 4 | Complete |
 | TREE-02 | Phase 4 | Pending |
 | TREE-03 | Phase 4 | Pending |
 | TREE-04 | Phase 4 | Pending |
-| TAB-01 | Phase 5 | Pending |
-| TAB-02 | Phase 5 | Pending |
-| TAB-03 | Phase 5 | Pending |
+| TAB-01 | Phase 5 | Complete |
+| TAB-02 | Phase 5 | Complete |
+| TAB-03 | Phase 5 | Complete |
 | DET-01 | Phase 6 | Pending |
 | DET-02 | Phase 6 | Pending |
 | DET-03 | Phase 6 | Pending |

@@ -19,7 +19,7 @@ Close the gap from "IDE scaffold" to "professional-grade detection engineering I
 - [ ] **Phase 2: Global Search** — Cmd+Shift+F workspace-wide search with results panel (2 plans)
 - [ ] **Phase 3: Quick Navigation** — Cmd+P file picker, breadcrumbs, Cmd+G go-to-line (2 plans)
 - [ ] **Phase 4: File Tree Mutations** — Create/rename/delete files from Explorer with status indicators (2 plans)
-- [ ] **Phase 5: Tab & Terminal Polish** — Tab overflow scrolling, context menu additions, terminal splits (2 plans)
+- [x] **Phase 5: Tab & Terminal Polish** — Tab overflow scrolling, context menu additions, terminal splits (2 plans)
 - [ ] **Phase 6: Detection Engineering Inline** — Gutter test buttons, coverage gap indicators, guard reorder
 - [ ] **Phase 7: Detection Editor Integration** — Surface 50K LOC of orphaned detection engineering features as proper IDE panels
 
@@ -79,7 +79,7 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 04-01-PLAN.md — Tauri fs bridge wrappers, project store mutations, context menu, New File with inline input
+- [x] 04-01-PLAN.md — Tauri fs bridge wrappers, project store mutations, context menu, New File with inline input
 - [ ] 04-02-PLAN.md — Inline rename (F2 + context menu), delete confirmation dialog, file status indicators
 
 ### Phase 5: Tab & Terminal Polish
@@ -95,7 +95,7 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 05-01-PLAN.md — Tab overflow arrows, wheel scroll, and context menu with Close to the Right / Close Saved
+- [x] 05-01-PLAN.md — Tab overflow arrows, wheel scroll, and context menu with Close to the Right / Close Saved
 - [x] 05-02-PLAN.md — Terminal split view and session tab rename via double-click
 
 ### Phase 6: Detection Engineering Inline
@@ -142,7 +142,7 @@ Phases 1-2 are sequential (global search builds on in-file search). Phases 3, 4,
 | 1. In-File Search | 1/1 | Complete | 2026-03-18 |
 | 2. Global Search | 0/2 | Planning | - |
 | 3. Quick Navigation | 0/2 | Planning | - |
-| 4. File Tree Mutations | 0/2 | Planning | - |
-| 5. Tab & Terminal Polish | 1/2 | In Progress | - |
+| 4. File Tree Mutations | 1/2 | In Progress | - |
+| 5. Tab & Terminal Polish | 2/2 | Complete | 2026-03-18 |
 | 6. Detection Engineering Inline | 0/2 | Not started | - |
 | 7. Detection Editor Integration | 0/3 | Not started | - |

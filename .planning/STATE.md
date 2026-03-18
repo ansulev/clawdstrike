@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: completed
-stopped_at: Completed 03-02-PLAN.md
-last_updated: "2026-03-18T17:29:22.793Z"
-last_activity: 2026-03-18 -- Completed 03-02 layout integration + command registration
+status: executing
+stopped_at: Completed 04-01-PLAN.md
+last_updated: "2026-03-18T18:10:41.194Z"
+last_activity: 2026-03-18 -- Completed 04-01 lab decomposition direct routes
 progress:
   total_phases: 4
   completed_phases: 3
-  total_plans: 7
-  completed_plans: 7
-  percent: 100
+  total_plans: 9
+  completed_plans: 8
+  percent: 89
 ---
 
 # Project State
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-17)
 
 **Core value:** Security operators can work across multiple views simultaneously with a folder-first, IDE-grade navigation model
-**Current focus:** Phase 4 (next)
+**Current focus:** Phase 4 Lab Decomposition + App Navigation
 
 ## Current Position
 
-Phase: 3 of 4 (Right Sidebar + Bottom Panel + Commands) -- COMPLETE
-Plan: 2 of 2 in current phase (All plans complete)
-Status: Phase Complete
-Last activity: 2026-03-18 -- Completed 03-02 layout integration + command registration
+Phase: 4 of 4 (Lab Decomposition + App Navigation)
+Plan: 1 of 2 in current phase (04-01 complete)
+Status: In Progress
+Last activity: 2026-03-18 -- Completed 04-01 lab decomposition direct routes
 
-Progress: [██████████] 100%
+Progress: [█████████░] 89%
 
 ## Performance Metrics
 
@@ -57,6 +57,8 @@ Progress: [██████████] 100%
 | Phase 02 P03 | 7min | 2 tasks | 7 files |
 | Phase 03 P01 | 4min | 2 tasks | 8 files |
 | Phase 03 P02 | 3min | 2 tasks | 3 files |
+| Phase 04 P01 | 2min | 2 tasks | 2 files |
+| Phase 04 P01 | 2min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -83,6 +85,8 @@ Recent decisions affecting current work:
 - [Phase 02]: tab.close command wired via closeActiveTab dep using getAllPaneGroups
 - [Phase 03]: Added inline prop to SpeakeasyPanel instead of CSS-hack approach for de-overlaying fixed positioning
 - [Phase 03]: Right sidebar uses 200px collapse threshold (higher than left sidebar's 120px) per UI-SPEC
+- [Phase 04]: Kept /lab route and LabLayout unchanged as convenience grouping; sub-apps are independently routable but Lab still works
+- [Phase 04]: Used Suspense wrappers at route level for lazy-loaded HuntLayout, SimulatorLayout, SwarmBoardPage
 
 ### Pending Todos
 
@@ -94,6 +98,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-18T17:29:22.791Z
-Stopped at: Completed 03-02-PLAN.md
+Last session: 2026-03-18T18:10:40.223Z
+Stopped at: Completed 04-01-PLAN.md
 Resume file: None

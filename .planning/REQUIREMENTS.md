@@ -50,10 +50,10 @@
 
 ### Lab Decomposition
 
-- [ ] **LAB-01**: Swarm Board openable as independent editor tab (not only via Lab container)
-- [ ] **LAB-02**: Threat Hunt openable as independent editor tab
-- [ ] **LAB-03**: Simulator openable as independent editor tab
-- [ ] **LAB-04**: Lab container preserved as optional convenience grouping
+- [x] **LAB-01**: Swarm Board openable as independent editor tab (not only via Lab container)
+- [x] **LAB-02**: Threat Hunt openable as independent editor tab
+- [x] **LAB-03**: Simulator openable as independent editor tab
+- [x] **LAB-04**: Lab container preserved as optional convenience grouping
 
 ### Commands & Navigation
 
@@ -137,10 +137,10 @@
 | BPAN-01 | Phase 3 | Complete |
 | BPAN-02 | Phase 3 | Complete |
 | BPAN-03 | Phase 3 | Complete |
-| LAB-01 | Phase 4 | Pending |
-| LAB-02 | Phase 4 | Pending |
-| LAB-03 | Phase 4 | Pending |
-| LAB-04 | Phase 4 | Pending |
+| LAB-01 | Phase 4 | Complete |
+| LAB-02 | Phase 4 | Complete |
+| LAB-03 | Phase 4 | Complete |
+| LAB-04 | Phase 4 | Complete |
 | CMD-01 | Phase 1 | Complete |
 | CMD-02 | Phase 1 | Complete |
 | CMD-03 | Phase 3 | Complete |

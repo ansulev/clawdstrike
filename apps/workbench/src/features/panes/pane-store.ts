@@ -4,12 +4,17 @@ import {
   normalizeWorkbenchRoute,
 } from "@/components/desktop/workbench-routes";
 import {
+  addViewToGroup,
   closePane as closePaneNode,
   createPaneGroup,
+  findPaneGroup,
   getAdjacentPane,
   getAllPaneGroups,
   getFirstPaneGroup,
   getPaneActiveView,
+  removeViewFromGroup,
+  replaceNode,
+  setActivePaneView,
   setPaneActiveRoute,
   splitPane as splitPaneNode,
   updatePaneSizes,
@@ -48,6 +53,12 @@ export interface PaneStore {
   resizeSplit: (splitId: string, sizes: [number, number]) => void;
   focusPane: (direction: PaneFocusDirection) => void;
   paneCount: () => number;
+  /** Open a route as a new tab in the active pane, or focus an existing tab with that route. */
+  openApp: (route: string, label?: string) => void;
+  /** Close a specific view (tab) within a pane group. */
+  closeView: (paneId: string, viewId: string) => void;
+  /** Switch to a specific view (tab) within a pane group. */
+  setActiveView: (paneId: string, viewId: string) => void;
   _reset: () => void;
 }
 
@@ -120,6 +131,72 @@ export const usePaneStore = create<PaneStore>((set, get) => ({
   },
 
   paneCount: () => getAllPaneGroups(get().root).length,
+
+  openApp: (route, label) => {
+    const normalized = normalizeWorkbenchRoute(route);
+    const resolvedLabel = label ?? getWorkbenchRouteLabel(normalized);
+
+    // Search all pane groups for an existing view with this normalized route
+    const allGroups = getAllPaneGroups(get().root);
+    for (const group of allGroups) {
+      const existing = group.views.find(
+        (v) => normalizeWorkbenchRoute(v.route) === normalized,
+      );
+      if (existing) {
+        // Focus the existing tab instead of adding a duplicate
+        set((state) => ({
+          activePaneId: group.id,
+          root: setActivePaneView(state.root, group.id, existing.id),
+        }));
+        return;
+      }
+    }
+
+    // Not found anywhere -- add new view to the active pane
+    const view: PaneView = {
+      id: crypto.randomUUID(),
+      route: normalized,
+      label: resolvedLabel,
+    };
+    set((state) => ({
+      root: addViewToGroup(state.root, state.activePaneId, view),
+    }));
+  },
+
+  closeView: (paneId, viewId) => {
+    const { root } = get();
+    const nextRoot = removeViewFromGroup(root, paneId, viewId);
+
+    // Check if the group is now empty
+    const group = findPaneGroup(nextRoot, paneId);
+    if (group && group.views.length === 0) {
+      const allGroups = getAllPaneGroups(nextRoot);
+      if (allGroups.length === 1) {
+        // Last pane -- reset to Home instead of leaving empty
+        const homeView = createPaneView("/home");
+        set({
+          root: replaceNode(nextRoot, paneId, (node) =>
+            node.type === "group"
+              ? { ...node, views: [homeView], activeViewId: homeView.id }
+              : node,
+          ),
+        });
+      } else {
+        // Multiple panes -- close the empty pane entirely
+        get().closePane(paneId);
+      }
+      return;
+    }
+
+    set({ root: nextRoot });
+  },
+
+  setActiveView: (paneId, viewId) => {
+    set((state) => ({
+      activePaneId: paneId,
+      root: setActivePaneView(state.root, paneId, viewId),
+    }));
+  },
 
   _reset: () => {
     const nextRoot = createInitialRoot();

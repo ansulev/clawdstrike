@@ -53,7 +53,7 @@ export function getFirstPaneGroup(root: PaneNode): PaneGroup {
   return root.type === "group" ? root : getFirstPaneGroup(root.children[0]);
 }
 
-function replaceNode(
+export function replaceNode(
   root: PaneNode,
   targetId: string,
   replacer: (node: PaneNode) => PaneNode,
@@ -183,4 +183,34 @@ export function setPaneActiveRoute(
 
 export function getPaneActiveView(group: PaneGroup): PaneView | null {
   return group.views.find((view) => view.id === group.activeViewId) ?? group.views[0] ?? null;
+}
+
+export function addViewToGroup(
+  root: PaneNode,
+  paneId: string,
+  view: PaneView,
+): PaneNode {
+  return replaceNode(root, paneId, (node) =>
+    node.type === "group"
+      ? { ...node, views: [...node.views, view], activeViewId: view.id }
+      : node,
+  );
+}
+
+export function removeViewFromGroup(
+  root: PaneNode,
+  paneId: string,
+  viewId: string,
+): PaneNode {
+  return replaceNode(root, paneId, (node) => {
+    if (node.type !== "group") return node;
+    const nextViews = node.views.filter((v) => v.id !== viewId);
+    let nextActiveId = node.activeViewId;
+    if (viewId === node.activeViewId && nextViews.length > 0) {
+      const closedIdx = node.views.findIndex((v) => v.id === viewId);
+      nextActiveId =
+        nextViews[Math.min(closedIdx, nextViews.length - 1)]?.id ?? null;
+    }
+    return { ...node, views: nextViews, activeViewId: nextActiveId };
+  });
 }

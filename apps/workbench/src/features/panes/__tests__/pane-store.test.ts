@@ -59,10 +59,18 @@ describe("pane-store", () => {
       const pane1 = findPaneGroup(state1.root, state1.activePaneId)!;
       const editorViewId = pane1.views[1].id;
 
-      // Split to create a second pane (focus moves to new pane)
-      usePaneStore.getState().splitPane(state1.activePaneId, "vertical");
+      // Switch active view back to Home before splitting, so the sibling clones Home (not Editor)
+      usePaneStore.getState().setActiveView(pane1.id, pane1.views[0].id);
 
-      // Now try to open /editor again from the new pane -- should focus the first pane
+      // Split to create a second pane (focus moves to new pane, which clones Home)
+      usePaneStore.getState().splitPane(pane1.id, "vertical");
+
+      // Verify the new pane has Home, not Editor
+      const stateAfterSplit = usePaneStore.getState();
+      const siblingPane = findPaneGroup(stateAfterSplit.root, stateAfterSplit.activePaneId)!;
+      expect(siblingPane.views[0].route).toBe("/home");
+
+      // Now try to open /editor from the new pane -- should focus the first pane's existing editor tab
       usePaneStore.getState().openApp("/editor");
 
       const state2 = usePaneStore.getState();

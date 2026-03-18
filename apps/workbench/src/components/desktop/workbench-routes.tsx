@@ -167,6 +167,37 @@ const MitreHeatmap = lazy(() =>
   })),
 );
 
+const SigmaBuilderPage = lazy(() =>
+  import("@/components/workbench/editor/visual-builder-pages").then((m) => ({
+    default: m.SigmaBuilderPage,
+  })),
+);
+const YaraBuilderPage = lazy(() =>
+  import("@/components/workbench/editor/visual-builder-pages").then((m) => ({
+    default: m.YaraBuilderPage,
+  })),
+);
+const OcsfBuilderPage = lazy(() =>
+  import("@/components/workbench/editor/visual-builder-pages").then((m) => ({
+    default: m.OcsfBuilderPage,
+  })),
+);
+const TrustprintPatternsPage = lazy(() =>
+  import("@/components/workbench/editor/trustprint-pages").then((m) => ({
+    default: m.TrustprintPatternsPage,
+  })),
+);
+const TrustprintProvidersPage = lazy(() =>
+  import("@/components/workbench/editor/trustprint-pages").then((m) => ({
+    default: m.TrustprintProvidersPage,
+  })),
+);
+const TrustprintThresholdsPage = lazy(() =>
+  import("@/components/workbench/editor/trustprint-pages").then((m) => ({
+    default: m.TrustprintThresholdsPage,
+  })),
+);
+
 function parseRoute(route: string): URL {
   const normalized = route.startsWith("/") ? route : `/${route}`;
   return new URL(normalized, "https://clawdstrike.local");
@@ -248,6 +279,12 @@ export function getWorkbenchRouteLabel(route: string): string {
   if (url.pathname === "/approvals") return "Approvals";
   if (url.pathname === "/fleet") return "Fleet";
   if (url.pathname === "/audit") return "Audit";
+  if (url.pathname === "/visual-builder/sigma") return "Sigma Builder";
+  if (url.pathname === "/visual-builder/yara") return "YARA Builder";
+  if (url.pathname === "/visual-builder/ocsf") return "OCSF Builder";
+  if (url.pathname === "/trustprint/patterns") return "TrustPrint Patterns";
+  if (url.pathname === "/trustprint/providers") return "TrustPrint Providers";
+  if (url.pathname === "/trustprint/thresholds") return "TrustPrint Thresholds";
   return "Workbench";
 }
 
@@ -308,6 +345,12 @@ export const WORKBENCH_ROUTE_OBJECTS: RouteObject[] = [
       />
     ),
   },
+  { path: "visual-builder/sigma", element: <SigmaBuilderPage /> },
+  { path: "visual-builder/yara", element: <YaraBuilderPage /> },
+  { path: "visual-builder/ocsf", element: <OcsfBuilderPage /> },
+  { path: "trustprint/patterns", element: <TrustprintPatternsPage /> },
+  { path: "trustprint/providers", element: <TrustprintProvidersPage /> },
+  { path: "trustprint/thresholds", element: <TrustprintThresholdsPage /> },
   { path: "overview", element: <Navigate to="/home" replace /> },
   { path: "*", element: <Navigate to="/home" replace /> },
 ];

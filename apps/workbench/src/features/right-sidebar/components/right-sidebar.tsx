@@ -103,6 +103,16 @@ function HistoryContent() {
   if (!policyId)
     return <NoEditorPlaceholder panelName="Version History" />;
 
+  if (!currentPolicy) {
+    return (
+      <div className="flex flex-1 items-center justify-center p-4">
+        <p className="text-center text-[12px] text-[#6f7f9a]">
+          Parsing policy…
+        </p>
+      </div>
+    );
+  }
+
   const handleRollback = (version: { yaml?: string }) => {
     if (version.yaml) {
       window.dispatchEvent(
@@ -121,7 +131,7 @@ function HistoryContent() {
     <VersionHistoryPanel
       policyId={policyId}
       currentYaml={currentYaml}
-      currentPolicy={currentPolicy!}
+      currentPolicy={currentPolicy}
       onRollback={handleRollback}
       onCompare={handleCompare}
     />

@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 01-03-PLAN.md
-last_updated: "2026-03-18T21:01:56Z"
-last_activity: 2026-03-18 -- Completed 01-03 (Open UI seams)
+stopped_at: Completed 01-01-PLAN.md
+last_updated: "2026-03-18T21:04:17Z"
+last_activity: 2026-03-18 -- Completed 01-01 (Open guard pipeline seams)
 progress:
   total_phases: 6
   completed_phases: 1
@@ -28,25 +28,25 @@ See: .planning/PROJECT.md (updated 2026-03-18)
 Phase: 1 of 6 (Open Closed Seams) -- COMPLETE
 Plan: 3 of 3 in current phase
 Status: Phase complete
-Last activity: 2026-03-18 -- Completed 01-03 (Open UI seams)
+Last activity: 2026-03-18 -- Completed 01-01 (Open guard pipeline seams)
 
 Progress: [██████████] 100%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 2
-- Average duration: 5.5min
-- Total execution time: 0.18 hours
+- Total plans completed: 3
+- Average duration: 7min
+- Total execution time: 0.35 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 1: Open Closed Seams | 2 | 11min | 5.5min |
+| 1: Open Closed Seams | 3 | 21min | 7min |
 
 **Recent Trend:**
-- Last 5 plans: 01-02 (4min), 01-03 (7min)
+- Last 5 plans: 01-02 (4min), 01-03 (7min), 01-01 (10min)
 - Trend: Steady
 
 *Updated after each plan completion*
@@ -67,6 +67,9 @@ Recent decisions affecting current work:
 - [01-03]: Used Map-based registry pattern for CapsuleRendererRegistry and StatusBarRegistry (consistent with guard/file-type registries)
 - [01-03]: Used useSyncExternalStore for StatusBar registry subscription with snapshot cache for referential stability
 - [01-03]: Used Proxy wrapper for backward-compatible PLUGIN_ICONS Record type
+- [01-01]: Used Proxy pattern for GUARD_REGISTRY backward compat -- 19+ consumer files continue to use .filter(), .map(), .find() without changes
+- [01-01]: Added GuardConfigMap index signature for plugin guard configs
+- [01-01]: registerGuard auto-creates categories; dispose cleans up empty non-built-in categories
 
 ### Pending Todos
 
@@ -79,5 +82,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-18
-Stopped at: Completed 01-03-PLAN.md (Phase 1 complete)
+Stopped at: Completed 01-01-PLAN.md (all Phase 1 plans complete)
 Resume file: None

@@ -33,7 +33,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Plans**: 3 plans
 
 Plans:
-- [ ] 01-01: Open guard pipeline seams (GuardId, GUARD_REGISTRY, GuardCategory, ConfigFieldType)
+- [x] 01-01: Open guard pipeline seams (GuardId, GUARD_REGISTRY, GuardCategory, ConfigFieldType)
 - [ ] 01-02: Open file type and detection seams (FileType, FILE_TYPE_REGISTRY, ExplainabilityTrace)
 - [x] 01-03: Open UI seams (StatusBarRegistry, AppId, PluginIcon, CapsuleKind, ShelfMode)
 

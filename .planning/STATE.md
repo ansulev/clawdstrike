@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: milestone
 status: in-progress
-stopped_at: Completed 04-02-PLAN.md
-last_updated: "2026-03-18T19:49:10Z"
-last_activity: 2026-03-18 -- Completed Phase 4 Plan 2 (File Tree Mutations - Rename, Delete, Status)
+stopped_at: Completed 07-01-PLAN.md
+last_updated: "2026-03-18T20:23:22Z"
+last_activity: 2026-03-18 -- Completed Phase 7 Plan 1 (Detection Editor Integration - Routes & Commands)
 progress:
   total_phases: 7
   completed_phases: 5
-  total_plans: 9
-  completed_plans: 9
+  total_plans: 10
+  completed_plans: 10
   percent: 100
 ---
 
@@ -25,10 +25,10 @@ See: .planning/PROJECT.md (updated 2026-03-18)
 
 ## Current Position
 
-Phase: 4 of 7 (File Tree Mutations) COMPLETE
-Plan: 2 of 2 COMPLETE
-Status: Phase 04 complete, all v1.1 plans done
-Last activity: 2026-03-18 -- Completed Phase 4 Plan 2 (File Tree Mutations - Rename, Delete, Status)
+Phase: 7 of 7 (Detection Editor Integration)
+Plan: 1 of 4 COMPLETE
+Status: Phase 07 in progress, plan 1 complete
+Last activity: 2026-03-18 -- Completed Phase 7 Plan 1 (Detection Editor Integration - Routes & Commands)
 
 Progress: [██████████] 100%
 
@@ -66,6 +66,7 @@ Summary: Delivered IDE shell — activity bar, 7 sidebar panels, pane tab system
 | Phase 04 P01 | 6min | 2 tasks | 8 files |
 | Phase 02 P02 | 3min | 2 tasks | 5 files |
 | Phase 04 P02 | 3min | 2 tasks | 5 files |
+| Phase 07 P01 | 2min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -102,6 +103,8 @@ v1.1 decisions:
 - [Phase 04]: Delete confirmation uses Dialog primitives with dark IDE theme override (bg-[#131721])
 - [Phase 04]: FileStatus map keyed by relative file path, error badge takes visual priority over modified dot
 - [Phase 04]: Newly created files auto-marked as modified to demonstrate status indicators
+- [Phase 07]: MitreHeatmap standalone route uses empty tabs array (valid blank ATT&CK matrix); rich data version stays in PolicyEditor
+- [Phase 07]: /editor?panel=guards and /editor?panel=compare normalized to /guards and /compare for backward compat
 
 ### Pending Todos
 
@@ -113,6 +116,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-18T19:49:10Z
-Stopped at: Completed 04-02-PLAN.md
-Resume file: All v1.1 planned phases complete
+Last session: 2026-03-18T20:23:22Z
+Stopped at: Completed 07-01-PLAN.md
+Resume file: Continue with 07-02-PLAN.md (Evidence Pack, Explainability, Version History right sidebar panels)

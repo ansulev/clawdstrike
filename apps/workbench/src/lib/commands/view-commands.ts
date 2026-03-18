@@ -1,6 +1,7 @@
 import type { PaneFocusDirection } from "@/features/panes/pane-types";
 import { commandRegistry } from "@/lib/command-registry";
 import type { Command } from "@/lib/command-registry";
+import { useRightSidebarStore } from "@/features/right-sidebar/stores/right-sidebar-store";
 
 export interface ViewCommandDeps {
   toggleShortcutHelp: () => void;
@@ -227,6 +228,39 @@ export function registerViewCommands(deps: ViewCommandDeps): void {
       category: "View",
       context: "global",
       execute: () => deps.toggleAudit(),
+    },
+    {
+      id: "rightSidebar.evidence",
+      title: "Show Evidence Packs",
+      category: "View",
+      context: "global",
+      execute: () => {
+        const store = useRightSidebarStore.getState();
+        store.actions.setActivePanel("evidence");
+        store.actions.show();
+      },
+    },
+    {
+      id: "rightSidebar.explain",
+      title: "Show Explainability Traces",
+      category: "View",
+      context: "global",
+      execute: () => {
+        const store = useRightSidebarStore.getState();
+        store.actions.setActivePanel("explain");
+        store.actions.show();
+      },
+    },
+    {
+      id: "rightSidebar.history",
+      title: "Show Version History",
+      category: "View",
+      context: "global",
+      execute: () => {
+        const store = useRightSidebarStore.getState();
+        store.actions.setActivePanel("history");
+        store.actions.show();
+      },
     },
   ];
 

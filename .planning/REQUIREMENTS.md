@@ -82,9 +82,9 @@ Enable third-party and internal extension of the ClawdStrike workbench through a
 | SEAM-08 | Phase 1 | Complete |
 | SEAM-09 | Phase 1 | Complete |
 | SEAM-10 | Phase 1 | Complete |
-| MFST-01 | Phase 2 | Pending |
-| MFST-02 | Phase 2 | Pending |
-| MFST-03 | Phase 2 | Pending |
+| MFST-01 | Phase 2 | Complete |
+| MFST-02 | Phase 2 | Complete |
+| MFST-03 | Phase 2 | Complete |
 | REG-01 | Phase 2 | Pending |
 | REG-02 | Phase 2 | Pending |
 | REG-03 | Phase 2 | Pending |

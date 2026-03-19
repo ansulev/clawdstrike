@@ -1,4 +1,4 @@
-import React, { useMemo, useCallback, useState } from "react";
+import React, { useMemo, useCallback, useState, useRef } from "react";
 import {
   IconFolderOpen,
   IconRefresh,
@@ -362,15 +362,20 @@ export function ExplorerPanel({
     () => new Set(projects.map((p) => p.rootPath)),
   );
 
-  // Ensure newly mounted roots are automatically expanded.
+  // Whether initial auto-expand has already been applied.
+  const autoExpandApplied = useRef(false);
+
+  // Auto-expand all roots on the very first mount only.
   const expandedRootsResolved = useMemo(() => {
-    const next = new Set(expandedRoots);
-    for (const p of projects) {
-      if (!expandedRoots.has(p.rootPath) && !expandedRoots.has("__initialized")) {
-        next.add(p.rootPath);
+    if (!autoExpandApplied.current) {
+      autoExpandApplied.current = true;
+      const initial = new Set(expandedRoots);
+      for (const p of projects) {
+        initial.add(p.rootPath);
       }
+      return initial;
     }
-    return next;
+    return expandedRoots;
   }, [projects, expandedRoots]);
 
   const toggleRootExpanded = useCallback((rootPath: string) => {

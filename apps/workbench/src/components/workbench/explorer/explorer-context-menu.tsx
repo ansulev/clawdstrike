@@ -143,6 +143,7 @@ export function ExplorerContextMenu({
             }
             onClick={() => {
               if ("action" in item) item.action();
+              onClose();
             }}
           >
             {Icon && <Icon size={12} stroke={1.5} />}

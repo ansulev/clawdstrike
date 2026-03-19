@@ -63,6 +63,7 @@ function ExplorerPanelConnected() {
   const [timedOut, setTimedOut] = useState(false);
   useEffect(() => {
     if (!loading) return;
+    setTimedOut(false);
     const timer = setTimeout(() => setTimedOut(true), 5000);
     return () => clearTimeout(timer);
   }, [loading]);
@@ -147,10 +148,26 @@ function ExplorerPanelConnected() {
         }
       }}
       onRenameFile={async (file, newName) => {
-        await actions.renameFile(file.path, newName);
+        // Resolve to absolute path so multi-root renames target the correct directory.
+        const project = projects.find((p) =>
+          p.files.some(function findFile(f: ProjectFile): boolean {
+            if (f.path === file.path) return true;
+            return f.children?.some(findFile) ?? false;
+          }),
+        );
+        const absPath = project ? `${project.rootPath}/${file.path}` : file.path;
+        await actions.renameFile(absPath, newName);
       }}
       onDeleteFile={async (file) => {
-        await actions.deleteFile(file.path);
+        // Resolve to absolute path so multi-root deletes target the correct directory.
+        const project = projects.find((p) =>
+          p.files.some(function findFile(f: ProjectFile): boolean {
+            if (f.path === file.path) return true;
+            return f.children?.some(findFile) ?? false;
+          }),
+        );
+        const absPath = project ? `${project.rootPath}/${file.path}` : file.path;
+        await actions.deleteFile(absPath);
       }}
       onRevealInFinder={async (absPath) => {
         const { revealInFinder } = await import("@/lib/tauri-bridge");

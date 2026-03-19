@@ -138,4 +138,145 @@ describe("Plugin Installer", () => {
       uninstallPlugin("nonexistent-plugin", { registry, loader }),
     ).resolves.toBeUndefined();
   });
+
+  // ---- Permission prompt ----
+
+  describe("permission prompt", () => {
+    // Test 6: installPlugin for community plugin with permissions calls onPermissionPrompt
+    it("installPlugin for community plugin with permissions calls onPermissionPrompt", async () => {
+      const manifest = createTestManifest({
+        id: "prompt-test",
+        trust: "community",
+        activationEvents: ["onStartup"],
+        main: "./index.ts",
+        permissions: ["guards:register", "storage:read"],
+      });
+
+      const permissiveLoader = new PluginLoader({
+        registry,
+        resolveModule: async () => mockModule,
+        trustOptions: { allowUnsigned: true },
+      });
+
+      const promptCallback = vi.fn().mockResolvedValue(true);
+
+      await installPlugin(manifest, {
+        registry,
+        loader: permissiveLoader,
+        onPermissionPrompt: promptCallback,
+      });
+
+      expect(promptCallback).toHaveBeenCalledOnce();
+      expect(promptCallback).toHaveBeenCalledWith(
+        manifest,
+        manifest.permissions,
+      );
+      expect(registry.get("prompt-test")!.state).toBe("activated");
+    });
+
+    // Test 7: installPlugin proceeds when permission prompt returns true
+    it("installPlugin proceeds when permission prompt approves", async () => {
+      const manifest = createTestManifest({
+        id: "prompt-approve-test",
+        trust: "community",
+        activationEvents: ["onStartup"],
+        main: "./index.ts",
+        permissions: ["guards:register"],
+      });
+
+      const permissiveLoader = new PluginLoader({
+        registry,
+        resolveModule: async () => mockModule,
+        trustOptions: { allowUnsigned: true },
+      });
+
+      await installPlugin(manifest, {
+        registry,
+        loader: permissiveLoader,
+        onPermissionPrompt: async () => true,
+      });
+
+      expect(registry.get("prompt-approve-test")!.state).toBe("activated");
+    });
+
+    // Test 8: installPlugin aborts when permission prompt returns false
+    it("installPlugin aborts when permission prompt rejects", async () => {
+      const manifest = createTestManifest({
+        id: "prompt-reject-test",
+        trust: "community",
+        activationEvents: ["onStartup"],
+        main: "./index.ts",
+        permissions: ["guards:register"],
+      });
+
+      const permissiveLoader = new PluginLoader({
+        registry,
+        resolveModule: async () => mockModule,
+        trustOptions: { allowUnsigned: true },
+      });
+
+      await expect(
+        installPlugin(manifest, {
+          registry,
+          loader: permissiveLoader,
+          onPermissionPrompt: async () => false,
+        }),
+      ).rejects.toThrow(/permissions not approved/i);
+
+      // Plugin should not be in registry (or should be cleaned up)
+      // The registration happened before the prompt, so it may still be registered
+      // but the loader should not have been called
+    });
+
+    // Test 9: installPlugin for internal plugin does not call permission prompt
+    it("installPlugin for internal plugin does not call permission prompt", async () => {
+      const manifest = createTestManifest({
+        id: "internal-no-prompt",
+        trust: "internal",
+        activationEvents: ["onStartup"],
+        main: "./index.ts",
+        permissions: ["guards:register"],
+      });
+
+      const promptCallback = vi.fn().mockResolvedValue(true);
+
+      await installPlugin(manifest, {
+        registry,
+        loader,
+        onPermissionPrompt: promptCallback,
+      });
+
+      expect(promptCallback).not.toHaveBeenCalled();
+      expect(registry.get("internal-no-prompt")!.state).toBe("activated");
+    });
+
+    // Test 10: installPlugin for community plugin with no permissions succeeds without prompt
+    it("installPlugin for community plugin with no permissions succeeds without prompt", async () => {
+      const manifest = createTestManifest({
+        id: "community-no-perms",
+        trust: "community",
+        activationEvents: ["onStartup"],
+        main: "./index.ts",
+      });
+      // Ensure no permissions key
+      delete (manifest as Partial<PluginManifest>).permissions;
+
+      const permissiveLoader = new PluginLoader({
+        registry,
+        resolveModule: async () => mockModule,
+        trustOptions: { allowUnsigned: true },
+      });
+
+      const promptCallback = vi.fn().mockResolvedValue(true);
+
+      await installPlugin(manifest, {
+        registry,
+        loader: permissiveLoader,
+        onPermissionPrompt: promptCallback,
+      });
+
+      expect(promptCallback).not.toHaveBeenCalled();
+      expect(registry.get("community-no-perms")!.state).toBe("activated");
+    });
+  });
 });

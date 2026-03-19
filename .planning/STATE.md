@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: milestone
-status: executing
-stopped_at: Completed 05-01-PLAN.md
-last_updated: "2026-03-19T06:21:04Z"
-last_activity: 2026-03-19 -- Completed client-side revocation infrastructure (05-01)
+status: complete
+stopped_at: Completed 05-02-PLAN.md (milestone complete)
+last_updated: "2026-03-19T06:28:37Z"
+last_activity: 2026-03-19 -- Completed hushd SSE revocation listener + badge UI (05-02)
 progress:
   total_phases: 5
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 10
-  completed_plans: 9
-  percent: 90
+  completed_plans: 10
+  percent: 100
 ---
 
 # Project State
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-19)
 
 **Core value:** Community plugins run in sandboxed iframes with capability-based permissions, Ed25519 audit trail, and fleet-wide emergency revocation
-**Current focus:** Phase 5 in progress -- Emergency Revocation (1 of 2 plans done).
+**Current focus:** Milestone v2.0 complete -- all 5 phases, 10 plans executed.
 
 ## Current Position
 
 Phase: 5 of 5 (Emergency Revocation)
-Plan: 1 of 2 complete
-Status: Executing
-Last activity: 2026-03-19 -- Completed client-side revocation infrastructure (05-01)
+Plan: 2 of 2 complete
+Status: Complete
+Last activity: 2026-03-19 -- Completed hushd SSE revocation listener + badge UI (05-02)
 
-Progress: [#########-] 90%
+Progress: [##########] 100%
 
 ## Previous Milestones
 
@@ -82,6 +82,11 @@ Progress: [#########-] 90%
 - revocationStore on BridgeHostOptions uses duck-typed interface { isRevoked(pluginId: string): boolean } for testability (05-01)
 - revokePlugin sets state to "revoked" immediately, waits 5s drain, then deactivates -- bridge rejects new calls during drain (05-01)
 - PluginRevocationStore follows receipt-store.ts localStorage + in-memory cache pattern (05-01)
+- SSE reconnect strategy: on EventSource open, always sync full revocation list from hushd to catch missed events (05-02)
+- Fixed 5s reconnect delay matching drain timeout, no exponential backoff for simplicity (05-02)
+- Receipt for SSE revocations uses recordDenied('revocation.sse', {plugin_id}, 'revocation') fire-and-forget (05-02)
+- PluginLoader.loadPlugin() checks isRevoked() before trust gate -- revoked plugins never start loading (05-02)
+- isPluginRevoked helper exported for marketplace UI button disabling without direct store imports (05-02)
 
 ### Pending Todos
 None yet.
@@ -91,6 +96,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-19T06:21:04Z
-Stopped at: Completed 05-01-PLAN.md
+Last session: 2026-03-19T06:28:37Z
+Stopped at: Completed 05-02-PLAN.md (milestone v2.0 complete)
 Resume file: None

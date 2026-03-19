@@ -16,7 +16,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 2: iframe Sandbox** - Isolate community plugins in null-origin iframes with strict CSP, fork PluginLoader by trust tier
 - [x] **Phase 3: Permission System** - Capability-based permissions declared in manifest, enforced at bridge middleware, with domain-scoped network access
 - [x] **Phase 4: Plugin Audit Trail** - Ed25519-signed receipts for every plugin action, local storage, hushd forwarding, and audit viewer UI
-- [ ] **Phase 5: Emergency Revocation** - Fleet-wide plugin kill via hushd SSE broadcast, offline sync on reconnect, revoked lifecycle state
+- [x] **Phase 5: Emergency Revocation** - Fleet-wide plugin kill via hushd SSE broadcast, offline sync on reconnect, revoked lifecycle state
 
 ## Phase Details
 
@@ -89,7 +89,7 @@ Plans:
 **Plans:** 2 plans
 Plans:
 - [x] 05-01-PLAN.md -- Revocation store + "revoked" lifecycle state + bridge host revocation guard + drain timeout
-- [ ] 05-02-PLAN.md -- hushd SSE revocation listener + reconnect sync + revocation badge UI
+- [x] 05-02-PLAN.md -- hushd SSE revocation listener + reconnect sync + revocation badge UI
 
 ## Progress
 
@@ -102,4 +102,4 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 | 2. iframe Sandbox | 2/2 | Complete | 2026-03-19 |
 | 3. Permission System | 2/2 | Complete | 2026-03-19 |
 | 4. Plugin Audit Trail | 2/2 | Complete | 2026-03-19 |
-| 5. Emergency Revocation | 1/2 | In progress | - |
+| 5. Emergency Revocation | 2/2 | Complete | 2026-03-19 |

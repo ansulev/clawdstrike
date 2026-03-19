@@ -83,9 +83,9 @@ Isolate community plugins in sandboxed iframes with a typed postMessage bridge, 
 | AUDIT-03 | Phase 4 | Complete |
 | AUDIT-04 | Phase 4 | Complete |
 | AUDIT-05 | Phase 4 | Complete |
-| REVOKE-01 | Phase 5 | Pending |
-| REVOKE-02 | Phase 5 | Pending |
+| REVOKE-01 | Phase 5 | Complete |
+| REVOKE-02 | Phase 5 | Complete |
 | REVOKE-03 | Phase 5 | Complete |
 | REVOKE-04 | Phase 5 | Complete |
-| REVOKE-05 | Phase 5 | Pending |
+| REVOKE-05 | Phase 5 | Complete |
 | REVOKE-06 | Phase 5 | Complete |

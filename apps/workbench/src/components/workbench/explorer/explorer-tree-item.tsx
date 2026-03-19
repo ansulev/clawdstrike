@@ -3,7 +3,7 @@ import {
   IconFolder,
   IconFolderOpen,
 } from "@tabler/icons-react";
-import { FILE_TYPE_REGISTRY } from "@/lib/workbench/file-type-registry";
+import { FileTypeIcon } from "@/lib/workbench/file-type-icons";
 import type { ProjectFile } from "@/features/project/stores/project-store";
 import { InlineNameInput } from "./inline-name-input";
 import { cn } from "@/lib/utils";
@@ -50,7 +50,6 @@ export function ExplorerTreeItem({
   hasError,
 }: ExplorerTreeItemProps) {
   const indent = file.depth * 16;
-  const descriptor = FILE_TYPE_REGISTRY[file.fileType];
 
   const handleClick = () => {
     if (file.isDirectory) {
@@ -131,7 +130,7 @@ export function ExplorerTreeItem({
         <span className="shrink-0 w-3" />
       )}
 
-      {/* Icon: folder or colored dot */}
+      {/* Icon: folder or file-type icon */}
       {file.isDirectory ? (
         isExpanded ? (
           <IconFolderOpen
@@ -147,11 +146,7 @@ export function ExplorerTreeItem({
           />
         )
       ) : (
-        <span
-          className="shrink-0 w-[7px] h-[7px] rounded-full"
-          style={{ backgroundColor: descriptor.iconColor }}
-          aria-label={descriptor.label}
-        />
+        <FileTypeIcon fileType={file.fileType} size={14} stroke={1.5} className="shrink-0" />
       )}
 
       {/* Name or inline rename input */}

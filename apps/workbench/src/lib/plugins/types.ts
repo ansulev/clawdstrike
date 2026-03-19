@@ -38,6 +38,7 @@ export type PluginLifecycleState =
   | "activating"
   | "activated"
   | "deactivated"
+  | "revoked"
   | "error";
 
 // ---- Categories ----

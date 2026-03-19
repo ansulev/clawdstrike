@@ -249,6 +249,38 @@ export function registerNavigateCommands(): void {
         usePaneStore.getState().openApp("/swarm-board", "Swarm Board"),
     },
     {
+      id: "nav.newSwarm",
+      title: "New Swarm Board",
+      category: "File",
+      execute: async () => {
+        const { isDesktop, createSwarmBundle } = await import("@/lib/tauri-bridge");
+        if (!isDesktop()) return;
+
+        // Use the first mounted workspace root as the parent directory
+        const { useProjectStore } = await import("@/features/project/stores/project-store");
+        const roots = useProjectStore.getState().projectRoots;
+        if (roots.length === 0) return;
+        const parentDir = roots[0];
+
+        // Generate a default name with timestamp
+        const timestamp = new Date().toISOString().slice(0, 10);
+        const name = `investigation-${timestamp}`;
+
+        const bundlePath = await createSwarmBundle(parentDir, name);
+        if (!bundlePath) return;
+
+        // Refresh the Explorer tree so the new .swarm entry appears
+        await useProjectStore.getState().actions.loadRoot(parentDir);
+
+        // Open the new board
+        const label = name.replace(/\.swarm$/, "");
+        usePaneStore.getState().openApp(
+          `/swarm-board/${encodeURIComponent(bundlePath)}`,
+          label,
+        );
+      },
+    },
+    {
       id: "app.hunt",
       title: "Open Threat Hunt",
       category: "Navigate",

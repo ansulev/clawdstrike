@@ -10,6 +10,7 @@
  */
 
 import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useLocation } from "react-router-dom";
 import { useCoordinatorBoardBridge } from "@/features/swarm/hooks/use-coordinator-board-bridge";
 import { useReceiptFlowBridge } from "@/features/swarm/hooks/use-receipt-flow-bridge";
 import { getCoordinator } from "@/features/swarm/coordinator-instance";
@@ -789,8 +790,24 @@ function SwarmBoardStatsBar({
 // ---------------------------------------------------------------------------
 
 export function SwarmBoardPage() {
+  // Extract bundlePath from the wildcard route segment.
+  // Route is "swarm-board/*" so location.pathname looks like "/swarm-board/encoded%2Fpath"
+  // For the plain "/swarm-board" route (scratch board), bundlePath will be undefined.
+  const location = useLocation();
+  const bundlePath = useMemo(() => {
+    const prefix = "/swarm-board/";
+    if (!location.pathname.startsWith(prefix)) return undefined;
+    const encoded = location.pathname.slice(prefix.length);
+    if (!encoded) return undefined;
+    try {
+      return decodeURIComponent(encoded);
+    } catch {
+      return undefined;
+    }
+  }, [location.pathname]);
+
   return (
-    <SwarmBoardProvider>
+    <SwarmBoardProvider bundlePath={bundlePath}>
       <ReactFlowProvider>
         <SwarmBoardCanvas />
       </ReactFlowProvider>

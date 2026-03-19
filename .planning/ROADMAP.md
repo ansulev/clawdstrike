@@ -238,7 +238,7 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 13-01-PLAN.md — Visual/YAML split editor: toggle in toolbar, EditorVisualPanel + YamlEditor in resizable split
+- [x] 13-01-PLAN.md — Visual/YAML split editor: toggle in toolbar, EditorVisualPanel + YamlEditor in resizable split
 - [ ] 13-02-PLAN.md — Run button with quick test presets, TestRunnerPanel below editor with coverage strip
 - [ ] 13-03-PLAN.md — Sidebar toggle buttons (History, Evidence, Explain), native validation, auto-versioning
 
@@ -261,4 +261,4 @@ Phase 10 depends on 8. Phases 11, 12 depend on 10 (independent of each other). P
 | 10. Live CodeMirror Editor | 2/2 | Complete | 2026-03-19 |
 | 11. Visual Polish | 2/2 | Complete | 2026-03-19 |
 | 12. Session Restore | 1/1 | Complete | 2026-03-19 |
-| 13. Full Editor Experience | 0/3 | Not started | - |
+| 13. Full Editor Experience | 1/3 | In progress | - |

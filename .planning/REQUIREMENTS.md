@@ -97,6 +97,17 @@
 - [ ] **SESS-03**: Dirty unsaved files show recovery banner
 - [ ] **SESS-04**: "Restored N files" toast on successful session restore
 
+### Full Editor Experience
+
+- [x] **EDIT-01**: Policy files show Visual/YAML split toggle — EditorVisualPanel (guard cards) alongside YamlEditor
+- [x] **EDIT-02**: Guard cards display with enable/disable toggles, config fields, drag-to-reorder
+- [ ] **EDIT-03**: Run button with dropdown shows 3 quick test presets that execute inline with flash result
+- [ ] **EDIT-04**: Test Runner panel renders below editor when toggled, with results and coverage strip
+- [ ] **EDIT-05**: FileEditorToolbar has sidebar toggle buttons for History, Evidence, Explain, Publish
+- [ ] **EDIT-06**: Native validation (Tauri) runs on policy changes with richer error diagnostics
+- [ ] **EDIT-07**: Auto-versioning creates snapshot on each save
+- [x] **EDIT-08**: Features gated to policy file types — non-policy files show only visual builder + CodeMirror
+
 ## v2 Requirements
 
 ### Advanced IDE

@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: milestone
 status: in_progress
-stopped_at: Completed 11-02-PLAN.md
-last_updated: "2026-03-19T00:23:04Z"
-last_activity: 2026-03-19 -- Completed Phase 11 Plan 2 (relative breadcrumbs, explorer refresh, pane-aware status bar)
+stopped_at: Completed 13-01-PLAN.md
+last_updated: "2026-03-19T00:54:10Z"
+last_activity: 2026-03-19 -- Completed Phase 13 Plan 1 (Visual/YAML split editor with EditorVisualPanel + guard cards)
 progress:
-  total_phases: 12
-  completed_phases: 10
-  total_plans: 26
-  completed_plans: 24
-  percent: 92
+  total_phases: 13
+  completed_phases: 12
+  total_plans: 28
+  completed_plans: 25
+  percent: 89
 ---
 
 # Project State
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-18)
 
 **Core value:** Security operators get a professional-grade IDE with search, quick navigation, and file management
-**Current focus:** Phase 11 Visual Polish (in progress)
+**Current focus:** Phase 13 Full Editor Experience (in progress)
 
 ## Current Position
 
-Phase: 11 of 12 (Visual Polish) IN PROGRESS
-Plan: 2 of 2 complete
-Status: Phase 11 Plan 2 complete -- relative breadcrumbs, explorer auto-refresh, pane-aware status bar
-Last activity: 2026-03-19 -- Completed Phase 11 Plan 2 (relative breadcrumbs, explorer refresh, pane-aware status bar)
+Phase: 13 of 13 (Full Editor Experience) IN PROGRESS
+Plan: 1 of 3 complete
+Status: Phase 13 Plan 1 complete -- Visual/YAML split editor with EditorVisualPanel + guard cards
+Last activity: 2026-03-19 -- Completed Phase 13 Plan 1 (Visual/YAML split editor with EditorVisualPanel + guard cards)
 
-Progress: [█████████░] 92%
+Progress: [████████░░] 89%
 
 ## Previous Milestone (v1.0 — IDE Pivot)
 
@@ -80,6 +80,7 @@ Summary: Delivered IDE shell — activity bar, 7 sidebar panels, pane tab system
 | Phase 10 P01 | 2min | 2 tasks | 2 files |
 | Phase 10 P02 | 2min | 2 tasks | 2 files |
 | Phase 11 P02 | 5min | 3 tasks | 4 files |
+| Phase 13 P01 | 2min | 1 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -157,6 +158,9 @@ v1.1 decisions:
 - [Phase 11]: Multi-root prefix stripping: iterate projectRoots array first, fall back to single project.rootPath
 - [Phase 11]: Post-mutation loadRoot is fire-and-forget after in-memory tree update (immediate UI + eventual disk consistency)
 - [Phase 11]: Status bar pane context: show file name + dirty + fileType for file routes, view label for app routes
+- [Phase 13]: EditorVisualPanel rendered directly in split (not via legacy SplitEditor coupled to MultiPolicyProvider)
+- [Phase 13]: Split toggle placed after Format button, before ToolbarDivider in policy-only button group
+- [Phase 13]: ResizableHandle uses gold accent color (#d4a84b) matching existing split-editor.tsx styling
 
 ### Pending Todos
 
@@ -168,6 +172,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-19T00:23:04Z
-Stopped at: Completed 11-02-PLAN.md
-Resume file: Continue with Phase 12 (Session Restore)
+Last session: 2026-03-19T00:54:10Z
+Stopped at: Completed 13-01-PLAN.md
+Resume file: Continue with Phase 13 Plan 2 (Run button with quick test presets, TestRunnerPanel)

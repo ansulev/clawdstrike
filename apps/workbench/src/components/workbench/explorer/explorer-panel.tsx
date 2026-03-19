@@ -12,6 +12,7 @@ import {
 } from "@tabler/icons-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { FILE_TYPE_REGISTRY, type FileType } from "@/lib/workbench/file-type-registry";
+import { FileTypeIcon } from "@/lib/workbench/file-type-icons";
 import type { DetectionProject, ProjectFile, FileStatus } from "@/features/project/stores/project-store";
 import { ExplorerTreeItem } from "./explorer-tree-item";
 import { ExplorerContextMenu } from "./explorer-context-menu";
@@ -138,16 +139,14 @@ function FormatDot({
       onClick={onClick}
       title={`Filter: ${descriptor.shortLabel}`}
       className={cn(
-        "w-[14px] h-[14px] rounded-full border transition-all shrink-0",
+        "flex items-center justify-center w-[22px] h-[22px] rounded transition-all shrink-0",
         active
-          ? "scale-110 shadow-sm"
+          ? "scale-110 bg-[#131721]/60"
           : "opacity-40 hover:opacity-70",
       )}
-      style={{
-        backgroundColor: active ? descriptor.iconColor : "transparent",
-        borderColor: descriptor.iconColor,
-      }}
-    />
+    >
+      <FileTypeIcon fileType={fileType} size={14} stroke={1.5} />
+    </button>
   );
 }
 

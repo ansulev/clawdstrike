@@ -1,14 +1,8 @@
 import { IconX } from "@tabler/icons-react";
 import { cn } from "@/lib/utils";
+import { FileTypeIcon } from "@/lib/workbench/file-type-icons";
 import { usePaneStore } from "./pane-store";
 import type { PaneView } from "./pane-types";
-
-const FILE_TYPE_COLORS: Record<string, string> = {
-  clawdstrike_policy: "#5eead4",
-  sigma_rule: "#a78bfa",
-  yara_rule: "#86efac",
-  ocsf_event: "#fbbf24",
-};
 
 export function PaneTab({
   view,
@@ -53,11 +47,7 @@ export function PaneTab({
       )}
 
       {view.fileType && view.route.startsWith("/file/") && (
-        <span
-          className="h-1.5 w-1.5 shrink-0 rounded-full"
-          style={{ backgroundColor: FILE_TYPE_COLORS[view.fileType] ?? "#6f7f9a" }}
-          aria-label={`File type: ${view.fileType}`}
-        />
+        <FileTypeIcon fileType={view.fileType} size={12} stroke={1.5} className="shrink-0" />
       )}
 
       <span className="min-w-0 truncate text-[11px] font-mono font-medium tracking-[0.04em]">

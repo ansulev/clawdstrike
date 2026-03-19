@@ -94,11 +94,11 @@ Enable third-party and internal extension of the ClawdStrike workbench through a
 | LOAD-03 | Phase 3 | Complete |
 | LOAD-04 | Phase 3 | Complete |
 | LOAD-05 | Phase 3 | Complete |
-| SDK-01 | Phase 4 | Pending |
-| SDK-02 | Phase 4 | Pending |
-| SDK-03 | Phase 4 | Pending |
-| SDK-04 | Phase 4 | Pending |
-| SDK-05 | Phase 4 | Pending |
+| SDK-01 | Phase 4 | Complete |
+| SDK-02 | Phase 4 | Complete |
+| SDK-03 | Phase 4 | Complete |
+| SDK-04 | Phase 4 | Complete |
+| SDK-05 | Phase 4 | Complete |
 | GAP-01 | Phase 5 | Pending |
 | GAP-02 | Phase 5 | Pending |
 | GAP-03 | Phase 5 | Pending |

@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: executing
-stopped_at: Completed 03-02-PLAN.md
-last_updated: "2026-03-18T23:47:56.157Z"
-last_activity: 2026-03-18 -- Completed 03-01 (Plugin trust verification with Ed25519 signatures)
+status: In progress
+stopped_at: Completed 04-01-PLAN.md
+last_updated: "2026-03-18T23:59:05Z"
+last_activity: 2026-03-18 -- Completed 04-01 (@clawdstrike/plugin-sdk with createPlugin, PluginContext, contribution types)
 progress:
   total_phases: 6
-  completed_phases: 3
-  total_plans: 7
-  completed_plans: 7
-  percent: 46
+  completed_phases: 4
+  total_plans: 8
+  completed_plans: 8
+  percent: 100
 ---
 
 # Project State
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-18)
 
 **Core value:** Security teams can extend ClawdStrike with custom guards, detection formats, intel sources, and UI panels without forking the workbench.
-**Current focus:** Phase 4: Plugin SDK Package
+**Current focus:** Phase 5: Guard-as-Plugin Proof of Concept
 
 ## Current Position
 
-Phase: 4 of 6 (Plugin SDK Package)
-Plan: 1 of 1 in current phase
+Phase: 5 of 6 (Guard-as-Plugin Proof of Concept)
+Plan: 1 of 2 in current phase
 Status: Not started
-Last activity: 2026-03-18 -- Completed 03-02 (PluginLoader with contribution routing, trust gating, activation events)
+Last activity: 2026-03-18 -- Completed 04-01 (@clawdstrike/plugin-sdk with createPlugin, PluginContext, contribution types)
 
-Progress: [██████████] 100%
+Progress: [████████░░] 80%
 
 ## Performance Metrics
 
@@ -54,6 +54,7 @@ Progress: [██████████] 100%
 | Phase 02 P02 | 2min | 1 tasks | 2 files |
 | Phase 03 P01 | 2min | 1 tasks | 2 files |
 | Phase 03 P02 | 4min | 2 tasks | 3 files |
+| Phase 04 P01 | 5min | 1 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -86,6 +87,10 @@ Recent decisions affecting current work:
 - [Phase 03]: Dependency injection via resolveModule option for testability instead of mocking dynamic import()
 - [Phase 03]: Contributions routed BEFORE activate() called -- registrations happen first, then plugin code runs
 - [Phase 03]: Activation event matching is pure functions in separate module (no side effects)
+- [Phase 04]: Zero runtime deps for SDK -- types + identity function only; runtime injection happens in PluginLoader
+- [Phase 04]: Types copied from workbench, not imported -- SDK is standalone publishable package
+- [Phase 04]: createPlugin() is identity function for type-safe call site inference
+- [Phase 04]: PluginContext uses namespaced API interfaces matching workbench registry patterns
 
 ### Pending Todos
 
@@ -97,6 +102,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-18T23:47:56.154Z
-Stopped at: Completed 03-02-PLAN.md
+Last session: 2026-03-18T23:59:05Z
+Stopped at: Completed 04-01-PLAN.md
 Resume file: None

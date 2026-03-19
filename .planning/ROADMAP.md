@@ -15,7 +15,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 1: Open Closed Seams** - Convert static unions and const arrays into dynamic registries with register/unregister APIs
 - [ ] **Phase 2: Plugin Manifest and Registry** - Define the PluginManifest type and PluginRegistry singleton adapted from Athas patterns
 - [ ] **Phase 3: Plugin Loader and Trust** - Build lifecycle management with activation events, trust verification, and contribution routing
-- [ ] **Phase 4: Plugin SDK Package** - Create @clawdstrike/plugin-sdk with typed API surface for plugin authors
+- [x] **Phase 4: Plugin SDK Package** - Create @clawdstrike/plugin-sdk with typed API surface for plugin authors
 - [ ] **Phase 5: Guard-as-Plugin Proof of Concept** - Extract EgressAllowlistGuard into plugin format to validate the full pipeline
 - [ ] **Phase 6: Marketplace UI** - Add Plugins tab to Library panel with browsing, install, and registry client
 
@@ -78,7 +78,7 @@ Plans:
 **Plans**: 1 plan
 
 Plans:
-- [ ] 04-01-PLAN.md -- @clawdstrike/plugin-sdk package with PluginContext, contribution types, and createPlugin helper
+- [x] 04-01-PLAN.md -- @clawdstrike/plugin-sdk package with PluginContext, contribution types, and createPlugin helper
 
 ### Phase 5: Guard-as-Plugin Proof of Concept
 **Goal**: A real built-in guard works identically when loaded as a plugin, proving the end-to-end pipeline from manifest to guard evaluation to config UI
@@ -120,6 +120,6 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 | 1. Open Closed Seams | 3/3 | Complete | 2026-03-18 |
 | 2. Plugin Manifest and Registry | 0/2 | Not started | - |
 | 3. Plugin Loader and Trust | 1/2 | In progress | - |
-| 4. Plugin SDK Package | 0/1 | Not started | - |
+| 4. Plugin SDK Package | 1/1 | Complete | 2026-03-18 |
 | 5. Guard-as-Plugin Proof of Concept | 0/2 | Not started | - |
 | 6. Marketplace UI | 0/3 | Not started | - |

@@ -3,7 +3,7 @@ import { useActivityBarStore } from "../stores/activity-bar-store";
 import { ExplorerPanel } from "@/components/workbench/explorer/explorer-panel";
 import { useProjectStore } from "@/features/project/stores/project-store";
 import type { DetectionProject, ProjectFile } from "@/features/project/stores/project-store";
-import { usePaneStore } from "@/features/panes/pane-store";
+import { usePaneStore, getActivePaneRoute } from "@/features/panes/pane-store";
 import { HeartbeatPanel } from "../panels/heartbeat-panel";
 import { SentinelPanel } from "../panels/sentinel-panel";
 import { FindingsPanel } from "../panels/findings-panel";
@@ -41,6 +41,23 @@ function ExplorerPanelConnected() {
       .filter((p): p is DetectionProject => p != null);
   }, [projectRoots, projectsMap]);
 
+  // Derive active file's relative path from pane store for tree highlighting.
+  const paneRoot = usePaneStore((s) => s.root);
+  const activePaneId = usePaneStore((s) => s.activePaneId);
+
+  const activeFilePath = useMemo(() => {
+    const route = getActivePaneRoute(paneRoot, activePaneId);
+    if (!route.startsWith("/file/")) return null;
+    const absPath = route.slice("/file/".length);
+    // Strip project root prefix to get relative path matching ProjectFile.path
+    for (const rootPath of projectRoots) {
+      if (absPath.startsWith(rootPath + "/")) {
+        return absPath.slice(rootPath.length + 1);
+      }
+    }
+    return absPath;
+  }, [paneRoot, activePaneId, projectRoots]);
+
   // Show loading indicator briefly while bootstrap scans directories.
   // 5s timeout prevents indefinite "Loading..." if bootstrap hangs or fails.
   const [timedOut, setTimedOut] = useState(false);
@@ -70,6 +87,7 @@ function ExplorerPanelConnected() {
   return (
     <ExplorerPanel
       projects={projects}
+      activeFilePath={activeFilePath}
       onToggleDir={(rootPath, dirPath) => {
         actions.toggleDirForRoot(rootPath, dirPath);
       }}

@@ -70,7 +70,7 @@ Plans:
   4. Built-in sidebar items, gutters, and context menus continue to work identically after the dynamic registration changes
 **Plans:** 3 plans
 Plans:
-- [ ] 04-01-PLAN.md -- Activity bar plugin items in DesktopSidebar + panel rendering in DesktopLayout
+- [x] 04-01-PLAN.md -- Activity bar plugin items in DesktopSidebar + panel rendering in DesktopLayout
 - [ ] 04-02-PLAN.md -- GutterExtensionRegistry + CodeMirror Compartment integration in yaml-editor
 - [ ] 04-03-PLAN.md -- ContextMenuRegistry with when-clause predicates + PluginContextMenuItems component
 
@@ -85,4 +85,4 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 | 1. ViewRegistry Foundation | 2/2 | Complete | 2026-03-19 |
 | 2. Editor Tab Views | 2/2 | Complete | 2026-03-19 |
 | 3. Bottom Panel and Right Sidebar | 1/1 | Complete | 2026-03-19 |
-| 4. Activity Bar, Gutters, and Context Menus | 0/3 | Not started | - |
+| 4. Activity Bar, Gutters, and Context Menus | 1/3 | In progress | - |

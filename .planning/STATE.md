@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: milestone
-status: in_progress
-stopped_at: Completed 02-02-PLAN.md
-last_updated: "2026-03-19T13:30:11Z"
+status: executing
+stopped_at: Completed 04-01-PLAN.md
+last_updated: "2026-03-19T14:40:11Z"
 progress:
   total_phases: 4
   completed_phases: 3
-  total_plans: 5
-  completed_plans: 5
-  percent: 100
+  total_plans: 8
+  completed_plans: 6
+  percent: 75
 ---
 
 # Project State
@@ -20,15 +20,15 @@ progress:
 See: .planning/PROJECT.md
 
 **Core value:** Plugins can contribute React views to any UI slot — editor tabs, bottom panels, right sidebar, activity bar, gutters, context menus
-**Current focus:** Phase 2 complete, Phase 4 remaining (Activity Bar, Gutters, Context Menus)
+**Current focus:** Phase 4 in progress -- Activity Bar complete, Gutters and Context Menus remaining
 
 ## Current Position
 
-Phase: 2 of 4 (Editor Tab Views) -- Complete
-Plan: 2 of 2 complete
-Status: All planned phases complete (1, 2, 3). Phase 4 plans TBD.
+Phase: 4 of 4 (Activity Bar, Gutters, and Context Menus)
+Plan: 1 of 3 complete
+Status: Phase 4 Plan 1 (Activity Bar) complete. Plans 2 (Gutters) and 3 (Context Menus) remaining.
 
-Progress: [██████████] 100%
+Progress: [███████░░░] 75%
 
 ## Previous Milestones
 
@@ -65,6 +65,11 @@ Progress: [██████████] 100%
 - [Phase 02]: activatePluginViewTab(null) on policy tab switch for clean bidirectional switching
 - [Phase 02]: plugin: prefix on splitTabId for plugin view routing without multi-policy-store type changes
 - [Phase 02]: ViewContainer in split pane (not ViewTabRenderer) for independent state per pane instance
+- [Phase 04]: Separate active-plugin-view.ts module with useSyncExternalStore for cross-component active plugin panel state
+- [Phase 04]: Plugin nav items use <button> instead of <Link> since they bypass react-router
+- [Phase 04]: Built-in items inactive when plugin view active (routeActive && activePluginViewId === null)
+- [Phase 04]: ActivityBarPluginView wrapper clones registration with injected isCollapsed via useMemo
+- [Phase 04]: Plugin section uses distinct green accent (#6b8b55) for visual separation
 
 ### Pending Todos
 None.
@@ -74,6 +79,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-19T13:30:11Z
-Stopped at: Completed 02-02-PLAN.md
+Last session: 2026-03-19T14:40:11Z
+Stopped at: Completed 04-01-PLAN.md
 Resume file: None

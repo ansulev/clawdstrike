@@ -102,9 +102,9 @@ Enable plugins to contribute React components and CodeMirror extensions to every
 | BPAN-02 | Phase 3 | Complete |
 | RSIDE-01 | Phase 3 | Complete |
 | RSIDE-02 | Phase 3 | Complete |
-| ABAR-01 | Phase 4 | Pending |
-| ABAR-02 | Phase 4 | Pending |
-| ABAR-03 | Phase 4 | Pending |
+| ABAR-01 | Phase 4 | Complete |
+| ABAR-02 | Phase 4 | Complete |
+| ABAR-03 | Phase 4 | Complete |
 | GUTR-01 | Phase 4 | Pending |
 | GUTR-02 | Phase 4 | Pending |
 | GUTR-03 | Phase 4 | Pending |

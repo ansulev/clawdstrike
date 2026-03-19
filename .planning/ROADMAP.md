@@ -11,7 +11,7 @@ Make the Explorer panel production-ready. The IDE shell and editor are functiona
 ## Phases
 
 - [ ] **Phase 1: File & Folder Icons** — Replace colored dots with proper file-type icons, folder open/close icons, root chevrons
-- [ ] **Phase 2: Labeled Filter Bar** — Replace cryptic dots with labeled toggles showing type + count
+- [x] **Phase 2: Labeled Filter Bar** — Replace cryptic dots with labeled toggles showing type + count
 - [ ] **Phase 3: Tree Visual Refinement** — Indent guides, active file highlight, root collapse, item counts, empty state hero
 - [ ] **Phase 4: Context Menu Completeness** — Root/file/folder context menus with Copy Path, Reveal in Finder, Remove from Workspace
 
@@ -46,7 +46,7 @@ Plans:
 **Plans:** 1 plan
 
 Plans:
-- [ ] 02-01-PLAN.md — Replace FormatDot with labeled FormatToggle pills, add countFilesByType, fix footer
+- [x] 02-01-PLAN.md — Replace FormatDot with labeled FormatToggle pills, add countFilesByType, fix footer
 
 ### Phase 3: Tree Visual Refinement
 **Goal**: The tree looks polished with indent guides, proper highlighting, and smart empty states
@@ -84,6 +84,6 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. File & Folder Icons | 0/1 | Planned | - |
-| 2. Labeled Filter Bar | 0/1 | Planned | - |
+| 2. Labeled Filter Bar | 1/1 | Complete | 2026-03-19 |
 | 3. Tree Visual Refinement | 0/2 | Not started | - |
 | 4. Context Menu Completeness | 0/1 | Planned | - |

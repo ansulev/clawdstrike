@@ -1,177 +1,62 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.1
-milestone_name: milestone
-status: in_progress
-stopped_at: Completed 13-01-PLAN.md
-last_updated: "2026-03-19T00:54:10Z"
-last_activity: 2026-03-19 -- Completed Phase 13 Plan 1 (Visual/YAML split editor with EditorVisualPanel + guard cards)
+milestone: v1.2
+milestone_name: Explorer Polish
+status: executing
+stopped_at: Completed 02-01-PLAN.md
+last_updated: "2026-03-19T12:53:00Z"
+last_activity: 2026-03-19 -- Phase 2 Plan 01 (Labeled Filter Bar) completed
 progress:
-  total_phases: 13
-  completed_phases: 12
-  total_plans: 28
-  completed_plans: 25
-  percent: 89
+  total_phases: 4
+  completed_phases: 1
+  total_plans: 5
+  completed_plans: 1
+  percent: 20
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-03-18)
-
-**Core value:** Security operators get a professional-grade IDE with search, quick navigation, and file management
-**Current focus:** Phase 13 Full Editor Experience (in progress)
+See: .planning/PROJECT.md
+**Core value:** The Explorer panel looks and feels like a professional IDE file tree
+**Current focus:** Phase 3 Tree Visual Refinement
 
 ## Current Position
 
-Phase: 13 of 13 (Full Editor Experience) IN PROGRESS
-Plan: 1 of 3 complete
-Status: Phase 13 Plan 1 complete -- Visual/YAML split editor with EditorVisualPanel + guard cards
-Last activity: 2026-03-19 -- Completed Phase 13 Plan 1 (Visual/YAML split editor with EditorVisualPanel + guard cards)
+Phase: 2 of 4 (Labeled Filter Bar) -- COMPLETE
+Plan: 1 of 1
+Status: Complete
+Last activity: 2026-03-19 -- Phase 2 Plan 01 completed
 
-Progress: [████████░░] 89%
+Progress: [##░░░░░░░░] 20%
 
-## Previous Milestone (v1.0 — IDE Pivot)
+## Previous Milestones
 
-Completed: 2026-03-18
-Phases: 4/4 | Plans: 9/9 | Requirements: 45/45
-Summary: Delivered IDE shell — activity bar, 7 sidebar panels, pane tab system, right sidebar, bottom panels, 80+ commands, lab decomposition
-
-## Performance Metrics
-
-**v1.0 Velocity:**
-| Phase | Plan | Duration | Tasks | Files |
-|-------|------|----------|-------|-------|
-| Phase 01 P01 | 5min | 2 tasks | 7 files |
-| Phase 01 P02 | 14min | 3 tasks | 5 files |
-| Phase 02 P01 | 5min | 2 tasks | 6 files |
-| Phase 02 P02 | 10min | 2 tasks | 5 files |
-| Phase 02 P03 | 7min | 2 tasks | 7 files |
-| Phase 03 P01 | 4min | 2 tasks | 8 files |
-| Phase 03 P02 | 3min | 2 tasks | 3 files |
-| Phase 04 P01 | 2min | 2 tasks | 2 files |
-| Phase 04 P02 | 2min | 2 tasks | 2 files |
-
-**v1.1 Velocity:**
-| Phase | Plan | Duration | Tasks | Files |
-|-------|------|----------|-------|-------|
-| Phase 01 P01 | 2min | 2 tasks | 2 files |
-| Phase 03 P02 | 2min | 2 tasks | 2 files |
-| Phase 05 P02 | 2min | 1 tasks | 3 files |
-| Phase 03 P01 | 3min | 2 tasks | 4 files |
-| Phase 05 P02 | 2min | 1 tasks | 3 files |
-| Phase 02 P01 | 5min | 2 tasks | 5 files |
-| Phase 05 P01 | 5min | 2 tasks | 3 files |
-| Phase 04 P01 | 6min | 2 tasks | 8 files |
-| Phase 02 P02 | 3min | 2 tasks | 5 files |
-| Phase 04 P02 | 3min | 2 tasks | 5 files |
-| Phase 07 P01 | 2min | 2 tasks | 2 files |
-| Phase 07 P02 | 3min | 2 tasks | 3 files |
-| Phase 07 P04 | 1min | 1 tasks | 1 files |
-| Phase 06 P01 | 7min | 2 tasks | 4 files |
-| Phase 07 P03 | 3min | 2 tasks | 4 files |
-| Phase 06 P02 | 3min | 1 tasks | 3 files |
-| Phase 08 P02 | 3min | 2 tasks | 3 files |
-| Phase 08 P01 | 5min | 2 tasks | 5 files |
-| Phase 08 P03 | 4min | 2 tasks | 2 files |
-| Phase 08 P04 | 7min | 2 tasks | 8 files |
-| Phase 09 P01 | 2min | 2 tasks | 3 files |
-| Phase 10 P01 | 2min | 2 tasks | 2 files |
-| Phase 10 P02 | 2min | 2 tasks | 2 files |
-| Phase 11 P02 | 5min | 3 tasks | 4 files |
-| Phase 13 P01 | 2min | 1 tasks | 2 files |
+**v1.0 — IDE Pivot** (2026-03-18): 4 phases, 9 plans, 45 reqs
+**v1.1 — IDE Completeness** (2026-03-18/19): 13 phases, ~28 plans, 50+ reqs
 
 ## Accumulated Context
 
+### Key Files for Explorer Work
+- `apps/workbench/src/components/workbench/explorer/explorer-panel.tsx` — main panel
+- `apps/workbench/src/components/workbench/explorer/explorer-tree-item.tsx` — tree item rendering
+- `apps/workbench/src/components/workbench/explorer/explorer-context-menu.tsx` — context menu
+- `apps/workbench/src/features/activity-bar/components/sidebar-panel.tsx` — Explorer connected wrapper
+- `apps/workbench/src/features/project/stores/project-store.tsx` — project/file tree state
+- `apps/workbench/src/lib/workbench/file-type-registry.ts` — file type detection
+
 ### Decisions
-
-Key v1.0 decisions carried forward:
-- SpeakeasyPanel uses `inline` prop for right sidebar rendering
-- openApp searches all pane groups for route dedup
-- navigate-commands uses Zustand getState() (no react-router dependency)
-- Gold border removed from pane container (too prominent for IDE)
-- Lab sub-apps independently routable at /swarm-board, /hunt, /simulator
-
-v1.1 decisions:
-- Module-level EditorView ref for command dispatch (simpler than React context)
-- searchKeymap Mod-h handler extraction for replace mode (stable public API)
-- search({ top: true }) for IDE-standard top-positioned search panel
-- Split terminal uses [leftId, rightId] tuple (max 2 panes, simple model)
-- Split auto-creates second session if fewer than 2 exist
-- Closing split session exits split mode automatically
-- BreadcrumbBar self-hides via internal null return (consumer needs no conditional)
-- Folder breadcrumb click expands dir AND reveals Explorer sidebar via showPanel
-- [Phase 03]: Used tauri-bridge readDetectionFileByPath instead of direct Tauri plugin-fs for QuickOpen file reads
-- [Phase 03]: Module-level useSyncExternalStore for QuickOpenDialog visibility (self-contained, no separate store)
-- [Phase 05]: Split terminal uses [leftId, rightId] tuple (max 2 panes, simple model)
-- [Phase 02]: regex crate added as direct dep for search; 10K match cap; results grouped by file in store
-- [Phase 05]: closeSavedViews closes non-active tabs (PaneView has no dirty state)
-- [Phase 05]: PaneTabContextMenu co-located in pane-tab-bar.tsx matching policy-tab-bar styling
-- [Phase 04]: createDetectionFile composes saveDetectionFile with FILE_TYPE_REGISTRY defaultContent (no new Tauri command)
-- [Phase 04]: mutateTree helper uses immutable shallow-copy-on-write for Zustand state correctness
-- [Phase 04]: ExplorerContextMenu follows PaneTabContextMenu pattern for visual consistency
-- [Phase 02]: IconSearch from @tabler/icons-react used directly as activity bar icon (SigilProps compatible)
-- [Phase 02]: SearchPanel split into presentational + connected components for testability
-- [Phase 02]: 300ms debounce on search input with immediate Enter key override
-- [Phase 04]: Delete confirmation uses Dialog primitives with dark IDE theme override (bg-[#131721])
-- [Phase 04]: FileStatus map keyed by relative file path, error badge takes visual priority over modified dot
-- [Phase 04]: Newly created files auto-marked as modified to demonstrate status indicators
-- [Phase 07]: MitreHeatmap standalone route uses empty tabs array (valid blank ATT&CK matrix); rich data version stays in PolicyEditor
-- [Phase 07]: /editor?panel=guards and /editor?panel=compare normalized to /guards and /compare for backward compat
-- [Phase 07]: Right sidebar tab strip uses icon-only buttons with gold #d4a84b active indicator
-- [Phase 07]: Editor-context panels wrapped in dedicated content components with no-tab fallback
-- [Phase 07]: rightSidebar.* commands use useRightSidebarStore.getState() directly (no ViewCommandDeps coupling)
-- [Phase 06]: RangeSet-based gutter markers via derived StateField for clean CodeMirror 6 state management
-- [Phase 06]: useCallback + ref pattern for onRunGuardTest to keep extension identity stable across renders
-- [Phase 06]: 500ms debounce on guard range parsing to balance responsiveness with performance
-- [Phase 06]: Coverage threshold: red (#c45c5c) for >= 3 uncovered techniques, amber (#d4a84b) for 1-2
-- [Phase 07]: Hunt onNavigateToEditor uses usePaneStore.getState().openApp() for cross-feature pane navigation
-- [Phase 07]: Local useState for visual builder/TrustPrint wrapper pages (no store integration) -- keeps pages self-contained
-- [Phase 06]: Execution order badge placed between drag handle and guard icon for visual hierarchy
-- [Phase 06]: Gutter test callback uses toast feedback for both success and info states (not console.log)
-- [Phase 08]: FILE_TYPE_COLORS map uses direct hex values matching PolicyTabBar precedent (cyan/purple/green/amber)
-- [Phase 08]: Close button dirty-dot uses group-hover/tab CSS toggle (VS Code pattern)
-- [Phase 08]: New-file button uses usePolicyTabsStore.newTab() with /file/__new__/{tabId} route convention
-- [Phase 08]: useParams("*") splat for file path extraction in FileEditorShell (standard react-router pattern)
-- [Phase 08]: Zustand basic subscribe(state, prevState) for dirty sync (no subscribeWithSelector middleware)
-- [Phase 08]: openFile delegates to openApp for route dedup, then pushRecentFile for recent tracking
-- [Phase 08]: File routes pass through normalizeWorkbenchRoute unchanged (no switch-case collapsing)
-- [Phase 08]: FileEditorToolbar shows only validate/format/test/problems for policy files; non-policy gets badge + status
-- [Phase 08]: SplitModeToggle omitted from FileEditorToolbar (FLAT-06: pane splitting replaces it)
-- [Phase 08]: Dynamic import of tauri-bridge for file loading in FileEditorShell (code-split friendly)
-- [Phase 08]: Temporary read-only <pre> for content area (CodeMirror integration deferred to avoid useMultiPolicy coupling)
-- [Phase 08]: Hunt onNavigateToEditor checks getActiveTab for filePath vs __new__ tab ID for correct route
-- [Phase 08]: BreadcrumbBar extracts file path from route string (not from policy-tabs-store activeTab)
-- [Phase 08]: nav.editor removed entirely (Meta+1 keybinding unassigned; Cmd+P is primary file opener)
-- [Phase 08]: Legacy navigate('/editor') calls naturally redirect via route system -- no inline migration needed
-- [Phase 09]: Fail-open bootstrap: errors logged but never thrown, app works without bootstrapped workspace
-- [Phase 09]: projectRoots initialized from loadPersistedRoots() at store creation time for immediate hydration
-- [Phase 09]: loadRoot expands all directories by default for first-mount discoverability
-- [Phase 09]: Backward compat: project field always points to first root's DetectionProject
-- [Phase 10]: YamlEditor onChange uses getState() for setYaml/isDirty (avoids stale closures in useCallback)
-- [Phase 10]: editorErrors maps ValidationIssue to YamlEditorError with line: undefined (ValidationIssue lacks line numbers)
-- [Phase 10]: ProblemsPanel onClick uses switchTab + paneStore.openFile for file-first navigation (not navigate('/editor'))
-- [Phase 10]: Dynamic import of saveDetectionFile in handleSave (consistent with readDetectionFileByPath pattern)
-- [Phase 10]: file.save tries file-first tab logic before falling back to legacy saveFile
-- [Phase 10]: file.saveAs always passes null filePath to force Save As dialog
-- [Phase 11]: Multi-root prefix stripping: iterate projectRoots array first, fall back to single project.rootPath
-- [Phase 11]: Post-mutation loadRoot is fire-and-forget after in-memory tree update (immediate UI + eventual disk consistency)
-- [Phase 11]: Status bar pane context: show file name + dirty + fileType for file routes, view label for app routes
-- [Phase 13]: EditorVisualPanel rendered directly in split (not via legacy SplitEditor coupled to MultiPolicyProvider)
-- [Phase 13]: Split toggle placed after Format button, before ToolbarDivider in policy-only button group
-- [Phase 13]: ResizableHandle uses gold accent color (#d4a84b) matching existing split-editor.tsx styling
-
-### Pending Todos
-
-None yet.
-
-### Blockers/Concerns
-
-None yet.
+- File type icons should be distinctive at 16px (the tree item icon size)
+- Use @tabler/icons-react for standard icons (folder, chevron), custom badges for detection types
+- Filter bar labels more important than saving horizontal space
+- Context menus should use viewport clamping (known issue from reviews)
+- Used inline style for dynamic filter pill color (iconColor varies per type)
+- Pill shows shortLabel not full label to conserve horizontal space in narrow sidebar
+- Footer count switches between filtered and total based on formatFilter state
 
 ## Session Continuity
 
-Last session: 2026-03-19T00:54:10Z
-Stopped at: Completed 13-01-PLAN.md
-Resume file: Continue with Phase 13 Plan 2 (Run button with quick test presets, TestRunnerPanel)
+Last session: 2026-03-19
+Stopped at: Completed 02-01-PLAN.md
+Resume file: .planning/ROADMAP.md

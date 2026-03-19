@@ -106,4 +106,4 @@ Enable third-party and internal extension of the ClawdStrike workbench through a
 | MKT-02 | Phase 6 | Pending |
 | MKT-03 | Phase 6 | Pending |
 | MKT-04 | Phase 6 | Pending |
-| MKT-05 | Phase 6 | Pending |
+| MKT-05 | Phase 6 | Complete |

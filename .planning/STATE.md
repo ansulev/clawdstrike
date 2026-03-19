@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: In progress
-stopped_at: Completed 05-02-PLAN.md
-last_updated: "2026-03-19T00:20:04Z"
-last_activity: 2026-03-19 -- Completed 05-02 (Cross-runtime verdict parity tests for EgressAllowlistGuard plugin)
+status: executing
+stopped_at: Completed 06-01-PLAN.md
+last_updated: "2026-03-19T00:34:03.042Z"
+last_activity: 2026-03-19 -- Completed 06-01 (Registry client with typed API surface)
 progress:
   total_phases: 6
   completed_phases: 5
-  total_plans: 10
-  completed_plans: 10
+  total_plans: 13
+  completed_plans: 11
   percent: 100
 ---
 
@@ -26,9 +26,9 @@ See: .planning/PROJECT.md (updated 2026-03-18)
 ## Current Position
 
 Phase: 6 of 6 (Marketplace UI)
-Plan: 1 of 1 in current phase
+Plan: 2 of 3 in current phase
 Status: In progress
-Last activity: 2026-03-19 -- Completed 05-02 (Cross-runtime verdict parity tests for EgressAllowlistGuard plugin)
+Last activity: 2026-03-19 -- Completed 06-01 (Registry client with typed API surface)
 
 Progress: [██████████] 100%
 
@@ -57,6 +57,7 @@ Progress: [██████████] 100%
 | Phase 04 P01 | 5min | 1 tasks | 10 files |
 | Phase 05 P01 | 3min | 1 tasks | 2 files |
 | Phase 05 P02 | 7min | 2 tasks | 3 files |
+| Phase 06 P01 | 3min | 1 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -98,6 +99,9 @@ Recent decisions affecting current work:
 - [Phase 05-01]: ConfigFields are byte-identical copies of built-in egress_allowlist guard metadata for parity validation
 - [Phase 05-02]: Parity tests verify config schema mapping rather than runtime delegation since plugin declares metadata only
 - [Phase 05-02]: Rust factory wraps built-in guard via CustomGuardFactory trait, proving custom_guards path works without WASM
+- [Phase 06]: snake_case response types matching Rust serde output -- no camelCase conversion layer
+- [Phase 06]: search() fail-open for browsing; getPackageInfo/getAttestation throw on error for specific lookups
+- [Phase 06]: getDownloadUrl() is pure function returning URL string -- actual download handled by install flow
 
 ### Pending Todos
 
@@ -109,6 +113,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-19T00:20:04Z
-Stopped at: Completed 05-02-PLAN.md
+Last session: 2026-03-19T00:34:03.039Z
+Stopped at: Completed 06-01-PLAN.md
 Resume file: None

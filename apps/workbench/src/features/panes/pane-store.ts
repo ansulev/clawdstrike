@@ -79,10 +79,32 @@ export const usePaneStore = create<PaneStore>((set, get) => ({
 
   syncRoute: (route) => {
     const normalized = normalizeWorkbenchRoute(route);
-    set((state) => ({
+    const state = get();
+    const activePane = getActivePane(state.root, state.activePaneId)
+      ?? getFirstPaneGroup(state.root);
+
+    // If the active view already shows this route, no-op.
+    const activeView = getPaneActiveView(activePane);
+    if (activeView && normalizeWorkbenchRoute(activeView.route) === normalized) {
+      return;
+    }
+
+    // If another tab in the active pane already has this route, focus it.
+    const existingView = activePane.views.find(
+      (v) => normalizeWorkbenchRoute(v.route) === normalized,
+    );
+    if (existingView) {
+      set((s) => ({
+        root: setActivePaneView(s.root, s.activePaneId, existingView.id),
+      }));
+      return;
+    }
+
+    // Otherwise, replace the active view's route (original behavior).
+    set((s) => ({
       root: setPaneActiveRoute(
-        state.root,
-        state.activePaneId,
+        s.root,
+        s.activePaneId,
         normalized,
         getWorkbenchRouteLabel(normalized),
       ),

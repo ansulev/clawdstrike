@@ -313,3 +313,33 @@ export async function savePolicyFile(
 ): Promise<string | null> {
   return saveDetectionFile(content, "clawdstrike_policy", filePath, "policy");
 }
+
+/**
+ * Reveal a file or directory in the OS file manager (Finder on macOS).
+ * Falls back to opening the parent directory if the path cannot be revealed.
+ */
+export async function revealInFinder(path: string): Promise<void> {
+  if (!isDesktop()) return;
+  try {
+    const { revealItemInDir } = await import("@tauri-apps/plugin-opener");
+    await revealItemInDir(path);
+  } catch (err) {
+    console.error("[tauri-bridge] Failed to reveal in Finder:", path, err);
+  }
+}
+
+/**
+ * Create a directory on disk (recursive).
+ * @returns true on success, false on failure / non-desktop.
+ */
+export async function createDirectory(dirPath: string): Promise<boolean> {
+  if (!isDesktop()) return false;
+  try {
+    const { mkdir } = await import("@tauri-apps/plugin-fs");
+    await mkdir(dirPath, { recursive: true });
+    return true;
+  } catch (err) {
+    console.error("[tauri-bridge] Failed to create directory:", dirPath, err);
+    return false;
+  }
+}

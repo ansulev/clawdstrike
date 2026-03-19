@@ -28,6 +28,7 @@ hunt-query = { path = "../../../crates/libs/hunt-query" }
 clawdstrike-ocsf = { path = "../../../crates/libs/clawdstrike-ocsf" }
 tauri-plugin-fs = "2"
 tauri-plugin-http = "2"
+tauri-plugin-opener = "2"
 tauri-plugin-stronghold = "2"
 iota_stronghold = "2"
 hex = "0.4"

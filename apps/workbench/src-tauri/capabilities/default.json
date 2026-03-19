@@ -32,6 +32,8 @@
     "fs:allow-home-write",
     "fs:allow-home-write-recursive",
     "fs:allow-home-meta",
-    "fs:allow-home-meta-recursive"
+    "fs:allow-home-meta-recursive",
+    "opener:default",
+    "opener:allow-reveal-item-in-dir"
   ]
 }

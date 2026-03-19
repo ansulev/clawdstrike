@@ -19,6 +19,8 @@
  * mock plugin modules without dynamic import().
  */
 
+import { lazy, createElement } from "react";
+import type { ComponentType } from "react";
 import type {
   PluginManifest,
   GuardContribution,
@@ -37,6 +39,7 @@ import {
 import { registerGuard } from "../workbench/guard-registry";
 import { registerFileType } from "../workbench/file-type-registry";
 import { statusBarRegistry } from "../workbench/status-bar-registry";
+import { registerView } from "./view-registry";
 import { PluginBridgeHost } from "./bridge";
 import { buildPluginSrcdoc } from "./sandbox";
 import {
@@ -550,6 +553,68 @@ export class PluginLoader {
         disposables.push(dispose);
       }
     }
+
+    // Route editor tab contributions to ViewRegistry
+    if (contributions.editorTabs) {
+      for (const tab of contributions.editorTabs) {
+        const viewId = `${manifest.id}.${tab.id}`;
+        const dispose = registerView({
+          id: viewId,
+          slot: "editorTab",
+          label: tab.label,
+          icon: tab.icon,
+          component: lazy(() => this.resolveViewEntrypoint(tab.entrypoint)),
+        });
+        disposables.push(dispose);
+      }
+    }
+
+    // Route bottom panel tab contributions to ViewRegistry
+    if (contributions.bottomPanelTabs) {
+      for (const tab of contributions.bottomPanelTabs) {
+        const viewId = `${manifest.id}.${tab.id}`;
+        const dispose = registerView({
+          id: viewId,
+          slot: "bottomPanelTab",
+          label: tab.label,
+          icon: tab.icon,
+          component: lazy(() => this.resolveViewEntrypoint(tab.entrypoint)),
+        });
+        disposables.push(dispose);
+      }
+    }
+
+    // Route right sidebar panel contributions to ViewRegistry
+    if (contributions.rightSidebarPanels) {
+      for (const panel of contributions.rightSidebarPanels) {
+        const viewId = `${manifest.id}.${panel.id}`;
+        const dispose = registerView({
+          id: viewId,
+          slot: "rightSidebarPanel",
+          label: panel.label,
+          icon: panel.icon,
+          component: lazy(() => this.resolveViewEntrypoint(panel.entrypoint)),
+        });
+        disposables.push(dispose);
+      }
+    }
+
+    // Route activity bar item contributions to ViewRegistry
+    if (contributions.activityBarItems) {
+      for (const item of contributions.activityBarItems) {
+        const viewId = `${manifest.id}.${item.id}`;
+        const dispose = registerView({
+          id: viewId,
+          slot: "activityBarPanel",
+          label: item.label,
+          icon: item.icon,
+          component: lazy(() => this.resolveViewEntrypoint(item.href)),
+          priority: item.order,
+          meta: { section: item.section, href: item.href },
+        });
+        disposables.push(dispose);
+      }
+    }
   }
 
   /**
@@ -588,19 +653,46 @@ export class PluginLoader {
 
   /**
    * Route a status bar item contribution to the status bar registry.
-   * Note: StatusBarItemContribution has an entrypoint field for dynamic
-   * module loading, but the render function is resolved at activation time.
-   * For now, we register a placeholder that can be updated later.
+   * Resolves the entrypoint module asynchronously and uses the exported
+   * component as the render function. Falls back to null if resolution fails.
    */
   private routeStatusBarItemContribution(
     item: StatusBarItemContribution,
   ): Disposable {
+    let resolvedComponent: ComponentType<unknown> | null = null;
+
+    // Kick off async resolution -- update the render once resolved
+    void (async () => {
+      try {
+        const mod = await import(/* @vite-ignore */ item.entrypoint);
+        resolvedComponent = mod.default ?? mod;
+      } catch {
+        // Entrypoint resolution failed -- render stays null gracefully
+      }
+    })();
+
     return statusBarRegistry.register({
       id: item.id,
       side: item.side,
       priority: item.priority,
-      render: () => null,
+      render: () => {
+        if (resolvedComponent) {
+          return createElement(resolvedComponent, { viewId: item.id });
+        }
+        return null;
+      },
     });
+  }
+
+  /**
+   * Resolve a view entrypoint to a module with a default export.
+   * Used by React.lazy() for deferred component loading.
+   */
+  private async resolveViewEntrypoint(
+    entrypoint: string,
+  ): Promise<{ default: ComponentType<unknown> }> {
+    const mod = await import(/* @vite-ignore */ entrypoint);
+    return { default: mod.default ?? mod };
   }
 }
 

@@ -38,3 +38,8 @@ export {
 } from "./receipt-store";
 export { createReceiptMiddleware } from "./receipt-middleware";
 export type { ReceiptMiddlewareOptions } from "./receipt-middleware";
+export {
+  PluginReceiptForwarder,
+  createReceiptForwarder,
+} from "./receipt-forwarder";
+export type { ReceiptForwarderOptions } from "./receipt-forwarder";

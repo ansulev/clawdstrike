@@ -10,6 +10,8 @@
  */
 
 import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCoordinatorBoardBridge } from "@/features/swarm/hooks/use-coordinator-board-bridge";
+import { getCoordinator } from "@/features/swarm/coordinator-instance";
 import {
   ReactFlow,
   ReactFlowProvider,
@@ -107,6 +109,10 @@ function SwarmBoardCanvas() {
   const { nodes, edges } = state;
   const storeActions = useSwarmBoardStore((s) => s.actions);
   const reactFlow = useReactFlow();
+
+  // Bridge SwarmCoordinator messages to board store (live intel/detection nodes)
+  const coordinator = useMemo(() => getCoordinator(), []);
+  useCoordinatorBoardBridge(coordinator);
 
   // Context menu
   const [contextMenu, setContextMenu] = useState<NodeContextMenuState | null>(null);

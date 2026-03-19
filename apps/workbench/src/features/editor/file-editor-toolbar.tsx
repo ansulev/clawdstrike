@@ -15,12 +15,17 @@ import {
   IconTestPipe,
   IconAlertTriangle,
   IconChevronDown,
+  IconHistory,
+  IconPackage,
+  IconBulb,
 } from "@tabler/icons-react";
 import { cn } from "@/lib/utils";
 import { isPolicyFileType } from "@/lib/workbench/file-type-registry";
 import { simulatePolicy } from "@/lib/workbench/simulation-engine";
 import { useWorkbench } from "@/features/policy/stores/multi-policy-store";
 import { useToast } from "@/components/ui/toast";
+import { useRightSidebarStore } from "@/features/right-sidebar/stores/right-sidebar-store";
+import type { RightSidebarPanel } from "@/features/right-sidebar/types";
 import type { TestScenario } from "@/lib/workbench/types";
 import type { TabMeta } from "@/features/policy/stores/policy-tabs-store";
 import type { TabEditState } from "@/features/policy/stores/policy-edit-store";
@@ -185,6 +190,43 @@ function RunButtonGroup() {
   );
 }
 
+// ---- Sidebar toggle group ----
+
+function SidebarToggleGroup() {
+  const activePanel = useRightSidebarStore.use.activePanel();
+  const visible = useRightSidebarStore.use.visible();
+
+  const togglePanel = useCallback((panel: RightSidebarPanel) => {
+    const { actions } = useRightSidebarStore.getState();
+    if (visible && activePanel === panel) {
+      actions.toggle(); // hide if clicking active panel
+    } else {
+      actions.setActivePanel(panel);
+      actions.show();
+    }
+  }, [activePanel, visible]);
+
+  const panels = [
+    { id: "history" as const, icon: IconHistory, label: "Version History" },
+    { id: "evidence" as const, icon: IconPackage, label: "Evidence Pack" },
+    { id: "explain" as const, icon: IconBulb, label: "Explainability" },
+  ] as const;
+
+  return (
+    <div className="flex items-center gap-0.5">
+      {panels.map((p) => (
+        <ToolbarButton
+          key={p.id}
+          icon={p.icon}
+          label={p.label}
+          active={visible && activePanel === p.id}
+          onClick={() => togglePanel(p.id)}
+        />
+      ))}
+    </div>
+  );
+}
+
 // ---- Main component ----
 
 export function FileEditorToolbar({
@@ -253,6 +295,14 @@ export function FileEditorToolbar({
 
       {/* Spacer */}
       <div className="flex-1" />
+
+      {/* Policy sidebar toggles (right side) */}
+      {isPolicy && (
+        <>
+          <SidebarToggleGroup />
+          <ToolbarDivider />
+        </>
+      )}
 
       {/* Validation status indicator (right side) */}
       <span

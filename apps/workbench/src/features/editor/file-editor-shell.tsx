@@ -22,6 +22,9 @@ import { EditorVisualPanel } from "@/components/workbench/editor/editor-visual-p
 import { TestRunnerPanel } from "@/components/workbench/editor/test-runner-panel";
 import { usePolicyTabsStore } from "@/features/policy/stores/policy-tabs-store";
 import { usePolicyEditStore } from "@/features/policy/stores/policy-edit-store";
+import { useWorkbench } from "@/features/policy/stores/multi-policy-store";
+import { useNativeValidation } from "@/features/policy/use-native-validation";
+import { useAutoVersion } from "@/features/policy/use-auto-version";
 import { isPolicyFileType } from "@/lib/workbench/file-type-registry";
 import { FileEditorToolbar } from "./file-editor-toolbar";
 
@@ -173,6 +176,26 @@ export function FileEditorShell() {
       usePolicyTabsStore.getState().switchTab(tabMeta.id);
     }
   }, [tabMeta, activeTabId, filePath]);
+
+  // Native validation -- runs Rust policy engine via Tauri IPC on each change
+  // Auto-versioning -- creates snapshot on explicit save (dirty -> clean transition)
+  // Both hooks must be called unconditionally before early returns (React rules of hooks).
+  // They are safe with empty/undefined values: useNativeValidation is a no-op outside
+  // Tauri, and useAutoVersion only acts when policyId is defined and dirty transitions.
+  const { state: workbenchState, dispatch: workbenchDispatch } = useWorkbench();
+
+  useNativeValidation(
+    editState?.yaml ?? "",
+    tabMeta?.fileType ?? "clawdstrike_policy",
+    workbenchDispatch,
+  );
+
+  useAutoVersion(
+    tabMeta?.documentId,
+    editState?.yaml ?? "",
+    workbenchState.activePolicy,
+    tabMeta?.dirty ?? false,
+  );
 
   if (!tabMeta || !editState) {
     // Show a loading message while the file is being fetched from disk;

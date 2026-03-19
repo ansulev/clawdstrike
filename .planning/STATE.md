@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: Explorer Polish
 status: executing
-stopped_at: Completed 02-01-PLAN.md
-last_updated: "2026-03-19T14:01:11Z"
-last_activity: 2026-03-19 -- Track A Fleet Plan 01 (SSE Streaming + Drift Detection) completed
+stopped_at: Completed C2-01-PLAN.md
+last_updated: "2026-03-19T14:10:22Z"
+last_activity: 2026-03-19 -- Track C Intel Plan C2-01 (Finding-to-Detection Pipeline) completed
 progress:
   total_phases: 4
   completed_phases: 1
@@ -57,9 +57,11 @@ Progress: [##░░░░░░░░] 20%
 - Fleet SSE: import consumeSseMessages from live-agent-tab (no circular dep risk)
 - Fleet SSE: FleetEventStream is a class (not hook) managed as module singleton
 - Fleet drift: expectedPolicyVersion from remotePolicyInfo.policyHash or .version
+- Finding-to-detection: callback prop pattern (onDraftDetection) for cross-domain actions, wired in parent page
+- Finding mapper: technique hints from signal text (not flags) since SignalContext.flags lack label field
 
 ## Session Continuity
 
 Last session: 2026-03-19
-Stopped at: Completed track-a-fleet-01-PLAN.md
-Resume file: .planning/phases/track-a-fleet/track-a-fleet-02-PLAN.md
+Stopped at: Completed C2-01-PLAN.md
+Resume file: .planning/phases/track-c-intel/C2-01-SUMMARY.md

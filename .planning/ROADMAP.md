@@ -85,7 +85,9 @@ Plans:
   2. "Draft Policy Guard" button generates a guard config block from the finding's pattern
   3. Generated content opens in a new file tab in the editor for review/editing
   4. The finding is linked to the generated detection (bidirectional reference)
-**Plans**: TBD
+**Plans**: 1 plan
+Plans:
+- [x] C2-01-PLAN.md -- Finding mapper, draftFromFinding hook, Draft Detection button (complete)
 
 ## Progress
 
@@ -95,5 +97,5 @@ Plans:
 | A. Fleet Dashboard | A2: Viz & Actions | Planned (1 plan, wave 2) |
 | B. Swarm Board | B1: Editor Bridge | Not started |
 | B. Swarm Board | B2: Real-Time Viz | Not started |
-| C. Threat Intel | C1: Signal Clustering | Not started |
-| C. Threat Intel | C2: Promote-to-Detection | Not started |
+| C. Threat Intel | C1: Signal Clustering | Complete (2 plans) |
+| C. Threat Intel | C2: Promote-to-Detection | Complete (1 plan: C2-01) |

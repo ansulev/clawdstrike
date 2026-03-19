@@ -240,6 +240,27 @@ export function FileEditorToolbar({
   splitActive,
 }: FileEditorToolbarProps) {
   const isPolicy = isPolicyFileType(tabMeta.fileType);
+  const { state } = useWorkbench();
+  const { toast } = useToast();
+
+  const runQuickTest = useCallback(() => {
+    const test = QUICK_TESTS[0];
+    try {
+      const result = simulatePolicy(state.activePolicy, test);
+      const verdict = result.overallVerdict;
+      toast({
+        type: verdict === "deny" ? "success" : "warning",
+        title: `${test.name}: ${verdict.toUpperCase()}`,
+        description: `${result.guardResults.length} guard(s) evaluated`,
+      });
+    } catch (err) {
+      toast({
+        type: "error",
+        title: "Test failed",
+        description: err instanceof Error ? err.message : "Simulation error",
+      });
+    }
+  }, [state.activePolicy, toast]);
 
   return (
     <div className="flex h-[36px] shrink-0 items-center gap-1 border-b border-[#202531] bg-[#0b0d13] px-3">
@@ -253,17 +274,14 @@ export function FileEditorToolbar({
         <>
           <ToolbarButton
             icon={IconPlayerPlay}
-            label="Validate"
-            onClick={() => {
-              /* validation already runs on yaml change via policy-edit-store */
-            }}
+            label="Run Quick Test"
+            onClick={runQuickTest}
           />
           <ToolbarButton
             icon={IconCode}
-            label="Format"
-            onClick={() => {
-              /* format action -- noop for now, can be wired to prettier-yaml */
-            }}
+            label="Toggle Visual / YAML"
+            active={splitActive}
+            onClick={onToggleSplit}
           />
           <ToolbarButton
             icon={IconLayoutColumns}

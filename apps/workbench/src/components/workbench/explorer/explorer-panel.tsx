@@ -12,10 +12,9 @@ import {
 } from "@tabler/icons-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { FILE_TYPE_REGISTRY, type FileType } from "@/lib/workbench/file-type-registry";
-import { FileTypeIcon } from "@/lib/workbench/file-type-icons";
 import type { DetectionProject, ProjectFile, FileStatus } from "@/features/project/stores/project-store";
 import { ExplorerTreeItem } from "./explorer-tree-item";
-import { ExplorerContextMenu } from "./explorer-context-menu";
+import { ExplorerContextMenu, type ContextMenuTarget } from "./explorer-context-menu";
 import { DeleteConfirmDialog } from "./delete-confirm-dialog";
 import { InlineNameInput } from "./inline-name-input";
 import { cn } from "@/lib/utils";
@@ -45,6 +44,10 @@ interface ExplorerPanelProps {
   onRenameFile?: (file: ProjectFile, newName: string) => void;
   onDeleteFile?: (file: ProjectFile) => void;
   fileStatuses?: Map<string, FileStatus>;
+  onRevealInFinder?: (absolutePath: string) => void;
+  onCreateFolder?: (parentPath: string, folderName: string) => void;
+  onCollapseChildren?: (rootPath: string, dirPath: string) => void;
+  onRefreshRoot?: (rootPath: string) => void;
 }
 
 // ---- Filter logic ----
@@ -120,15 +123,17 @@ function flattenTree(
   return result;
 }
 
-// ---- Format filter dot button ----
+// ---- Format filter toggle pill ----
 
-function FormatDot({
+function FormatToggle({
   fileType,
   active,
+  count,
   onClick,
 }: {
   fileType: FileType;
   active: boolean;
+  count: number;
   onClick: () => void;
 }) {
   const descriptor = FILE_TYPE_REGISTRY[fileType];
@@ -137,15 +142,20 @@ function FormatDot({
     <button
       type="button"
       onClick={onClick}
-      title={`Filter: ${descriptor.shortLabel}`}
       className={cn(
-        "flex items-center justify-center w-[22px] h-[22px] rounded transition-all shrink-0",
+        "inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-mono leading-tight transition-all shrink-0 border",
         active
-          ? "scale-110 bg-[#131721]/60"
-          : "opacity-40 hover:opacity-70",
+          ? "text-white shadow-sm"
+          : "bg-transparent hover:opacity-80",
       )}
+      style={{
+        backgroundColor: active ? descriptor.iconColor : "transparent",
+        borderColor: active ? descriptor.iconColor : `${descriptor.iconColor}40`,
+        color: active ? "#ffffff" : descriptor.iconColor,
+      }}
     >
-      <FileTypeIcon fileType={fileType} size={14} stroke={1.5} />
+      <span>{descriptor.shortLabel}</span>
+      <span className={active ? "opacity-80" : "opacity-60"}>({count})</span>
     </button>
   );
 }
@@ -185,8 +195,8 @@ function RootTreeSection({
   setCreatingInDir: (dir: string | null) => void;
   renamingFilePath: string | null;
   setRenamingFilePath: (path: string | null) => void;
-  contextMenu: { file: ProjectFile; x: number; y: number } | null;
-  setContextMenu: (menu: { file: ProjectFile; x: number; y: number } | null) => void;
+  contextMenu: ContextMenuTarget | null;
+  setContextMenu: (menu: ContextMenuTarget | null) => void;
   setDeletingFile: (file: ProjectFile | null) => void;
 }) {
   const filteredFiles = useMemo(() => {
@@ -266,7 +276,13 @@ function RootTreeSection({
         }
         onContextMenu={(e) => {
           e.preventDefault();
-          setContextMenu({ file, x: e.clientX, y: e.clientY });
+          setContextMenu({
+            targetType: file.isDirectory ? "folder" : "file",
+            file,
+            rootPath: project.rootPath,
+            x: e.clientX,
+            y: e.clientY,
+          });
         }}
         isRenaming={renamingFilePath === file.path}
         onRenameSubmit={(newName) => {
@@ -326,11 +342,17 @@ export function ExplorerPanel({
   onRenameFile,
   onDeleteFile,
   fileStatuses,
+  onRevealInFinder,
+  onCreateFolder,
+  onCollapseChildren,
+  onRefreshRoot,
 }: ExplorerPanelProps) {
-  // Context menu state
-  const [contextMenu, setContextMenu] = useState<{ file: ProjectFile; x: number; y: number } | null>(null);
+  // Context menu state (discriminated union: root | file | folder)
+  const [contextMenu, setContextMenu] = useState<ContextMenuTarget | null>(null);
   // Inline new-file creation state: the directory path where a file is being created.
   const [creatingInDir, setCreatingInDir] = useState<string | null>(null);
+  // Inline folder creation state: the parent directory path where a folder is being created.
+  const [creatingFolderInDir, setCreatingFolderInDir] = useState<string | null>(null);
   // Inline rename state: which file path is being renamed.
   const [renamingFilePath, setRenamingFilePath] = useState<string | null>(null);
   // Delete confirmation dialog state.
@@ -375,17 +397,10 @@ export function ExplorerPanel({
     return projects.reduce((sum, p) => sum + countFiles(p.files), 0);
   }, [projects]);
 
-  // Find which project a context menu file belongs to.
-  const contextProject = useMemo(() => {
-    if (!contextMenu) return projects[0] ?? null;
-    return projects.find((p) =>
-      contextMenu.file.path.startsWith(p.rootPath) ||
-      p.files.some(function findFile(f: ProjectFile): boolean {
-        if (f.path === contextMenu.file.path) return true;
-        return f.children?.some(findFile) ?? false;
-      }),
-    ) ?? projects[0] ?? null;
-  }, [contextMenu, projects]);
+  // File counts grouped by type across all roots.
+  const fileCountsByType = useMemo(() => {
+    return countFilesByType(projects);
+  }, [projects]);
 
   // ---- Empty state ----
   if (projects.length === 0) {
@@ -519,21 +534,17 @@ export function ExplorerPanel({
           />
         </div>
 
-        {/* Format filter dots */}
-        <div className="flex items-center gap-2">
-          <span className="text-[9px] font-mono text-[#6f7f9a]/40 uppercase tracking-wide">
-            File type
-          </span>
-          <div className="flex items-center gap-1.5">
-            {ALL_FILE_TYPES.map((ft) => (
-              <FormatDot
-                key={ft}
-                fileType={ft}
-                active={formatFilter === ft}
-                onClick={() => handleFormatClick(ft)}
-              />
-            ))}
-          </div>
+        {/* Format filter toggles */}
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {ALL_FILE_TYPES.map((ft) => (
+            <FormatToggle
+              key={ft}
+              fileType={ft}
+              active={formatFilter === ft}
+              count={fileCountsByType[ft]}
+              onClick={() => handleFormatClick(ft)}
+            />
+          ))}
           {formatFilter && (
             <button
               type="button"
@@ -551,6 +562,16 @@ export function ExplorerPanel({
         <div
           className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 border-b border-[#2d3240]/50 cursor-pointer hover:bg-[#131721]/20"
           onClick={() => toggleRootExpanded(firstProject.rootPath)}
+          onContextMenu={(e) => {
+            e.preventDefault();
+            setContextMenu({
+              targetType: "root",
+              rootPath: firstProject.rootPath,
+              rootName: firstProject.name,
+              x: e.clientX,
+              y: e.clientY,
+            });
+          }}
         >
           <IconChevronRight
             size={10}
@@ -582,6 +603,16 @@ export function ExplorerPanel({
                   <div
                     className="flex items-center gap-1.5 px-3 py-1.5 border-b border-[#2d3240]/50 cursor-pointer hover:bg-[#131721]/20"
                     onClick={() => toggleRootExpanded(project.rootPath)}
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      setContextMenu({
+                        targetType: "root",
+                        rootPath: project.rootPath,
+                        rootName: project.name,
+                        x: e.clientX,
+                        y: e.clientY,
+                      });
+                    }}
                   >
                     <IconChevronRight
                       size={10}
@@ -664,47 +695,74 @@ export function ExplorerPanel({
       </ScrollArea>
 
       {/* Context menu overlay */}
-      {contextMenu && contextProject && (
+      {contextMenu && (
         <ExplorerContextMenu
-          menu={contextMenu}
+          target={contextMenu}
           onClose={() => setContextMenu(null)}
-          onNewFile={() => {
-            // If the context target is a directory, create in it. Otherwise use parent dir.
-            const targetPath = contextMenu.file.isDirectory
-              ? contextMenu.file.path
-              : contextMenu.file.path.substring(0, contextMenu.file.path.lastIndexOf("/")) || contextProject.rootPath;
-            // For relative paths, resolve to absolute for the store action.
-            const absPath = targetPath.startsWith("/") ? targetPath : `${contextProject.rootPath}/${targetPath}`;
-            setCreatingInDir(absPath);
+          onNewFile={(dirPath) => {
+            setCreatingInDir(dirPath);
             setContextMenu(null);
           }}
-          onRename={() => {
-            setRenamingFilePath(contextMenu.file.path);
+          onOpen={(file) => {
+            onOpenFile(file);
             setContextMenu(null);
           }}
-          onDelete={() => {
-            setDeletingFile(contextMenu.file);
+          onRename={(file) => {
+            setRenamingFilePath(file.path);
+            setContextMenu(null);
+          }}
+          onDelete={(file) => {
+            setDeletingFile(file);
+            setContextMenu(null);
+          }}
+          onRevealInFinder={(absPath) => {
+            onRevealInFinder?.(absPath);
+            setContextMenu(null);
+          }}
+          onRemoveRoot={(rootPath) => {
+            onRemoveRoot?.(rootPath);
+            setContextMenu(null);
+          }}
+          onRefreshRoot={(rootPath) => {
+            onRefreshRoot?.(rootPath);
+            setContextMenu(null);
+          }}
+          onCollapseChildren={(rootPath, dirPath) => {
+            onCollapseChildren?.(rootPath, dirPath);
+            setContextMenu(null);
+          }}
+          onNewFolder={(dirPath) => {
+            setCreatingFolderInDir(dirPath);
             setContextMenu(null);
           }}
         />
       )}
 
+      {/* Inline folder creation input */}
+      {creatingFolderInDir && (
+        <div className="fixed z-[100] top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-[#131721] border border-[#2d3240] rounded-md shadow-xl p-3 min-w-[220px]">
+          <p className="text-[10px] font-mono text-[#6f7f9a] mb-2">New Folder</p>
+          <InlineNameInput
+            placeholder="folder-name"
+            onSubmit={(name) => {
+              onCreateFolder?.(creatingFolderInDir, name);
+              setCreatingFolderInDir(null);
+            }}
+            onCancel={() => setCreatingFolderInDir(null)}
+          />
+        </div>
+      )}
+
       {/* Footer status bar */}
       <div className="shrink-0 px-3 py-1.5 border-t border-[#2d3240] flex items-center gap-2">
         <span className="text-[9px] font-mono text-[#6f7f9a]/40">
-          {totalFileCount} {totalFileCount === 1 ? "file" : "files"}
+          {formatFilter
+            ? `${fileCountsByType[formatFilter]} ${fileCountsByType[formatFilter] === 1 ? "file" : "files"}`
+            : `${totalFileCount} ${totalFileCount === 1 ? "file" : "files"}`}
         </span>
         {isMultiRoot && (
           <span className="text-[9px] font-mono text-[#6f7f9a]/30">
-            {projects.length} {projects.length === 1 ? "root" : "roots"}
-          </span>
-        )}
-        {formatFilter && (
-          <span
-            className="text-[9px] font-mono"
-            style={{ color: FILE_TYPE_REGISTRY[formatFilter].iconColor }}
-          >
-            {FILE_TYPE_REGISTRY[formatFilter].shortLabel}
+            {projects.length} roots
           </span>
         )}
       </div>
@@ -736,4 +794,27 @@ function countFiles(files: ProjectFile[]): number {
     }
   }
   return count;
+}
+
+/** Count files grouped by FileType across all project roots. */
+function countFilesByType(projects: DetectionProject[]): Record<FileType, number> {
+  const counts: Record<FileType, number> = {
+    clawdstrike_policy: 0,
+    sigma_rule: 0,
+    yara_rule: 0,
+    ocsf_event: 0,
+  };
+  function walk(files: ProjectFile[]) {
+    for (const f of files) {
+      if (f.isDirectory) {
+        if (f.children) walk(f.children);
+      } else {
+        counts[f.fileType] += 1;
+      }
+    }
+  }
+  for (const p of projects) {
+    walk(p.files);
+  }
+  return counts;
 }

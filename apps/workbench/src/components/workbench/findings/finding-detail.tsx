@@ -19,6 +19,8 @@ import {
 } from "@tabler/icons-react";
 import { cn } from "@/lib/utils";
 import { EnrichmentSidebar } from "./enrichment-sidebar";
+import { ConfidenceBreakdown } from "./confidence-breakdown";
+import { useSignalStore } from "@/features/findings/stores/signal-store";
 import type {
   Finding,
   TimelineEntry,
@@ -102,6 +104,12 @@ export function FindingDetail({
 }: FindingDetailProps) {
   const [annotationText, setAnnotationText] = useState("");
   const [expandedEntryId, setExpandedEntryId] = useState<string | null>(null);
+
+  const allSignals = useSignalStore.use.signals();
+  const findingSignals = useMemo(
+    () => allSignals.filter((s) => finding.signalIds.includes(s.id)),
+    [allSignals, finding.signalIds],
+  );
 
   const sevColor = SEVERITY_COLORS[finding.severity] ?? "#6f7f9a";
   const statusConfig = STATUS_CONFIG[finding.status] ?? STATUS_CONFIG.emerging;
@@ -197,6 +205,16 @@ export function FindingDetail({
                   </>
                 )}
               </div>
+
+              <details className="mt-2">
+                <summary className="cursor-pointer text-[10px] text-[#6f7f9a]/60 hover:text-[#6f7f9a] transition-colors select-none list-none flex items-center gap-1">
+                  <IconChevronRight size={10} stroke={1.5} className="transition-transform details-open:rotate-90" />
+                  Score breakdown
+                </summary>
+                <div className="mt-2">
+                  <ConfidenceBreakdown finding={finding} signals={findingSignals} />
+                </div>
+              </details>
             </div>
 
             <div className="flex items-center gap-1.5 shrink-0">

@@ -94,6 +94,11 @@ async function scanDir(dirPath: string, basePath: string): Promise<string[]> {
     const fullPath = `${dirPath}/${entry.name}`;
     const relPath = fullPath.slice(basePath.length + 1);
     if (entry.isDirectory) {
+      // .swarm bundle detection -- emit as leaf file, skip recursion
+      if (entry.name.endsWith(".swarm")) {
+        paths.push(relPath);
+        continue;
+      }
       paths.push(relPath + "/");
       const subPaths = await scanDir(fullPath, basePath);
       paths.push(...subPaths);
@@ -282,6 +287,9 @@ function insertIntoDir(
  * the result is deterministic. For YAML files we use path-segment heuristics.
  */
 function inferFileTypeFromPath(relPath: string, name: string): FileType {
+  // .swarm bundle directories treated as leaf files
+  if (name.endsWith(".swarm")) return "swarm_bundle";
+
   // Unambiguous by extension
   const byExt = getFileTypeByExtension(name);
   if (byExt !== null) return byExt;

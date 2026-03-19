@@ -104,7 +104,14 @@ function ExplorerPanelConnected() {
         const absPath = project
           ? `${project.rootPath}/${file.path}`
           : file.path;
-        usePaneStore.getState().openFile(absPath, file.name);
+        if (file.fileType === "swarm_bundle") {
+          usePaneStore.getState().openApp(
+            `/swarm-board/${encodeURIComponent(absPath)}`,
+            file.name.replace(/\.swarm$/, ""),
+          );
+        } else {
+          usePaneStore.getState().openFile(absPath, file.name);
+        }
       }}
       onExpandAll={actions.expandAll}
       onCollapseAll={actions.collapseAll}

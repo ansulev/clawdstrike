@@ -217,6 +217,11 @@ export function normalizeWorkbenchRoute(route: string): string {
     return `${url.pathname}${url.search}` || "/home";
   }
 
+  // Swarm board routes pass through unchanged (they contain the bundle path)
+  if (url.pathname.startsWith("/swarm-board/")) {
+    return `${url.pathname}${url.search}` || "/swarm-board";
+  }
+
   // Redirect /editor?panel=guards and /editor?panel=compare to standalone routes
   // FLAT-08: /editor redirects to /home
   if (url.pathname === "/editor") {
@@ -260,6 +265,16 @@ export function getWorkbenchRouteLabel(route: string): string {
   if (url.pathname === "/live-agent") return "Live Agent";
   if (url.pathname === "/sdk-integration") return "SDK Integration";
   if (url.pathname === "/coverage") return "Coverage";
+  if (url.pathname.startsWith("/swarm-board/")) {
+    const segments = url.pathname.split("/").filter(Boolean);
+    const last = segments[segments.length - 1];
+    try {
+      const decoded = decodeURIComponent(last);
+      return decoded.replace(/\.swarm$/, "").split("/").pop() || "Swarm Board";
+    } catch {
+      return "Swarm Board";
+    }
+  }
   if (url.pathname === "/swarm-board") return "Swarm Board";
   if (url.pathname === "/hunt") return "Hunt";
   if (url.pathname === "/simulator") return "Simulator";
@@ -326,6 +341,7 @@ export const WORKBENCH_ROUTE_OBJECTS: RouteObject[] = [
   { path: "missions", element: <MissionControlPage /> },
   { path: "swarms", element: <SwarmPage /> },
   { path: "swarms/:id", element: <SwarmDetail /> },
+  { path: "swarm-board/*", element: <Suspense fallback={<div className="flex-1" />}><SwarmBoardPage /></Suspense> },
   { path: "swarm-board", element: <Suspense fallback={<div className="flex-1" />}><SwarmBoardPage /></Suspense> },
   { path: "lab", element: <LabLayout /> },
   { path: "topology", element: <TopologyLayout /> },

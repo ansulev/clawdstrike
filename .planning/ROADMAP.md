@@ -59,7 +59,7 @@ Plans:
   4. A manifest declaring an unknown permission (e.g., `"filesystem:write"`) is rejected at install time with a validation error
 **Plans:** 2 plans
 Plans:
-- [ ] 03-01-PLAN.md -- Permission types + METHOD_TO_PERMISSION mapping + bridge host enforcement middleware
+- [x] 03-01-PLAN.md -- Permission types + METHOD_TO_PERMISSION mapping + bridge host enforcement middleware
 - [ ] 03-02-PLAN.md -- Network domain scoping + manifest validation + loader wiring + install prompt
 
 ### Phase 4: Plugin Audit Trail
@@ -94,6 +94,6 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 |-------|----------------|--------|-----------|
 | 1. postMessage RPC Bridge | 2/2 | Complete | 2026-03-19 |
 | 2. iframe Sandbox | 2/2 | Complete | 2026-03-19 |
-| 3. Permission System | 0/2 | Not started | - |
+| 3. Permission System | 1/2 | In progress | - |
 | 4. Plugin Audit Trail | 0/TBD | Not started | - |
 | 5. Emergency Revocation | 0/TBD | Not started | - |

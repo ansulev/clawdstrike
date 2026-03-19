@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: milestone
 status: in-progress
-stopped_at: Completed 02-02-PLAN.md
-last_updated: "2026-03-19T05:13:30Z"
-last_activity: 2026-03-19 -- Completed PluginLoader trust-tier fork + integration tests (02-02)
+stopped_at: Completed 03-01-PLAN.md
+last_updated: "2026-03-19T05:26:35Z"
+last_activity: 2026-03-19 -- Completed permission types + enforcement middleware (03-01)
 progress:
   total_phases: 5
   completed_phases: 2
-  total_plans: 2
-  completed_plans: 2
-  percent: 40
+  total_plans: 5
+  completed_plans: 5
+  percent: 50
 ---
 
 # Project State
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-19)
 
 **Core value:** Community plugins run in sandboxed iframes with capability-based permissions, Ed25519 audit trail, and fleet-wide emergency revocation
-**Current focus:** Phase 2 complete -- ready for Phase 3 (Permission System)
+**Current focus:** Phase 3 in progress -- Permission System (Plan 1 of 2 complete)
 
 ## Current Position
 
-Phase: 2 of 5 (iframe Sandbox) -- COMPLETE
-Plan: 2 of 2 complete
-Status: Phase complete
-Last activity: 2026-03-19 -- Completed PluginLoader trust-tier fork + integration tests (02-02)
+Phase: 3 of 5 (Permission System)
+Plan: 1 of 2 complete
+Status: In progress
+Last activity: 2026-03-19 -- Completed permission types + enforcement middleware (03-01)
 
-Progress: [####░░░░░░] 40%
+Progress: [#####░░░░░] 50%
 
 ## Previous Milestones
 
@@ -60,6 +60,10 @@ Progress: [####░░░░░░] 40%
 - No iframe.onload wait -- contentWindow available immediately after appendChild (02-02)
 - Community plugins store module: null in LoadedPlugin; code runs in iframe not host (02-02)
 - resolvePluginCode defaults to empty string for declarative-only community plugins (02-02)
+- Permission strings use colon notation (guards:register) while bridge methods use dot notation (guards.register) -- intentionally different namespaces (03-01)
+- permissions field on BridgeHostOptions is optional; null permissionSet means no enforcement for backward compat (03-01)
+- Permission check runs BEFORE handler lookup/dispatch -- denied calls never touch handlers (03-01)
+- sendError updated from 3-variant union to full BridgeErrorCode type for extensibility (03-01)
 
 ### Pending Todos
 None yet.
@@ -69,6 +73,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-19T05:13:30Z
-Stopped at: Completed 02-02-PLAN.md (Phase 2 complete)
+Last session: 2026-03-19T05:26:35Z
+Stopped at: Completed 03-01-PLAN.md
 Resume file: None

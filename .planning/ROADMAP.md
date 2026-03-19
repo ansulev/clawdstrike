@@ -14,7 +14,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: postMessage RPC Bridge** - Build typed request/response and event subscription protocol over postMessage with host-side dispatch to registries
 - [x] **Phase 2: iframe Sandbox** - Isolate community plugins in null-origin iframes with strict CSP, fork PluginLoader by trust tier
-- [ ] **Phase 3: Permission System** - Capability-based permissions declared in manifest, enforced at bridge middleware, with domain-scoped network access
+- [x] **Phase 3: Permission System** - Capability-based permissions declared in manifest, enforced at bridge middleware, with domain-scoped network access
 - [ ] **Phase 4: Plugin Audit Trail** - Ed25519-signed receipts for every plugin action, local SQLite storage, hushd forwarding, and audit viewer UI
 - [ ] **Phase 5: Emergency Revocation** - Fleet-wide plugin kill via hushd SSE broadcast, offline sync on reconnect, revoked lifecycle state
 
@@ -60,7 +60,7 @@ Plans:
 **Plans:** 2 plans
 Plans:
 - [x] 03-01-PLAN.md -- Permission types + METHOD_TO_PERMISSION mapping + bridge host enforcement middleware
-- [ ] 03-02-PLAN.md -- Network domain scoping + manifest validation + loader wiring + install prompt
+- [x] 03-02-PLAN.md -- Network domain scoping + manifest validation + loader wiring + install prompt
 
 ### Phase 4: Plugin Audit Trail
 **Goal**: Every action a community plugin takes through the bridge is recorded as an Ed25519-signed receipt, queryable locally and forwardable to hushd for fleet aggregation
@@ -94,6 +94,6 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 |-------|----------------|--------|-----------|
 | 1. postMessage RPC Bridge | 2/2 | Complete | 2026-03-19 |
 | 2. iframe Sandbox | 2/2 | Complete | 2026-03-19 |
-| 3. Permission System | 1/2 | In progress | - |
+| 3. Permission System | 2/2 | Complete | 2026-03-19 |
 | 4. Plugin Audit Trail | 0/TBD | Not started | - |
 | 5. Emergency Revocation | 0/TBD | Not started | - |

@@ -537,6 +537,151 @@ describe("PluginBridgeHost", () => {
     });
   });
 
+  // ---- Receipt Middleware Integration ----
+
+  describe("receipt middleware integration", () => {
+    let receiptHost: PluginBridgeHost;
+    let mockRecordAllowed: ReturnType<typeof vi.fn>;
+    let mockRecordDenied: ReturnType<typeof vi.fn>;
+    let mockRecordError: ReturnType<typeof vi.fn>;
+
+    beforeEach(() => {
+      mockRecordAllowed = vi.fn().mockResolvedValue(undefined);
+      mockRecordDenied = vi.fn().mockResolvedValue(undefined);
+      mockRecordError = vi.fn().mockResolvedValue(undefined);
+    });
+
+    afterEach(() => {
+      receiptHost?.destroy();
+    });
+
+    it("calls recordAllowed after a successful guards.register dispatch", () => {
+      receiptHost = new PluginBridgeHost({
+        pluginId: "receipt-plugin",
+        targetWindow: mockTargetWindow as unknown as Window,
+        permissions: ["guards:register"],
+        receiptMiddleware: {
+          recordAllowed: mockRecordAllowed,
+          recordDenied: mockRecordDenied,
+          recordError: mockRecordError,
+        },
+      });
+
+      receiptHost.handleMessage(
+        makeMessageEvent(
+          makeRequest("guards.register", {
+            id: "g1",
+            name: "G1",
+            technicalName: "G1Guard",
+            description: "",
+            category: "detection",
+            defaultVerdict: "deny",
+            icon: "IconShield",
+            configFields: [],
+          }),
+        ),
+      );
+
+      // Response should have been sent
+      const reply = mockTargetWindow.postMessage.mock
+        .calls[0][0] as BridgeResponse;
+      expect(reply.type).toBe("response");
+      expect(reply.result).toMatchObject({ registered: true });
+
+      // Receipt middleware should have been called with recordAllowed
+      expect(mockRecordAllowed).toHaveBeenCalledWith(
+        "guards.register",
+        expect.anything(),
+        expect.any(Number),
+      );
+    });
+
+    it("calls recordDenied after a permission-denied call", () => {
+      receiptHost = new PluginBridgeHost({
+        pluginId: "receipt-denied-plugin",
+        targetWindow: mockTargetWindow as unknown as Window,
+        permissions: [], // deny all
+        receiptMiddleware: {
+          recordAllowed: mockRecordAllowed,
+          recordDenied: mockRecordDenied,
+          recordError: mockRecordError,
+        },
+      });
+
+      receiptHost.handleMessage(
+        makeMessageEvent(
+          makeRequest("guards.register", { id: "g1" }),
+        ),
+      );
+
+      const reply = mockTargetWindow.postMessage.mock
+        .calls[0][0] as BridgeErrorResponse;
+      expect(reply.type).toBe("error");
+      expect(reply.error.code).toBe("PERMISSION_DENIED");
+
+      // Receipt middleware should have been called with recordDenied
+      expect(mockRecordDenied).toHaveBeenCalledWith(
+        "guards.register",
+        expect.anything(),
+        "guards:register",
+      );
+    });
+
+    it("calls recordAllowed for a successful storage.set dispatch", () => {
+      receiptHost = new PluginBridgeHost({
+        pluginId: "receipt-storage-plugin",
+        targetWindow: mockTargetWindow as unknown as Window,
+        permissions: ["storage:write"],
+        receiptMiddleware: {
+          recordAllowed: mockRecordAllowed,
+          recordDenied: mockRecordDenied,
+          recordError: mockRecordError,
+        },
+      });
+
+      receiptHost.handleMessage(
+        makeMessageEvent(
+          makeRequest("storage.set", { key: "k", value: "v" }),
+        ),
+      );
+
+      expect(mockRecordAllowed).toHaveBeenCalledWith(
+        "storage.set",
+        expect.anything(),
+        expect.any(Number),
+      );
+    });
+
+    it("calls recordError when a handler throws (sync)", () => {
+      vi.mocked(registerGuard).mockImplementationOnce(() => {
+        throw new Error("handler boom");
+      });
+
+      receiptHost = new PluginBridgeHost({
+        pluginId: "receipt-err-plugin",
+        targetWindow: mockTargetWindow as unknown as Window,
+        permissions: ["guards:register"],
+        receiptMiddleware: {
+          recordAllowed: mockRecordAllowed,
+          recordDenied: mockRecordDenied,
+          recordError: mockRecordError,
+        },
+      });
+
+      receiptHost.handleMessage(
+        makeMessageEvent(
+          makeRequest("guards.register", { id: "g1" }),
+        ),
+      );
+
+      expect(mockRecordError).toHaveBeenCalledWith(
+        "guards.register",
+        expect.anything(),
+        expect.any(Number),
+      );
+    });
+  });
+
   // ---- Network fetch handler ----
 
   describe("network.fetch handler", () => {

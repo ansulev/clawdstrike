@@ -27,6 +27,7 @@ import {
   checkNetworkPermission,
 } from "./permissions";
 import type { NetworkPermission } from "../types";
+import type { ReceiptMiddleware } from "./receipt-middleware";
 import { registerGuard } from "../../workbench/guard-registry";
 import { registerFileType } from "../../workbench/file-type-registry";
 import { statusBarRegistry } from "../../workbench/status-bar-registry";
@@ -60,6 +61,12 @@ export interface BridgeHostOptions {
    * handler to enforce domain-scoped access control.
    */
   networkPermissions?: NetworkPermission[];
+  /**
+   * Receipt generation middleware. When provided, every bridge dispatch
+   * produces a signed PluginActionReceipt (allowed, denied, or error).
+   * Receipt generation is fire-and-forget (non-blocking).
+   */
+  receiptMiddleware?: ReceiptMiddleware | null;
 }
 
 /**
@@ -121,6 +128,9 @@ export class PluginBridgeHost {
   /** Network permissions with domain allowlists for fetch proxying. */
   private networkPermissions: NetworkPermission[];
 
+  /** Receipt generation middleware (fire-and-forget). */
+  private receiptMiddleware: ReceiptMiddleware | null;
+
   constructor(options: BridgeHostOptions) {
     this.pluginId = options.pluginId;
     this.targetWindow = options.targetWindow;
@@ -129,6 +139,7 @@ export class PluginBridgeHost {
       ? new Set(options.permissions)
       : null;
     this.networkPermissions = options.networkPermissions ?? [];
+    this.receiptMiddleware = options.receiptMiddleware ?? null;
 
     this.registerDefaultHandlers();
   }
@@ -165,6 +176,14 @@ export class PluginBridgeHost {
           "PERMISSION_DENIED",
           `Plugin "${this.pluginId}" requires "${requiredPerm}" permission for "${method}"`,
         );
+        // Receipt: record denial (fire-and-forget, AUDIT-02)
+        if (this.receiptMiddleware) {
+          void this.receiptMiddleware
+            .recordDenied(method, params, requiredPerm)
+            .catch((e) =>
+              console.warn("[bridge-host] receipt recordDenied failed:", e),
+            );
+        }
         return;
       }
     }
@@ -175,14 +194,28 @@ export class PluginBridgeHost {
       return;
     }
 
+    const startTime = performance.now();
+
     try {
       const result = handler(params);
 
       // Handle async handlers
       if (result instanceof Promise) {
         result
-          .then((resolved) => this.sendResponse(id, resolved))
+          .then((resolved) => {
+            const durationMs = performance.now() - startTime;
+            this.sendResponse(id, resolved);
+            // Receipt: record allowed (fire-and-forget)
+            if (this.receiptMiddleware) {
+              void this.receiptMiddleware
+                .recordAllowed(method, params, durationMs)
+                .catch((e) =>
+                  console.warn("[bridge-host] receipt recordAllowed failed:", e),
+                );
+            }
+          })
           .catch((err: unknown) => {
+            const durationMs = performance.now() - startTime;
             const code: BridgeErrorCode =
               err instanceof PermissionDeniedError
                 ? "PERMISSION_DENIED"
@@ -190,17 +223,61 @@ export class PluginBridgeHost {
             const message =
               err instanceof Error ? err.message : String(err);
             this.sendError(id, code, message);
+            // Receipt: record error or denial from handler
+            if (this.receiptMiddleware) {
+              if (code === "PERMISSION_DENIED") {
+                const requiredPerm = METHOD_TO_PERMISSION[method] ?? method;
+                void this.receiptMiddleware
+                  .recordDenied(method, params, requiredPerm)
+                  .catch((e) =>
+                    console.warn("[bridge-host] receipt recordDenied failed:", e),
+                  );
+              } else {
+                void this.receiptMiddleware
+                  .recordError(method, params, durationMs)
+                  .catch((e) =>
+                    console.warn("[bridge-host] receipt recordError failed:", e),
+                  );
+              }
+            }
           });
       } else {
+        const durationMs = performance.now() - startTime;
         this.sendResponse(id, result);
+        // Receipt: record allowed (fire-and-forget)
+        if (this.receiptMiddleware) {
+          void this.receiptMiddleware
+            .recordAllowed(method, params, durationMs)
+            .catch((e) =>
+              console.warn("[bridge-host] receipt recordAllowed failed:", e),
+            );
+        }
       }
     } catch (err: unknown) {
+      const durationMs = performance.now() - startTime;
       const code: BridgeErrorCode =
         err instanceof PermissionDeniedError
           ? "PERMISSION_DENIED"
           : "INTERNAL_ERROR";
       const message = err instanceof Error ? err.message : String(err);
       this.sendError(id, code, message);
+      // Receipt: record error or denial from handler
+      if (this.receiptMiddleware) {
+        if (code === "PERMISSION_DENIED") {
+          const requiredPerm = METHOD_TO_PERMISSION[method] ?? method;
+          void this.receiptMiddleware
+            .recordDenied(method, params, requiredPerm)
+            .catch((e) =>
+              console.warn("[bridge-host] receipt recordDenied failed:", e),
+            );
+        } else {
+          void this.receiptMiddleware
+            .recordError(method, params, durationMs)
+            .catch((e) =>
+              console.warn("[bridge-host] receipt recordError failed:", e),
+            );
+        }
+      }
     }
   }
 

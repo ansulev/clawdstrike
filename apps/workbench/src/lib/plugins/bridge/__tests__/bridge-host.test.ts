@@ -536,4 +536,102 @@ describe("PluginBridgeHost", () => {
       expect(reply.error.code).toBe("PERMISSION_DENIED");
     });
   });
+
+  // ---- Network fetch handler ----
+
+  describe("network.fetch handler", () => {
+    let netHost: PluginBridgeHost;
+
+    afterEach(() => {
+      netHost?.destroy();
+      vi.restoreAllMocks();
+    });
+
+    it("proxies fetch for allowed domain and returns response", async () => {
+      const mockResponse = {
+        status: 200,
+        statusText: "OK",
+        headers: new Map([["content-type", "application/json"]]),
+        text: async () => '{"result": "ok"}',
+      };
+      // Mock headers.entries() for Object.fromEntries
+      (mockResponse.headers as unknown as { entries: () => IterableIterator<[string, string]> }).entries = () =>
+        mockResponse.headers.entries();
+
+      vi.stubGlobal("fetch", vi.fn().mockResolvedValue(mockResponse));
+
+      netHost = new PluginBridgeHost({
+        pluginId: "net-plugin",
+        targetWindow: mockTargetWindow as unknown as Window,
+        permissions: ["network:fetch"],
+        networkPermissions: [
+          { type: "network:fetch", allowedDomains: ["api.virustotal.com"] },
+        ],
+      });
+
+      netHost.handleMessage(
+        makeMessageEvent(
+          makeRequest("network.fetch", {
+            url: "https://api.virustotal.com/v3/files",
+          }),
+        ),
+      );
+
+      // Wait for async handler to complete
+      await vi.waitFor(() => {
+        expect(mockTargetWindow.postMessage).toHaveBeenCalled();
+      });
+
+      const reply = mockTargetWindow.postMessage.mock
+        .calls[0][0] as BridgeResponse;
+      expect(reply.type).toBe("response");
+      expect(reply.result).toMatchObject({
+        status: 200,
+        statusText: "OK",
+      });
+    });
+
+    it("returns PERMISSION_DENIED for domain not in allowed list", () => {
+      netHost = new PluginBridgeHost({
+        pluginId: "net-plugin-denied",
+        targetWindow: mockTargetWindow as unknown as Window,
+        permissions: ["network:fetch"],
+        networkPermissions: [
+          { type: "network:fetch", allowedDomains: ["api.virustotal.com"] },
+        ],
+      });
+
+      netHost.handleMessage(
+        makeMessageEvent(
+          makeRequest("network.fetch", { url: "https://evil.com/steal" }),
+        ),
+      );
+
+      const reply = mockTargetWindow.postMessage.mock
+        .calls[0][0] as BridgeErrorResponse;
+      expect(reply.type).toBe("error");
+      expect(reply.error.code).toBe("PERMISSION_DENIED");
+    });
+
+    it("returns PERMISSION_DENIED when network:fetch permission is not granted", () => {
+      netHost = new PluginBridgeHost({
+        pluginId: "no-net-plugin",
+        targetWindow: mockTargetWindow as unknown as Window,
+        permissions: ["guards:register"],
+      });
+
+      netHost.handleMessage(
+        makeMessageEvent(
+          makeRequest("network.fetch", {
+            url: "https://api.virustotal.com/v3/files",
+          }),
+        ),
+      );
+
+      const reply = mockTargetWindow.postMessage.mock
+        .calls[0][0] as BridgeErrorResponse;
+      expect(reply.type).toBe("error");
+      expect(reply.error.code).toBe("PERMISSION_DENIED");
+    });
+  });
 });

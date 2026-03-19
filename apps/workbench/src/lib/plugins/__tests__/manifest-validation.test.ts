@@ -196,4 +196,108 @@ describe("validateManifest", () => {
     expect(fields).toContain("id");
     expect(fields).toContain("name");
   });
+
+  // ---- Permission validation ----
+
+  // Test 14: Valid string permissions pass
+  it("accepts a manifest with valid string permissions", () => {
+    const manifest = createTestManifest({
+      permissions: ["guards:register", "storage:read"],
+    });
+    const result = validateManifest(manifest);
+
+    expect(result.valid).toBe(true);
+    expect(result.errors).toEqual([]);
+  });
+
+  // Test 15: Unknown permission string is rejected
+  it("rejects a manifest with unknown permission string", () => {
+    const manifest = createTestManifest({
+      permissions: ["filesystem:write"] as unknown as PluginManifest["permissions"],
+    });
+    const result = validateManifest(manifest);
+
+    expect(result.valid).toBe(false);
+    expect(
+      result.errors.some(
+        (e: ManifestValidationError) =>
+          e.field.includes("permissions") && e.message.includes("unknown permission"),
+      ),
+    ).toBe(true);
+  });
+
+  // Test 16: Valid NetworkPermission object passes
+  it("accepts a manifest with valid NetworkPermission object", () => {
+    const manifest = createTestManifest({
+      permissions: [
+        { type: "network:fetch", allowedDomains: ["api.virustotal.com"] },
+      ],
+    });
+    const result = validateManifest(manifest);
+
+    expect(result.valid).toBe(true);
+    expect(result.errors).toEqual([]);
+  });
+
+  // Test 17: NetworkPermission with empty allowedDomains is rejected
+  it("rejects a NetworkPermission with empty allowedDomains", () => {
+    const manifest = createTestManifest({
+      permissions: [
+        { type: "network:fetch", allowedDomains: [] },
+      ],
+    });
+    const result = validateManifest(manifest);
+
+    expect(result.valid).toBe(false);
+    expect(
+      result.errors.some(
+        (e: ManifestValidationError) =>
+          e.field.includes("permissions") && e.message.includes("allowedDomains"),
+      ),
+    ).toBe(true);
+  });
+
+  // Test 18: Unknown type in NetworkPermission object is rejected
+  it("rejects a permission object with unknown type", () => {
+    const manifest = createTestManifest({
+      permissions: [
+        { type: "unknown:type", allowedDomains: ["example.com"] } as unknown as PluginManifest["permissions"] extends (infer U)[] ? U : never,
+      ],
+    });
+    const result = validateManifest(manifest);
+
+    expect(result.valid).toBe(false);
+    expect(
+      result.errors.some(
+        (e: ManifestValidationError) => e.field.includes("permissions"),
+      ),
+    ).toBe(true);
+  });
+
+  // Test 19: permissions as non-array is rejected
+  it("rejects permissions that is not an array", () => {
+    const manifest = createTestManifest({
+      permissions: "not-an-array" as unknown as PluginManifest["permissions"],
+    });
+    const result = validateManifest(manifest);
+
+    expect(result.valid).toBe(false);
+    expect(
+      result.errors.some(
+        (e: ManifestValidationError) =>
+          e.field === "permissions" && e.message.includes("array"),
+      ),
+    ).toBe(true);
+  });
+
+  // Test 20: Missing permissions field is valid (permissions are optional)
+  it("accepts a manifest without permissions field", () => {
+    const manifest = createTestManifest();
+    // Ensure no permissions key
+    delete (manifest as Partial<PluginManifest>).permissions;
+    const result = validateManifest(manifest);
+
+    expect(result.valid).toBe(true);
+    expect(result.errors).toEqual([]);
+  });
 });

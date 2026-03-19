@@ -8,6 +8,8 @@ import { FILE_TYPE_REGISTRY } from "@/lib/workbench/file-type-registry";
 import { GUARD_REGISTRY } from "@/lib/workbench/guard-registry";
 import type { GuardId } from "@/lib/workbench/types";
 import { cn } from "@/lib/utils";
+import { usePaneStore, getActivePane } from "@/features/panes/pane-store";
+import { getPaneActiveView } from "@/features/panes/pane-tree";
 import {
   IconPlugConnected,
   IconRefresh,
@@ -25,6 +27,16 @@ export function StatusBar() {
   const rawFileType = currentTab?.fileType ?? "clawdstrike_policy";
   const fileDescriptor = FILE_TYPE_REGISTRY[rawFileType as keyof typeof FILE_TYPE_REGISTRY];
   const policyTab = fileDescriptor?.id === "clawdstrike_policy";
+
+  // Active pane view context
+  const paneRoot = usePaneStore((s) => s.root);
+  const activePaneId = usePaneStore((s) => s.activePaneId);
+  const activePane = getActivePane(paneRoot, activePaneId);
+  const activePaneView = activePane ? getPaneActiveView(activePane) : null;
+  const paneFileName = activePaneView?.label ?? null;
+  const paneFileDirty = activePaneView?.dirty ?? false;
+  const paneFileType = activePaneView?.fileType ?? null;
+  const isFileRoute = activePaneView?.route?.startsWith("/file/") ?? false;
 
   // ---- Validation status ----
   const prefersNativeDetectionValidation = desktop && !policyTab;
@@ -145,6 +157,29 @@ export function StatusBar() {
 
         <span className="w-px h-3 bg-[#2d3240]/60" />
 
+        {/* Active pane view context */}
+        {activePaneView && (
+          <>
+            <span className="flex items-center gap-1 text-[#ece7dc]/70 truncate max-w-[200px]" title={`Active: ${paneFileName}${paneFileDirty ? " (unsaved)" : ""}`}>
+              {(paneFileDirty || state.dirty) && isFileRoute && (
+                <span className="inline-block w-[6px] h-[6px] rounded-full bg-[#d4a84b] shrink-0" />
+              )}
+              <span className="truncate">{paneFileName}</span>
+            </span>
+
+            {isFileRoute && paneFileType && (
+              <>
+                <span className="w-px h-3 bg-[#2d3240]/60" />
+                <span className="text-[#6f7f9a]/60 text-[10px] font-mono">
+                  {paneFileType}
+                </span>
+              </>
+            )}
+
+            <span className="w-px h-3 bg-[#2d3240]/60" />
+          </>
+        )}
+
         {/* Tab count */}
         {tabs.length > 1 && (
           <>
@@ -155,22 +190,13 @@ export function StatusBar() {
           </>
         )}
 
-        {/* Active policy name + dirty indicator */}
-        <span className="flex items-center gap-1 text-[#ece7dc]/70 truncate max-w-[200px]" title={`Active policy: ${currentTab?.name || activePolicy.name}${state.dirty ? " (unsaved changes)" : ""}`}>
-          {state.dirty && (
-            <span className="inline-block w-[6px] h-[6px] rounded-full bg-[#d4a84b] shrink-0" />
-          )}
-          <span className="truncate">{currentTab?.name || activePolicy.name}</span>
-        </span>
-
-        <span className="w-px h-3 bg-[#2d3240]/60" />
-
+        {/* File path (from workbench state, for backward compat) */}
         {filePath ? (
           <span className="text-[#6f7f9a]/70 truncate max-w-[400px]" title={filePath}>
             {filePath}
           </span>
         ) : (
-          <span className="text-[#6f7f9a]/30 italic">unsaved</span>
+          !isFileRoute && <span className="text-[#6f7f9a]/30 italic">unsaved</span>
         )}
       </div>
     </footer>

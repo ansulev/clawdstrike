@@ -86,7 +86,10 @@ Plans:
   3. A workbench instance that was offline during revocation deactivates the plugin on reconnect after syncing the revocation list from hushd
   4. If a revoked plugin has a bridge call in-flight, the call returns `PLUGIN_REVOKED` error and the iframe is removed after draining (5-second timeout)
   5. A time-limited revocation (e.g., revoked for 24 hours) automatically allows reactivation after the expiration period
-**Plans**: TBD
+**Plans:** 2 plans
+Plans:
+- [ ] 05-01-PLAN.md -- Revocation store + "revoked" lifecycle state + bridge host revocation guard + drain timeout
+- [ ] 05-02-PLAN.md -- hushd SSE revocation listener + reconnect sync + revocation badge UI
 
 ## Progress
 
@@ -99,4 +102,4 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 | 2. iframe Sandbox | 2/2 | Complete | 2026-03-19 |
 | 3. Permission System | 2/2 | Complete | 2026-03-19 |
 | 4. Plugin Audit Trail | 2/2 | Complete | 2026-03-19 |
-| 5. Emergency Revocation | 0/TBD | Not started | - |
+| 5. Emergency Revocation | 0/2 | Not started | - |

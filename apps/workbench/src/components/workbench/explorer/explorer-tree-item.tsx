@@ -104,13 +104,14 @@ export function ExplorerTreeItem({
         <div className="absolute left-0 top-0 bottom-0 w-[2px] bg-[#d4a84b]" />
       )}
 
-      {/* Connector line segment */}
-      {file.depth > 0 && (
+      {/* Indent guide lines -- one vertical line per ancestor depth level */}
+      {Array.from({ length: file.depth }, (_, i) => (
         <div
-          className="absolute top-0 bottom-0 border-l border-[#2d3240]/30"
-          style={{ left: (file.depth - 1) * 16 + 11 }}
+          key={i}
+          className="absolute top-0 bottom-0 border-l border-[#2d3240]/30 indent-guide"
+          style={{ left: i * 16 + 11 }}
         />
-      )}
+      ))}
 
       {/* Chevron (directories) or spacer (files) */}
       {file.isDirectory ? (

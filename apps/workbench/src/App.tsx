@@ -1,4 +1,4 @@
-import { Component, Suspense, useEffect } from "react";
+import { Component, Suspense, useEffect, useRef } from "react";
 import type { ErrorInfo, ReactNode } from "react";
 import { HashRouter, useRoutes } from "react-router-dom";
 import { ToastProvider } from "@/components/ui/toast";
@@ -76,7 +76,7 @@ function LoadingFallback() {
  *
  * Fire-and-forget: errors are logged but never thrown.
  */
-function useWorkspaceBootstrap() {
+function useWorkspaceBootstrap(toastRef: React.RefObject<ReturnType<typeof useToast>["toast"] | null>) {
   useEffect(() => {
     async function init() {
       const { isDesktop } = await import("@/lib/tauri-bridge");
@@ -125,6 +125,18 @@ function useWorkspaceBootstrap() {
       } finally {
         useProjectStore.getState().actions.setLoading(false);
       }
+
+      // Restore the previous pane session AFTER workspace roots are loaded
+      // so that restored file panes can resolve against mounted projects.
+      const count = usePaneStore.getState().restoreSession();
+      if (count > 0 && toastRef.current) {
+        toastRef.current({
+          type: "info",
+          title: `Restored ${count} file${count === 1 ? "" : "s"}`,
+          description: "Your previous session has been restored",
+          duration: 3000,
+        });
+      }
     }
     init().catch((err) => {
       console.warn("[workspace-bootstrap] Init failed:", err);
@@ -133,36 +145,16 @@ function useWorkspaceBootstrap() {
   }, []);
 }
 
-/**
- * On app launch, check if a pane session was restored from localStorage.
- * If file views were restored, show an info toast.
- *
- * Note: The pane store already initializes from the saved session at
- * module load time (synchronous), so the tree is available before React
- * renders. This hook only handles the notification.
- */
-function useSessionRestore() {
-  const { toast } = useToast();
-  useEffect(() => {
-    const count = usePaneStore.getState().restoreSession();
-    if (count > 0) {
-      toast({
-        type: "info",
-        title: `Restored ${count} file${count === 1 ? "" : "s"}`,
-        description: "Your previous session has been restored",
-        duration: 3000,
-      });
-    }
-  }, [toast]);
-}
-
 function WorkbenchBootstraps() {
+  const { toast } = useToast();
+  const toastRef = useRef<typeof toast | null>(null);
+  toastRef.current = toast;
+
   useOperator();
   useFleetConnection();
   useHintSettingsSafe();
   useMultiPolicyBootstrap();
-  useWorkspaceBootstrap();
-  useSessionRestore();
+  useWorkspaceBootstrap(toastRef);
   return null;
 }
 

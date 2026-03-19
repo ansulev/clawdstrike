@@ -18,8 +18,10 @@ import type {
   BridgeResponse,
   BridgeErrorResponse,
   BridgeEvent,
+  BridgeErrorCode,
 } from "./types";
 import { isBridgeMessage } from "./types";
+import { checkPermission, METHOD_TO_PERMISSION } from "./permissions";
 import { registerGuard } from "../../workbench/guard-registry";
 import { registerFileType } from "../../workbench/file-type-registry";
 import { statusBarRegistry } from "../../workbench/status-bar-registry";
@@ -42,6 +44,12 @@ export interface BridgeHostOptions {
   targetWindow: Window;
   /** Expected origin for incoming messages. Defaults to "null" (srcdoc iframe). */
   allowedOrigin?: string;
+  /**
+   * Declared permissions for the plugin. When provided, only bridge methods
+   * whose required permission is in this list will be allowed. When omitted,
+   * all calls are allowed (backward compat for internal plugins).
+   */
+  permissions?: string[];
 }
 
 // ---- PluginBridgeHost ----
@@ -80,10 +88,20 @@ export class PluginBridgeHost {
   private targetWindow: Window;
   private allowedOrigin: string;
 
+  /**
+   * Permission enforcement set. When non-null, only bridge methods whose
+   * required permission is in this set are allowed. When null (no permissions
+   * declared), all calls pass through (backward compat for internal plugins).
+   */
+  private permissionSet: Set<string> | null;
+
   constructor(options: BridgeHostOptions) {
     this.pluginId = options.pluginId;
     this.targetWindow = options.targetWindow;
     this.allowedOrigin = options.allowedOrigin ?? "null";
+    this.permissionSet = options.permissions
+      ? new Set(options.permissions)
+      : null;
 
     this.registerDefaultHandlers();
   }
@@ -110,6 +128,19 @@ export class PluginBridgeHost {
     }
 
     const { id, method, params } = data;
+
+    // Permission enforcement -- check BEFORE handler dispatch
+    if (this.permissionSet !== null) {
+      if (!checkPermission(this.permissionSet, method)) {
+        const requiredPerm = METHOD_TO_PERMISSION[method] ?? method;
+        this.sendError(
+          id,
+          "PERMISSION_DENIED",
+          `Plugin "${this.pluginId}" requires "${requiredPerm}" permission for "${method}"`,
+        );
+        return;
+      }
+    }
 
     const handler = this.handlers.get(method);
     if (!handler) {
@@ -254,7 +285,7 @@ export class PluginBridgeHost {
    */
   private sendError(
     id: string,
-    code: "METHOD_NOT_FOUND" | "INVALID_PARAMS" | "INTERNAL_ERROR",
+    code: BridgeErrorCode,
     message: string,
   ): void {
     const response: BridgeErrorResponse = {

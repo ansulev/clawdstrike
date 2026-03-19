@@ -16,8 +16,11 @@ import { SigmaVisualPanel } from "@/components/workbench/editor/sigma-visual-pan
 import { OcsfVisualPanel } from "@/components/workbench/editor/ocsf-visual-panel";
 import { YaraVisualPanel } from "@/components/workbench/editor/yara-visual-panel";
 import { YamlPreviewPanel } from "@/components/workbench/editor/yaml-preview-panel";
+import { ViewContainer } from "@/components/plugins/view-container";
 import { useMultiPolicy, useWorkbench, type SplitMode } from "@/lib/workbench/multi-policy-store";
 import { useNativeValidation } from "@/lib/workbench/use-native-validation";
+import { usePluginViewTabs } from "@/lib/plugins/plugin-view-tab-store";
+import { getView } from "@/lib/plugins/view-registry";
 import { cn } from "@/lib/utils";
 import {
   IconLayoutColumns,
@@ -83,11 +86,12 @@ function PaneTabSelector({
   onSelect: (tabId: string) => void;
 }) {
   const { tabs } = useMultiPolicy();
+  const pluginViewTabs = usePluginViewTabs();
   const available = excludeTabId
     ? tabs.filter((t) => t.id !== excludeTabId)
     : tabs;
 
-  if (available.length === 0) return null;
+  if (available.length === 0 && pluginViewTabs.length === 0) return null;
 
   return (
     <div className="flex items-center px-2 py-1 bg-[#0b0d13] border-b border-[#2d3240]">
@@ -96,7 +100,7 @@ function PaneTabSelector({
         onValueChange={(val) => { if (val) onSelect(val); }}
       >
         <SelectTrigger className="h-7 text-[10px] font-mono bg-[#131721] border-[#2d3240] text-[#ece7dc]">
-          <SelectValue placeholder="Select policy..." />
+          <SelectValue placeholder="Select tab..." />
         </SelectTrigger>
         <SelectContent className="bg-[#131721] border-[#2d3240]">
           {available.map((tab) => (
@@ -107,6 +111,19 @@ function PaneTabSelector({
             >
               {tab.name}
               {tab.dirty ? " *" : ""}
+            </SelectItem>
+          ))}
+          {pluginViewTabs.length > 0 && available.length > 0 && (
+            <div className="h-px bg-[#2d3240] my-1" />
+          )}
+          {pluginViewTabs.map((pvTab) => (
+            <SelectItem
+              key={`plugin:${pvTab.viewId}`}
+              value={`plugin:${pvTab.viewId}`}
+              className="text-[10px] font-mono text-[#ece7dc] focus:bg-[#2d3240] focus:text-[#ece7dc]"
+            >
+              {pvTab.label} [Plugin]
+              {pvTab.dirty ? " *" : ""}
             </SelectItem>
           ))}
         </SelectContent>
@@ -252,11 +269,30 @@ export function SplitEditor() {
               onSelect={handleSetSplitTab}
             />
             <div className="flex-1 min-h-0">
-              {splitTabId ? (
+              {splitTabId && splitTabId.startsWith("plugin:") ? (
+                (() => {
+                  const viewId = splitTabId.slice(7);
+                  const reg = getView(viewId);
+                  if (!reg) {
+                    return (
+                      <div className="flex items-center justify-center h-full text-[#6f7f9a]/50 text-[11px] font-mono">
+                        Plugin view not found
+                      </div>
+                    );
+                  }
+                  return (
+                    <ViewContainer
+                      registration={reg}
+                      isActive={true}
+                      slotType="editorTab"
+                    />
+                  );
+                })()
+              ) : splitTabId ? (
                 <SecondaryPanePreview tabId={splitTabId} />
               ) : (
                 <div className="flex items-center justify-center h-full text-[#6f7f9a]/50 text-[11px] font-mono">
-                  Select a policy above to compare
+                  Select a tab above to compare
                 </div>
               )}
             </div>

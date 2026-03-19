@@ -406,23 +406,28 @@ export function ExplorerPanel({
           </div>
         </div>
 
-        {/* Empty state content */}
-        <div className="flex-1 flex flex-col items-center justify-center p-4 text-center gap-3">
+        {/* Hero empty state */}
+        <div className="flex-1 flex flex-col items-center justify-center p-6 text-center gap-4">
           <IconFolderOpen
-            size={28}
-            stroke={1}
-            className="text-[#6f7f9a]/30"
+            size={48}
+            stroke={0.8}
+            className="text-[#6f7f9a]/20"
           />
-          <p className="text-[11px] font-mono text-[#6f7f9a]/70 leading-relaxed">
-            No project open. Open a folder containing detection rules to browse them here.
-          </p>
+          <div className="space-y-1.5">
+            <p className="text-[13px] font-mono text-[#ece7dc]/70 font-medium">
+              No folder open
+            </p>
+            <p className="text-[10px] font-mono text-[#6f7f9a]/50 leading-relaxed max-w-[180px]">
+              Open a folder containing detection rules to get started.
+            </p>
+          </div>
           {onOpenFolder && (
             <button
               type="button"
               onClick={onOpenFolder}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-mono rounded border border-[#d4a84b]/20 text-[#d4a84b] bg-[#d4a84b]/5 hover:bg-[#d4a84b]/10 transition-colors"
+              className="inline-flex items-center gap-2 px-5 py-2.5 text-[12px] font-mono font-medium rounded-md border border-[#d4a84b]/30 text-[#d4a84b] bg-[#d4a84b]/5 hover:bg-[#d4a84b]/15 hover:border-[#d4a84b]/50 transition-colors"
             >
-              <IconFolderOpen size={12} stroke={1.5} />
+              <IconFolderOpen size={16} stroke={1.5} />
               Open Folder
             </button>
           )}
@@ -430,10 +435,10 @@ export function ExplorerPanel({
             <button
               type="button"
               onClick={onAddFolder}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-mono rounded border border-[#d4a84b]/20 text-[#d4a84b] bg-[#d4a84b]/5 hover:bg-[#d4a84b]/10 transition-colors"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-mono text-[#6f7f9a]/60 hover:text-[#ece7dc] transition-colors"
             >
               <IconPlus size={12} stroke={1.5} />
-              Add Folder
+              Add Folder to Workspace
             </button>
           )}
         </div>
@@ -688,11 +693,11 @@ export function ExplorerPanel({
       {/* Footer status bar */}
       <div className="shrink-0 px-3 py-1.5 border-t border-[#2d3240] flex items-center gap-2">
         <span className="text-[9px] font-mono text-[#6f7f9a]/40">
-          {totalFileCount} files
+          {totalFileCount} {totalFileCount === 1 ? "file" : "files"}
         </span>
         {isMultiRoot && (
           <span className="text-[9px] font-mono text-[#6f7f9a]/30">
-            {projects.length} roots
+            {projects.length} {projects.length === 1 ? "root" : "roots"}
           </span>
         )}
         {formatFilter && (

@@ -12,7 +12,7 @@ Harden the community plugin boundary from trust-based to sandbox-based isolation
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: postMessage RPC Bridge** - Build typed request/response and event subscription protocol over postMessage with host-side dispatch to registries
+- [x] **Phase 1: postMessage RPC Bridge** - Build typed request/response and event subscription protocol over postMessage with host-side dispatch to registries
 - [ ] **Phase 2: iframe Sandbox** - Isolate community plugins in null-origin iframes with strict CSP, fork PluginLoader by trust tier
 - [ ] **Phase 3: Permission System** - Capability-based permissions declared in manifest, enforced at bridge middleware, with domain-scoped network access
 - [ ] **Phase 4: Plugin Audit Trail** - Ed25519-signed receipts for every plugin action, local SQLite storage, hushd forwarding, and audit viewer UI
@@ -32,7 +32,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Plans:** 2 plans
 Plans:
 - [x] 01-01-PLAN.md -- Bridge protocol types + PluginBridgeClient (call/subscribe/timeout)
-- [ ] 01-02-PLAN.md -- PluginBridgeHost dispatch + origin validation + integration tests
+- [x] 01-02-PLAN.md -- PluginBridgeHost dispatch + origin validation + integration tests
 
 ### Phase 2: iframe Sandbox
 **Goal**: Community plugins run in isolated null-origin iframes with zero access to the host window, Tauri IPC, cookies, localStorage, or network
@@ -86,7 +86,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. postMessage RPC Bridge | 1/2 | In progress | - |
+| 1. postMessage RPC Bridge | 2/2 | Complete | 2026-03-19 |
 | 2. iframe Sandbox | 0/TBD | Not started | - |
 | 3. Permission System | 0/TBD | Not started | - |
 | 4. Plugin Audit Trail | 0/TBD | Not started | - |

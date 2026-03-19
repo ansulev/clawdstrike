@@ -1,17 +1,17 @@
 ---
 gsd_state_version: 1.0
 milestone: v2.0
-milestone_name: Plugin Sandboxing
-status: in_progress
-stopped_at: Completed 01-01-PLAN.md
-last_updated: "2026-03-19T04:41:56Z"
-last_activity: 2026-03-19 -- Completed bridge protocol types + PluginBridgeClient (01-01)
+milestone_name: milestone
+status: completed
+stopped_at: Completed 01-02-PLAN.md (Phase 1 complete)
+last_updated: "2026-03-19T04:51:07.381Z"
+last_activity: 2026-03-19 -- Completed PluginBridgeHost dispatch + integration tests (01-02)
 progress:
   total_phases: 5
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 2
-  completed_plans: 1
-  percent: 10
+  completed_plans: 2
+  percent: 20
 ---
 
 # Project State
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-19)
 
 **Core value:** Community plugins run in sandboxed iframes with capability-based permissions, Ed25519 audit trail, and fleet-wide emergency revocation
-**Current focus:** Phase 1 postMessage RPC Bridge
+**Current focus:** Phase 1 complete, ready for Phase 2 (iframe Sandbox)
 
 ## Current Position
 
-Phase: 1 of 5 (postMessage RPC Bridge)
-Plan: 1 of 2 complete
-Status: In progress
-Last activity: 2026-03-19 -- Completed bridge protocol types + PluginBridgeClient (01-01)
+Phase: 1 of 5 (postMessage RPC Bridge) -- COMPLETE
+Plan: 2 of 2 complete
+Status: Phase 1 complete
+Last activity: 2026-03-19 -- Completed PluginBridgeHost dispatch + integration tests (01-02)
 
-Progress: [#░░░░░░░░░] 10%
+Progress: [##░░░░░░░░] 20%
 
 ## Previous Milestones
 
@@ -49,6 +49,10 @@ Progress: [#░░░░░░░░░] 10%
 - Events have no id field -- fire-and-forget, not correlated with requests (01-01)
 - BRIDGE_METHODS uses nested object structure mirroring PluginContext namespace hierarchy (01-01)
 - BridgeMethodName type uses recursive conditional type extraction from BRIDGE_METHODS values (01-01)
+- statusBar.register injects render: () => null placeholder since render functions cannot cross iframe boundary (01-02)
+- commands.register stores metadata host-side; actual handler stays in iframe for future callback invocation pattern (01-02)
+- Host uses try/catch + Promise chain for both sync and async handler error propagation (01-02)
+- [Phase 01]: statusBar.register injects render: () => null placeholder since render functions cannot cross iframe boundary (01-02)
 
 ### Pending Todos
 None yet.
@@ -58,6 +62,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-19
-Stopped at: Completed 01-01-PLAN.md (bridge protocol types + PluginBridgeClient)
-Resume file: .planning/phases/01-postmessage-rpc-bridge/01-02-PLAN.md
+Last session: 2026-03-19T04:51:03.863Z
+Stopped at: Completed 01-02-PLAN.md (Phase 1 complete)
+Resume file: None

@@ -23,7 +23,10 @@ Close the gap from "IDE scaffold" to "professional-grade detection engineering I
 - [x] **Phase 6: Detection Engineering Inline** — Gutter test buttons, coverage gap indicators, guard reorder (2 plans)
 - [ ] **Phase 7: Detection Editor Integration** — Surface 50K LOC of orphaned detection engineering features as proper IDE panels
 - [x] **Phase 8: File-First Editor** — Files are pane tabs, FileEditorShell wraps per-file chrome, kill PolicyTabBar (4 plans)
-- [ ] **Phase 9: Default Workspace Bootstrap** — Auto-scaffold ~/.clawdstrike/workspace/, multi-root explorer, example content (2 plans)
+- [x] **Phase 9: Default Workspace Bootstrap** — Auto-scaffold ~/.clawdstrike/workspace/, multi-root explorer, example content (2 plans)
+- [ ] **Phase 10: Live CodeMirror Editor** — Replace FileEditorShell pre tag with real CodeMirror, wired to policy-edit-store (2 plans)
+- [ ] **Phase 11: Visual Polish** — Fix duplicate Home tabs, relative breadcrumbs, tree refresh, status bar updates
+- [ ] **Phase 12: Session Restore** — Persist pane layout + open files to localStorage, restore on launch
 
 ## Phase Details
 
@@ -172,10 +175,56 @@ Plans:
 - [x] 09-01-PLAN.md — Workspace bootstrap module, Tauri fs capabilities, multi-root project store with localStorage persistence
 - [ ] 09-02-PLAN.md — Multi-root Explorer UI, Add Folder button with native dialog, app-level bootstrap hook
 
+### Phase 10: Live CodeMirror Editor
+**Goal**: FileEditorShell renders the real CodeMirror editor with full editing, undo/redo, validation, and dirty tracking — replacing the read-only pre tag
+**Depends on**: Phase 8 (file-first editor)
+**Requirements**: LIVE-01, LIVE-02, LIVE-03, LIVE-04, LIVE-05
+**Success Criteria** (what must be TRUE):
+  1. FileEditorShell renders YamlEditor (CodeMirror) instead of a pre tag for all file types
+  2. Typing in the editor updates policy-edit-store and marks the pane tab as dirty
+  3. Cmd+Z/Cmd+Shift+Z undo/redo work per-file through the edit store's undo stack
+  4. Validation errors appear in the Problems panel for the active file
+  5. Cmd+S saves the file to disk via Tauri fs and clears the dirty indicator
+**Plans**: 2 plans
+
+Plans:
+- [ ] 10-01-PLAN.md — Replace pre tag with YamlEditor (CodeMirror), wire onChange to policy-edit-store, update ProblemsPanel
+- [ ] 10-02-PLAN.md — Wire Cmd+S save to saveDetectionFile, update file.save/file.saveAs commands for file-first tabs
+
+### Phase 11: Visual Polish
+**Goal**: Fix visual inconsistencies that make the IDE feel like a prototype
+**Depends on**: Phase 10
+**Requirements**: POLISH-01, POLISH-02, POLISH-03, POLISH-04, POLISH-05
+**Success Criteria** (what must be TRUE):
+  1. Only one Home tab opens on launch (no duplicates)
+  2. Breadcrumbs show relative path from project root (not full absolute path)
+  3. Explorer tree refreshes after file create/rename/delete (no stale "No detection files found")
+  4. Status bar shows active file name, line/column, file type, and dirty state
+  5. Pane tab deduplication prevents opening the same file twice
+**Plans**: TBD
+
+Plans:
+- [ ] 11-01: TBD
+- [ ] 11-02: TBD
+
+### Phase 12: Session Restore
+**Goal**: Workbench remembers open files and layout across restarts
+**Depends on**: Phase 10
+**Requirements**: SESS-01, SESS-02, SESS-03, SESS-04
+**Success Criteria** (what must be TRUE):
+  1. On quit, pane tree (layout + open views) is serialized to localStorage
+  2. On launch, pane tree is restored from localStorage — files reopen in their previous positions
+  3. Dirty files that weren't saved show a recovery banner (existing crash recovery behavior)
+  4. A "Restored N files" toast appears on successful session restore
+**Plans**: 1 plan
+
+Plans:
+- [ ] 12-01-PLAN.md — Pane session serialize/restore, beforeunload save, launch restore with toast
+
 ## Progress
 
 **Execution Order:**
-Phases 1-2 sequential. 3, 4, 5 independent. 6 depends on 1. 7 depends on 3. Phase 8 depends on 5 + 7. Phase 9 depends on 4 + 8.
+Phase 10 depends on 8. Phase 11 depends on 10. Phase 12 depends on 10. Phases 11 and 12 are independent of each other.
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -187,4 +236,7 @@ Phases 1-2 sequential. 3, 4, 5 independent. 6 depends on 1. 7 depends on 3. Phas
 | 6. Detection Engineering Inline | 2/2 | Complete | 2026-03-18 |
 | 7. Detection Editor Integration | 4/4 | Complete | 2026-03-18 |
 | 8. File-First Editor | 4/4 | Complete | 2026-03-18 |
-| 9. Default Workspace Bootstrap | 1/2 | In progress | - |
+| 9. Default Workspace Bootstrap | 2/2 | Complete | 2026-03-18 |
+| 10. Live CodeMirror Editor | 0/2 | Not started | - |
+| 11. Visual Polish | 0/2 | Not started | - |
+| 12. Session Restore | 0/1 | Not started | - |

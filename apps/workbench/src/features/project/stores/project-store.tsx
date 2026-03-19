@@ -446,6 +446,8 @@ const useProjectStoreBase = create<ProjectStoreState>()((set, get) => ({
       }
 
       set({ project: { ...project, files: newFiles, expandedDirs } });
+      // Re-scan from disk to ensure tree is in sync (catches nested dir creation, etc.)
+      get().actions.loadRoot(project.rootPath);
       return savedPath;
     },
 
@@ -495,6 +497,8 @@ const useProjectStoreBase = create<ProjectStoreState>()((set, get) => ({
       }
 
       set({ project: { ...project, files: newFiles }, fileStatuses });
+      // Re-scan from disk to pick up any side effects of the rename.
+      get().actions.loadRoot(project.rootPath);
       return true;
     },
 
@@ -526,6 +530,8 @@ const useProjectStoreBase = create<ProjectStoreState>()((set, get) => ({
       fileStatuses.delete(relPath);
 
       set({ project: { ...project, files: newFiles }, fileStatuses });
+      // Re-scan from disk to ensure deleted file (and any empty parent dirs) are gone.
+      get().actions.loadRoot(project.rootPath);
       return true;
     },
 

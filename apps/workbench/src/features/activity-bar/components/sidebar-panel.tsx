@@ -59,6 +59,11 @@ function ExplorerPanelConnected() {
       }}
       onExpandAll={actions.expandAll}
       onCollapseAll={actions.collapseAll}
+      onRefresh={async () => {
+        for (const root of projectRoots) {
+          await actions.loadRoot(root);
+        }
+      }}
       filter={filter}
       onFilterChange={actions.setFilter}
       formatFilter={formatFilter}

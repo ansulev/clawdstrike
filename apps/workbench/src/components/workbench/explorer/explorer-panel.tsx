@@ -33,7 +33,6 @@ interface ExplorerPanelProps {
   formatFilter: FileType | null;
   onFormatFilterChange: (format: FileType | null) => void;
   onRefresh?: () => void;
-  onOpenFolder?: () => void;
   /** Callback to open native folder picker and mount a new root. */
   onAddFolder?: () => void;
   /** Callback to remove a mounted root from the workspace. */
@@ -172,12 +171,10 @@ function RootTreeSection({
   fileStatuses,
   onCreateFile,
   onRenameFile,
-  onDeleteFile,
   creatingInDir,
   setCreatingInDir,
   renamingFilePath,
   setRenamingFilePath,
-  contextMenu,
   setContextMenu,
   setDeletingFile,
 }: {
@@ -190,12 +187,10 @@ function RootTreeSection({
   fileStatuses?: Map<string, FileStatus>;
   onCreateFile?: (parentPath: string, fileName: string) => void;
   onRenameFile?: (file: ProjectFile, newName: string) => void;
-  onDeleteFile?: (file: ProjectFile) => void;
   creatingInDir: string | null;
   setCreatingInDir: (dir: string | null) => void;
   renamingFilePath: string | null;
   setRenamingFilePath: (path: string | null) => void;
-  contextMenu: ContextMenuTarget | null;
   setContextMenu: (menu: ContextMenuTarget | null) => void;
   setDeletingFile: (file: ProjectFile | null) => void;
 }) {
@@ -333,7 +328,6 @@ export function ExplorerPanel({
   formatFilter,
   onFormatFilterChange,
   onRefresh,
-  onOpenFolder,
   onAddFolder,
   onRemoveRoot,
   activeFilePath,
@@ -440,16 +434,6 @@ export function ExplorerPanel({
               Open a folder containing detection rules to get started.
             </p>
           </div>
-          {onOpenFolder && (
-            <button
-              type="button"
-              onClick={onOpenFolder}
-              className="inline-flex items-center gap-2 px-5 py-2.5 text-[12px] font-mono font-medium rounded-md border border-[#d4a84b]/30 text-[#d4a84b] bg-[#d4a84b]/5 hover:bg-[#d4a84b]/15 hover:border-[#d4a84b]/50 transition-colors"
-            >
-              <IconFolderOpen size={16} stroke={1.5} />
-              Open Folder
-            </button>
-          )}
           {onAddFolder && (
             <button
               type="button"
@@ -647,12 +631,10 @@ export function ExplorerPanel({
                       fileStatuses={fileStatuses}
                       onCreateFile={onCreateFile}
                       onRenameFile={onRenameFile}
-                      onDeleteFile={onDeleteFile}
                       creatingInDir={creatingInDir}
                       setCreatingInDir={setCreatingInDir}
                       renamingFilePath={renamingFilePath}
                       setRenamingFilePath={setRenamingFilePath}
-                      contextMenu={contextMenu}
                       setContextMenu={setContextMenu}
                       setDeletingFile={setDeletingFile}
                     />
@@ -673,12 +655,10 @@ export function ExplorerPanel({
                 fileStatuses={fileStatuses}
                 onCreateFile={onCreateFile}
                 onRenameFile={onRenameFile}
-                onDeleteFile={onDeleteFile}
                 creatingInDir={creatingInDir}
                 setCreatingInDir={setCreatingInDir}
                 renamingFilePath={renamingFilePath}
                 setRenamingFilePath={setRenamingFilePath}
-                contextMenu={contextMenu}
                 setContextMenu={setContextMenu}
                 setDeletingFile={setDeletingFile}
               />

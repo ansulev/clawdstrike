@@ -16,7 +16,6 @@ interface ExplorerTreeItemProps {
   onToggle: () => void;
   onOpen: () => void;
   isActive?: boolean;
-  style?: React.CSSProperties;
   onContextMenu?: (e: React.MouseEvent) => void;
   /** Whether this item is currently being renamed inline. */
   isRenaming?: boolean;
@@ -40,7 +39,6 @@ export function ExplorerTreeItem({
   onToggle,
   onOpen,
   isActive,
-  style,
   onContextMenu,
   isRenaming,
   onRenameSubmit,
@@ -87,10 +85,7 @@ export function ExplorerTreeItem({
       onClick={handleClick}
       onKeyDown={handleKeyDown}
       onContextMenu={onContextMenu}
-      style={{
-        paddingLeft: indent + 4,
-        ...style,
-      }}
+      style={{ paddingLeft: indent + 4 }}
       className={cn(
         "w-full flex items-center gap-1.5 pr-2 py-[3px] text-left transition-colors group relative",
         "hover:bg-[#131721]/40",

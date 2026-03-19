@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: In progress
-stopped_at: Completed 04-01-PLAN.md
-last_updated: "2026-03-18T23:59:05Z"
-last_activity: 2026-03-18 -- Completed 04-01 (@clawdstrike/plugin-sdk with createPlugin, PluginContext, contribution types)
+stopped_at: Completed 05-01-PLAN.md
+last_updated: "2026-03-19T00:11:17Z"
+last_activity: 2026-03-19 -- Completed 05-01 (EgressAllowlistGuard plugin via createPlugin SDK with 6 integration tests)
 progress:
   total_phases: 6
   completed_phases: 4
-  total_plans: 8
-  completed_plans: 8
-  percent: 100
+  total_plans: 10
+  completed_plans: 9
+  percent: 90
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-03-18)
 ## Current Position
 
 Phase: 5 of 6 (Guard-as-Plugin Proof of Concept)
-Plan: 1 of 2 in current phase
-Status: Not started
-Last activity: 2026-03-18 -- Completed 04-01 (@clawdstrike/plugin-sdk with createPlugin, PluginContext, contribution types)
+Plan: 2 of 2 in current phase
+Status: In progress
+Last activity: 2026-03-19 -- Completed 05-01 (EgressAllowlistGuard plugin via createPlugin SDK with 6 integration tests)
 
-Progress: [████████░░] 80%
+Progress: [█████████░] 90%
 
 ## Performance Metrics
 
@@ -55,6 +55,7 @@ Progress: [████████░░] 80%
 | Phase 03 P01 | 2min | 1 tasks | 2 files |
 | Phase 03 P02 | 4min | 2 tasks | 3 files |
 | Phase 04 P01 | 5min | 1 tasks | 10 files |
+| Phase 05 P01 | 3min | 1 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -91,6 +92,9 @@ Recent decisions affecting current work:
 - [Phase 04]: Types copied from workbench, not imported -- SDK is standalone publishable package
 - [Phase 04]: createPlugin() is identity function for type-safe call site inference
 - [Phase 04]: PluginContext uses namespaced API interfaces matching workbench registry patterns
+- [Phase 05-01]: Plugin uses distinct ID 'egress_allowlist_plugin' to avoid collision with built-in 'egress_allowlist'
+- [Phase 05-01]: Plugin activate() is no-op -- PluginLoader routes contributions from manifest BEFORE calling activate()
+- [Phase 05-01]: ConfigFields are byte-identical copies of built-in egress_allowlist guard metadata for parity validation
 
 ### Pending Todos
 
@@ -102,6 +106,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-18T23:59:05Z
-Stopped at: Completed 04-01-PLAN.md
+Last session: 2026-03-19T00:11:17Z
+Stopped at: Completed 05-01-PLAN.md
 Resume file: None

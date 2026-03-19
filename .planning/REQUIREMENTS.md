@@ -99,8 +99,8 @@ Enable third-party and internal extension of the ClawdStrike workbench through a
 | SDK-03 | Phase 4 | Complete |
 | SDK-04 | Phase 4 | Complete |
 | SDK-05 | Phase 4 | Complete |
-| GAP-01 | Phase 5 | Pending |
-| GAP-02 | Phase 5 | Pending |
+| GAP-01 | Phase 5 | Complete |
+| GAP-02 | Phase 5 | Complete |
 | GAP-03 | Phase 5 | Pending |
 | MKT-01 | Phase 6 | Pending |
 | MKT-02 | Phase 6 | Pending |

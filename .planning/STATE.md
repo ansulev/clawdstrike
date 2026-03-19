@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: executing
-stopped_at: Completed 06-01-PLAN.md
-last_updated: "2026-03-19T00:38:20.224Z"
-last_activity: 2026-03-19 -- Completed 06-01 (Registry client with typed API surface)
+status: complete
+stopped_at: Completed 06-03-PLAN.md
+last_updated: "2026-03-19T00:43:02.747Z"
+last_activity: 2026-03-19 -- Completed 06-03 (Install/Uninstall lifecycle wired to PluginsBrowser)
 progress:
   total_phases: 6
-  completed_phases: 5
+  completed_phases: 6
   total_plans: 13
-  completed_plans: 12
+  completed_plans: 13
   percent: 100
 ---
 
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-18)
 
 **Core value:** Security teams can extend ClawdStrike with custom guards, detection formats, intel sources, and UI panels without forking the workbench.
-**Current focus:** Phase 6: Marketplace UI
+**Current focus:** All phases complete
 
 ## Current Position
 
 Phase: 6 of 6 (Marketplace UI)
 Plan: 3 of 3 in current phase
-Status: In progress
-Last activity: 2026-03-19 -- Completed 06-02 (Plugins tab UI with PluginCard and PluginsBrowser)
+Status: Complete
+Last activity: 2026-03-19 -- Completed 06-03 (Install/Uninstall lifecycle wired to PluginsBrowser)
 
-Progress: [█████████░] 92%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
@@ -59,6 +59,7 @@ Progress: [█████████░] 92%
 | Phase 05 P02 | 7min | 2 tasks | 3 files |
 | Phase 06 P01 | 3min | 1 tasks | 2 files |
 | Phase 06 P02 | 2min | 2 tasks | 3 files |
+| Phase 06 P03 | 2min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -106,6 +107,8 @@ Recent decisions affecting current work:
 - [Phase 06-02]: Stub install/uninstall callbacks with console.log -- 06-03 wires to PluginLoader
 - [Phase 06-02]: asManifest() converts RegistrySearchResult to PluginManifest shape for PluginCard rendering
 - [Phase 06-02]: Available plugins filtered to exclude already-installed plugins by ID match
+- [Phase 06]: Standalone functions (not class) for install/uninstall -- composing registry and loader singletons via DI
+- [Phase 06]: installPlugin lets loader set error state on failure -- plugin stays registered with error state for user visibility
 
 ### Pending Todos
 
@@ -117,6 +120,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-19T00:37:31Z
-Stopped at: Completed 06-02-PLAN.md
+Last session: 2026-03-19T00:43:02.745Z
+Stopped at: Completed 06-03-PLAN.md
 Resume file: None

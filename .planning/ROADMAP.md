@@ -40,7 +40,7 @@ Plans:
   4. Bulk select agents for batch policy push, restart, or retire operations
 **Plans**: 1 plan
 Plans:
-- [x] track-a-fleet-02-PLAN.md — Agent detail page, SVG topology, bulk select, quick deploy, dashboard enhancements (complete, pending human verify)
+- [x] track-a-fleet-02-PLAN.md — Agent detail page, SVG topology, bulk select, quick deploy, dashboard enhancements (complete)
 
 ## Track B: Swarm Board Evolution
 
@@ -94,7 +94,7 @@ Plans:
 | Track | Phase | Status |
 |-------|-------|--------|
 | A. Fleet Dashboard | A1: Data Layer | Complete (1 plan) |
-| A. Fleet Dashboard | A2: Viz & Actions | Complete (1 plan, pending human verify) |
+| A. Fleet Dashboard | A2: Viz & Actions | Complete (1 plan) |
 | B. Swarm Board | B1: Editor Bridge | Not started |
 | B. Swarm Board | B2: Real-Time Viz | Not started |
 | C. Threat Intel | C1: Signal Clustering | Complete (2 plans) |

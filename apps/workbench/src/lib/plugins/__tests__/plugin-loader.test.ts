@@ -12,6 +12,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { PluginRegistry } from "../plugin-registry";
 import { createTestManifest } from "../manifest-validation";
 import { getGuardMeta, unregisterGuard } from "../../workbench/guard-registry";
+import { getView, getViewsBySlot } from "../view-registry";
 import type { PluginManifest, GuardContribution, NetworkPermission } from "../types";
 import { PluginLoader } from "../plugin-loader";
 import type { PluginModule, PluginActivationContext } from "../plugin-loader";
@@ -711,6 +712,208 @@ describe("PluginLoader", () => {
       // Clean up
       await loader.deactivatePlugin("no-perm-compat-test");
       iframeContainer.remove();
+    });
+  });
+
+  // ---- View contribution routing ----
+
+  describe("view contribution routing", () => {
+    // Test 23: loadPlugin() with editorTabs contribution routes to ViewRegistry
+    it("loadPlugin() with editorTabs contribution routes to ViewRegistry with slot 'editorTab'", async () => {
+      const manifest = createTestManifest({
+        id: "editor-tab-plugin",
+        trust: "internal",
+        activationEvents: ["onStartup"],
+        main: "./index.ts",
+        contributions: {
+          editorTabs: [
+            { id: "myTab", label: "My Editor Tab", icon: "file-code", entrypoint: "./tabs/my-tab.tsx" },
+          ],
+        },
+      });
+      registry.register(manifest);
+
+      const mockModule = createMockModule();
+      loader = new PluginLoader({
+        registry,
+        resolveModule: async () => mockModule,
+      });
+
+      await loader.loadPlugin("editor-tab-plugin");
+
+      const view = getView("editor-tab-plugin.myTab");
+      expect(view).toBeDefined();
+      expect(view!.slot).toBe("editorTab");
+      expect(view!.label).toBe("My Editor Tab");
+      expect(view!.icon).toBe("file-code");
+
+      // Clean up
+      await loader.deactivatePlugin("editor-tab-plugin");
+    });
+
+    // Test 24: loadPlugin() with bottomPanelTabs contribution routes to ViewRegistry
+    it("loadPlugin() with bottomPanelTabs contribution routes to ViewRegistry with slot 'bottomPanelTab'", async () => {
+      const manifest = createTestManifest({
+        id: "bottom-panel-plugin",
+        trust: "internal",
+        activationEvents: ["onStartup"],
+        main: "./index.ts",
+        contributions: {
+          bottomPanelTabs: [
+            { id: "output", label: "Plugin Output", entrypoint: "./panels/output.tsx" },
+          ],
+        },
+      });
+      registry.register(manifest);
+
+      const mockModule = createMockModule();
+      loader = new PluginLoader({
+        registry,
+        resolveModule: async () => mockModule,
+      });
+
+      await loader.loadPlugin("bottom-panel-plugin");
+
+      const view = getView("bottom-panel-plugin.output");
+      expect(view).toBeDefined();
+      expect(view!.slot).toBe("bottomPanelTab");
+      expect(view!.label).toBe("Plugin Output");
+
+      // Clean up
+      await loader.deactivatePlugin("bottom-panel-plugin");
+    });
+
+    // Test 25: loadPlugin() with rightSidebarPanels contribution routes to ViewRegistry
+    it("loadPlugin() with rightSidebarPanels contribution routes to ViewRegistry with slot 'rightSidebarPanel'", async () => {
+      const manifest = createTestManifest({
+        id: "right-sidebar-plugin",
+        trust: "internal",
+        activationEvents: ["onStartup"],
+        main: "./index.ts",
+        contributions: {
+          rightSidebarPanels: [
+            { id: "inspector", label: "Plugin Inspector", icon: "search", entrypoint: "./panels/inspector.tsx" },
+          ],
+        },
+      });
+      registry.register(manifest);
+
+      const mockModule = createMockModule();
+      loader = new PluginLoader({
+        registry,
+        resolveModule: async () => mockModule,
+      });
+
+      await loader.loadPlugin("right-sidebar-plugin");
+
+      const view = getView("right-sidebar-plugin.inspector");
+      expect(view).toBeDefined();
+      expect(view!.slot).toBe("rightSidebarPanel");
+      expect(view!.label).toBe("Plugin Inspector");
+
+      // Clean up
+      await loader.deactivatePlugin("right-sidebar-plugin");
+    });
+
+    // Test 26: deactivatePlugin() removes view contributions from ViewRegistry
+    it("deactivatePlugin() removes view contributions from ViewRegistry", async () => {
+      const manifest = createTestManifest({
+        id: "deactivate-views-plugin",
+        trust: "internal",
+        activationEvents: ["onStartup"],
+        main: "./index.ts",
+        contributions: {
+          editorTabs: [
+            { id: "tab1", label: "Tab 1", entrypoint: "./tab1.tsx" },
+          ],
+          bottomPanelTabs: [
+            { id: "panel1", label: "Panel 1", entrypoint: "./panel1.tsx" },
+          ],
+        },
+      });
+      registry.register(manifest);
+
+      const mockModule = createMockModule();
+      loader = new PluginLoader({
+        registry,
+        resolveModule: async () => mockModule,
+      });
+
+      await loader.loadPlugin("deactivate-views-plugin");
+
+      // Views should be registered
+      expect(getView("deactivate-views-plugin.tab1")).toBeDefined();
+      expect(getView("deactivate-views-plugin.panel1")).toBeDefined();
+
+      // Deactivate
+      await loader.deactivatePlugin("deactivate-views-plugin");
+
+      // Views should be removed
+      expect(getView("deactivate-views-plugin.tab1")).toBeUndefined();
+      expect(getView("deactivate-views-plugin.panel1")).toBeUndefined();
+    });
+
+    // Test 27: routeStatusBarItemContribution does not crash when entrypoint is invalid
+    it("routeStatusBarItemContribution does not crash when entrypoint is invalid", async () => {
+      const manifest = createTestManifest({
+        id: "status-bar-crash-test",
+        trust: "internal",
+        activationEvents: ["onStartup"],
+        main: "./index.ts",
+        contributions: {
+          statusBarItems: [
+            { id: "broken-status", side: "right" as const, priority: 100, entrypoint: "./does-not-exist.tsx" },
+          ],
+        },
+      });
+      registry.register(manifest);
+
+      const mockModule = createMockModule();
+      loader = new PluginLoader({
+        registry,
+        resolveModule: async () => mockModule,
+      });
+
+      // Should not throw
+      await expect(loader.loadPlugin("status-bar-crash-test")).resolves.not.toThrow();
+
+      expect(registry.get("status-bar-crash-test")!.state).toBe("activated");
+
+      // Clean up
+      await loader.deactivatePlugin("status-bar-crash-test");
+    });
+
+    // Test 28: loadPlugin() with activityBarItems routes to ViewRegistry with slot 'activityBarPanel'
+    it("loadPlugin() with activityBarItems contribution routes to ViewRegistry with slot 'activityBarPanel'", async () => {
+      const manifest = createTestManifest({
+        id: "activity-bar-plugin",
+        trust: "internal",
+        activationEvents: ["onStartup"],
+        main: "./index.ts",
+        contributions: {
+          activityBarItems: [
+            { id: "myNav", section: "security", label: "My Nav", icon: "shield", href: "/my-nav", order: 10 },
+          ],
+        },
+      });
+      registry.register(manifest);
+
+      const mockModule = createMockModule();
+      loader = new PluginLoader({
+        registry,
+        resolveModule: async () => mockModule,
+      });
+
+      await loader.loadPlugin("activity-bar-plugin");
+
+      const view = getView("activity-bar-plugin.myNav");
+      expect(view).toBeDefined();
+      expect(view!.slot).toBe("activityBarPanel");
+      expect(view!.label).toBe("My Nav");
+      expect(view!.priority).toBe(10);
+
+      // Clean up
+      await loader.deactivatePlugin("activity-bar-plugin");
     });
   });
 });

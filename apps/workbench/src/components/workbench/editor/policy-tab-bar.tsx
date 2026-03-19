@@ -3,6 +3,14 @@ import { useMultiPolicy } from "@/lib/workbench/multi-policy-store";
 import type { PolicyTab } from "@/lib/workbench/multi-policy-store";
 import { FILE_TYPE_REGISTRY } from "@/lib/workbench/file-type-registry";
 import type { FileType } from "@/lib/workbench/file-type-registry";
+import {
+  usePluginViewTabs,
+  useActivePluginViewTabId,
+  activatePluginViewTab,
+  closePluginViewTab,
+  openPluginViewTab,
+} from "@/lib/plugins/plugin-view-tab-store";
+import { useViewsBySlot } from "@/lib/plugins/view-registry";
 import { cn } from "@/lib/utils";
 import {
   IconPlus,
@@ -262,6 +270,11 @@ export function PolicyTabBar({ isHomeActive, onHomeClick, onTabSwitch }: PolicyT
   const { multiState, multiDispatch, tabs, canAddTab } = useMultiPolicy();
   const { activeTabId, splitTabId } = multiState;
 
+  // Plugin view tabs integration
+  const pluginViewTabs = usePluginViewTabs();
+  const activePluginViewTabId = useActivePluginViewTabId();
+  const availableEditorViews = useViewsBySlot("editorTab");
+
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [draggedTabId, setDraggedTabId] = useState<string | null>(null);
@@ -287,6 +300,7 @@ export function PolicyTabBar({ isHomeActive, onHomeClick, onTabSwitch }: PolicyT
   const handleSwitch = useCallback(
     (tabId: string) => {
       multiDispatch({ type: "SWITCH_TAB", tabId });
+      activatePluginViewTab(null);
       onTabSwitch?.();
     },
     [multiDispatch, onTabSwitch],
@@ -525,6 +539,58 @@ export function PolicyTabBar({ isHomeActive, onHomeClick, onTabSwitch }: PolicyT
             </div>
           ))}
 
+          {/* Plugin view tabs */}
+          {pluginViewTabs.map((pvTab) => (
+            <div
+              key={`plugin:${pvTab.viewId}`}
+              onClick={() => {
+                activatePluginViewTab(pvTab.viewId);
+                onTabSwitch?.();
+              }}
+              className={cn(
+                "group relative flex items-center gap-1.5 px-3 py-1.5 min-w-[80px] max-w-[200px] cursor-pointer select-none transition-all",
+                "border-r border-[#2d3240]/50",
+                pvTab.viewId === activePluginViewTabId
+                  ? "bg-[#131721] text-[#ece7dc]"
+                  : "bg-[#0b0d13]/60 text-[#6f7f9a] hover:text-[#ece7dc] hover:bg-[#131721]/50",
+              )}
+            >
+              {/* Active indicator -- blue for plugin tabs */}
+              {pvTab.viewId === activePluginViewTabId && (
+                <div className="absolute top-0 left-0 right-0 h-[3px] bg-[#7c9aef]" />
+              )}
+
+              {/* Plugin icon indicator */}
+              <span className="inline-block w-2.5 h-2.5 rounded-full flex-shrink-0 bg-[#7c9aef]" />
+
+              {/* Dirty dot */}
+              {pvTab.dirty && (
+                <span className="w-1.5 h-1.5 rounded-full bg-[#d4a84b] shrink-0" />
+              )}
+
+              {/* Tab label */}
+              <span className="truncate text-[11px] font-mono flex-1">
+                {pvTab.label}
+              </span>
+
+              {/* Close button */}
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  closePluginViewTab(pvTab.viewId);
+                }}
+                className={cn(
+                  "shrink-0 p-1 rounded hover:bg-[#c45c5c]/20 hover:text-[#c45c5c] transition-colors",
+                  pvTab.viewId === activePluginViewTabId ? "opacity-60 group-hover:opacity-100" : "opacity-0 group-hover:opacity-100",
+                )}
+                title="Close tab"
+              >
+                <IconX size={11} stroke={1.5} />
+              </button>
+            </div>
+          ))}
+
           {/* New tab split button — main + dropdown caret */}
           <div ref={newTabDropdownRef} className="relative shrink-0 flex items-center">
             {/* Main button: creates a new ClawdStrike policy tab */}
@@ -585,6 +651,27 @@ export function PolicyTabBar({ isHomeActive, onHomeClick, onTabSwitch }: PolicyT
                     <span className="text-[#6f7f9a]/60 text-[10px]">{item.ext}</span>
                   </button>
                 ))}
+                {availableEditorViews.length > 0 && (
+                  <>
+                    <div className="h-px bg-[#2d3240] my-1" />
+                    {availableEditorViews.map((view) => (
+                      <button
+                        key={view.id}
+                        type="button"
+                        onClick={() => {
+                          openPluginViewTab(view.id);
+                          onTabSwitch?.();
+                          setNewTabDropdownOpen(false);
+                        }}
+                        className="flex items-center gap-2 w-full px-3 py-1.5 text-[11px] font-mono text-[#ece7dc] hover:bg-[#131721] cursor-pointer transition-colors"
+                      >
+                        <span className="inline-block w-2 h-2 rounded-full shrink-0 bg-[#7c9aef]" />
+                        <span className="flex-1 text-left">{view.label}</span>
+                        <span className="text-[#6f7f9a]/60 text-[10px]">plugin</span>
+                      </button>
+                    ))}
+                  </>
+                )}
               </div>
             )}
           </div>

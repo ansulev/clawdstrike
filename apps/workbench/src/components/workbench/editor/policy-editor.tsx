@@ -1,6 +1,8 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { PolicyTabBar } from "@/components/workbench/editor/policy-tab-bar";
+import { ViewTabRenderer } from "@/components/plugins/view-tab-renderer";
+import { useActivePluginViewTabId } from "@/lib/plugins/plugin-view-tab-store";
 import { CommandPalette } from "@/components/workbench/editor/command-palette";
 import { ProblemsPanel, type ProblemEntry } from "@/components/workbench/editor/problems-panel";
 import { SplitEditor, SplitModeToggle } from "@/components/workbench/editor/split-editor";
@@ -357,6 +359,7 @@ export function PolicyEditor() {
   const [evidenceOpen, setEvidenceOpen] = useState(false);
   const [explainOpen, setExplainOpen] = useState(false);
   const [publishOpen, setPublishOpen] = useState(false);
+  const activePluginViewTabId = useActivePluginViewTabId();
   const isPolicyTab = activeTab ? isPolicyFileType(activeTab.fileType) : true;
   const publishedCoverage = usePublishedCoverage();
   const openDocumentCoverage = useMemo(
@@ -938,7 +941,9 @@ export function PolicyEditor() {
           )}
 
           <div className="flex-1 min-w-0">
-            {showCommandCenter ? (
+            {activePluginViewTabId ? (
+              <ViewTabRenderer />
+            ) : showCommandCenter ? (
               <PolicyCommandCenter onClose={() => setShowCommandCenter(false)} />
             ) : showHome ? (
               <EditorHomeTab onNavigateToTab={() => setShowHome(false)} />

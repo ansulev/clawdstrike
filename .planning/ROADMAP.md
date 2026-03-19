@@ -15,7 +15,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 1: postMessage RPC Bridge** - Build typed request/response and event subscription protocol over postMessage with host-side dispatch to registries
 - [x] **Phase 2: iframe Sandbox** - Isolate community plugins in null-origin iframes with strict CSP, fork PluginLoader by trust tier
 - [x] **Phase 3: Permission System** - Capability-based permissions declared in manifest, enforced at bridge middleware, with domain-scoped network access
-- [ ] **Phase 4: Plugin Audit Trail** - Ed25519-signed receipts for every plugin action, local SQLite storage, hushd forwarding, and audit viewer UI
+- [x] **Phase 4: Plugin Audit Trail** - Ed25519-signed receipts for every plugin action, local storage, hushd forwarding, and audit viewer UI
 - [ ] **Phase 5: Emergency Revocation** - Fleet-wide plugin kill via hushd SSE broadcast, offline sync on reconnect, revoked lifecycle state
 
 ## Phase Details
@@ -73,8 +73,8 @@ Plans:
   4. The workbench audit view shows plugin receipts filterable by plugin name, action type (e.g., "network.fetch"), result, and time range
 **Plans:** 2 plans
 Plans:
-- [ ] 04-01-PLAN.md -- Receipt types + receipt store + receipt generation middleware wired into bridge host
-- [ ] 04-02-PLAN.md -- hushd receipt forwarding + plugin audit viewer UI with filtering
+- [x] 04-01-PLAN.md -- Receipt types + receipt store + receipt generation middleware wired into bridge host
+- [x] 04-02-PLAN.md -- hushd receipt forwarding + plugin audit viewer UI with filtering
 
 ### Phase 5: Emergency Revocation
 **Goal**: An operator can revoke a community plugin fleet-wide via hushd, and all connected workbench instances immediately kill the plugin and persist the revocation for offline restarts
@@ -98,5 +98,5 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 | 1. postMessage RPC Bridge | 2/2 | Complete | 2026-03-19 |
 | 2. iframe Sandbox | 2/2 | Complete | 2026-03-19 |
 | 3. Permission System | 2/2 | Complete | 2026-03-19 |
-| 4. Plugin Audit Trail | 0/2 | Planning complete | - |
+| 4. Plugin Audit Trail | 2/2 | Complete | 2026-03-19 |
 | 5. Emergency Revocation | 0/TBD | Not started | - |

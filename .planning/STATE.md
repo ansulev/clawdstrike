@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 04-01-PLAN.md
-last_updated: "2026-03-19T05:54:25.433Z"
-last_activity: 2026-03-19 -- Completed receipt types, store, and middleware for plugin audit trail (04-01)
+stopped_at: Completed 04-02-PLAN.md
+last_updated: "2026-03-19T06:07:00.000Z"
+last_activity: 2026-03-19 -- Completed hushd forwarding and audit viewer (04-02)
 progress:
   total_phases: 5
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 8
-  completed_plans: 7
-  percent: 88
+  completed_plans: 8
+  percent: 100
 ---
 
 # Project State
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-19)
 
 **Core value:** Community plugins run in sandboxed iframes with capability-based permissions, Ed25519 audit trail, and fleet-wide emergency revocation
-**Current focus:** Phase 4 in progress -- Plugin Audit Trail (1 of 2 plans done).
+**Current focus:** Phase 4 complete -- Plugin Audit Trail (2 of 2 plans done). Ready for Phase 5.
 
 ## Current Position
 
 Phase: 4 of 5 (Plugin Audit Trail)
-Plan: 1 of 2 complete
-Status: In progress
-Last activity: 2026-03-19 -- Completed receipt types, store, and middleware for plugin audit trail (04-01)
+Plan: 2 of 2 complete
+Status: Phase complete
+Last activity: 2026-03-19 -- Completed hushd forwarding and audit viewer (04-02)
 
-Progress: [#########░] 88%
+Progress: [##########] 100%
 
 ## Previous Milestones
 
@@ -75,6 +75,9 @@ Progress: [#########░] 88%
 - Handler-level PermissionDeniedError produces recordDenied, not recordError (04-01)
 - Receipt store uses localStorage with 5000 cap following existing local-audit.ts pattern (04-01)
 - Receipt middleware is injected via BridgeHostOptions for testability (store instance injected, not singleton) (04-01)
+- Forwarding is best-effort (fail-open): network errors queue for retry, never throw or block bridge (04-02)
+- Local-only mode (hushdUrl=null) silently skips forwarding -- receipts stay in local store only (04-02)
+- Audit viewer uses native select element for result filter for simplicity and testing compat (04-02)
 
 ### Pending Todos
 None yet.
@@ -84,6 +87,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-19T05:54:25.431Z
-Stopped at: Completed 04-01-PLAN.md
+Last session: 2026-03-19T06:07:00.000Z
+Stopped at: Completed 04-02-PLAN.md
 Resume file: None

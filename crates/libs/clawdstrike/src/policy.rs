@@ -2,7 +2,6 @@
 
 use regex::Regex;
 use serde::{Deserialize, Serialize};
-#[cfg(feature = "full")]
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
@@ -267,8 +266,16 @@ pub struct GuardConfigs {
     pub mcp_tool: Option<McpToolConfig>,
     #[serde(default)]
     pub prompt_injection: Option<PromptInjectionConfig>,
+    /// Tracks explicitly provided prompt-injection object keys when compiling
+    /// partial HushSpec overlays so merge preserves inherited values.
+    #[serde(skip)]
+    pub prompt_injection_present_fields: BTreeSet<String>,
     #[serde(default)]
     pub jailbreak: Option<JailbreakConfig>,
+    /// Tracks explicitly provided jailbreak object keys when compiling partial
+    /// HushSpec overlays so merge preserves inherited values.
+    #[serde(skip)]
+    pub jailbreak_present_fields: BTreeSet<String>,
     #[serde(default)]
     pub computer_use: Option<ComputerUseConfig>,
     #[serde(default)]
@@ -345,11 +352,44 @@ impl GuardConfigs {
                 (None, Some(child_cfg)) => Some(McpToolConfig::default().merge_with(child_cfg)),
                 (None, None) => None,
             },
-            prompt_injection: child
-                .prompt_injection
-                .clone()
-                .or_else(|| self.prompt_injection.clone()),
-            jailbreak: child.jailbreak.clone().or_else(|| self.jailbreak.clone()),
+            prompt_injection: match (&self.prompt_injection, &child.prompt_injection) {
+                (Some(base), Some(child_cfg))
+                    if child.prompt_injection_present_fields.is_empty() =>
+                {
+                    Some(child_cfg.clone())
+                }
+                (Some(base), Some(child_cfg)) => Some(merge_prompt_injection_config(
+                    base,
+                    child_cfg,
+                    &child.prompt_injection_present_fields,
+                )),
+                (Some(base), None) => Some(base.clone()),
+                (None, Some(child_cfg)) => Some(child_cfg.clone()),
+                (None, None) => None,
+            },
+            prompt_injection_present_fields: if child.prompt_injection.is_some() {
+                BTreeSet::new()
+            } else {
+                self.prompt_injection_present_fields.clone()
+            },
+            jailbreak: match (&self.jailbreak, &child.jailbreak) {
+                (Some(base), Some(child_cfg)) if child.jailbreak_present_fields.is_empty() => {
+                    Some(child_cfg.clone())
+                }
+                (Some(base), Some(child_cfg)) => Some(merge_jailbreak_config(
+                    base,
+                    child_cfg,
+                    &child.jailbreak_present_fields,
+                )),
+                (Some(base), None) => Some(base.clone()),
+                (None, Some(child_cfg)) => Some(child_cfg.clone()),
+                (None, None) => None,
+            },
+            jailbreak_present_fields: if child.jailbreak.is_some() {
+                BTreeSet::new()
+            } else {
+                self.jailbreak_present_fields.clone()
+            },
             computer_use: child
                 .computer_use
                 .clone()
@@ -389,6 +429,48 @@ impl GuardConfigs {
             },
         }
     }
+}
+
+fn merge_prompt_injection_config(
+    base: &PromptInjectionConfig,
+    child: &PromptInjectionConfig,
+    present_fields: &BTreeSet<String>,
+) -> PromptInjectionConfig {
+    let mut merged = base.clone();
+    if present_fields.contains("enabled") {
+        merged.enabled = child.enabled;
+    }
+    if present_fields.contains("warn_at_or_above") {
+        merged.warn_at_or_above = child.warn_at_or_above;
+    }
+    if present_fields.contains("block_at_or_above") {
+        merged.block_at_or_above = child.block_at_or_above;
+    }
+    if present_fields.contains("max_scan_bytes") {
+        merged.max_scan_bytes = child.max_scan_bytes;
+    }
+    merged
+}
+
+fn merge_jailbreak_config(
+    base: &JailbreakConfig,
+    child: &JailbreakConfig,
+    present_fields: &BTreeSet<String>,
+) -> JailbreakConfig {
+    let mut merged = base.clone();
+    if present_fields.contains("enabled") {
+        merged.enabled = child.enabled;
+    }
+    if present_fields.contains("block_threshold") {
+        merged.detector.block_threshold = child.detector.block_threshold;
+    }
+    if present_fields.contains("warn_threshold") {
+        merged.detector.warn_threshold = child.detector.warn_threshold;
+    }
+    if present_fields.contains("max_input_bytes") {
+        merged.detector.max_input_bytes = child.detector.max_input_bytes;
+    }
+    merged
 }
 
 fn default_custom_guard_enabled() -> bool {

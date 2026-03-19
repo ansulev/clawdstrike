@@ -72,19 +72,19 @@ describe("PluginAuditViewer", () => {
   it("shows empty state when no receipts exist", () => {
     render(<PluginAuditViewer />);
 
-    expect(screen.getByText("No plugin audit receipts")).toBeInTheDocument();
+    expect(screen.getByText("No plugin audit receipts")).toBeTruthy();
   });
 
   it("renders a table with correct column headers", () => {
     mockReceipts = [makeReceipt()];
     render(<PluginAuditViewer />);
 
-    expect(screen.getByText("Time")).toBeInTheDocument();
-    expect(screen.getByText("Plugin")).toBeInTheDocument();
-    expect(screen.getByText("Action")).toBeInTheDocument();
-    expect(screen.getByText("Result")).toBeInTheDocument();
-    expect(screen.getByText("Permission")).toBeInTheDocument();
-    expect(screen.getByText("Duration")).toBeInTheDocument();
+    expect(screen.getByText("Time")).toBeTruthy();
+    expect(screen.getByText("Plugin")).toBeTruthy();
+    expect(screen.getByText("Action")).toBeTruthy();
+    expect(screen.getByText("Result")).toBeTruthy();
+    expect(screen.getByText("Permission")).toBeTruthy();
+    expect(screen.getByText("Duration")).toBeTruthy();
   });
 
   it("renders 3 rows when store has 3 receipts", () => {
@@ -113,11 +113,11 @@ describe("PluginAuditViewer", () => {
     ];
     render(<PluginAuditViewer />);
 
-    expect(screen.getByText("my-plugin")).toBeInTheDocument();
-    expect(screen.getByText("storage.set")).toBeInTheDocument();
-    expect(screen.getByText("allowed")).toBeInTheDocument();
-    expect(screen.getByText("storage:set")).toBeInTheDocument();
-    expect(screen.getByText("42ms")).toBeInTheDocument();
+    expect(screen.getByText("my-plugin")).toBeTruthy();
+    expect(screen.getByText("storage.set")).toBeTruthy();
+    expect(screen.getByText("allowed")).toBeTruthy();
+    expect(screen.getByText("storage:set")).toBeTruthy();
+    expect(screen.getByText("42ms")).toBeTruthy();
   });
 
   it("applies red styling class to denied receipts", () => {
@@ -159,7 +159,7 @@ describe("PluginAuditViewer", () => {
     const tbody = screen.getByRole("table").querySelector("tbody");
     const rows = within(tbody!).getAllByRole("row");
     expect(rows).toHaveLength(2);
-    expect(screen.queryByText("beta-plugin")).not.toBeInTheDocument();
+    expect(screen.queryByText("beta-plugin")).toBeNull();
   });
 
   it("filters rows by action type when action filter is typed", async () => {
@@ -188,7 +188,7 @@ describe("PluginAuditViewer", () => {
     ];
     render(<PluginAuditViewer />);
 
-    const resultSelect = screen.getByDisplayValue("all");
+    const resultSelect = screen.getByRole("combobox");
     await user.selectOptions(resultSelect, "denied");
 
     const tbody = screen.getByRole("table").querySelector("tbody");
@@ -215,6 +215,6 @@ describe("PluginAuditViewer", () => {
     const pluginInput = screen.getByPlaceholderText("Filter by plugin...");
     await user.type(pluginInput, "nonexistent");
 
-    expect(screen.getByText("No plugin audit receipts")).toBeInTheDocument();
+    expect(screen.getByText("No plugin audit receipts")).toBeTruthy();
   });
 });

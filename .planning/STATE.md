@@ -1,17 +1,16 @@
 ---
 gsd_state_version: 1.0
 milestone: v3.0
-milestone_name: Plugin-Contributed Views
-status: in_progress
-stopped_at: Completed 01-02-PLAN.md
-last_updated: "2026-03-19T12:33:00.000Z"
-last_activity: 2026-03-19 -- Completed 01-02 SDK ViewsApi + PluginLoader view routing + status bar fix (9 min)
+milestone_name: milestone
+status: in-progress
+stopped_at: Completed 03-01-PLAN.md (Phase 3 complete)
+last_updated: "2026-03-19T12:50:51Z"
 progress:
   total_phases: 4
-  completed_phases: 1
-  total_plans: 2
-  completed_plans: 2
-  percent: 25
+  completed_phases: 2
+  total_plans: 3
+  completed_plans: 3
+  percent: 50
 ---
 
 # Project State
@@ -21,15 +20,15 @@ progress:
 See: .planning/PROJECT.md
 
 **Core value:** Plugins can contribute React views to any UI slot — editor tabs, bottom panels, right sidebar, activity bar, gutters, context menus
-**Current focus:** Phase 1 ViewRegistry Foundation -- COMPLETE
+**Current focus:** Phase 3 Bottom Panel and Right Sidebar -- COMPLETE
 
 ## Current Position
 
-Phase: 1 of 4 (ViewRegistry Foundation) -- COMPLETE
-Plan: 2 of 2 complete
-Status: Phase 1 complete, ready for Phase 2
+Phase: 3 of 4 (Bottom Panel and Right Sidebar) -- COMPLETE
+Plan: 1 of 1 complete
+Status: Phase 3 complete, ready for Phase 4
 
-Progress: [██░░░░░░░░] 25%
+Progress: [█████░░░░░] 50%
 
 ## Previous Milestones
 
@@ -55,6 +54,10 @@ Progress: [██░░░░░░░░] 25%
 - Status bar entrypoint resolution is async fire-and-forget with null fallback until resolved
 - SDK view contributions accept ComponentType or lazy factory, manifest contributions use entrypoint strings
 - View IDs namespaced as {pluginId}.{viewId} for uniqueness across plugins
+- BuiltInTab/BuiltInPanel interfaces decouple components from specific built-in panels -- caller passes definitions
+- Plugin view wrappers use useMemo to clone registration with injected slot-specific props (panelHeight, sidebarWidth)
+- RightSidebarPanels returns a fragment for parent flex positioning instead of wrapping in a container
+- Unified tab/panel descriptors merge built-in and plugin entries with type discriminator for render dispatch
 
 ### Pending Todos
 None.
@@ -65,5 +68,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-03-19
-Stopped at: Completed 01-02-PLAN.md (Phase 1 complete)
-Resume file: Phase 2 planning needed
+Stopped at: Completed 03-01-PLAN.md (Phase 3 complete)
+Resume file: Phase 4 planning needed

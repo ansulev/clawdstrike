@@ -14,7 +14,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: ViewRegistry Foundation** - Central view registry, ViewContainer with ErrorBoundary/Suspense, status bar fix, SDK ViewsApi
 - [ ] **Phase 2: Editor Tab Views** - Plugin components in pane tabs with keep-alive state preservation and LRU eviction
-- [ ] **Phase 3: Bottom Panel and Right Sidebar** - Plugin tabs in bottom panel and right sidebar alongside built-in panels
+- [x] **Phase 3: Bottom Panel and Right Sidebar** - Plugin tabs in bottom panel and right sidebar alongside built-in panels
 - [ ] **Phase 4: Activity Bar, Gutters, and Context Menus** - Dynamic sidebar navigation, CodeMirror gutter extensions, and context menu items
 
 ## Phase Details
@@ -57,7 +57,7 @@ Plans:
   3. Uninstalling a plugin that contributed panel views removes its tabs/panels from both the bottom panel and right sidebar without breaking other panels
 **Plans:** 1 plan
 Plans:
-- [ ] 03-01-PLAN.md -- BottomPanelTabs + RightSidebarPanels components with plugin view integration
+- [x] 03-01-PLAN.md -- BottomPanelTabs + RightSidebarPanels components with plugin view integration
 
 ### Phase 4: Activity Bar, Gutters, and Context Menus
 **Goal**: Plugins can add sidebar navigation items, CodeMirror gutter decorations, and context menu items to the workbench
@@ -80,5 +80,5 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 |-------|----------------|--------|-----------|
 | 1. ViewRegistry Foundation | 2/2 | Complete | 2026-03-19 |
 | 2. Editor Tab Views | 0/2 | Not started | - |
-| 3. Bottom Panel and Right Sidebar | 0/1 | Not started | - |
+| 3. Bottom Panel and Right Sidebar | 1/1 | Complete | 2026-03-19 |
 | 4. Activity Bar, Gutters, and Context Menus | 0/? | Not started | - |

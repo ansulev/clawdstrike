@@ -88,11 +88,11 @@ Plans:
   1. The EgressAllowlistGuard plugin registers via the SDK, appears in the workbench guard list with the same name/description/category/icon as the original built-in, and its config fields render identically
   2. Policy evaluation with the plugin guard produces the same allow/deny verdicts as the built-in guard for the same policy and actions
   3. The plugin is loadable both as an in-process TypeScript plugin (workbench) and as a WASM guard via `CustomGuardRegistry` (Rust engine)
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 05-01: Extract EgressAllowlistGuard into standalone plugin with manifest and SDK usage
-- [ ] 05-02: Verify parity between plugin guard and built-in guard (TS workbench + Rust WASM paths)
+- [ ] 05-01-PLAN.md -- EgressAllowlistGuard plugin module with createPlugin(), manifest, guard contribution, and PluginLoader integration tests
+- [ ] 05-02-PLAN.md -- Verdict parity tests (TS workbench + Rust CustomGuardRegistry) proving both loading paths produce identical results
 
 ### Phase 6: Marketplace UI
 **Goal**: Operators can discover, install, and manage plugins from within the workbench Library panel

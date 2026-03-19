@@ -1,24 +1,29 @@
-import { useNavigate } from "react-router-dom";
-import { useMultiPolicy } from "@/features/policy/stores/multi-policy-store";
+import { usePolicyTabsStore } from "@/features/policy/stores/policy-tabs-store";
+import { usePolicyEditStore } from "@/features/policy/stores/policy-edit-store";
+import { usePaneStore } from "@/features/panes/pane-store";
 
 export function ProblemsPanel() {
-  const navigate = useNavigate();
-  const { tabs, multiDispatch } = useMultiPolicy();
+  const tabs = usePolicyTabsStore((s) => s.tabs);
+  const editStates = usePolicyEditStore((s) => s.editStates);
 
   const entries = tabs.flatMap((tab) => {
-    const errors = tab.validation.errors.map((issue) => ({
+    const editState = editStates.get(tab.id);
+    if (!editState) return [];
+    const errors = editState.validation.errors.map((issue) => ({
       kind: "error" as const,
       message: issue.message,
       path: issue.path,
       tabId: tab.id,
       tabName: tab.name,
+      filePath: tab.filePath,
     }));
-    const warnings = tab.validation.warnings.map((issue) => ({
+    const warnings = editState.validation.warnings.map((issue) => ({
       kind: "warning" as const,
       message: issue.message,
       path: issue.path,
       tabId: tab.id,
       tabName: tab.name,
+      filePath: tab.filePath,
     }));
     return [...errors, ...warnings];
   });
@@ -48,8 +53,10 @@ export function ProblemsPanel() {
             type="button"
             className="w-full rounded-lg border border-[#202531] bg-[#0b0d13] px-3 py-2 text-left transition-colors hover:border-[#30384b] hover:bg-[#131721]"
             onClick={() => {
-              multiDispatch({ type: "SWITCH_TAB", tabId: entry.tabId });
-              navigate("/editor");
+              usePolicyTabsStore.getState().switchTab(entry.tabId);
+              if (entry.filePath) {
+                usePaneStore.getState().openFile(entry.filePath);
+              }
             }}
           >
             <div className="mb-1 flex items-center gap-2">

@@ -13,6 +13,7 @@ import { useActivityBarStore } from "@/features/activity-bar/stores/activity-bar
 export function BreadcrumbBar({ route }: { route: string }) {
   const tabs = usePolicyTabsStore((s) => s.tabs);
   const project = useProjectStore((s) => s.project);
+  const projectRoots = useProjectStore((s) => s.projectRoots);
 
   // Show breadcrumbs for file routes (not app routes like /home, /guards, etc.)
   if (!route.startsWith("/file/")) return null;
@@ -34,7 +35,30 @@ export function BreadcrumbBar({ route }: { route: string }) {
     );
   }
 
-  const segments = filePath.split("/").filter(Boolean);
+  // Derive relative path by stripping the matching project root prefix.
+  // E.g., "/Users/connor/.clawdstrike/workspace/policies/strict.yaml"
+  // becomes "policies/strict.yaml" when rootPath is "/Users/connor/.clawdstrike/workspace".
+  let relPath = filePath;
+  for (const root of projectRoots) {
+    if (filePath.startsWith(root + "/")) {
+      relPath = filePath.slice(root.length + 1);
+      break;
+    }
+    if (filePath.startsWith(root)) {
+      relPath = filePath.slice(root.length).replace(/^\//, "");
+      break;
+    }
+  }
+  // Also try the single project rootPath for backward compat.
+  if (relPath === filePath && project?.rootPath) {
+    if (filePath.startsWith(project.rootPath + "/")) {
+      relPath = filePath.slice(project.rootPath.length + 1);
+    } else if (filePath.startsWith(project.rootPath)) {
+      relPath = filePath.slice(project.rootPath.length).replace(/^\//, "");
+    }
+  }
+
+  const segments = relPath.split("/").filter(Boolean);
 
   // Build breadcrumb segments: [projectName, ...folders, fileName]
   const projectName = project?.name ?? segments[0] ?? "Project";

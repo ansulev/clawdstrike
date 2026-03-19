@@ -108,10 +108,13 @@ function ExplorerPanelConnected() {
       onCreateFile={async (parentPath, fileName) => {
         const savedPath = await actions.createFile(parentPath, fileName, "clawdstrike_policy");
         if (savedPath) {
-          // Compute relative path for status key.
-          const project = useProjectStore.getState().project;
-          const relPath = project && savedPath.startsWith(project.rootPath)
-            ? savedPath.slice(project.rootPath.length).replace(/^\//, "")
+          // Find the correct project root that contains parentPath.
+          const storeProjects = useProjectStore.getState().projects;
+          const matchingProject = [...storeProjects.values()].find(
+            (p) => parentPath.startsWith(p.rootPath),
+          );
+          const relPath = matchingProject && savedPath.startsWith(matchingProject.rootPath)
+            ? savedPath.slice(matchingProject.rootPath.length).replace(/^\//, "")
             : fileName;
           actions.setFileStatus(relPath, { modified: true });
           usePaneStore.getState().openFile(savedPath, fileName);

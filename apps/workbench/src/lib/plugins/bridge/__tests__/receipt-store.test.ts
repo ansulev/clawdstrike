@@ -142,15 +142,30 @@ describe("PluginReceiptStore", () => {
   });
 
   it("enforces MAX_RECEIPTS (5000) cap with oldest-eviction", () => {
-    // Add 5002 receipts
-    for (let i = 0; i < 5002; i++) {
-      store.add(
-        makeReceipt({ pluginId: `plugin-${i}` }),
-      );
+    // Seed the store with 4999 receipts by writing directly to localStorage
+    const seedReceipts: PluginActionReceipt[] = [];
+    for (let i = 0; i < 4999; i++) {
+      seedReceipts.push(makeReceipt({ pluginId: `old-${i}` }));
     }
+    localStorageMock.setItem(
+      "clawdstrike_plugin_receipts",
+      JSON.stringify(seedReceipts),
+    );
 
-    const all = store.getAll();
+    // Create a fresh store that reads from seeded localStorage
+    const cappedStore = new PluginReceiptStore();
+
+    // Add 3 more (total would be 5002 without cap)
+    cappedStore.add(makeReceipt({ pluginId: "new-0" }));
+    cappedStore.add(makeReceipt({ pluginId: "new-1" }));
+    cappedStore.add(makeReceipt({ pluginId: "new-2" }));
+
+    const all = cappedStore.getAll();
     expect(all.length).toBeLessThanOrEqual(5000);
+    // Newest receipts should be at the front
+    expect(all[0].content.plugin.id).toBe("new-2");
+    expect(all[1].content.plugin.id).toBe("new-1");
+    expect(all[2].content.plugin.id).toBe("new-0");
   });
 
   it("clear() removes all receipts", () => {

@@ -33,10 +33,11 @@ import { ImportExport } from "./import-export";
 import { YamlViewDialog } from "./yaml-view-dialog";
 import { CatalogBrowser } from "./catalog-browser";
 import { SigmaHQBrowser } from "./sigmahq-browser";
+import { PluginsBrowser } from "./plugins-browser";
 
 const MCP_LAUNCH_COMMAND = "bun run apps/workbench/mcp-server/index.ts";
 
-type LibraryTab = "my-policies" | "catalog" | "sigmahq";
+type LibraryTab = "my-policies" | "catalog" | "sigmahq" | "plugins";
 
 /**
  * Merge native rulesets from the Rust engine with the client-side fallback list.
@@ -237,6 +238,7 @@ export function LibraryGallery() {
             { id: "my-policies", label: "My Policies", icon: IconBooks },
             { id: "catalog", label: "Catalog", icon: IconLayoutGrid },
             { id: "sigmahq", label: "SigmaHQ", icon: IconShieldCheck },
+            { id: "plugins", label: "Plugins", icon: IconPlugConnected },
           ] satisfies SubTab[]}
           activeTab={activeTab}
           onTabChange={(id) => setActiveTab(id as LibraryTab)}
@@ -244,7 +246,9 @@ export function LibraryGallery() {
       </div>
 
       {/* Tab content */}
-      {activeTab === "catalog" ? (
+      {activeTab === "plugins" ? (
+        <PluginsBrowser />
+      ) : activeTab === "catalog" ? (
         <CatalogBrowser />
       ) : activeTab === "sigmahq" ? (
         <SigmaHQBrowser

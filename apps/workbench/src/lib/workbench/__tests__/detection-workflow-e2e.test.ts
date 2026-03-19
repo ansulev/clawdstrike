@@ -1058,6 +1058,8 @@ describe("Scenario: Publication SHA-256 integrity across all adapters", () => {
       "settings: {}",
     ].join("\n"),
     swarm_bundle: "",
+    // Receipt files are read-only evidence artifacts — no publication source template.
+    receipt: "",
   };
 
   for (const fileType of adaptersToTest) {

@@ -147,6 +147,7 @@ const FILE_TYPE_FILTERS: Record<FileType, { name: string; extensions: string[] }
   yara_rule: { name: "YARA Rule", extensions: ["yar", "yara"] },
   ocsf_event: { name: "OCSF Event", extensions: ["json"] },
   swarm_bundle: { name: "Swarm Bundle", extensions: ["swarm"] },
+  receipt: { name: "Receipt / Evidence", extensions: ["receipt", "hush"] },
 };
 
 function resolveLegacySaveType(value: FileType | string): FileType {

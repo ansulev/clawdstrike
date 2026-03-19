@@ -40,6 +40,8 @@ import { registerGuard } from "../workbench/guard-registry";
 import { registerFileType } from "../workbench/file-type-registry";
 import { statusBarRegistry } from "../workbench/status-bar-registry";
 import { registerView } from "./view-registry";
+import { registerGutterExtension } from "./gutter-extension-registry";
+import type { GutterConfig } from "./types";
 import { PluginBridgeHost } from "./bridge";
 import { buildPluginSrcdoc } from "./sandbox";
 import {
@@ -613,6 +615,27 @@ export class PluginLoader {
           meta: { section: item.section, href: item.href },
         });
         disposables.push(dispose);
+      }
+    }
+
+    // Route gutter decoration contributions to GutterExtensionRegistry
+    if (contributions.gutterDecorations) {
+      for (const deco of contributions.gutterDecorations) {
+        const decoId = `${manifest.id}.${deco.id}`;
+        void (async () => {
+          try {
+            const mod = await import(/* @vite-ignore */ deco.entrypoint);
+            const factory = mod.createGutterExtension ?? mod.default;
+            if (typeof factory === "function") {
+              const config: GutterConfig = { pluginId: manifest.id, decorationId: decoId };
+              const extension = factory(config);
+              const dispose = registerGutterExtension({ id: decoId, extension });
+              disposables.push(dispose);
+            }
+          } catch (err) {
+            console.warn(`[PluginLoader] Failed to load gutter extension "${decoId}":`, err);
+          }
+        })();
       }
     }
   }

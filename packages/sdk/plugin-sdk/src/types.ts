@@ -288,6 +288,26 @@ export interface ComplianceFrameworkContribution {
   entrypoint: string;
 }
 
+// ---- Gutter Decoration Contribution ----
+
+/** Gutter decoration contribution -- provides a CodeMirror Extension factory. */
+export interface GutterDecorationContribution {
+  /** Unique identifier for this gutter decoration. */
+  id: string;
+  /** Optional gutter name (defaults to a plugin-namespaced custom gutter). */
+  gutter?: string;
+  /** Module path exporting a createGutterExtension(config: GutterConfig) => Extension factory. */
+  entrypoint: string;
+}
+
+/** Configuration passed to a plugin's gutter extension factory. */
+export interface GutterConfig {
+  /** The plugin's qualified ID. */
+  pluginId: string;
+  /** The gutter decoration's qualified ID. */
+  decorationId: string;
+}
+
 // ---- Contributions Container ----
 
 /**
@@ -319,6 +339,8 @@ export interface PluginContributions {
   threatIntelSources?: ThreatIntelSourceContribution[];
   /** Compliance framework definitions. */
   complianceFrameworks?: ComplianceFrameworkContribution[];
+  /** CodeMirror gutter decoration extensions. */
+  gutterDecorations?: GutterDecorationContribution[];
 }
 
 // ---- Installation Metadata ----

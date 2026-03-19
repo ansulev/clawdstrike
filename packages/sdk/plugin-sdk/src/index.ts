@@ -31,7 +31,7 @@ export type {
   // Config
   ConfigFieldType,
   ConfigFieldDef,
-  // Contribution Points (all 12)
+  // Contribution Points (all 13)
   GuardContribution,
   CommandContribution,
   KeybindingContribution,
@@ -44,6 +44,8 @@ export type {
   StatusBarItemContribution,
   ThreatIntelSourceContribution,
   ComplianceFrameworkContribution,
+  GutterDecorationContribution,
+  GutterConfig,
   // Contributions Container
   PluginContributions,
   // Installation & Manifest

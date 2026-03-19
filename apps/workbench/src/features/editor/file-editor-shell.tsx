@@ -19,6 +19,7 @@ import {
   ResizableHandle,
 } from "@/components/ui/resizable";
 import { EditorVisualPanel } from "@/components/workbench/editor/editor-visual-panel";
+import { TestRunnerPanel } from "@/components/workbench/editor/test-runner-panel";
 import { usePolicyTabsStore } from "@/features/policy/stores/policy-tabs-store";
 import { usePolicyEditStore } from "@/features/policy/stores/policy-edit-store";
 import { isPolicyFileType } from "@/lib/workbench/file-type-registry";
@@ -190,6 +191,38 @@ export function FileEditorShell() {
     );
   }
 
+  // Editor content: split (Visual + YAML) or plain YAML editor.
+  // Computed as a variable so TypeScript narrowing from the null guard above applies.
+  const editorContent =
+    splitActive && isPolicyFileType(tabMeta.fileType) ? (
+      <ResizablePanelGroup direction="horizontal" className="h-full">
+        <ResizablePanel defaultSize={45} minSize={25}>
+          <EditorVisualPanel />
+        </ResizablePanel>
+        <ResizableHandle
+          className="bg-[#2d3240] hover:bg-[#d4a84b]/40 transition-colors data-[resize-handle-active]:bg-[#d4a84b]"
+          withHandle
+        />
+        <ResizablePanel defaultSize={55} minSize={25}>
+          <YamlEditor
+            value={editState.yaml}
+            onChange={handleEditorChange}
+            fileType={tabMeta.fileType}
+            errors={editorErrors}
+            showDetectionGutters={tabMeta.fileType === "clawdstrike_policy"}
+          />
+        </ResizablePanel>
+      </ResizablePanelGroup>
+    ) : (
+      <YamlEditor
+        value={editState.yaml}
+        onChange={handleEditorChange}
+        fileType={tabMeta.fileType}
+        errors={editorErrors}
+        showDetectionGutters={tabMeta.fileType === "clawdstrike_policy"}
+      />
+    );
+
   return (
     <div className="h-full flex flex-col">
       <FileEditorToolbar
@@ -202,36 +235,23 @@ export function FileEditorShell() {
         problemsOpen={showProblems}
         splitActive={splitActive}
       />
-      <div className="flex-1 min-h-0">
-        {splitActive && isPolicyFileType(tabMeta.fileType) ? (
-          <ResizablePanelGroup direction="horizontal" className="h-full">
-            <ResizablePanel defaultSize={45} minSize={25}>
-              <EditorVisualPanel />
-            </ResizablePanel>
-            <ResizableHandle
-              className="bg-[#2d3240] hover:bg-[#d4a84b]/40 transition-colors data-[resize-handle-active]:bg-[#d4a84b]"
-              withHandle
-            />
-            <ResizablePanel defaultSize={55} minSize={25}>
-              <YamlEditor
-                value={editState.yaml}
-                onChange={handleEditorChange}
-                fileType={tabMeta.fileType}
-                errors={editorErrors}
-                showDetectionGutters={tabMeta.fileType === "clawdstrike_policy"}
-              />
-            </ResizablePanel>
-          </ResizablePanelGroup>
-        ) : (
-          <YamlEditor
-            value={editState.yaml}
-            onChange={handleEditorChange}
-            fileType={tabMeta.fileType}
-            errors={editorErrors}
-            showDetectionGutters={tabMeta.fileType === "clawdstrike_policy"}
+      {testRunnerOpen && isPolicyFileType(tabMeta.fileType) ? (
+        <ResizablePanelGroup direction="vertical" className="flex-1 min-h-0">
+          <ResizablePanel defaultSize={60} minSize={20}>
+            {editorContent}
+          </ResizablePanel>
+          <ResizableHandle
+            className="bg-[#2d3240] hover:bg-[#d4a84b]/40 transition-colors data-[resize-handle-active]:bg-[#d4a84b]"
           />
-        )}
-      </div>
+          <ResizablePanel defaultSize={40} minSize={15}>
+            <TestRunnerPanel />
+          </ResizablePanel>
+        </ResizablePanelGroup>
+      ) : (
+        <div className="flex-1 min-h-0">
+          {editorContent}
+        </div>
+      )}
     </div>
   );
 }

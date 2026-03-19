@@ -71,7 +71,10 @@ Plans:
   2. After a permission-denied bridge call, a receipt with `result: "denied"` exists in the store regardless of audit verbosity settings
   3. When connected to hushd, plugin action receipts appear in the daemon's audit ledger and are available to SIEM exporters
   4. The workbench audit view shows plugin receipts filterable by plugin name, action type (e.g., "network.fetch"), result, and time range
-**Plans**: TBD
+**Plans:** 2 plans
+Plans:
+- [ ] 04-01-PLAN.md -- Receipt types + receipt store + receipt generation middleware wired into bridge host
+- [ ] 04-02-PLAN.md -- hushd receipt forwarding + plugin audit viewer UI with filtering
 
 ### Phase 5: Emergency Revocation
 **Goal**: An operator can revoke a community plugin fleet-wide via hushd, and all connected workbench instances immediately kill the plugin and persist the revocation for offline restarts
@@ -95,5 +98,5 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 | 1. postMessage RPC Bridge | 2/2 | Complete | 2026-03-19 |
 | 2. iframe Sandbox | 2/2 | Complete | 2026-03-19 |
 | 3. Permission System | 2/2 | Complete | 2026-03-19 |
-| 4. Plugin Audit Trail | 0/TBD | Not started | - |
+| 4. Plugin Audit Trail | 0/2 | Planning complete | - |
 | 5. Emergency Revocation | 0/TBD | Not started | - |

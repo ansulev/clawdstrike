@@ -33,7 +33,7 @@ import {
   IconCommand,
 } from "@tabler/icons-react";
 
-import { SwarmBoardProvider, useSwarmBoard } from "@/features/swarm/stores/swarm-board-store";
+import { SwarmBoardProvider, useSwarmBoard, useSwarmBoardStore } from "@/features/swarm/stores/swarm-board-store";
 import { swarmBoardNodeTypes } from "./nodes";
 import { swarmBoardEdgeTypes } from "./edges";
 import { SwarmBoardToolbar } from "./swarm-board-toolbar";
@@ -103,8 +103,9 @@ interface NodeContextMenuState {
 // ---------------------------------------------------------------------------
 
 function SwarmBoardCanvas() {
-  const { state, dispatch, selectNode, removeNode, addNode, updateNode, rfEdges, killSession, spawnSession } = useSwarmBoard();
+  const { state, selectNode, removeNode, addNode, updateNode, rfEdges, killSession, spawnSession } = useSwarmBoard();
   const { nodes, edges } = state;
+  const storeActions = useSwarmBoardStore((s) => s.actions);
   const reactFlow = useReactFlow();
 
   // Context menu
@@ -144,9 +145,9 @@ function SwarmBoardCanvas() {
         }
       }
       const updated = applyNodeChanges(changes, nodesRef.current);
-      dispatch({ type: "SET_NODES", nodes: updated as Node<SwarmBoardNodeData>[] });
+      storeActions.setNodes(updated as Node<SwarmBoardNodeData>[]);
     },
-    [dispatch, killSession],
+    [storeActions, killSession],
   );
 
   // Handle React Flow's built-in edge changes (remove)
@@ -161,9 +162,9 @@ function SwarmBoardCanvas() {
         label: typeof e.label === "string" ? e.label : undefined,
         type: findEdgeType(e.id, edgesRef.current),
       }));
-      dispatch({ type: "SET_EDGES", edges: newEdges });
+      storeActions.setEdges(newEdges);
     },
-    [dispatch],
+    [storeActions],
   );
 
   // Handle new connections drawn by the user
@@ -171,17 +172,14 @@ function SwarmBoardCanvas() {
     (params) => {
       if (!params.source || !params.target) return;
       const edgeId = `edge-${params.source}-${params.target}-${Date.now().toString(36)}`;
-      dispatch({
-        type: "ADD_EDGE",
-        edge: {
-          id: edgeId,
-          source: params.source,
-          target: params.target,
-          type: "handoff",
-        },
+      storeActions.addEdge({
+        id: edgeId,
+        source: params.source,
+        target: params.target,
+        type: "handoff",
       });
     },
-    [dispatch],
+    [storeActions],
   );
 
   // Node click -> select & open inspector
@@ -311,7 +309,7 @@ function SwarmBoardCanvas() {
           ...n,
           selected: true,
         }));
-        dispatch({ type: "SET_NODES", nodes: allNodes as Node<SwarmBoardNodeData>[] });
+        storeActions.setNodes(allNodes as Node<SwarmBoardNodeData>[]);
         return;
       }
 
@@ -390,7 +388,7 @@ function SwarmBoardCanvas() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [selectNode, dispatch, addNode, getDropPosition, reactFlow, spawnSession, state.repoRoot]);
+  }, [selectNode, storeActions, addNode, getDropPosition, reactFlow, spawnSession, state.repoRoot]);
 
   // Follow active — auto-zoom to running node
   useEffect(() => {

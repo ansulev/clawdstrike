@@ -78,9 +78,9 @@ Isolate community plugins in sandboxed iframes with a typed postMessage bridge, 
 | PERM-04 | Phase 3 | Complete |
 | PERM-05 | Phase 3 | Complete |
 | PERM-06 | Phase 3 | Complete |
-| AUDIT-01 | Phase 4 | Pending |
-| AUDIT-02 | Phase 4 | Pending |
-| AUDIT-03 | Phase 4 | Pending |
+| AUDIT-01 | Phase 4 | Complete |
+| AUDIT-02 | Phase 4 | Complete |
+| AUDIT-03 | Phase 4 | Complete |
 | AUDIT-04 | Phase 4 | Pending |
 | AUDIT-05 | Phase 4 | Pending |
 | REVOKE-01 | Phase 5 | Pending |

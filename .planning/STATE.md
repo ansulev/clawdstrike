@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: milestone
-status: in-progress
-stopped_at: Completed 03-02-PLAN.md
-last_updated: "2026-03-19T05:37:00Z"
-last_activity: 2026-03-19 -- Completed network domain scoping, manifest validation, install prompt (03-02)
+status: executing
+stopped_at: Completed 04-01-PLAN.md
+last_updated: "2026-03-19T05:54:25.433Z"
+last_activity: 2026-03-19 -- Completed receipt types, store, and middleware for plugin audit trail (04-01)
 progress:
   total_phases: 5
   completed_phases: 3
-  total_plans: 5
+  total_plans: 8
   completed_plans: 7
-  percent: 60
+  percent: 88
 ---
 
 # Project State
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-19)
 
 **Core value:** Community plugins run in sandboxed iframes with capability-based permissions, Ed25519 audit trail, and fleet-wide emergency revocation
-**Current focus:** Phase 3 complete -- Permission System (2 of 2 plans done). Ready for Phase 4.
+**Current focus:** Phase 4 in progress -- Plugin Audit Trail (1 of 2 plans done).
 
 ## Current Position
 
-Phase: 3 of 5 (Permission System) -- COMPLETE
-Plan: 2 of 2 complete
-Status: Phase complete
-Last activity: 2026-03-19 -- Completed network domain scoping, manifest validation, install prompt (03-02)
+Phase: 4 of 5 (Plugin Audit Trail)
+Plan: 1 of 2 complete
+Status: In progress
+Last activity: 2026-03-19 -- Completed receipt types, store, and middleware for plugin audit trail (04-01)
 
-Progress: [######░░░░] 60%
+Progress: [#########░] 88%
 
 ## Previous Milestones
 
@@ -69,6 +69,12 @@ Progress: [######░░░░] 60%
 - network:fetch auto-added to simple permissions when NetworkPermission objects present, ensuring permission-level check passes before domain-level check (03-02)
 - Permission prompt runs BEFORE registry.register() so rejected installs never touch the registry (03-02)
 - Empty permissions array on manifest activates enforcement (deny-all); undefined permissions means no enforcement (backward compat) (03-02)
+- Receipt generation is fire-and-forget (void the promise) so audit does not block bridge response time (04-01)
+- Denials always recorded regardless of verbosity -- fail-open for audit, fail-closed for security (04-01)
+- Unsigned receipts (signature='') supported for dev mode when secretKeyHex is null (04-01)
+- Handler-level PermissionDeniedError produces recordDenied, not recordError (04-01)
+- Receipt store uses localStorage with 5000 cap following existing local-audit.ts pattern (04-01)
+- Receipt middleware is injected via BridgeHostOptions for testability (store instance injected, not singleton) (04-01)
 
 ### Pending Todos
 None yet.
@@ -78,6 +84,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-19T05:37:00Z
-Stopped at: Completed 03-02-PLAN.md
+Last session: 2026-03-19T05:54:25.431Z
+Stopped at: Completed 04-01-PLAN.md
 Resume file: None

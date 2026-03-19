@@ -15,7 +15,7 @@ export interface DetectionDocumentRef {
 
 // ---- Draft Seed ----
 
-export type DraftSeedKind = "hunt_event" | "investigation" | "hunt_pattern" | "manual";
+export type DraftSeedKind = "hunt_event" | "investigation" | "hunt_pattern" | "finding" | "manual";
 
 export interface DraftSeed {
   id: string;
@@ -23,6 +23,7 @@ export interface DraftSeed {
   sourceEventIds: string[];
   investigationId?: string;
   patternId?: string;
+  findingId?: string;
   preferredFormats: FileType[];
   techniqueHints: string[];
   dataSourceHints: string[];

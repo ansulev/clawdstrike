@@ -1,19 +1,30 @@
 // ---------------------------------------------------------------------------
-// SwarmBoard Store — React Context + useReducer for board CRUD
+// SwarmBoard Store — Zustand store with createSelectors for board CRUD
 //
-// Follows the swarm-store.tsx / sentinel-store.tsx pattern: State, Action
-// union, reducer, Provider with localStorage persistence, and a typed hook.
+// Migrated from React Context + useReducer to Zustand, matching the
+// swarm-store.tsx / swarm-feed-store.tsx pattern. The Zustand store is
+// globally accessible (no provider tree required for read-only access).
+//
+// SwarmBoardProvider is kept as a thin wrapper that manages:
+// - Auto-detect repoRoot on mount (terminalService.getCwd)
+// - Session spawn/kill lifecycle (PTY refs, exit monitoring, worktrees)
+// - Session context (spawn/kill methods via SwarmBoardSessionContext)
+//
+// The existing useSwarmBoard() hook composes Zustand store + session context
+// for backward compatibility.
 // ---------------------------------------------------------------------------
 import {
   createContext,
   useContext,
-  useReducer,
   useCallback,
   useEffect,
   useMemo,
   useRef,
   type ReactNode,
 } from "react";
+import { create } from "zustand";
+import { useShallow } from "zustand/react/shallow";
+import { createSelectors } from "@/lib/create-selectors";
 import { MarkerType, type Node, type Edge } from "@xyflow/react";
 import type {
   SwarmBoardNodeData,
@@ -34,7 +45,7 @@ import type { UnlistenFn } from "@tauri-apps/api/event";
 export const MAX_ACTIVE_TERMINALS = 8;
 
 // ---------------------------------------------------------------------------
-// Actions
+// Legacy Action type — kept for backward compat type exports
 // ---------------------------------------------------------------------------
 
 export type SwarmBoardAction =
@@ -52,145 +63,6 @@ export type SwarmBoardAction =
   | { type: "CLEAR_BOARD" }
   | { type: "SET_SESSION_STATUS"; sessionId: string; status: SessionStatus; exitCode?: number }
   | { type: "SET_SESSION_METADATA"; sessionId: string; metadata: Partial<SwarmBoardNodeData> };
-
-// ---------------------------------------------------------------------------
-// Reducer
-// ---------------------------------------------------------------------------
-
-function boardReducer(
-  state: SwarmBoardState,
-  action: SwarmBoardAction,
-): SwarmBoardState {
-  switch (action.type) {
-    case "ADD_NODE": {
-      // Prevent duplicates
-      if (state.nodes.some((n) => n.id === action.node.id)) return state;
-      return { ...state, nodes: [...state.nodes, action.node] };
-    }
-
-    case "REMOVE_NODE": {
-      return {
-        ...state,
-        nodes: state.nodes.filter((n) => n.id !== action.nodeId),
-        // Remove edges connected to the deleted node
-        edges: state.edges.filter(
-          (e) => e.source !== action.nodeId && e.target !== action.nodeId,
-        ),
-        selectedNodeId:
-          state.selectedNodeId === action.nodeId ? null : state.selectedNodeId,
-        inspectorOpen:
-          state.selectedNodeId === action.nodeId ? false : state.inspectorOpen,
-      };
-    }
-
-    case "UPDATE_NODE": {
-      return {
-        ...state,
-        nodes: state.nodes.map((n) =>
-          n.id === action.nodeId
-            ? { ...n, data: { ...n.data, ...action.patch } }
-            : n,
-        ),
-      };
-    }
-
-    case "SET_NODES": {
-      return { ...state, nodes: action.nodes };
-    }
-
-    case "ADD_EDGE": {
-      if (state.edges.some((e) => e.id === action.edge.id)) return state;
-      return { ...state, edges: [...state.edges, action.edge] };
-    }
-
-    case "REMOVE_EDGE": {
-      return {
-        ...state,
-        edges: state.edges.filter((e) => e.id !== action.edgeId),
-      };
-    }
-
-    case "SET_EDGES": {
-      return { ...state, edges: action.edges };
-    }
-
-    case "SELECT_NODE": {
-      return {
-        ...state,
-        selectedNodeId: action.nodeId,
-        inspectorOpen: action.nodeId !== null,
-      };
-    }
-
-    case "TOGGLE_INSPECTOR": {
-      const open = action.open ?? !state.inspectorOpen;
-      return {
-        ...state,
-        inspectorOpen: open,
-        selectedNodeId: open ? state.selectedNodeId : null,
-      };
-    }
-
-    case "SET_REPO_ROOT": {
-      return { ...state, repoRoot: action.repoRoot };
-    }
-
-    case "LOAD": {
-      return {
-        ...state,
-        ...action.state,
-        nodes: action.state.nodes ?? state.nodes,
-        edges: action.state.edges ?? state.edges,
-      };
-    }
-
-    case "CLEAR_BOARD": {
-      return {
-        ...state,
-        nodes: [],
-        edges: [],
-        selectedNodeId: null,
-        inspectorOpen: false,
-      };
-    }
-
-    case "SET_SESSION_STATUS": {
-      return {
-        ...state,
-        nodes: state.nodes.map((n) => {
-          const d = n.data as SwarmBoardNodeData;
-          if (d.sessionId === action.sessionId) {
-            return {
-              ...n,
-              data: {
-                ...d,
-                status: action.status,
-                ...(action.exitCode !== undefined ? { exitCode: action.exitCode } : {}),
-              },
-            };
-          }
-          return n;
-        }),
-      };
-    }
-
-    case "SET_SESSION_METADATA": {
-      return {
-        ...state,
-        nodes: state.nodes.map((n) => {
-          const d = n.data as SwarmBoardNodeData;
-          if (d.sessionId === action.sessionId) {
-            return { ...n, data: { ...d, ...action.metadata } };
-          }
-          return n;
-        }),
-      };
-    }
-
-    default:
-      return state;
-  }
-}
 
 // ---------------------------------------------------------------------------
 // Persistence
@@ -226,8 +98,7 @@ function loadPersistedBoard(): Partial<SwarmBoardState> | null {
       return null;
     }
 
-    // Validate each node has the minimum required shape to prevent
-    // runtime errors from corrupted localStorage data.
+    // Validate each node has the minimum required shape
     const validNodes = (parsed.nodes as unknown[]).filter(
       (n): n is Node<SwarmBoardNodeData> =>
         typeof n === "object" &&
@@ -249,9 +120,7 @@ function loadPersistedBoard(): Partial<SwarmBoardState> | null {
 
     if (validNodes.length === 0) return null;
 
-    // Strip sessionId from persisted nodes — PTY sessions don't survive
-    // page reloads, so stale sessionIds would cause the TerminalRenderer
-    // to mount and connect to a non-existent backend, producing garbled output.
+    // Strip sessionId from persisted nodes — PTY sessions don't survive reloads
     const sanitizedNodes = validNodes.map((n) => {
       if (n.data?.sessionId) {
         return {
@@ -341,15 +210,13 @@ export function createBoardNode(config: CreateNodeConfig): Node<SwarmBoardNodeDa
 }
 
 // ---------------------------------------------------------------------------
-// Mock data seeder — provides a demo board for first-time users
+// Mock data seeder
 // ---------------------------------------------------------------------------
 
 export function createMockBoard(): {
   nodes: Node<SwarmBoardNodeData>[];
   edges: SwarmBoardEdge[];
 } {
-  // --- Agent Session nodes ---
-
   const agent1 = createBoardNode({
     nodeType: "agentSession",
     title: "Fix auth middleware",
@@ -396,7 +263,7 @@ export function createMockBoard(): {
       previewLines: [
         "$ cargo clippy --workspace",
         "Checking rate-limiter v0.1.0",
-        "Finished `dev` profile target(s)",
+        'Finished `dev` profile target(s)',
         "All checks passed.",
       ],
       receiptCount: 12,
@@ -442,8 +309,6 @@ export function createMockBoard(): {
     },
   });
 
-  // --- Terminal Task nodes ---
-
   const task1 = createBoardNode({
     nodeType: "terminalTask",
     title: "Run integration tests",
@@ -453,8 +318,6 @@ export function createMockBoard(): {
       taskPrompt: "Execute the full integration test suite and report failures",
     },
   });
-
-  // --- Receipt nodes ---
 
   const receipt1 = createBoardNode({
     nodeType: "receipt",
@@ -488,8 +351,6 @@ export function createMockBoard(): {
     },
   });
 
-  // --- Diff nodes ---
-
   const diff1 = createBoardNode({
     nodeType: "diff",
     title: "Auth changes",
@@ -508,8 +369,6 @@ export function createMockBoard(): {
       },
     },
   });
-
-  // --- Artifact nodes ---
 
   const artifact1 = createBoardNode({
     nodeType: "artifact",
@@ -533,8 +392,6 @@ export function createMockBoard(): {
     },
   });
 
-  // --- Note nodes ---
-
   const note1 = createBoardNode({
     nodeType: "note",
     title: "Coordination notes",
@@ -549,7 +406,6 @@ export function createMockBoard(): {
   const nodes = [agent1, agent2, agent3, task1, receipt1, receipt2, diff1, artifact1, artifact2, note1];
 
   const edges: SwarmBoardEdge[] = [
-    // Agent1 spawned task1
     {
       id: `edge-${agent1.id}-${task1.id}`,
       source: agent1.id,
@@ -557,7 +413,6 @@ export function createMockBoard(): {
       type: "spawned",
       label: "spawned",
     },
-    // Agent1 produces artifact1
     {
       id: `edge-${agent1.id}-${artifact1.id}`,
       source: agent1.id,
@@ -565,14 +420,12 @@ export function createMockBoard(): {
       type: "artifact",
       label: "produces",
     },
-    // Agent1 produces diff1
     {
       id: `edge-${agent1.id}-${diff1.id}`,
       source: agent1.id,
       target: diff1.id,
       type: "artifact",
     },
-    // Agent2 receipt (allow)
     {
       id: `edge-${agent2.id}-${receipt1.id}`,
       source: agent2.id,
@@ -580,7 +433,6 @@ export function createMockBoard(): {
       type: "receipt",
       label: "receipt",
     },
-    // Agent2 produces artifact2
     {
       id: `edge-${agent2.id}-${artifact2.id}`,
       source: agent2.id,
@@ -588,7 +440,6 @@ export function createMockBoard(): {
       type: "artifact",
       label: "produces",
     },
-    // Agent3 receipt (deny)
     {
       id: `edge-${agent3.id}-${receipt2.id}`,
       source: agent3.id,
@@ -596,7 +447,6 @@ export function createMockBoard(): {
       type: "receipt",
       label: "denied",
     },
-    // Handoff edge: Agent1 -> Agent2 (coordination)
     {
       id: `edge-${agent1.id}-${agent2.id}`,
       source: agent1.id,
@@ -607,6 +457,59 @@ export function createMockBoard(): {
   ];
 
   return { nodes, edges };
+}
+
+// ---------------------------------------------------------------------------
+// Edge color helper
+// ---------------------------------------------------------------------------
+
+function edgeColor(type?: SwarmBoardEdge["type"]): string {
+  switch (type) {
+    case "handoff":
+      return "#5b8def";
+    case "spawned":
+      return "#d4a84b";
+    case "artifact":
+      return "#3dbf84";
+    case "receipt":
+      return "#8b5cf6";
+    default:
+      return "#2d3240";
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Convert SwarmBoardEdge[] to React Flow Edge[]
+// ---------------------------------------------------------------------------
+
+function toRfEdges(edges: SwarmBoardEdge[]): Edge[] {
+  return edges.map((e) => ({
+    id: e.id,
+    source: e.source,
+    target: e.target,
+    label: e.label,
+    type: "swarmEdge",
+    data: { edgeType: e.type },
+    animated: e.type === "spawned",
+    markerEnd:
+      e.type === "handoff" || e.type === "spawned"
+        ? { type: MarkerType.ArrowClosed, color: edgeColor(e.type) }
+        : undefined,
+  }));
+}
+
+// ---------------------------------------------------------------------------
+// Debounced persistence
+// ---------------------------------------------------------------------------
+
+let _persistTimer: ReturnType<typeof setTimeout> | null = null;
+
+function schedulePersist(state: SwarmBoardState): void {
+  if (_persistTimer) clearTimeout(_persistTimer);
+  _persistTimer = setTimeout(() => {
+    persistBoard(state);
+    _persistTimer = null;
+  }, 500);
 }
 
 // ---------------------------------------------------------------------------
@@ -639,13 +542,307 @@ function getInitialState(): SwarmBoardState {
 }
 
 // ---------------------------------------------------------------------------
-// Context
+// Zustand store type
+// ---------------------------------------------------------------------------
+
+interface SwarmBoardStoreState extends SwarmBoardState {
+  // Derived state
+  selectedNode: Node<SwarmBoardNodeData> | undefined;
+  rfEdges: Edge[];
+
+  // Actions namespace (matching swarm-store.tsx pattern)
+  actions: {
+    addNode: (config: CreateNodeConfig) => Node<SwarmBoardNodeData>;
+    addNodeDirect: (node: Node<SwarmBoardNodeData>) => void;
+    removeNode: (nodeId: string) => void;
+    updateNode: (nodeId: string, patch: Partial<SwarmBoardNodeData>) => void;
+    selectNode: (nodeId: string | null) => void;
+    addEdge: (edge: SwarmBoardEdge) => void;
+    removeEdge: (edgeId: string) => void;
+    clearBoard: () => void;
+    setRepoRoot: (repoRoot: string) => void;
+    loadState: (state: Partial<SwarmBoardState>) => void;
+    setSessionStatus: (sessionId: string, status: SessionStatus, exitCode?: number) => void;
+    setSessionMetadata: (sessionId: string, metadata: Partial<SwarmBoardNodeData>) => void;
+    setNodes: (nodes: Node<SwarmBoardNodeData>[]) => void;
+    setEdges: (edges: SwarmBoardEdge[]) => void;
+    toggleInspector: (open?: boolean) => void;
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Derived helpers
+// ---------------------------------------------------------------------------
+
+function deriveSelectedNode(
+  nodes: Node<SwarmBoardNodeData>[],
+  selectedNodeId: string | null,
+): Node<SwarmBoardNodeData> | undefined {
+  return selectedNodeId ? nodes.find((n) => n.id === selectedNodeId) : undefined;
+}
+
+// ---------------------------------------------------------------------------
+// Zustand store
+// ---------------------------------------------------------------------------
+
+const initialState = getInitialState();
+
+const useSwarmBoardStoreBase = create<SwarmBoardStoreState>()((set, get) => ({
+  ...initialState,
+  selectedNode: deriveSelectedNode(initialState.nodes, initialState.selectedNodeId),
+  rfEdges: toRfEdges(initialState.edges),
+
+  actions: {
+    addNode: (config: CreateNodeConfig): Node<SwarmBoardNodeData> => {
+      const node = createBoardNode(config);
+      const current = get();
+      // Prevent duplicates
+      if (current.nodes.some((n) => n.id === node.id)) return node;
+      const nodes = [...current.nodes, node];
+      set({
+        nodes,
+        selectedNode: deriveSelectedNode(nodes, current.selectedNodeId),
+      });
+      schedulePersist({ ...get() });
+      return node;
+    },
+
+    addNodeDirect: (node: Node<SwarmBoardNodeData>): void => {
+      const current = get();
+      if (current.nodes.some((n) => n.id === node.id)) return;
+      const nodes = [...current.nodes, node];
+      set({
+        nodes,
+        selectedNode: deriveSelectedNode(nodes, current.selectedNodeId),
+      });
+      schedulePersist({ ...get() });
+    },
+
+    removeNode: (nodeId: string): void => {
+      const current = get();
+      const nodes = current.nodes.filter((n) => n.id !== nodeId);
+      const edges = current.edges.filter(
+        (e) => e.source !== nodeId && e.target !== nodeId,
+      );
+      const selectedNodeId = current.selectedNodeId === nodeId ? null : current.selectedNodeId;
+      const inspectorOpen = current.selectedNodeId === nodeId ? false : current.inspectorOpen;
+      set({
+        nodes,
+        edges,
+        selectedNodeId,
+        inspectorOpen,
+        selectedNode: deriveSelectedNode(nodes, selectedNodeId),
+        rfEdges: toRfEdges(edges),
+      });
+      schedulePersist({ ...get() });
+    },
+
+    updateNode: (nodeId: string, patch: Partial<SwarmBoardNodeData>): void => {
+      const current = get();
+      const nodes = current.nodes.map((n) =>
+        n.id === nodeId ? { ...n, data: { ...n.data, ...patch } } : n,
+      );
+      set({
+        nodes,
+        selectedNode: deriveSelectedNode(nodes, current.selectedNodeId),
+      });
+      schedulePersist({ ...get() });
+    },
+
+    selectNode: (nodeId: string | null): void => {
+      const current = get();
+      const nodes = current.nodes;
+      set({
+        selectedNodeId: nodeId,
+        inspectorOpen: nodeId !== null,
+        selectedNode: deriveSelectedNode(nodes, nodeId),
+      });
+    },
+
+    addEdge: (edge: SwarmBoardEdge): void => {
+      const current = get();
+      if (current.edges.some((e) => e.id === edge.id)) return;
+      const edges = [...current.edges, edge];
+      set({
+        edges,
+        rfEdges: toRfEdges(edges),
+      });
+      schedulePersist({ ...get() });
+    },
+
+    removeEdge: (edgeId: string): void => {
+      const current = get();
+      const edges = current.edges.filter((e) => e.id !== edgeId);
+      set({
+        edges,
+        rfEdges: toRfEdges(edges),
+      });
+      schedulePersist({ ...get() });
+    },
+
+    clearBoard: (): void => {
+      set({
+        nodes: [],
+        edges: [],
+        selectedNodeId: null,
+        inspectorOpen: false,
+        selectedNode: undefined,
+        rfEdges: [],
+      });
+      schedulePersist({ ...get() });
+    },
+
+    setRepoRoot: (repoRoot: string): void => {
+      set({ repoRoot });
+      schedulePersist({ ...get() });
+    },
+
+    loadState: (partial: Partial<SwarmBoardState>): void => {
+      const current = get();
+      const nodes = partial.nodes ?? current.nodes;
+      const edges = partial.edges ?? current.edges;
+      set({
+        ...partial,
+        nodes,
+        edges,
+        selectedNode: deriveSelectedNode(nodes, partial.selectedNodeId ?? current.selectedNodeId),
+        rfEdges: toRfEdges(edges),
+      });
+      schedulePersist({ ...get() });
+    },
+
+    setSessionStatus: (sessionId: string, status: SessionStatus, exitCode?: number): void => {
+      const current = get();
+      const nodes = current.nodes.map((n) => {
+        const d = n.data as SwarmBoardNodeData;
+        if (d.sessionId === sessionId) {
+          return {
+            ...n,
+            data: {
+              ...d,
+              status,
+              ...(exitCode !== undefined ? { exitCode } : {}),
+            },
+          };
+        }
+        return n;
+      });
+      set({
+        nodes,
+        selectedNode: deriveSelectedNode(nodes, current.selectedNodeId),
+      });
+      schedulePersist({ ...get() });
+    },
+
+    setSessionMetadata: (sessionId: string, metadata: Partial<SwarmBoardNodeData>): void => {
+      const current = get();
+      const nodes = current.nodes.map((n) => {
+        const d = n.data as SwarmBoardNodeData;
+        if (d.sessionId === sessionId) {
+          return { ...n, data: { ...d, ...metadata } };
+        }
+        return n;
+      });
+      set({
+        nodes,
+        selectedNode: deriveSelectedNode(nodes, current.selectedNodeId),
+      });
+      schedulePersist({ ...get() });
+    },
+
+    setNodes: (nodes: Node<SwarmBoardNodeData>[]): void => {
+      const current = get();
+      set({
+        nodes,
+        selectedNode: deriveSelectedNode(nodes, current.selectedNodeId),
+      });
+      schedulePersist({ ...get() });
+    },
+
+    setEdges: (edges: SwarmBoardEdge[]): void => {
+      set({
+        edges,
+        rfEdges: toRfEdges(edges),
+      });
+      schedulePersist({ ...get() });
+    },
+
+    toggleInspector: (open?: boolean): void => {
+      const current = get();
+      const isOpen = open ?? !current.inspectorOpen;
+      set({
+        inspectorOpen: isOpen,
+        selectedNodeId: isOpen ? current.selectedNodeId : null,
+        selectedNode: isOpen
+          ? deriveSelectedNode(current.nodes, current.selectedNodeId)
+          : undefined,
+      });
+    },
+  },
+}));
+
+// Expose getInitialState and reinitialize for test reset / provider mount
+function reinitializeFromStorage(): void {
+  const fresh = getInitialState();
+  useSwarmBoardStoreBase.setState({
+    ...fresh,
+    selectedNode: deriveSelectedNode(fresh.nodes, fresh.selectedNodeId),
+    rfEdges: toRfEdges(fresh.edges),
+  });
+}
+
+const storeWithInitialState = Object.assign(useSwarmBoardStoreBase, {
+  getInitialState,
+  reinitializeFromStorage,
+});
+
+export const useSwarmBoardStore = createSelectors(storeWithInitialState);
+
+// ---------------------------------------------------------------------------
+// Session context (spawn/kill — needs mutable refs + Tauri callbacks)
+// ---------------------------------------------------------------------------
+
+export interface SpawnSessionOptions {
+  cwd: string;
+  position?: { x: number; y: number };
+  launchClaude?: boolean;
+  title?: string;
+  shell?: string;
+  command?: string;
+}
+
+export interface SpawnClaudeSessionOptions {
+  cwd?: string;
+  position?: { x: number; y: number };
+  prompt?: string;
+  worktree?: boolean;
+  branch?: string;
+  title?: string;
+}
+
+export interface SpawnWorktreeSessionOptions {
+  position?: { x: number; y: number };
+  branch?: string;
+  title?: string;
+  shell?: string;
+}
+
+interface SwarmBoardSessionContextValue {
+  spawnSession: (opts: SpawnSessionOptions) => Promise<Node<SwarmBoardNodeData>>;
+  spawnClaudeSession: (opts: SpawnClaudeSessionOptions) => Promise<Node<SwarmBoardNodeData>>;
+  spawnWorktreeSession: (opts: SpawnWorktreeSessionOptions) => Promise<Node<SwarmBoardNodeData>>;
+  killSession: (nodeId: string) => Promise<void>;
+}
+
+const SwarmBoardSessionContext = createContext<SwarmBoardSessionContextValue | null>(null);
+
+// ---------------------------------------------------------------------------
+// Backward-compatible context value shape
 // ---------------------------------------------------------------------------
 
 interface SwarmBoardContextValue {
   state: SwarmBoardState;
-  dispatch: React.Dispatch<SwarmBoardAction>;
-  // Convenience helpers
+  dispatch: (action: SwarmBoardAction) => void;
   addNode: (config: CreateNodeConfig) => Node<SwarmBoardNodeData>;
   removeNode: (nodeId: string) => void;
   updateNode: (nodeId: string, patch: Partial<SwarmBoardNodeData>) => void;
@@ -654,182 +851,162 @@ interface SwarmBoardContextValue {
   removeEdge: (edgeId: string) => void;
   clearBoard: () => void;
   selectedNode: Node<SwarmBoardNodeData> | undefined;
-  // React Flow compatible edges
   rfEdges: Edge[];
-  // Live session management
   spawnSession: (opts: SpawnSessionOptions) => Promise<Node<SwarmBoardNodeData>>;
   spawnClaudeSession: (opts: SpawnClaudeSessionOptions) => Promise<Node<SwarmBoardNodeData>>;
   spawnWorktreeSession: (opts: SpawnWorktreeSessionOptions) => Promise<Node<SwarmBoardNodeData>>;
   killSession: (nodeId: string) => Promise<void>;
 }
 
-export interface SpawnSessionOptions {
-  /** Working directory for the PTY shell */
-  cwd: string;
-  /** Position on the canvas */
-  position?: { x: number; y: number };
-  /** If true, run `claude` CLI after shell starts */
-  launchClaude?: boolean;
-  /** Custom title */
-  title?: string;
-  /** Shell binary (defaults to $SHELL) */
-  shell?: string;
-  /** Optional initial command to write after spawn */
-  command?: string;
-}
+// ---------------------------------------------------------------------------
+// Dispatch shim — routes legacy dispatch calls to Zustand actions
+// ---------------------------------------------------------------------------
 
-export interface SpawnClaudeSessionOptions {
-  /** Working directory. Defaults to repoRoot. */
-  cwd?: string;
-  /** Position on the canvas */
-  position?: { x: number; y: number };
-  /** Optional initial prompt to send to Claude Code */
-  prompt?: string;
-  /** If true, create an isolated git worktree first */
-  worktree?: boolean;
-  /** Branch name for worktree (auto-generated if omitted) */
-  branch?: string;
-  /** Custom title */
-  title?: string;
+function createDispatchShim(): (action: SwarmBoardAction) => void {
+  return (action: SwarmBoardAction) => {
+    const { actions } = useSwarmBoardStore.getState();
+    switch (action.type) {
+      case "ADD_NODE":
+        actions.addNodeDirect(action.node);
+        break;
+      case "REMOVE_NODE":
+        actions.removeNode(action.nodeId);
+        break;
+      case "UPDATE_NODE":
+        actions.updateNode(action.nodeId, action.patch);
+        break;
+      case "SET_NODES":
+        actions.setNodes(action.nodes);
+        break;
+      case "ADD_EDGE":
+        actions.addEdge(action.edge);
+        break;
+      case "REMOVE_EDGE":
+        actions.removeEdge(action.edgeId);
+        break;
+      case "SET_EDGES":
+        actions.setEdges(action.edges);
+        break;
+      case "SELECT_NODE":
+        actions.selectNode(action.nodeId);
+        break;
+      case "TOGGLE_INSPECTOR":
+        actions.toggleInspector(action.open);
+        break;
+      case "SET_REPO_ROOT":
+        actions.setRepoRoot(action.repoRoot);
+        break;
+      case "LOAD":
+        actions.loadState(action.state);
+        break;
+      case "CLEAR_BOARD":
+        actions.clearBoard();
+        break;
+      case "SET_SESSION_STATUS":
+        actions.setSessionStatus(action.sessionId, action.status, action.exitCode);
+        break;
+      case "SET_SESSION_METADATA":
+        actions.setSessionMetadata(action.sessionId, action.metadata);
+        break;
+    }
+  };
 }
-
-export interface SpawnWorktreeSessionOptions {
-  /** Position on the canvas */
-  position?: { x: number; y: number };
-  /** Branch name for the worktree */
-  branch?: string;
-  /** Custom title */
-  title?: string;
-  /** Shell binary */
-  shell?: string;
-}
-
-const SwarmBoardContext = createContext<SwarmBoardContextValue | null>(null);
 
 // ---------------------------------------------------------------------------
 // Hook
 // ---------------------------------------------------------------------------
 
 export function useSwarmBoard(): SwarmBoardContextValue {
-  const ctx = useContext(SwarmBoardContext);
-  if (!ctx) throw new Error("useSwarmBoard must be used within SwarmBoardProvider");
-  return ctx;
+  const state = useSwarmBoardStore(
+    useShallow((s) => ({
+      boardId: s.boardId,
+      repoRoot: s.repoRoot,
+      nodes: s.nodes,
+      edges: s.edges,
+      selectedNodeId: s.selectedNodeId,
+      inspectorOpen: s.inspectorOpen,
+    })),
+  );
+  const selectedNode = useSwarmBoardStore((s) => s.selectedNode);
+  const rfEdges = useSwarmBoardStore((s) => s.rfEdges);
+  const actions = useSwarmBoardStore((s) => s.actions);
+
+  // Session context (may be null if called outside SwarmBoardProvider)
+  const sessionCtx = useContext(SwarmBoardSessionContext);
+
+  const dispatch = useMemo(() => createDispatchShim(), []);
+
+  const noopSession = useMemo(
+    () => ({
+      spawnSession: () =>
+        Promise.reject(new Error("useSwarmBoard must be used within SwarmBoardProvider for session management")),
+      spawnClaudeSession: () =>
+        Promise.reject(new Error("useSwarmBoard must be used within SwarmBoardProvider for session management")),
+      spawnWorktreeSession: () =>
+        Promise.reject(new Error("useSwarmBoard must be used within SwarmBoardProvider for session management")),
+      killSession: () =>
+        Promise.reject(new Error("useSwarmBoard must be used within SwarmBoardProvider for session management")),
+    }),
+    [],
+  );
+
+  const sessionMethods = sessionCtx ?? noopSession;
+
+  return useMemo(
+    () => ({
+      state,
+      dispatch,
+      addNode: actions.addNode,
+      removeNode: actions.removeNode,
+      updateNode: actions.updateNode,
+      selectNode: actions.selectNode,
+      addEdge: actions.addEdge,
+      removeEdge: actions.removeEdge,
+      clearBoard: actions.clearBoard,
+      selectedNode,
+      rfEdges,
+      ...sessionMethods,
+    }),
+    [state, dispatch, actions, selectedNode, rfEdges, sessionMethods],
+  );
 }
 
 // ---------------------------------------------------------------------------
-// Provider
+// Provider — thin wrapper for session lifecycle
 // ---------------------------------------------------------------------------
 
 export function SwarmBoardProvider({ children }: { children: ReactNode }) {
-  const [state, dispatch] = useReducer(boardReducer, undefined, getInitialState);
-
-  // Debounced persistence
-  const persistRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Re-initialize store from localStorage on mount to maintain parity with
+  // the old Context+useReducer pattern where each Provider mount created
+  // fresh state from persistence.
   useEffect(() => {
-    if (persistRef.current) clearTimeout(persistRef.current);
-    persistRef.current = setTimeout(() => {
-      persistBoard(state);
-    }, 500);
-    return () => {
-      if (persistRef.current) clearTimeout(persistRef.current);
-    };
-  }, [state.nodes, state.edges, state.boardId, state.repoRoot]);
+    useSwarmBoardStore.reinitializeFromStorage();
+  }, []);
 
-  // Auto-detect repoRoot on mount if it is empty
+  // Auto-detect repoRoot on mount if empty
   useEffect(() => {
+    const state = useSwarmBoardStore.getState();
     if (state.repoRoot) return;
     terminalService
       .getCwd()
       .then((cwd) => {
         if (cwd) {
-          dispatch({ type: "SET_REPO_ROOT", repoRoot: cwd });
+          useSwarmBoardStore.getState().actions.setRepoRoot(cwd);
         }
       })
       .catch(() => {
-        // Not in Tauri or command failed — leave repoRoot empty.
-        // The user can set it manually via the toolbar.
+        // Not in Tauri or command failed
       });
-    // Only run on mount (repoRoot is read once)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  // Derive selected node (memoized to avoid unnecessary re-renders of inspector)
-  const selectedNode = useMemo(
-    () =>
-      state.selectedNodeId
-        ? state.nodes.find((n) => n.id === state.selectedNodeId)
-        : undefined,
-    [state.selectedNodeId, state.nodes],
-  );
-
-  // Convert SwarmBoardEdge[] to React Flow Edge[] (memoized to keep React Flow stable)
-  const rfEdges: Edge[] = useMemo(
-    () =>
-      state.edges.map((e) => ({
-        id: e.id,
-        source: e.source,
-        target: e.target,
-        label: e.label,
-        type: "swarmEdge",
-        data: { edgeType: e.type },
-        animated: e.type === "spawned",
-        markerEnd: e.type === "handoff" || e.type === "spawned"
-          ? { type: MarkerType.ArrowClosed, color: edgeColor(e.type) }
-          : undefined,
-      })),
-    [state.edges],
-  );
-
-  // Action helpers
-  const addNode = useCallback(
-    (config: CreateNodeConfig): Node<SwarmBoardNodeData> => {
-      const node = createBoardNode(config);
-      dispatch({ type: "ADD_NODE", node });
-      return node;
-    },
-    [],
-  );
-
-  const removeNode = useCallback((nodeId: string) => {
-    dispatch({ type: "REMOVE_NODE", nodeId });
-  }, []);
-
-  const updateNode = useCallback(
-    (nodeId: string, patch: Partial<SwarmBoardNodeData>) => {
-      dispatch({ type: "UPDATE_NODE", nodeId, patch });
-    },
-    [],
-  );
-
-  const selectNode = useCallback((nodeId: string | null) => {
-    dispatch({ type: "SELECT_NODE", nodeId });
-  }, []);
-
-  const addEdge = useCallback((edge: SwarmBoardEdge) => {
-    dispatch({ type: "ADD_EDGE", edge });
-  }, []);
-
-  const removeEdge = useCallback((edgeId: string) => {
-    dispatch({ type: "REMOVE_EDGE", edgeId });
-  }, []);
-
-  const clearBoard = useCallback(() => {
-    dispatch({ type: "CLEAR_BOARD" });
-  }, []);
-
-  // -----------------------------------------------------------------------
-  // Live session management — exit monitoring, worktree tracking, cleanup
-  // -----------------------------------------------------------------------
 
   // Track exit listeners and worktree paths for cleanup
   const exitListenersRef = useRef<Map<string, UnlistenFn>>(new Map());
-  const worktreeMapRef = useRef<Map<string, string>>(new Map()); // sessionId -> worktreePath
+  const worktreeMapRef = useRef<Map<string, string>>(new Map());
   const closedSessionsRef = useRef<Set<string>>(new Set());
+  const killingRef = useRef<Set<string>>(new Set());
 
-  // Idempotent cleanup for all in-memory session tracking artifacts.
   const cleanupSessionTracking = useCallback((sessionId: string): string | undefined => {
     closedSessionsRef.current.add(sessionId);
-
     const unlisten = exitListenersRef.current.get(sessionId);
     if (unlisten) {
       try {
@@ -839,78 +1016,64 @@ export function SwarmBoardProvider({ children }: { children: ReactNode }) {
       }
     }
     exitListenersRef.current.delete(sessionId);
-
     const wtPath = worktreeMapRef.current.get(sessionId);
     worktreeMapRef.current.delete(sessionId);
     return wtPath;
   }, []);
 
-  // Monitor a session for exit events
   const monitorSessionExit = useCallback(
     (sessionId: string) => {
       closedSessionsRef.current.delete(sessionId);
-      terminalService.onExit(sessionId, (exitCode) => {
-        const status: SessionStatus =
-          exitCode === null ? "completed" : exitCode === 0 ? "completed" : "failed";
-        dispatch({
-          type: "SET_SESSION_STATUS",
-          sessionId,
-          status,
-          exitCode: exitCode ?? undefined,
-        });
-        // Clear node-session linkage + tracking to avoid stale in-memory mappings.
-        dispatch({
-          type: "SET_SESSION_METADATA",
-          sessionId,
-          metadata: { sessionId: undefined },
-        });
-        cleanupSessionTracking(sessionId);
-      }).then((unlisten) => {
-        if (closedSessionsRef.current.has(sessionId)) {
-          unlisten();
-          return;
-        }
-        const existing = exitListenersRef.current.get(sessionId);
-        if (existing) {
-          try {
-            existing();
-          } catch {
-            // best-effort cleanup
+      terminalService
+        .onExit(sessionId, (exitCode) => {
+          const status: SessionStatus =
+            exitCode === null ? "completed" : exitCode === 0 ? "completed" : "failed";
+          const { actions } = useSwarmBoardStore.getState();
+          actions.setSessionStatus(sessionId, status, exitCode ?? undefined);
+          actions.setSessionMetadata(sessionId, { sessionId: undefined });
+          cleanupSessionTracking(sessionId);
+        })
+        .then((unlisten) => {
+          if (closedSessionsRef.current.has(sessionId)) {
+            unlisten();
+            return;
           }
-        }
-        exitListenersRef.current.set(sessionId, unlisten);
-      }).catch((err) => {
-        console.error("[swarm-board-store] Failed to monitor exit:", err);
-      });
+          const existing = exitListenersRef.current.get(sessionId);
+          if (existing) {
+            try {
+              existing();
+            } catch {
+              // best-effort cleanup
+            }
+          }
+          exitListenersRef.current.set(sessionId, unlisten);
+        })
+        .catch((err) => {
+          console.error("[swarm-board-store] Failed to monitor exit:", err);
+        });
     },
     [cleanupSessionTracking],
   );
 
   const spawnSession = useCallback(
     async (opts: SpawnSessionOptions): Promise<Node<SwarmBoardNodeData>> => {
-      // If cwd is empty, try to auto-detect
       let cwd = opts.cwd;
       if (!cwd) {
         try {
           cwd = await terminalService.getCwd();
           if (cwd) {
-            dispatch({ type: "SET_REPO_ROOT", repoRoot: cwd });
+            useSwarmBoardStore.getState().actions.setRepoRoot(cwd);
           }
         } catch {
-          // Not in Tauri — fall through
+          // Not in Tauri
         }
       }
       if (!cwd) {
         cwd = "/tmp";
-        console.warn(
-          "[swarm-board-store] No working directory for session; falling back to /tmp",
-        );
+        console.warn("[swarm-board-store] No working directory for session; falling back to /tmp");
       }
 
-      // Create a real PTY via the Rust backend
       const sessionInfo = await terminalService.create(cwd, opts.shell);
-
-      // Create the node with the real sessionId
       const node = createBoardNode({
         nodeType: "agentSession",
         title: opts.title ?? (opts.launchClaude ? "Claude Session" : "Terminal"),
@@ -929,13 +1092,9 @@ export function SwarmBoardProvider({ children }: { children: ReactNode }) {
         },
       });
 
-      dispatch({ type: "ADD_NODE", node });
-
-      // Monitor for exit
+      useSwarmBoardStore.getState().actions.addNodeDirect(node);
       monitorSessionExit(sessionInfo.id);
 
-      // If launching Claude CLI, write the command after a short delay
-      // to let the shell initialize
       if (opts.launchClaude) {
         setTimeout(() => {
           terminalService.write(sessionInfo.id, "claude\n").catch((err) => {
@@ -944,7 +1103,6 @@ export function SwarmBoardProvider({ children }: { children: ReactNode }) {
         }, 500);
       }
 
-      // If an initial command was provided, write it after shell init
       if (opts.command && !opts.launchClaude) {
         const cmd = opts.command;
         setTimeout(() => {
@@ -956,37 +1114,32 @@ export function SwarmBoardProvider({ children }: { children: ReactNode }) {
 
       return node;
     },
-    [monitorSessionExit, dispatch],
+    [monitorSessionExit],
   );
 
   const spawnClaudeSession = useCallback(
     async (opts: SpawnClaudeSessionOptions): Promise<Node<SwarmBoardNodeData>> => {
-      let cwd = opts.cwd || state.repoRoot;
+      let cwd = opts.cwd || useSwarmBoardStore.getState().repoRoot;
 
-      // If cwd is still empty, attempt to auto-detect via the Tauri backend
       if (!cwd) {
         try {
           cwd = await terminalService.getCwd();
           if (cwd) {
-            dispatch({ type: "SET_REPO_ROOT", repoRoot: cwd });
+            useSwarmBoardStore.getState().actions.setRepoRoot(cwd);
           }
         } catch {
-          // Not in Tauri — fall through
+          // Not in Tauri
         }
       }
 
-      // Last resort: use a safe default rather than throwing
       if (!cwd) {
         cwd = "/tmp";
-        console.warn(
-          "[swarm-board-store] No working directory available; falling back to /tmp",
-        );
+        console.warn("[swarm-board-store] No working directory available; falling back to /tmp");
       }
 
       let worktreePath: string | undefined;
       let branchName = opts.branch;
 
-      // Create a worktree if requested
       if (opts.worktree) {
         if (!branchName) {
           branchName = `swarm-${Date.now().toString(36)}`;
@@ -1002,15 +1155,12 @@ export function SwarmBoardProvider({ children }: { children: ReactNode }) {
         }
       }
 
-      // Create the PTY session
       const sessionInfo = await terminalService.create(cwd);
 
-      // Track worktree for cleanup
       if (worktreePath) {
         worktreeMapRef.current.set(sessionInfo.id, worktreePath);
       }
 
-      // Create board node
       const node = createBoardNode({
         nodeType: "agentSession",
         title: opts.title || `Claude: ${branchName || "session"}`,
@@ -1030,23 +1180,15 @@ export function SwarmBoardProvider({ children }: { children: ReactNode }) {
         },
       });
 
-      dispatch({ type: "ADD_NODE", node });
-
-      // Monitor exit
+      useSwarmBoardStore.getState().actions.addNodeDirect(node);
       monitorSessionExit(sessionInfo.id);
 
-      // Start Claude Code after shell initializes
       setTimeout(() => {
         terminalService.write(sessionInfo.id, "claude\n").catch((err) => {
           console.error("[swarm-board-store] Failed to launch claude:", err);
-          dispatch({
-            type: "SET_SESSION_STATUS",
-            sessionId: sessionInfo.id,
-            status: "failed",
-          });
+          useSwarmBoardStore.getState().actions.setSessionStatus(sessionInfo.id, "failed");
         });
 
-        // If a prompt was provided, send it after Claude has time to start
         if (opts.prompt) {
           const prompt = opts.prompt;
           setTimeout(() => {
@@ -1059,25 +1201,20 @@ export function SwarmBoardProvider({ children }: { children: ReactNode }) {
 
       return node;
     },
-    [state.repoRoot, monitorSessionExit, dispatch],
+    [monitorSessionExit],
   );
 
   const spawnWorktreeSession = useCallback(
     async (opts: SpawnWorktreeSessionOptions): Promise<Node<SwarmBoardNodeData>> => {
-      const repoRoot = state.repoRoot;
+      const repoRoot = useSwarmBoardStore.getState().repoRoot;
       if (!repoRoot) {
         throw new Error("repoRoot is not set. Configure the repository root in SwarmBoard settings.");
       }
 
       const branchName = opts.branch || `swarm-${Date.now().toString(36)}`;
-
-      // Create the worktree
       const wtInfo = await worktreeService.create(repoRoot, branchName);
-
-      // Create the PTY in the worktree
       const sessionInfo = await terminalService.create(wtInfo.path, opts.shell);
 
-      // Track worktree for cleanup
       worktreeMapRef.current.set(sessionInfo.id, wtInfo.path);
 
       const node = createBoardNode({
@@ -1099,43 +1236,30 @@ export function SwarmBoardProvider({ children }: { children: ReactNode }) {
         },
       });
 
-      dispatch({ type: "ADD_NODE", node });
-
-      // Monitor exit
+      useSwarmBoardStore.getState().actions.addNodeDirect(node);
       monitorSessionExit(sessionInfo.id);
 
       return node;
     },
-    [state.repoRoot, monitorSessionExit],
+    [monitorSessionExit],
   );
-
-  // Track sessions that are currently being killed to make killSession
-  // idempotent — concurrent or repeated calls for the same node are no-ops.
-  const killingRef = useRef<Set<string>>(new Set());
 
   const killSession = useCallback(
     async (nodeId: string) => {
-      // Idempotency: if we're already tearing down this node, bail out.
       if (killingRef.current.has(nodeId)) return;
 
-      // Find the session ID from the node
+      const state = useSwarmBoardStore.getState();
       const node = state.nodes.find((n) => n.id === nodeId);
       if (!node) return;
       const d = node.data as SwarmBoardNodeData;
       if (!d.sessionId) {
-        dispatch({
-          type: "UPDATE_NODE",
-          nodeId,
-          patch: { status: "completed" },
-        });
+        state.actions.updateNode(nodeId, { status: "completed" });
         return;
       }
 
       const sessionId = d.sessionId;
       killingRef.current.add(nodeId);
 
-      // Always clean up tracking first — even if the kill IPC fails, we don't
-      // want stale listeners or worktree mappings lingering in memory.
       const wtPath = cleanupSessionTracking(sessionId);
       let finalStatus: SessionStatus = "completed";
 
@@ -1156,21 +1280,15 @@ export function SwarmBoardProvider({ children }: { children: ReactNode }) {
           }
         }
       } finally {
-        // Always update node state, even on unexpected errors — the node
-        // should never be left in a "running" limbo with a dead session.
-        dispatch({
-          type: "UPDATE_NODE",
-          nodeId,
-          patch: {
-            status: finalStatus,
-            sessionId: undefined,
-            ...(wtPath ? { worktreePath: undefined } : {}),
-          },
+        useSwarmBoardStore.getState().actions.updateNode(nodeId, {
+          status: finalStatus,
+          sessionId: undefined,
+          ...(wtPath ? { worktreePath: undefined } : {}),
         });
         killingRef.current.delete(nodeId);
       }
     },
-    [state.nodes, state.repoRoot, cleanupSessionTracking],
+    [cleanupSessionTracking],
   );
 
   // Clean up all listeners on unmount
@@ -1185,51 +1303,25 @@ export function SwarmBoardProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const value: SwarmBoardContextValue = useMemo(
+  const sessionValue = useMemo(
     () => ({
-      state,
-      dispatch,
-      addNode,
-      removeNode,
-      updateNode,
-      selectNode,
-      addEdge,
-      removeEdge,
-      clearBoard,
-      selectedNode,
-      rfEdges,
       spawnSession,
       spawnClaudeSession,
       spawnWorktreeSession,
       killSession,
     }),
-    [state, dispatch, addNode, removeNode, updateNode, selectNode, addEdge, removeEdge, clearBoard, selectedNode, rfEdges, spawnSession, spawnClaudeSession, spawnWorktreeSession, killSession],
+    [spawnSession, spawnClaudeSession, spawnWorktreeSession, killSession],
   );
 
   return (
-    <SwarmBoardContext.Provider value={value}>
+    <SwarmBoardSessionContext.Provider value={sessionValue}>
       {children}
-    </SwarmBoardContext.Provider>
+    </SwarmBoardSessionContext.Provider>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Helpers
+// Type re-exports
 // ---------------------------------------------------------------------------
-
-function edgeColor(type?: SwarmBoardEdge["type"]): string {
-  switch (type) {
-    case "handoff":
-      return "#5b8def";
-    case "spawned":
-      return "#d4a84b";
-    case "artifact":
-      return "#3dbf84";
-    case "receipt":
-      return "#8b5cf6";
-    default:
-      return "#2d3240";
-  }
-}
 
 export type { SwarmBoardState, SwarmBoardNodeData, SwarmBoardEdge, SwarmNodeType, SessionStatus, RiskLevel };

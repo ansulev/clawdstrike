@@ -1017,35 +1017,28 @@ describe("rfEdges", () => {
 // ---------------------------------------------------------------------------
 
 describe("useSwarmBoard hook outside provider", () => {
-  it("throws when used outside SwarmBoardProvider", () => {
-    // Using a class-based error boundary
-    class TestErrorBoundary extends React.Component<
-      { children: React.ReactNode },
-      { error: string | null }
-    > {
-      state = { error: null as string | null };
-      static getDerivedStateFromError(error: Error) {
-        return { error: error.message };
-      }
-      render() {
-        if (this.state.error) return <pre data-testid="error">{this.state.error}</pre>;
-        return this.props.children;
-      }
-    }
+  it("works outside SwarmBoardProvider for store access but session methods reject", () => {
+    // After the Zustand migration, useSwarmBoard() no longer throws outside
+    // the provider. Store state is globally accessible. Session management
+    // methods (spawnSession, killSession, etc.) reject with an error because
+    // they require the SwarmBoardSessionContext from the provider.
+    let hookValue: ReturnType<typeof useSwarmBoard> | null = null;
 
-    const BadComponent = () => {
-      useSwarmBoard();
-      return null;
+    const ReaderComponent = () => {
+      hookValue = useSwarmBoard();
+      return <div data-testid="reader">ok</div>;
     };
 
-    render(
-      <TestErrorBoundary>
-        <BadComponent />
-      </TestErrorBoundary>,
-    );
+    render(<ReaderComponent />);
 
-    expect(screen.getByTestId("error").textContent).toContain(
-      "useSwarmBoard must be used within SwarmBoardProvider",
+    expect(screen.getByTestId("reader")).toBeInTheDocument();
+    expect(hookValue).not.toBeNull();
+    expect(hookValue!.state).toBeDefined();
+    expect(hookValue!.state.nodes).toBeDefined();
+
+    // Session methods should reject when used outside provider
+    expect(hookValue!.spawnSession({ cwd: "/tmp" })).rejects.toThrow(
+      "useSwarmBoard must be used within SwarmBoardProvider for session management",
     );
   });
 });

@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import { useActivityBarStore } from "../stores/activity-bar-store";
 import { ExplorerPanel } from "@/components/workbench/explorer/explorer-panel";
 import { useProjectStore } from "@/features/project/stores/project-store";
@@ -40,9 +41,16 @@ function ExplorerPanelConnected() {
       .filter((p): p is DetectionProject => p != null);
   }, [projectRoots, projectsMap]);
 
-  // While the bootstrap is scanning directories, show a loading indicator
-  // instead of the empty "No project open" state.
-  if (loading && projects.length === 0) {
+  // Show loading indicator briefly while bootstrap scans directories.
+  // 5s timeout prevents indefinite "Loading..." if bootstrap hangs or fails.
+  const [timedOut, setTimedOut] = useState(false);
+  useEffect(() => {
+    if (!loading) return;
+    const timer = setTimeout(() => setTimedOut(true), 5000);
+    return () => clearTimeout(timer);
+  }, [loading]);
+
+  if (loading && !timedOut && projects.length === 0) {
     return (
       <div className="h-full flex flex-col">
         <div className="h-[36px] shrink-0 flex items-center border-b border-[#202531] px-3">

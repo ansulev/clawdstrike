@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 04-02-PLAN.md
-last_updated: "2026-03-19T06:07:00.000Z"
-last_activity: 2026-03-19 -- Completed hushd forwarding and audit viewer (04-02)
+stopped_at: Completed 05-01-PLAN.md
+last_updated: "2026-03-19T06:21:04Z"
+last_activity: 2026-03-19 -- Completed client-side revocation infrastructure (05-01)
 progress:
   total_phases: 5
   completed_phases: 4
-  total_plans: 8
-  completed_plans: 8
-  percent: 100
+  total_plans: 10
+  completed_plans: 9
+  percent: 90
 ---
 
 # Project State
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-19)
 
 **Core value:** Community plugins run in sandboxed iframes with capability-based permissions, Ed25519 audit trail, and fleet-wide emergency revocation
-**Current focus:** Phase 4 complete -- Plugin Audit Trail (2 of 2 plans done). Ready for Phase 5.
+**Current focus:** Phase 5 in progress -- Emergency Revocation (1 of 2 plans done).
 
 ## Current Position
 
-Phase: 4 of 5 (Plugin Audit Trail)
-Plan: 2 of 2 complete
-Status: Phase complete
-Last activity: 2026-03-19 -- Completed hushd forwarding and audit viewer (04-02)
+Phase: 5 of 5 (Emergency Revocation)
+Plan: 1 of 2 complete
+Status: Executing
+Last activity: 2026-03-19 -- Completed client-side revocation infrastructure (05-01)
 
-Progress: [##########] 100%
+Progress: [#########-] 90%
 
 ## Previous Milestones
 
@@ -78,6 +78,10 @@ Progress: [##########] 100%
 - Forwarding is best-effort (fail-open): network errors queue for retry, never throw or block bridge (04-02)
 - Local-only mode (hushdUrl=null) silently skips forwarding -- receipts stay in local store only (04-02)
 - Audit viewer uses native select element for result filter for simplicity and testing compat (04-02)
+- Revocation check runs BEFORE permission check in bridge host -- revoked plugins blocked at earliest point (05-01)
+- revocationStore on BridgeHostOptions uses duck-typed interface { isRevoked(pluginId: string): boolean } for testability (05-01)
+- revokePlugin sets state to "revoked" immediately, waits 5s drain, then deactivates -- bridge rejects new calls during drain (05-01)
+- PluginRevocationStore follows receipt-store.ts localStorage + in-memory cache pattern (05-01)
 
 ### Pending Todos
 None yet.
@@ -87,6 +91,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-19T06:07:00.000Z
-Stopped at: Completed 04-02-PLAN.md
+Last session: 2026-03-19T06:21:04Z
+Stopped at: Completed 05-01-PLAN.md
 Resume file: None

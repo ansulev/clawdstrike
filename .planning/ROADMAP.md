@@ -1,89 +1,99 @@
-# Roadmap: ClawdStrike Workbench v1.2 — Explorer Polish
+# Roadmap: ClawdStrike Workbench v1.3 — Live Features
 
 ## Overview
 
-Make the Explorer panel production-ready. The IDE shell and editor are functional — now the file tree needs to look and feel like a professional tool, not a prototype. Focus areas: file-type icons, folder visuals, labeled filter bar, indent guides, context menus, and interaction model.
+Three parallel feature tracks that bring the workbench to life with real-time data, agent coordination, and threat intelligence. These transform the workbench from "editor with tools" to "live security operations center."
 
 **Prior milestones:**
-- v1.0 (4 phases): IDE shell — activity bar, sidebar panels, pane tabs, right sidebar
-- v1.1 (13 phases): IDE completeness — search, nav, file tree CRUD, editor, session restore, detection integration
+- v1.0: IDE shell (activity bar, panes, sidebar panels, commands)
+- v1.1: IDE completeness (search, nav, file tree, editor, session restore, detection integration)
+- v1.2: Explorer polish (icons, filters, indent guides, context menus)
 
-## Phases
+## Feature Tracks
 
-- [ ] **Phase 1: File & Folder Icons** — Replace colored dots with proper file-type icons, folder open/close icons, root chevrons
-- [x] **Phase 2: Labeled Filter Bar** — Replace cryptic dots with labeled toggles showing type + count
-- [ ] **Phase 3: Tree Visual Refinement** — Indent guides, active file highlight, root collapse, item counts, empty state hero
-- [ ] **Phase 4: Context Menu Completeness** — Root/file/folder context menus with Copy Path, Reveal in Finder, Remove from Workspace
+- [ ] **Track A: Live Fleet Dashboard** — Real-time agent monitoring, posture visualization, drift detection, one-click policy push
+- [ ] **Track B: Swarm Board Evolution** — Launch swarms from editor, real-time agent coordination graph, receipt flow visualization
+- [ ] **Track C: Threat Intel Feed** — Signal clustering, severity scoring, promote-to-detection workflow
 
-## Phase Details
+## Track A: Live Fleet Dashboard
 
-### Phase 1: File & Folder Icons
-**Goal**: Every file and folder in the tree has a clear, recognizable icon — not just a colored dot
-**Depends on**: Nothing
-**Requirements**: ICON-01, ICON-02, ICON-03, ICON-04, ICON-05
-**Success Criteria** (what must be TRUE):
-  1. Policy files (.yaml with policy content) show a shield icon in the ClawdStrike gold color
-  2. Sigma files (.yml in sigma dirs) show a "SIG" badge or sigma symbol
-  3. YARA files (.yar/.yara) show a "YAR" badge or magnifying glass icon
-  4. OCSF files (.json) show a JSON brackets icon
-  5. Folders show a folder icon that changes between closed/open state based on expansion
-  6. Root section headers show a chevron (▸/▾) that toggles collapse + a folder icon
-**Plans:** 1 plan
-
+### Phase A1: Fleet Data Layer
+**Goal**: Real-time agent heartbeats and posture data flowing from hushd into the workbench via SSE streaming, with accurate drift detection
+**Requirements**: FLEET-01, FLEET-02, FLEET-03, FLEET-04
+**Success Criteria**:
+  1. Fleet dashboard shows connected agents with live heartbeat status (online/offline/degraded)
+  2. Each agent shows: posture score, active policy version, last heartbeat timestamp, guard count
+  3. Agents that drift from the fleet-wide policy are flagged with a drift indicator
+  4. Dashboard auto-refreshes on a configurable interval (default 10s) or via SSE when connected to hushd
+**Plans**: 1 plan
 Plans:
-- [ ] 01-01-PLAN.md — Create FileTypeIcon component (shield, SIG/YAR badges, braces) and wire into explorer tree, filter bar, pane tabs
+- [ ] track-a-fleet-01-PLAN.md — SSE event stream, heartbeat reducer, drift detection fix, store integration
 
-### Phase 2: Labeled Filter Bar
-**Goal**: Users can instantly understand and use the file type filter without guessing what colored dots mean
-**Depends on**: Phase 1 (uses same icon set)
-**Requirements**: FILT-01, FILT-02, FILT-03, FILT-04
-**Success Criteria** (what must be TRUE):
-  1. Filter bar shows labeled toggles: Policy, Sigma, YARA, OCSF (not anonymous colored dots)
-  2. Each toggle shows file count in parentheses: "Policy (5)"
-  3. Active filter has filled background, inactive is outline/ghost
-  4. "Clear" button resets all filters
-  5. Footer shows accurate count matching active filters: "5 files" (not "5 files Sigma")
-**Plans:** 1 plan
-
+### Phase A2: Fleet Visualization & Actions
+**Goal**: Topology map of agents, one-click policy push, bulk operations
+**Depends on**: Phase A1
+**Requirements**: FLEET-05, FLEET-06, FLEET-07, FLEET-08
+**Success Criteria**:
+  1. Topology view shows agents as nodes with edges representing trust relationships
+  2. Agent detail panel (right sidebar or drawer) shows full config, recent receipts, policy diff
+  3. "Push Policy" button deploys the active policy to selected agent(s) with confirmation
+  4. Bulk select agents for batch policy push, restart, or retire operations
+**Plans**: 1 plan
 Plans:
-- [x] 02-01-PLAN.md — Replace FormatDot with labeled FormatToggle pills, add countFilesByType, fix footer
+- [ ] track-a-fleet-02-PLAN.md — Agent detail page, SVG topology, bulk select, quick deploy, dashboard enhancements
 
-### Phase 3: Tree Visual Refinement
-**Goal**: The tree looks polished with indent guides, proper highlighting, and smart empty states
-**Depends on**: Phase 1
-**Requirements**: TREE-VIS-01, TREE-VIS-02, TREE-VIS-03, TREE-VIS-04, TREE-VIS-05, TREE-VIS-06
-**Success Criteria** (what must be TRUE):
-  1. Nested files show vertical indent guide lines (thin dotted/solid lines connecting tree levels)
-  2. The currently open file has a subtle background highlight in the tree
-  3. Root sections are collapsible by clicking the header (chevron rotates)
-  4. Root headers show item count badge: "workspace (12)"
-  5. When no files exist, a hero "Open Folder" button is prominent (not small text at bottom)
-  6. Footer grammar is correct: "1 file" vs "5 files"
+## Track B: Swarm Board Evolution
+
+### Phase B1: Editor-to-Swarm Bridge
+**Goal**: Launch a swarm session directly from the policy editor or command palette
+**Requirements**: SWARM-01, SWARM-02, SWARM-03
+**Success Criteria**:
+  1. "Launch Swarm" button in the editor toolbar spawns a new swarm session with the active policy
+  2. Swarm Board opens as a pane tab alongside the editor (split view)
+  3. Swarm session is pre-configured with the active policy and connected sentinels
 **Plans**: TBD
 
-Plans:
-- [ ] 03-01: TBD
-- [ ] 03-02: TBD
+### Phase B2: Real-Time Swarm Visualization
+**Goal**: Live agent coordination visible on the graph — receipts flowing, decisions animating
+**Depends on**: Phase B1
+**Requirements**: SWARM-04, SWARM-05, SWARM-06, SWARM-07
+**Success Criteria**:
+  1. Agent nodes pulse/glow when they evaluate a policy (real-time via SSE or polling)
+  2. Receipts appear as animated edges flowing between nodes
+  3. Trust graph updates live as agents join/leave or trust relationships change
+  4. Click a receipt edge to open the receipt inspector in a pane tab
+**Plans**: TBD
 
-### Phase 4: Context Menu Completeness
-**Goal**: Right-click anywhere in the explorer gives useful, contextual actions
-**Depends on**: Phase 3
-**Requirements**: CTX-01, CTX-02, CTX-03, CTX-04
-**Success Criteria** (what must be TRUE):
-  1. Root context menu: "Remove from Workspace", "Open in Finder", "Refresh", "New File"
-  2. File context menu: "Open", "Rename (F2)", "Delete", "Copy Path", "Copy Relative Path", "Reveal in Finder"
-  3. Folder context menu: "New File", "New Folder", "Collapse All Children", "Reveal in Finder"
-  4. Context menu positioned within viewport (no overflow offscreen)
-**Plans:** 1 plan
+## Track C: Threat Intel Feed
 
-Plans:
-- [ ] 04-01-PLAN.md — Install tauri-plugin-opener, rewrite context menu with root/file/folder variants and viewport clamping
+### Phase C1: Signal Ingestion & Clustering
+**Goal**: Incoming signals from sentinels are automatically clustered and scored
+**Requirements**: INTEL-01, INTEL-02, INTEL-03, INTEL-04
+**Success Criteria**:
+  1. Findings sidebar panel shows a live feed of incoming signals (not just static list)
+  2. Signals are automatically clustered by similarity (same source, same technique, same timeframe)
+  3. Each cluster shows a severity score (critical/high/medium/low) with color coding
+  4. New signals trigger a badge count update on the Findings activity bar icon
+**Plans**: TBD
+
+### Phase C2: Promote-to-Detection Workflow
+**Goal**: Turn a finding or signal cluster into a detection rule with one click
+**Depends on**: Phase C1
+**Requirements**: INTEL-05, INTEL-06, INTEL-07, INTEL-08
+**Success Criteria**:
+  1. "Draft Detection" button on a finding generates a Sigma rule from the finding's indicators
+  2. "Draft Policy Guard" button generates a guard config block from the finding's pattern
+  3. Generated content opens in a new file tab in the editor for review/editing
+  4. The finding is linked to the generated detection (bidirectional reference)
+**Plans**: TBD
 
 ## Progress
 
-| Phase | Plans Complete | Status | Completed |
-|-------|----------------|--------|-----------|
-| 1. File & Folder Icons | 0/1 | Planned | - |
-| 2. Labeled Filter Bar | 1/1 | Complete | 2026-03-19 |
-| 3. Tree Visual Refinement | 0/2 | Not started | - |
-| 4. Context Menu Completeness | 0/1 | Planned | - |
+| Track | Phase | Status |
+|-------|-------|--------|
+| A. Fleet Dashboard | A1: Data Layer | Planned (1 plan, wave 1) |
+| A. Fleet Dashboard | A2: Viz & Actions | Planned (1 plan, wave 2) |
+| B. Swarm Board | B1: Editor Bridge | Not started |
+| B. Swarm Board | B2: Real-Time Viz | Not started |
+| C. Threat Intel | C1: Signal Clustering | Not started |
+| C. Threat Intel | C2: Promote-to-Detection | Not started |

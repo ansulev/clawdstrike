@@ -65,6 +65,12 @@ const FleetDashboard = lazy(() =>
   })),
 );
 
+const FleetAgentDetail = lazy(() =>
+  import("@/components/workbench/fleet/fleet-agent-detail").then((m) => ({
+    default: m.FleetAgentDetail,
+  })),
+);
+
 const AuditLog = lazy(() =>
   import("@/components/workbench/audit/audit-log").then((m) => ({
     default: m.AuditLog,
@@ -283,6 +289,7 @@ export function getWorkbenchRouteLabel(route: string): string {
   if (url.pathname === "/library") return "Library";
   if (url.pathname === "/settings") return "Settings";
   if (url.pathname === "/approvals") return "Approvals";
+  if (url.pathname.startsWith("/fleet/")) return url.pathname.split("/").pop() ?? "Agent";
   if (url.pathname === "/fleet") return "Fleet";
   if (url.pathname === "/audit") return "Audit";
   if (url.pathname === "/visual-builder/sigma") return "Sigma Builder";
@@ -307,6 +314,7 @@ export const WORKBENCH_ROUTE_OBJECTS: RouteObject[] = [
   { path: "library", element: <LibraryGallery /> },
   { path: "settings", element: <SettingsPage /> },
   { path: "approvals", element: <ApprovalQueue /> },
+  { path: "fleet/:id", element: <FleetAgentDetail /> },
   { path: "fleet", element: <FleetDashboard /> },
   { path: "audit", element: <AuditLog /> },
   { path: "sentinels", element: <SentinelsPage /> },

@@ -25,8 +25,15 @@
     "fs:allow-rename",
     "fs:allow-remove",
     "fs:allow-mkdir",
-    "fs:allow-exists",
     "fs:allow-read-dir",
+    {
+      "identifier": "fs:allow-exists",
+      "allow": [{ "path": "$HOME/**" }]
+    },
+    {
+      "identifier": "fs:scope",
+      "allow": ["$HOME/**"]
+    },
     "fs:allow-home-read",
     "fs:allow-home-read-recursive",
     "fs:allow-home-write",

@@ -27,7 +27,7 @@ Three parallel feature tracks that bring the workbench to life with real-time da
   4. Dashboard auto-refreshes on a configurable interval (default 10s) or via SSE when connected to hushd
 **Plans**: 1 plan
 Plans:
-- [ ] track-a-fleet-01-PLAN.md — SSE event stream, heartbeat reducer, drift detection fix, store integration
+- [x] track-a-fleet-01-PLAN.md — SSE event stream, heartbeat reducer, drift detection fix, store integration (complete)
 
 ### Phase A2: Fleet Visualization & Actions
 **Goal**: Topology map of agents, one-click policy push, bulk operations
@@ -40,7 +40,7 @@ Plans:
   4. Bulk select agents for batch policy push, restart, or retire operations
 **Plans**: 1 plan
 Plans:
-- [ ] track-a-fleet-02-PLAN.md — Agent detail page, SVG topology, bulk select, quick deploy, dashboard enhancements
+- [x] track-a-fleet-02-PLAN.md — Agent detail page, SVG topology, bulk select, quick deploy, dashboard enhancements (complete, pending human verify)
 
 ## Track B: Swarm Board Evolution
 
@@ -93,8 +93,8 @@ Plans:
 
 | Track | Phase | Status |
 |-------|-------|--------|
-| A. Fleet Dashboard | A1: Data Layer | Planned (1 plan, wave 1) |
-| A. Fleet Dashboard | A2: Viz & Actions | Planned (1 plan, wave 2) |
+| A. Fleet Dashboard | A1: Data Layer | Complete (1 plan) |
+| A. Fleet Dashboard | A2: Viz & Actions | Complete (1 plan, pending human verify) |
 | B. Swarm Board | B1: Editor Bridge | Not started |
 | B. Swarm Board | B2: Real-Time Viz | Not started |
 | C. Threat Intel | C1: Signal Clustering | Complete (2 plans) |

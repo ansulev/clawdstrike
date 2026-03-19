@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: Explorer Polish
 status: executing
-stopped_at: Completed C2-01-PLAN.md
-last_updated: "2026-03-19T14:10:22Z"
-last_activity: 2026-03-19 -- Track C Intel Plan C2-01 (Finding-to-Detection Pipeline) completed
+stopped_at: Completed track-a-fleet-02-PLAN.md (awaiting checkpoint verification)
+last_updated: "2026-03-19T14:15:27Z"
+last_activity: 2026-03-19 -- Track A Fleet Plan 02 (Visualization, Agent Detail, Actions) auto tasks completed
 progress:
   total_phases: 4
   completed_phases: 1
@@ -59,9 +59,13 @@ Progress: [##░░░░░░░░] 20%
 - Fleet drift: expectedPolicyVersion from remotePolicyInfo.policyHash or .version
 - Finding-to-detection: callback prop pattern (onDraftDetection) for cross-domain actions, wired in parent page
 - Finding mapper: technique hints from signal text (not flags) since SignalContext.flags lack label field
+- Fleet topology: plain SVG grid layout (no @xyflow/react), 6 cols, 120px spacing
+- Fleet deploy: type-to-confirm CONFIRM_TEXT="deploy" matching deploy-panel.tsx
+- Fleet agent detail: useParams + store lookup for /fleet/:id pages
+- Fleet bulk select: Set<string> with indeterminate header checkbox
 
 ## Session Continuity
 
 Last session: 2026-03-19
-Stopped at: Completed C2-01-PLAN.md
-Resume file: .planning/phases/track-c-intel/C2-01-SUMMARY.md
+Stopped at: Completed track-a-fleet-02-PLAN.md (checkpoint:human-verify pending)
+Resume file: .planning/phases/track-a-fleet/track-a-fleet-02-PLAN.md

@@ -205,6 +205,12 @@ export class PluginLoader {
    * On any error: set state to "error", clean up partial contributions.
    */
   async loadPlugin(pluginId: string): Promise<void> {
+    // Revocation gate: block loading if the plugin is currently revoked
+    if (this.revocationStore.isRevoked(pluginId)) {
+      this.registry.setState(pluginId, "revoked");
+      return;
+    }
+
     const registered = this.registry.get(pluginId);
     if (!registered) {
       throw new Error(`Plugin "${pluginId}" is not registered`);

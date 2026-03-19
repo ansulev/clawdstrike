@@ -102,8 +102,8 @@ Enable third-party and internal extension of the ClawdStrike workbench through a
 | GAP-01 | Phase 5 | Complete |
 | GAP-02 | Phase 5 | Complete |
 | GAP-03 | Phase 5 | Complete |
-| MKT-01 | Phase 6 | Pending |
-| MKT-02 | Phase 6 | Pending |
+| MKT-01 | Phase 6 | Complete |
+| MKT-02 | Phase 6 | Complete |
 | MKT-03 | Phase 6 | Pending |
-| MKT-04 | Phase 6 | Pending |
+| MKT-04 | Phase 6 | Complete |
 | MKT-05 | Phase 6 | Complete |

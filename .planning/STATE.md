@@ -4,13 +4,13 @@ milestone: v1.0
 milestone_name: milestone
 status: executing
 stopped_at: Completed 06-01-PLAN.md
-last_updated: "2026-03-19T00:34:03.042Z"
+last_updated: "2026-03-19T00:38:20.224Z"
 last_activity: 2026-03-19 -- Completed 06-01 (Registry client with typed API surface)
 progress:
   total_phases: 6
   completed_phases: 5
   total_plans: 13
-  completed_plans: 11
+  completed_plans: 12
   percent: 100
 ---
 
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-03-18)
 ## Current Position
 
 Phase: 6 of 6 (Marketplace UI)
-Plan: 2 of 3 in current phase
+Plan: 3 of 3 in current phase
 Status: In progress
-Last activity: 2026-03-19 -- Completed 06-01 (Registry client with typed API surface)
+Last activity: 2026-03-19 -- Completed 06-02 (Plugins tab UI with PluginCard and PluginsBrowser)
 
-Progress: [██████████] 100%
+Progress: [█████████░] 92%
 
 ## Performance Metrics
 
@@ -58,6 +58,7 @@ Progress: [██████████] 100%
 | Phase 05 P01 | 3min | 1 tasks | 2 files |
 | Phase 05 P02 | 7min | 2 tasks | 3 files |
 | Phase 06 P01 | 3min | 1 tasks | 2 files |
+| Phase 06 P02 | 2min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -102,6 +103,9 @@ Recent decisions affecting current work:
 - [Phase 06]: snake_case response types matching Rust serde output -- no camelCase conversion layer
 - [Phase 06]: search() fail-open for browsing; getPackageInfo/getAttestation throw on error for specific lookups
 - [Phase 06]: getDownloadUrl() is pure function returning URL string -- actual download handled by install flow
+- [Phase 06-02]: Stub install/uninstall callbacks with console.log -- 06-03 wires to PluginLoader
+- [Phase 06-02]: asManifest() converts RegistrySearchResult to PluginManifest shape for PluginCard rendering
+- [Phase 06-02]: Available plugins filtered to exclude already-installed plugins by ID match
 
 ### Pending Todos
 
@@ -113,6 +117,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-19T00:34:03.039Z
-Stopped at: Completed 06-01-PLAN.md
+Last session: 2026-03-19T00:37:31Z
+Stopped at: Completed 06-02-PLAN.md
 Resume file: None

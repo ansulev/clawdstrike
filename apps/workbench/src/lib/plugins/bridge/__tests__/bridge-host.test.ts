@@ -351,4 +351,189 @@ describe("PluginBridgeHost", () => {
       });
     });
   });
+
+  // ---- Permission Enforcement ----
+
+  describe("permission enforcement", () => {
+    let permHost: PluginBridgeHost;
+
+    afterEach(() => {
+      permHost?.destroy();
+    });
+
+    it("allows guards.register when permissions include guards:register", () => {
+      permHost = new PluginBridgeHost({
+        pluginId: "perm-plugin",
+        targetWindow: mockTargetWindow as unknown as Window,
+        permissions: ["guards:register"],
+      });
+
+      permHost.handleMessage(
+        makeMessageEvent(
+          makeRequest("guards.register", {
+            id: "g1",
+            name: "G1",
+            technicalName: "G1Guard",
+            description: "",
+            category: "detection",
+            defaultVerdict: "deny",
+            icon: "IconShield",
+            configFields: [],
+          }),
+        ),
+      );
+
+      const reply = mockTargetWindow.postMessage.mock
+        .calls[0][0] as BridgeResponse;
+      expect(reply.type).toBe("response");
+      expect(reply.result).toMatchObject({ registered: true });
+    });
+
+    it("rejects storage.set with PERMISSION_DENIED when only guards:register is granted", () => {
+      permHost = new PluginBridgeHost({
+        pluginId: "perm-plugin",
+        targetWindow: mockTargetWindow as unknown as Window,
+        permissions: ["guards:register"],
+      });
+
+      permHost.handleMessage(
+        makeMessageEvent(
+          makeRequest("storage.set", { key: "k", value: "v" }),
+        ),
+      );
+
+      const reply = mockTargetWindow.postMessage.mock
+        .calls[0][0] as BridgeErrorResponse;
+      expect(reply.type).toBe("error");
+      expect(reply.error.code).toBe("PERMISSION_DENIED");
+    });
+
+    it("PERMISSION_DENIED error message includes plugin ID, required permission, and method name", () => {
+      permHost = new PluginBridgeHost({
+        pluginId: "my-locked-plugin",
+        targetWindow: mockTargetWindow as unknown as Window,
+        permissions: [],
+      });
+
+      permHost.handleMessage(
+        makeMessageEvent(
+          makeRequest("guards.register", { id: "g1" }),
+        ),
+      );
+
+      const reply = mockTargetWindow.postMessage.mock
+        .calls[0][0] as BridgeErrorResponse;
+      expect(reply.error.code).toBe("PERMISSION_DENIED");
+      expect(reply.error.message).toContain("my-locked-plugin");
+      expect(reply.error.message).toContain("guards:register");
+      expect(reply.error.message).toContain("guards.register");
+    });
+
+    it("allows both storage.get and storage.set when both storage permissions are granted", () => {
+      permHost = new PluginBridgeHost({
+        pluginId: "storage-plugin",
+        targetWindow: mockTargetWindow as unknown as Window,
+        permissions: ["storage:read", "storage:write"],
+      });
+
+      permHost.handleMessage(
+        makeMessageEvent(
+          makeRequest("storage.set", { key: "k", value: "v" }, "s1"),
+        ),
+      );
+      permHost.handleMessage(
+        makeMessageEvent(
+          makeRequest("storage.get", { key: "k" }, "s2"),
+        ),
+      );
+
+      const setReply = mockTargetWindow.postMessage.mock
+        .calls[0][0] as BridgeResponse;
+      expect(setReply.type).toBe("response");
+
+      const getReply = mockTargetWindow.postMessage.mock
+        .calls[1][0] as BridgeResponse;
+      expect(getReply.type).toBe("response");
+    });
+
+    it("rejects all bridge calls with PERMISSION_DENIED when permissions is empty array", () => {
+      permHost = new PluginBridgeHost({
+        pluginId: "empty-perm-plugin",
+        targetWindow: mockTargetWindow as unknown as Window,
+        permissions: [],
+      });
+
+      const methods = [
+        "guards.register",
+        "commands.register",
+        "storage.get",
+        "storage.set",
+        "fileTypes.register",
+        "statusBar.register",
+        "sidebar.register",
+      ];
+
+      for (const method of methods) {
+        permHost.handleMessage(
+          makeMessageEvent(makeRequest(method, {}, `req-${method}`)),
+        );
+      }
+
+      for (let i = 0; i < methods.length; i++) {
+        const reply = mockTargetWindow.postMessage.mock
+          .calls[i][0] as BridgeErrorResponse;
+        expect(reply.type).toBe("error");
+        expect(reply.error.code).toBe("PERMISSION_DENIED");
+      }
+    });
+
+    it("backward compat: PluginBridgeHost without permissions option allows all calls", () => {
+      // The default 'host' created in beforeEach has no permissions
+      host.handleMessage(
+        makeMessageEvent(
+          makeRequest("storage.set", { key: "x", value: "y" }, "s1"),
+        ),
+      );
+      host.handleMessage(
+        makeMessageEvent(
+          makeRequest("storage.get", { key: "x" }, "s2"),
+        ),
+      );
+
+      const setReply = mockTargetWindow.postMessage.mock
+        .calls[0][0] as BridgeResponse;
+      expect(setReply.type).toBe("response");
+
+      const getReply = mockTargetWindow.postMessage.mock
+        .calls[1][0] as BridgeResponse;
+      expect(getReply.type).toBe("response");
+      expect(getReply.result).toBe("y");
+    });
+
+    it("permission check happens BEFORE handler dispatch (handler never called if denied)", () => {
+      const customHandler = vi.fn(() => ({ ok: true }));
+
+      permHost = new PluginBridgeHost({
+        pluginId: "spy-plugin",
+        targetWindow: mockTargetWindow as unknown as Window,
+        permissions: ["storage:read"], // Does NOT include guards:register
+      });
+
+      // Override with spy handler
+      permHost.registerHandler("guards.register", customHandler);
+
+      permHost.handleMessage(
+        makeMessageEvent(
+          makeRequest("guards.register", { id: "g1" }),
+        ),
+      );
+
+      // Handler should NOT have been called -- permission denied first
+      expect(customHandler).not.toHaveBeenCalled();
+
+      const reply = mockTargetWindow.postMessage.mock
+        .calls[0][0] as BridgeErrorResponse;
+      expect(reply.error.code).toBe("PERMISSION_DENIED");
+    });
+  });
 });

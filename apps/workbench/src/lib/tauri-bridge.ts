@@ -344,3 +344,101 @@ export async function createDirectory(dirPath: string): Promise<boolean> {
     return false;
   }
 }
+
+// ---------------------------------------------------------------------------
+// .swarm bundle helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Read a .swarm bundle's manifest.json and board.json files.
+ * Returns the parsed data, or null if not found / not desktop.
+ */
+export async function readSwarmBundle(bundlePath: string): Promise<{
+  manifest: Record<string, unknown> | null;
+  board: Record<string, unknown> | null;
+} | null> {
+  if (!isDesktop()) return null;
+  try {
+    const { readTextFile, exists } = await import("@tauri-apps/plugin-fs");
+    const manifestPath = `${bundlePath}/manifest.json`;
+    const manifest = (await exists(manifestPath))
+      ? JSON.parse(await readTextFile(manifestPath))
+      : null;
+    const boardPath = `${bundlePath}/board.json`;
+    const board = (await exists(boardPath))
+      ? JSON.parse(await readTextFile(boardPath))
+      : null;
+    return { manifest, board };
+  } catch (err) {
+    console.error("[tauri-bridge] readSwarmBundle failed:", bundlePath, err);
+    return null;
+  }
+}
+
+/**
+ * Write board.json inside a .swarm bundle directory.
+ * Creates the file if it doesn't exist. Returns true on success.
+ */
+export async function writeSwarmBoardJson(
+  bundlePath: string,
+  board: Record<string, unknown>,
+): Promise<boolean> {
+  if (!isDesktop()) return false;
+  try {
+    const { writeTextFile } = await import("@tauri-apps/plugin-fs");
+    await writeTextFile(
+      `${bundlePath}/board.json`,
+      JSON.stringify(board, null, 2),
+    );
+    return true;
+  } catch (err) {
+    console.error("[tauri-bridge] writeSwarmBoardJson failed:", bundlePath, err);
+    return false;
+  }
+}
+
+/**
+ * Create a new .swarm bundle directory with manifest.json and empty board.json.
+ * Returns the absolute bundle path on success, or null on failure.
+ */
+export async function createSwarmBundle(
+  parentDir: string,
+  name: string,
+): Promise<string | null> {
+  if (!isDesktop()) return null;
+  try {
+    const { mkdir, writeTextFile } = await import("@tauri-apps/plugin-fs");
+    const safeName = name.replace(/[<>:"/\\|?*]/g, "_").replace(/\.swarm$/, "");
+    const bundlePath = `${parentDir}/${safeName}.swarm`;
+    await mkdir(bundlePath, { recursive: true });
+
+    const now = new Date().toISOString();
+    const manifest = {
+      version: "1.0.0",
+      name: safeName,
+      created: now,
+      modified: now,
+    };
+    await writeTextFile(
+      `${bundlePath}/manifest.json`,
+      JSON.stringify(manifest, null, 2),
+    );
+
+    const board = {
+      boardId: `board-${Date.now().toString(36)}`,
+      repoRoot: "",
+      nodes: [],
+      edges: [],
+      viewport: { x: 0, y: 0, zoom: 1 },
+    };
+    await writeTextFile(
+      `${bundlePath}/board.json`,
+      JSON.stringify(board, null, 2),
+    );
+
+    return bundlePath;
+  } catch (err) {
+    console.error("[tauri-bridge] createSwarmBundle failed:", err);
+    return null;
+  }
+}

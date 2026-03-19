@@ -332,6 +332,7 @@ describe("SwarmBoardState", () => {
       edges: [],
       selectedNodeId: null,
       inspectorOpen: false,
+      bundlePath: "",
     };
 
     expect(state.boardId).toBe("board-1");
@@ -350,6 +351,7 @@ describe("SwarmBoardState", () => {
       edges: [],
       selectedNodeId: "node-123",
       inspectorOpen: true,
+      bundlePath: "",
     };
 
     expect(state.selectedNodeId).toBe("node-123");

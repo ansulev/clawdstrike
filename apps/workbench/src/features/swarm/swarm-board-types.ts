@@ -101,4 +101,6 @@ export interface SwarmBoardState {
   edges: SwarmBoardEdge[];
   selectedNodeId: string | null;
   inspectorOpen: boolean;
+  /** Absolute path to the .swarm bundle directory, or empty string for scratch boards. */
+  bundlePath: string;
 }

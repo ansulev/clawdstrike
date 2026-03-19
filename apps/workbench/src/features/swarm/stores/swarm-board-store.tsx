@@ -79,6 +79,17 @@ function persistBoard(state: SwarmBoardState): void {
       edges: state.edges,
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(persisted));
+
+    // File-backed persistence for .swarm bundles
+    if (state.bundlePath) {
+      import("@/lib/tauri-bridge").then(({ writeSwarmBoardJson }) => {
+        writeSwarmBoardJson(state.bundlePath, persisted).catch((err: unknown) => {
+          console.error("[swarm-board-store] file persist failed:", err);
+        });
+      }).catch(() => {
+        // Not in Tauri environment
+      });
+    }
   } catch (e) {
     console.error("[swarm-board-store] persistBoard failed:", e);
   }
@@ -526,6 +537,7 @@ function getInitialState(): SwarmBoardState {
       edges: (persisted.edges ?? []) as SwarmBoardEdge[],
       selectedNodeId: null,
       inspectorOpen: false,
+      bundlePath: "",
     };
   }
 
@@ -538,6 +550,7 @@ function getInitialState(): SwarmBoardState {
     edges: mock.edges,
     selectedNodeId: null,
     inspectorOpen: false,
+    bundlePath: "",
   };
 }
 
@@ -567,6 +580,7 @@ interface SwarmBoardStoreState extends SwarmBoardState {
     setNodes: (nodes: Node<SwarmBoardNodeData>[]) => void;
     setEdges: (edges: SwarmBoardEdge[]) => void;
     toggleInspector: (open?: boolean) => void;
+    loadFromBundle: (bundlePath: string) => Promise<void>;
   };
 }
 
@@ -778,6 +792,37 @@ const useSwarmBoardStoreBase = create<SwarmBoardStoreState>()((set, get) => ({
           : undefined,
       });
     },
+
+    loadFromBundle: async (bundlePath: string): Promise<void> => {
+      try {
+        const { readSwarmBundle } = await import("@/lib/tauri-bridge");
+        const data = await readSwarmBundle(bundlePath);
+        if (!data?.board) {
+          // Empty bundle — just set the path, keep empty board
+          set({ bundlePath });
+          return;
+        }
+        const board = data.board as Record<string, unknown>;
+        const nodes = Array.isArray(board.nodes) ? board.nodes as Node<SwarmBoardNodeData>[] : [];
+        const edges = Array.isArray(board.edges) ? board.edges as SwarmBoardEdge[] : [];
+        const boardId = typeof board.boardId === "string" ? board.boardId : generateBoardId();
+        const repoRoot = typeof board.repoRoot === "string" ? board.repoRoot : "";
+        set({
+          bundlePath,
+          boardId,
+          repoRoot,
+          nodes,
+          edges,
+          selectedNodeId: null,
+          inspectorOpen: false,
+          selectedNode: undefined,
+          rfEdges: toRfEdges(edges),
+        });
+      } catch (err) {
+        console.error("[swarm-board-store] loadFromBundle failed:", err);
+        set({ bundlePath });
+      }
+    },
   },
 }));
 
@@ -925,6 +970,7 @@ export function useSwarmBoard(): SwarmBoardContextValue {
       edges: s.edges,
       selectedNodeId: s.selectedNodeId,
       inspectorOpen: s.inspectorOpen,
+      bundlePath: s.bundlePath,
     })),
   );
   const selectedNode = useSwarmBoardStore((s) => s.selectedNode);
@@ -975,13 +1021,16 @@ export function useSwarmBoard(): SwarmBoardContextValue {
 // Provider — thin wrapper for session lifecycle
 // ---------------------------------------------------------------------------
 
-export function SwarmBoardProvider({ children }: { children: ReactNode }) {
-  // Re-initialize store from localStorage on mount to maintain parity with
-  // the old Context+useReducer pattern where each Provider mount created
-  // fresh state from persistence.
+export function SwarmBoardProvider({ children, bundlePath }: { children: ReactNode; bundlePath?: string }) {
+  // Re-initialize store from localStorage on mount (scratch boards),
+  // or load from .swarm bundle when bundlePath is provided.
   useEffect(() => {
-    useSwarmBoardStore.reinitializeFromStorage();
-  }, []);
+    if (bundlePath) {
+      useSwarmBoardStore.getState().actions.loadFromBundle(bundlePath);
+    } else {
+      useSwarmBoardStore.reinitializeFromStorage();
+    }
+  }, [bundlePath]);
 
   // Auto-detect repoRoot on mount if empty
   useEffect(() => {

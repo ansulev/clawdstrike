@@ -1,6 +1,6 @@
 import { useRef, useEffect, useMemo } from "react";
 import { EditorView, keymap, lineNumbers, highlightActiveLine, highlightSpecialChars, drawSelection, rectangularSelection, highlightActiveLineGutter, type ViewUpdate } from "@codemirror/view";
-import { EditorState, type Extension } from "@codemirror/state";
+import { Compartment, EditorState, type Extension } from "@codemirror/state";
 import { yaml } from "@codemirror/lang-yaml";
 import { json } from "@codemirror/lang-json";
 import { syntaxHighlighting, HighlightStyle, foldGutter, bracketMatching, indentOnInput, foldKeymap } from "@codemirror/language";
@@ -16,6 +16,7 @@ import { ocsfJsonCompletionSource } from "@/lib/workbench/ocsf-schema";
 import { yaraLanguage } from "@/lib/workbench/yara-language";
 import type { FileType } from "@/lib/workbench/file-type-registry";
 import { useGeneralSettings, type FontSize } from "@/lib/workbench/use-general-settings";
+import { useGutterExtensions } from "@/lib/plugins/gutter-extension-registry";
 
 // ---- Types ----
 
@@ -329,6 +330,12 @@ export function YamlEditor({
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
 
+  // Compartment for plugin-contributed gutter extensions (dynamic reconfiguration)
+  const gutterCompartmentRef = useRef(new Compartment());
+
+  // Plugin gutter extensions from the GutterExtensionRegistry
+  const pluginGutterExtensions = useGutterExtensions();
+
   // Read general settings for editor customization
   const { settings: generalSettings } = useGeneralSettings();
   const { fontSize, showLineNumbers } = generalSettings;
@@ -362,6 +369,9 @@ export function YamlEditor({
         ...closeBracketsKeymap,
       ]),
     ];
+
+    // Plugin gutter extension compartment (initially empty; reconfigured dynamically)
+    base.push(gutterCompartmentRef.current.of([]));
 
     if (showLineNumbers) {
       base.push(lineNumbers());
@@ -409,6 +419,15 @@ export function YamlEditor({
     // Value syncing is handled separately below.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [extensions]);
+
+  // Reconfigure plugin gutter extensions dynamically (without recreating the editor)
+  useEffect(() => {
+    const view = viewRef.current;
+    if (!view) return;
+    view.dispatch({
+      effects: gutterCompartmentRef.current.reconfigure(pluginGutterExtensions),
+    });
+  }, [pluginGutterExtensions]);
 
   // Sync external value changes into the editor (e.g. when visual panel edits arrive)
   useEffect(() => {

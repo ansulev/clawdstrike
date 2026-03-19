@@ -15,7 +15,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 1: ViewRegistry Foundation** - Central view registry, ViewContainer with ErrorBoundary/Suspense, status bar fix, SDK ViewsApi
 - [x] **Phase 2: Editor Tab Views** - Plugin components in pane tabs with keep-alive state preservation and LRU eviction
 - [x] **Phase 3: Bottom Panel and Right Sidebar** - Plugin tabs in bottom panel and right sidebar alongside built-in panels
-- [ ] **Phase 4: Activity Bar, Gutters, and Context Menus** - Dynamic sidebar navigation, CodeMirror gutter extensions, and context menu items
+- [x] **Phase 4: Activity Bar, Gutters, and Context Menus** - Dynamic sidebar navigation, CodeMirror gutter extensions, and context menu items
 
 ## Phase Details
 
@@ -72,7 +72,7 @@ Plans:
 Plans:
 - [x] 04-01-PLAN.md -- Activity bar plugin items in DesktopSidebar + panel rendering in DesktopLayout
 - [x] 04-02-PLAN.md -- GutterExtensionRegistry + CodeMirror Compartment integration in yaml-editor
-- [ ] 04-03-PLAN.md -- ContextMenuRegistry with when-clause predicates + PluginContextMenuItems component
+- [x] 04-03-PLAN.md -- ContextMenuRegistry with when-clause predicates + PluginContextMenuItems component
 
 ## Progress
 
@@ -85,4 +85,4 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 | 1. ViewRegistry Foundation | 2/2 | Complete | 2026-03-19 |
 | 2. Editor Tab Views | 2/2 | Complete | 2026-03-19 |
 | 3. Bottom Panel and Right Sidebar | 1/1 | Complete | 2026-03-19 |
-| 4. Activity Bar, Gutters, and Context Menus | 2/3 | In progress | - |
+| 4. Activity Bar, Gutters, and Context Menus | 3/3 | Complete | 2026-03-19 |

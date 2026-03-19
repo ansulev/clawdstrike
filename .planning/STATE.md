@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 04-02-PLAN.md
-last_updated: "2026-03-19T15:32:06Z"
+stopped_at: Completed 04-03-PLAN.md
+last_updated: "2026-03-19T16:08:07Z"
 progress:
   total_phases: 4
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 8
-  completed_plans: 7
-  percent: 88
+  completed_plans: 8
+  percent: 100
 ---
 
 # Project State
@@ -20,15 +20,15 @@ progress:
 See: .planning/PROJECT.md
 
 **Core value:** Plugins can contribute React views to any UI slot — editor tabs, bottom panels, right sidebar, activity bar, gutters, context menus
-**Current focus:** Phase 4 in progress -- Activity Bar and Gutters complete, Context Menus remaining
+**Current focus:** All phases complete -- ViewRegistry, Editor Tabs, Bottom/Right Panels, Activity Bar, Gutters, Context Menus
 
 ## Current Position
 
 Phase: 4 of 4 (Activity Bar, Gutters, and Context Menus)
-Plan: 2 of 3 complete
-Status: Phase 4 Plans 1 (Activity Bar) and 2 (Gutters) complete. Plan 3 (Context Menus) remaining.
+Plan: 3 of 3 complete
+Status: All 4 phases and 8 plans complete. v3.0 milestone finished.
 
-Progress: [████████░░] 88%
+Progress: [██████████] 100%
 
 ## Previous Milestones
 
@@ -73,6 +73,9 @@ Progress: [████████░░] 88%
 - [Phase 04]: Compartment.of([]) in useMemo (static) with useEffect reconfigure for dynamic gutter extension updates
 - [Phase 04]: Frozen empty array sentinel for empty gutter registry state ensures useSyncExternalStore reference stability
 - [Phase 04]: Async gutter entrypoint resolution uses fire-and-forget pattern matching status bar routing
+- [Phase 04]: evaluateWhenClause supports VS Code when-clause subset (key existence, !, ==, !=, &&) -- no || for v1
+- [Phase 04]: PluginContextMenuItems is headless (returns raw elements) for embedding flexibility in various context menus
+- [Phase 04]: Frozen empty array sentinel for empty context menu queries ensures useSyncExternalStore reference stability
 
 ### Pending Todos
 None.
@@ -82,6 +85,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-19T15:32:06Z
-Stopped at: Completed 04-02-PLAN.md
+Last session: 2026-03-19T16:08:07Z
+Stopped at: Completed 04-03-PLAN.md
 Resume file: None

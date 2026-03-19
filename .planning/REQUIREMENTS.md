@@ -108,6 +108,6 @@ Enable plugins to contribute React components and CodeMirror extensions to every
 | GUTR-01 | Phase 4 | Complete |
 | GUTR-02 | Phase 4 | Complete |
 | GUTR-03 | Phase 4 | Complete |
-| CTXM-01 | Phase 4 | Pending |
-| CTXM-02 | Phase 4 | Pending |
-| CTXM-03 | Phase 4 | Pending |
+| CTXM-01 | Phase 4 | Complete |
+| CTXM-02 | Phase 4 | Complete |
+| CTXM-03 | Phase 4 | Complete |

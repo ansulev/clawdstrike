@@ -77,6 +77,46 @@ export function FileEditorShell() {
     [tabMeta],
   );
 
+  // --- Cmd+S save handler ---
+  const handleSave = useCallback(async () => {
+    if (!tabMeta || !editState) return;
+    try {
+      const { saveDetectionFile } = await import("@/lib/tauri-bridge");
+      const savedPath = await saveDetectionFile(
+        editState.yaml,
+        tabMeta.fileType,
+        tabMeta.filePath,    // null triggers Save As dialog
+        tabMeta.name,        // suggested filename for Save As
+      );
+      if (!savedPath) return; // user cancelled Save As
+
+      // If file was untitled (no filePath), set the new path
+      if (!tabMeta.filePath) {
+        usePolicyTabsStore.getState().setFilePath(tabMeta.id, savedPath);
+      }
+
+      // Mark clean in edit store (resets cleanSnapshot)
+      usePolicyEditStore.getState().markClean(tabMeta.id);
+
+      // Clear dirty in tabs store (drives pane tab dirty dot)
+      usePolicyTabsStore.getState().setDirty(tabMeta.id, false);
+    } catch (err) {
+      console.error("[FileEditorShell] Save failed:", err);
+    }
+  }, [tabMeta, editState]);
+
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.key === "s" && !e.shiftKey) {
+        e.preventDefault();
+        e.stopPropagation();
+        void handleSave();
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown, { capture: true });
+    return () => window.removeEventListener("keydown", handleKeyDown, { capture: true });
+  }, [handleSave]);
+
   // Map validation errors to YamlEditor error format
   const editorErrors = editState
     ? editState.validation.errors.map((e) => ({

@@ -74,6 +74,29 @@
 - [ ] **BOOT-04**: "Add Folder" button at bottom of Explorer lets users mount additional directories
 - [x] **BOOT-05**: Multi-root workspace folders persist across restarts via localStorage
 
+### Live CodeMirror Editor
+
+- [x] **LIVE-01**: FileEditorShell renders YamlEditor (CodeMirror) instead of pre tag for all file types
+- [x] **LIVE-02**: Typing updates policy-edit-store and marks pane tab dirty
+- [x] **LIVE-03**: Cmd+Z / Cmd+Shift+Z undo/redo work per-file through edit store undo stack
+- [x] **LIVE-04**: Validation errors appear in Problems panel for active file
+- [ ] **LIVE-05**: Cmd+S saves file to disk via Tauri fs and clears dirty indicator
+
+### Visual Polish
+
+- [ ] **POLISH-01**: Only one Home tab opens on launch (no duplicates)
+- [ ] **POLISH-02**: Breadcrumbs show relative path from project root (not absolute)
+- [ ] **POLISH-03**: Explorer tree refreshes after file create/rename/delete
+- [ ] **POLISH-04**: Status bar shows active file name, line/column, file type, dirty state
+- [ ] **POLISH-05**: Pane tab deduplication prevents opening same file twice
+
+### Session Restore
+
+- [ ] **SESS-01**: On quit, pane tree serialized to localStorage
+- [ ] **SESS-02**: On launch, pane tree restored — files reopen in previous positions
+- [ ] **SESS-03**: Dirty unsaved files show recovery banner
+- [ ] **SESS-04**: "Restored N files" toast on successful session restore
+
 ## v2 Requirements
 
 ### Advanced IDE
@@ -141,6 +164,12 @@
 | BOOT-03 | Phase 9 | Complete |
 | BOOT-04 | Phase 9 | Pending |
 | BOOT-05 | Phase 9 | Complete |
+
+| LIVE-01 | Phase 10 | Complete |
+| LIVE-02 | Phase 10 | Complete |
+| LIVE-03 | Phase 10 | Complete |
+| LIVE-04 | Phase 10 | Complete |
+| LIVE-05 | Phase 10 | Pending |
 
 **Coverage:**
 - v1.1 requirements: 42 total

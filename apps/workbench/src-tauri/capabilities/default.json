@@ -23,8 +23,7 @@
     {
       "identifier": "fs:scope",
       "allow": [
-        "$HOME/.clawdstrike/**",
-        "$HOME/.clawdstrike",
+        "$HOME/**",
         "$DOWNLOAD/**",
         "$DOCUMENT/**",
         "$DESKTOP/**"

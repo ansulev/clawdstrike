@@ -66,12 +66,12 @@ Isolate community plugins in sandboxed iframes with a typed postMessage bridge, 
 | BRIDGE-04 | Phase 1 | Complete |
 | BRIDGE-05 | Phase 1 | Complete |
 | BRIDGE-06 | Phase 1 | Complete |
-| SANDBOX-01 | Phase 2 | Pending |
-| SANDBOX-02 | Phase 2 | Pending |
-| SANDBOX-03 | Phase 2 | Pending |
+| SANDBOX-01 | Phase 2 | Complete |
+| SANDBOX-02 | Phase 2 | Complete |
+| SANDBOX-03 | Phase 2 | Complete |
 | SANDBOX-04 | Phase 2 | Pending |
-| SANDBOX-05 | Phase 2 | Pending |
-| SANDBOX-06 | Phase 2 | Pending |
+| SANDBOX-05 | Phase 2 | Complete |
+| SANDBOX-06 | Phase 2 | Complete |
 | PERM-01 | Phase 3 | Pending |
 | PERM-02 | Phase 3 | Pending |
 | PERM-03 | Phase 3 | Pending |

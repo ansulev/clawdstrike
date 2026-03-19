@@ -45,7 +45,7 @@ Plans:
   4. The plugin iframe cannot access `__TAURI_INTERNALS__` or invoke Tauri commands
 **Plans:** 2 plans
 Plans:
-- [ ] 02-01-PLAN.md -- PluginSandbox component + srcdoc builder with CSP and bridge bootstrap
+- [x] 02-01-PLAN.md -- PluginSandbox component + srcdoc builder with CSP and bridge bootstrap
 - [ ] 02-02-PLAN.md -- PluginLoader trust-tier fork + integration tests
 
 ### Phase 3: Permission System
@@ -90,7 +90,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. postMessage RPC Bridge | 2/2 | Complete | 2026-03-19 |
-| 2. iframe Sandbox | 0/2 | Not started | - |
+| 2. iframe Sandbox | 1/2 | In progress | - |
 | 3. Permission System | 0/TBD | Not started | - |
 | 4. Plugin Audit Trail | 0/TBD | Not started | - |
 | 5. Emergency Revocation | 0/TBD | Not started | - |

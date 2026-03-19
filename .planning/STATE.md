@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: milestone
-status: completed
-stopped_at: Completed 01-02-PLAN.md (Phase 1 complete)
-last_updated: "2026-03-19T04:51:07.381Z"
-last_activity: 2026-03-19 -- Completed PluginBridgeHost dispatch + integration tests (01-02)
+status: in-progress
+stopped_at: Completed 02-01-PLAN.md
+last_updated: "2026-03-19T05:03:33Z"
+last_activity: 2026-03-19 -- Completed PluginSandbox component + srcdoc builder (02-01)
 progress:
   total_phases: 5
   completed_phases: 1
   total_plans: 2
-  completed_plans: 2
-  percent: 20
+  completed_plans: 1
+  percent: 30
 ---
 
 # Project State
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-19)
 
 **Core value:** Community plugins run in sandboxed iframes with capability-based permissions, Ed25519 audit trail, and fleet-wide emergency revocation
-**Current focus:** Phase 1 complete, ready for Phase 2 (iframe Sandbox)
+**Current focus:** Phase 2 in progress -- iframe sandbox isolation
 
 ## Current Position
 
-Phase: 1 of 5 (postMessage RPC Bridge) -- COMPLETE
-Plan: 2 of 2 complete
-Status: Phase 1 complete
-Last activity: 2026-03-19 -- Completed PluginBridgeHost dispatch + integration tests (01-02)
+Phase: 2 of 5 (iframe Sandbox)
+Plan: 1 of 2 complete
+Status: In progress
+Last activity: 2026-03-19 -- Completed PluginSandbox component + srcdoc builder (02-01)
 
-Progress: [##░░░░░░░░] 20%
+Progress: [###░░░░░░░] 30%
 
 ## Previous Milestones
 
@@ -53,6 +53,9 @@ Progress: [##░░░░░░░░] 20%
 - commands.register stores metadata host-side; actual handler stays in iframe for future callback invocation pattern (01-02)
 - Host uses try/catch + Promise chain for both sync and async handler error propagation (01-02)
 - [Phase 01]: statusBar.register injects render: () => null placeholder since render functions cannot cross iframe boundary (01-02)
+- Inlined PluginBridgeClient in srcdoc as self-contained ES5-style class -- no module imports possible in srcdoc iframe (02-01)
+- React srcDoc prop (camelCase) maps to HTML srcdoc attribute -- used JSX convention (02-01)
+- Bridge host created in useEffect with [pluginId, pluginCode] as dependencies for proper lifecycle management (02-01)
 
 ### Pending Todos
 None yet.
@@ -62,6 +65,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-19T04:51:03.863Z
-Stopped at: Completed 01-02-PLAN.md (Phase 1 complete)
+Last session: 2026-03-19T05:03:33Z
+Stopped at: Completed 02-01-PLAN.md
 Resume file: None

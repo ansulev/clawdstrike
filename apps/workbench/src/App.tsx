@@ -82,34 +82,53 @@ function useWorkspaceBootstrap() {
       const { isDesktop } = await import("@/lib/tauri-bridge");
       if (!isDesktop()) return;
 
-      // Always ensure the default workspace directory structure exists.
-      const { bootstrapDefaultWorkspace, getDefaultWorkspacePath } = await import(
-        "@/features/project/workspace-bootstrap"
-      );
-      const workspacePath = await bootstrapDefaultWorkspace();
-      const defaultPath = workspacePath ?? await getDefaultWorkspacePath();
-
       const store = useProjectStore.getState();
-      const roots = store.projectRoots;
+      store.actions.setLoading(true);
 
-      if (roots.length > 0) {
-        // Restore persisted workspace roots.
-        await store.actions.initFromPersistedRoots();
+      try {
+        // Always ensure the default workspace directory structure exists.
+        const { bootstrapDefaultWorkspace, getDefaultWorkspacePath } = await import(
+          "@/features/project/workspace-bootstrap"
+        );
+        const workspacePath = await bootstrapDefaultWorkspace();
+        const defaultPath = workspacePath ?? await getDefaultWorkspacePath();
 
-        // If the default workspace path is missing from persisted roots,
-        // add it so the user always sees the workspace (not the raw config dir).
-        const currentRoots = useProjectStore.getState().projectRoots;
-        if (!currentRoots.includes(defaultPath)) {
+        const roots = store.projectRoots;
+
+        if (roots.length > 0) {
+          // Restore persisted workspace roots.
+          await store.actions.initFromPersistedRoots();
+
+          // If the default workspace path is missing from persisted roots,
+          // add it so the user always sees the workspace (not the raw config dir).
+          const currentRoots = useProjectStore.getState().projectRoots;
+          if (!currentRoots.includes(defaultPath)) {
+            store.actions.addRoot(defaultPath);
+          }
+        } else {
+          // First launch: mount the default workspace.
           store.actions.addRoot(defaultPath);
+          await store.actions.loadRoot(defaultPath);
         }
-      } else {
-        // First launch: mount the default workspace.
-        store.actions.addRoot(defaultPath);
-        await store.actions.loadRoot(defaultPath);
+
+        // Safety net: if after all bootstrap paths the projects Map is still
+        // empty (e.g. stale persisted roots pointing to deleted directories),
+        // ensure the default workspace is loaded as a fallback.
+        const finalProjects = useProjectStore.getState().projects;
+        if (finalProjects.size === 0) {
+          const finalRoots = useProjectStore.getState().projectRoots;
+          if (!finalRoots.includes(defaultPath)) {
+            store.actions.addRoot(defaultPath);
+          }
+          await store.actions.loadRoot(defaultPath);
+        }
+      } finally {
+        useProjectStore.getState().actions.setLoading(false);
       }
     }
     init().catch((err) => {
       console.warn("[workspace-bootstrap] Init failed:", err);
+      useProjectStore.getState().actions.setLoading(false);
     });
   }, []);
 }

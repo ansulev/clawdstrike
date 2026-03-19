@@ -25,17 +25,39 @@ import { useMemo } from "react";
 function ExplorerPanelConnected() {
   const projectRoots = useProjectStore.use.projectRoots();
   const projectsMap = useProjectStore.use.projects();
+  const loading = useProjectStore.use.loading();
   const filter = useProjectStore.use.filter();
   const formatFilter = useProjectStore.use.formatFilter();
   const fileStatuses = useProjectStore.use.fileStatuses();
   const actions = useProjectStore.use.actions();
 
   // Build ordered projects array from roots.
+  // When loading is true, roots may exist but projects Map is not yet populated,
+  // so we include an empty array during loading to avoid flashing "No project open".
   const projects = useMemo(() => {
     return projectRoots
       .map((root) => projectsMap.get(root))
       .filter((p): p is DetectionProject => p != null);
   }, [projectRoots, projectsMap]);
+
+  // While the bootstrap is scanning directories, show a loading indicator
+  // instead of the empty "No project open" state.
+  if (loading && projects.length === 0) {
+    return (
+      <div className="h-full flex flex-col">
+        <div className="h-[36px] shrink-0 flex items-center border-b border-[#202531] px-3">
+          <span className="font-mono text-[10px] font-semibold uppercase tracking-wider text-[#6f7f9a]">
+            Explorer
+          </span>
+        </div>
+        <div className="flex-1 flex items-center justify-center">
+          <span className="text-[11px] font-mono text-[#6f7f9a]/50 animate-pulse">
+            Loading workspace...
+          </span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <ExplorerPanel

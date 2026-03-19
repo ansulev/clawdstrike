@@ -8,7 +8,13 @@
 export { PluginBridgeClient, BridgeError } from "./bridge-client";
 export { PluginBridgeHost } from "./bridge-host";
 export type { BridgeHandler, BridgeHostOptions } from "./bridge-host";
-export { checkPermission, METHOD_TO_PERMISSION } from "./permissions";
+export {
+  checkPermission,
+  METHOD_TO_PERMISSION,
+  KNOWN_PERMISSIONS,
+  checkNetworkPermission,
+  extractNetworkPermissions,
+} from "./permissions";
 export type {
   BridgeMessage,
   BridgeRequest,

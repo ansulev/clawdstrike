@@ -548,15 +548,13 @@ describe("PluginBridgeHost", () => {
     });
 
     it("proxies fetch for allowed domain and returns response", async () => {
+      const mockHeaders = new Headers({ "content-type": "application/json" });
       const mockResponse = {
         status: 200,
         statusText: "OK",
-        headers: new Map([["content-type", "application/json"]]),
+        headers: mockHeaders,
         text: async () => '{"result": "ok"}',
       };
-      // Mock headers.entries() for Object.fromEntries
-      (mockResponse.headers as unknown as { entries: () => IterableIterator<[string, string]> }).entries = () =>
-        mockResponse.headers.entries();
 
       vi.stubGlobal("fetch", vi.fn().mockResolvedValue(mockResponse));
 
@@ -591,7 +589,7 @@ describe("PluginBridgeHost", () => {
       });
     });
 
-    it("returns PERMISSION_DENIED for domain not in allowed list", () => {
+    it("returns PERMISSION_DENIED for domain not in allowed list", async () => {
       netHost = new PluginBridgeHost({
         pluginId: "net-plugin-denied",
         targetWindow: mockTargetWindow as unknown as Window,
@@ -606,6 +604,11 @@ describe("PluginBridgeHost", () => {
           makeRequest("network.fetch", { url: "https://evil.com/steal" }),
         ),
       );
+
+      // Handler is async -- wait for the promise rejection to deliver the error
+      await vi.waitFor(() => {
+        expect(mockTargetWindow.postMessage).toHaveBeenCalled();
+      });
 
       const reply = mockTargetWindow.postMessage.mock
         .calls[0][0] as BridgeErrorResponse;

@@ -9,6 +9,7 @@
  */
 
 import type { PluginManifest, PluginTrustTier } from "./types";
+import { KNOWN_PERMISSIONS } from "./bridge/permissions";
 
 // ---- Validation Types ----
 
@@ -163,6 +164,72 @@ function validateContributions(
   }
 }
 
+function validatePermissions(
+  permissions: unknown,
+  errors: ManifestValidationError[],
+): void {
+  if (!Array.isArray(permissions)) {
+    errors.push({
+      field: "permissions",
+      message: '"permissions" must be an array',
+    });
+    return;
+  }
+
+  for (let i = 0; i < permissions.length; i++) {
+    const entry = permissions[i];
+
+    if (typeof entry === "string") {
+      // String permission -- check against KNOWN_PERMISSIONS
+      if (!KNOWN_PERMISSIONS.has(entry)) {
+        errors.push({
+          field: `permissions[${i}]`,
+          message: `unknown permission "${entry}" -- valid permissions: ${[...KNOWN_PERMISSIONS].join(", ")}`,
+        });
+      }
+    } else if (
+      entry !== null &&
+      typeof entry === "object" &&
+      !Array.isArray(entry)
+    ) {
+      // Object permission -- validate NetworkPermission shape
+      const obj = entry as Record<string, unknown>;
+
+      if (obj.type !== "network:fetch") {
+        errors.push({
+          field: `permissions[${i}].type`,
+          message: `unknown permission type "${String(obj.type)}" -- only "network:fetch" is supported`,
+        });
+        continue;
+      }
+
+      if (!Array.isArray(obj.allowedDomains)) {
+        errors.push({
+          field: `permissions[${i}].allowedDomains`,
+          message: `"permissions[${i}].allowedDomains" must be a non-empty array of strings`,
+        });
+      } else if (obj.allowedDomains.length === 0) {
+        errors.push({
+          field: `permissions[${i}].allowedDomains`,
+          message: `"permissions[${i}].allowedDomains" must not be empty -- specify at least one domain`,
+        });
+      } else if (
+        !obj.allowedDomains.every((d: unknown) => typeof d === "string")
+      ) {
+        errors.push({
+          field: `permissions[${i}].allowedDomains`,
+          message: `"permissions[${i}].allowedDomains" must be an array of strings`,
+        });
+      }
+    } else {
+      errors.push({
+        field: `permissions[${i}]`,
+        message: `permissions[${i}] must be a string permission or NetworkPermission object`,
+      });
+    }
+  }
+}
+
 function validateInstallation(
   installation: unknown,
   errors: ManifestValidationError[],
@@ -267,6 +334,11 @@ export function validateManifest(input: unknown): ManifestValidationResult {
   // Contributions (optional, validate recursively if present)
   if (input.contributions !== undefined) {
     validateContributions(input.contributions, errors);
+  }
+
+  // Permissions (optional, validate if present)
+  if (input.permissions !== undefined) {
+    validatePermissions(input.permissions, errors);
   }
 
   // Installation metadata (optional, validate recursively if present)

@@ -21,7 +21,12 @@ import type {
   BridgeErrorCode,
 } from "./types";
 import { isBridgeMessage } from "./types";
-import { checkPermission, METHOD_TO_PERMISSION } from "./permissions";
+import {
+  checkPermission,
+  METHOD_TO_PERMISSION,
+  checkNetworkPermission,
+} from "./permissions";
+import type { NetworkPermission } from "../types";
 import { registerGuard } from "../../workbench/guard-registry";
 import { registerFileType } from "../../workbench/file-type-registry";
 import { statusBarRegistry } from "../../workbench/status-bar-registry";
@@ -50,6 +55,24 @@ export interface BridgeHostOptions {
    * all calls are allowed (backward compat for internal plugins).
    */
   permissions?: string[];
+  /**
+   * Network permissions with domain allowlists. Used by the network.fetch
+   * handler to enforce domain-scoped access control.
+   */
+  networkPermissions?: NetworkPermission[];
+}
+
+/**
+ * Error thrown by bridge handlers to indicate a permission denial at the
+ * domain/scope level (e.g., network fetch to an unapproved domain).
+ * The dispatch loop catches this and returns PERMISSION_DENIED instead
+ * of INTERNAL_ERROR.
+ */
+class PermissionDeniedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "PermissionDeniedError";
+  }
 }
 
 // ---- PluginBridgeHost ----
@@ -95,6 +118,9 @@ export class PluginBridgeHost {
    */
   private permissionSet: Set<string> | null;
 
+  /** Network permissions with domain allowlists for fetch proxying. */
+  private networkPermissions: NetworkPermission[];
+
   constructor(options: BridgeHostOptions) {
     this.pluginId = options.pluginId;
     this.targetWindow = options.targetWindow;
@@ -102,6 +128,7 @@ export class PluginBridgeHost {
     this.permissionSet = options.permissions
       ? new Set(options.permissions)
       : null;
+    this.networkPermissions = options.networkPermissions ?? [];
 
     this.registerDefaultHandlers();
   }
@@ -156,16 +183,24 @@ export class PluginBridgeHost {
         result
           .then((resolved) => this.sendResponse(id, resolved))
           .catch((err: unknown) => {
+            const code: BridgeErrorCode =
+              err instanceof PermissionDeniedError
+                ? "PERMISSION_DENIED"
+                : "INTERNAL_ERROR";
             const message =
               err instanceof Error ? err.message : String(err);
-            this.sendError(id, "INTERNAL_ERROR", message);
+            this.sendError(id, code, message);
           });
       } else {
         this.sendResponse(id, result);
       }
     } catch (err: unknown) {
+      const code: BridgeErrorCode =
+        err instanceof PermissionDeniedError
+          ? "PERMISSION_DENIED"
+          : "INTERNAL_ERROR";
       const message = err instanceof Error ? err.message : String(err);
-      this.sendError(id, "INTERNAL_ERROR", message);
+      this.sendError(id, code, message);
     }
   }
 
@@ -270,6 +305,38 @@ export class PluginBridgeHost {
       this.storage.set(key, value);
       return undefined;
     });
+
+    // network.fetch -- domain-scoped fetch proxy
+    this.handlers.set(
+      "network.fetch",
+      async (params: unknown) => {
+        const { url, options: fetchOptions } = params as {
+          url: string;
+          options?: RequestInit;
+        };
+
+        // Check domain against network permission allowlists
+        const allAllowedDomains = this.networkPermissions.flatMap(
+          (np) => np.allowedDomains,
+        );
+
+        if (!checkNetworkPermission(url, allAllowedDomains)) {
+          throw new PermissionDeniedError(
+            `Plugin "${this.pluginId}" network fetch denied for "${url}" -- domain not in allowedDomains`,
+          );
+        }
+
+        // Proxy the fetch on behalf of the plugin
+        const response = await fetch(url, fetchOptions);
+        const body = await response.text();
+        return {
+          status: response.status,
+          statusText: response.statusText,
+          headers: Object.fromEntries(response.headers.entries()),
+          body,
+        };
+      },
+    );
   }
 
   /**

@@ -10,6 +10,7 @@ import {
   registryClient,
   type RegistrySearchResult,
 } from "@/lib/plugins/registry-client";
+import { installPlugin, uninstallPlugin } from "@/lib/plugins/plugin-installer";
 import type {
   PluginManifest,
   PluginTrustTier,
@@ -169,15 +170,21 @@ export function PluginsBrowser() {
     (p) => !installedIds.has(p.name),
   );
 
-  // ---- Stub callbacks ----
-  const handleInstall = useCallback((name: string) => {
-    // eslint-disable-next-line no-console
-    console.log(`[PluginsBrowser] Install requested: ${name}`);
+  // ---- Install/Uninstall callbacks ----
+  const handleInstall = useCallback(async (manifest: PluginManifest) => {
+    try {
+      await installPlugin(manifest);
+    } catch (err) {
+      console.error(`Failed to install plugin ${manifest.id}:`, err);
+    }
   }, []);
 
-  const handleUninstall = useCallback((id: string) => {
-    // eslint-disable-next-line no-console
-    console.log(`[PluginsBrowser] Uninstall requested: ${id}`);
+  const handleUninstall = useCallback(async (pluginId: string) => {
+    try {
+      await uninstallPlugin(pluginId);
+    } catch (err) {
+      console.error(`Failed to uninstall plugin ${pluginId}:`, err);
+    }
   }, []);
 
   return (
@@ -281,7 +288,7 @@ export function PluginsBrowser() {
                 key={p.name}
                 manifest={asManifest(p)}
                 state="not-installed"
-                onInstall={() => handleInstall(p.name)}
+                onInstall={() => handleInstall(asManifest(p))}
               />
             ))}
           </div>

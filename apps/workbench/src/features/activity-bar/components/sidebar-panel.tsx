@@ -13,6 +13,7 @@ import { FleetPanel } from "../panels/fleet-panel";
 import { CompliancePanel } from "../panels/compliance-panel";
 import { SearchPanelConnected } from "@/features/search/components/search-panel";
 import { AnalystRosterPanel } from "@/features/presence/components/analyst-roster-panel";
+import { ObservatoryMinimapPanel } from "@/features/observatory/panels/observatory-minimap-panel";
 import type { ActivityBarItemId } from "../types";
 import { useMemo } from "react";
 import {
@@ -211,6 +212,8 @@ function renderPanel(activeItem: ActivityBarItemId) {
       return <CompliancePanel />;
     case "people":
       return <AnalystRosterPanel />;
+    case "observatory":
+      return <ObservatoryMinimapPanel />;
   }
 }
 

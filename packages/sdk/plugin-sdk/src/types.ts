@@ -288,6 +288,24 @@ export interface ComplianceFrameworkContribution {
   entrypoint: string;
 }
 
+// ---- Context Menu Contribution ----
+
+/** Context menu item contribution -- adds an item to a right-click context menu. */
+export interface ContextMenuContribution {
+  /** Unique identifier for this menu item. */
+  id: string;
+  /** Display label for the menu item. */
+  label: string;
+  /** Command ID to execute when the item is clicked. */
+  command: string;
+  /** Optional icon identifier. */
+  icon?: string;
+  /** Visibility predicate expression. Evaluated against workbench context. */
+  when?: string;
+  /** Which context menu to add this item to. */
+  menu: "editor" | "sidebar" | "tab" | "finding" | "sentinel";
+}
+
 // ---- Gutter Decoration Contribution ----
 
 /** Gutter decoration contribution -- provides a CodeMirror Extension factory. */
@@ -341,6 +359,8 @@ export interface PluginContributions {
   complianceFrameworks?: ComplianceFrameworkContribution[];
   /** CodeMirror gutter decoration extensions. */
   gutterDecorations?: GutterDecorationContribution[];
+  /** Context menu items added to right-click menus. */
+  contextMenuItems?: ContextMenuContribution[];
 }
 
 // ---- Installation Metadata ----

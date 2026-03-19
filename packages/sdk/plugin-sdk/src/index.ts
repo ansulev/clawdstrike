@@ -46,6 +46,7 @@ export type {
   ComplianceFrameworkContribution,
   GutterDecorationContribution,
   GutterConfig,
+  ContextMenuContribution,
   // Contributions Container
   PluginContributions,
   // Installation & Manifest

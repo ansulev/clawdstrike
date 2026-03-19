@@ -41,6 +41,7 @@ import { registerFileType } from "../workbench/file-type-registry";
 import { statusBarRegistry } from "../workbench/status-bar-registry";
 import { registerView } from "./view-registry";
 import { registerGutterExtension } from "./gutter-extension-registry";
+import { registerContextMenuItem } from "./context-menu-registry";
 import type { GutterConfig } from "./types";
 import { PluginBridgeHost } from "./bridge";
 import { buildPluginSrcdoc } from "./sandbox";
@@ -636,6 +637,22 @@ export class PluginLoader {
             console.warn(`[PluginLoader] Failed to load gutter extension "${decoId}":`, err);
           }
         })();
+      }
+    }
+
+    // Route context menu item contributions to ContextMenuRegistry
+    if (contributions.contextMenuItems) {
+      for (const item of contributions.contextMenuItems) {
+        const itemId = `${manifest.id}.${item.id}`;
+        const dispose = registerContextMenuItem({
+          id: itemId,
+          label: item.label,
+          command: item.command,
+          icon: item.icon,
+          when: item.when,
+          menu: item.menu,
+        });
+        disposables.push(dispose);
       }
     }
   }

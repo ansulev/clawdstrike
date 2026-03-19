@@ -71,23 +71,31 @@ export function FileEditorShell() {
   );
 
   // --- Live editing: onChange handler wired to policy-edit-store ---
+  // Depend on stable scalar fields only (not the whole tabMeta object
+  // which is a new reference on every store update) to avoid re-creating
+  // the callback on every keystroke.
+  const tabId = tabMeta?.id;
+  const tabFileType = tabMeta?.fileType;
+  const tabFilePath = tabMeta?.filePath;
+  const tabName = tabMeta?.name;
   const handleEditorChange = useCallback(
     (newYaml: string) => {
-      if (!tabMeta) return;
+      if (!tabId) return;
       usePolicyEditStore.getState().setYaml(
-        tabMeta.id,
+        tabId,
         newYaml,
-        tabMeta.fileType,
-        tabMeta.filePath,
-        tabMeta.name,
+        tabFileType!,
+        tabFilePath ?? null,
+        tabName ?? "File",
       );
       // Sync dirty state to policy-tabs-store (drives pane tab dirty dot)
-      const isDirty = usePolicyEditStore.getState().isDirty(tabMeta.id);
-      if (tabMeta.dirty !== isDirty) {
-        usePolicyTabsStore.getState().setDirty(tabMeta.id, isDirty);
+      const isDirty = usePolicyEditStore.getState().isDirty(tabId);
+      const currentDirty = usePolicyTabsStore.getState().tabs.find((t) => t.id === tabId)?.dirty;
+      if (currentDirty !== isDirty) {
+        usePolicyTabsStore.getState().setDirty(tabId, isDirty);
       }
     },
-    [tabMeta],
+    [tabId, tabFileType, tabFilePath, tabName],
   );
 
   // --- Cmd+S save handler ---

@@ -1,6 +1,8 @@
 import type { NavigateFunction } from "react-router-dom";
 import { commandRegistry } from "@/lib/command-registry";
 import type { Command } from "@/lib/command-registry";
+import { usePolicyTabsStore } from "@/features/policy/stores/policy-tabs-store";
+import { usePolicyEditStore } from "@/features/policy/stores/policy-edit-store";
 
 export interface FileCommandDeps {
   navigate: NavigateFunction;
@@ -22,7 +24,36 @@ export function registerFileCommands(deps: FileCommandDeps): void {
       category: "File",
       keybinding: "Meta+S",
       context: "editor",
-      execute: () => void saveFile(),
+      execute: async () => {
+        // Check if there's an active file-first tab
+        const activeTab = usePolicyTabsStore.getState().getActiveTab();
+        if (activeTab?.id) {
+          const editState = usePolicyEditStore.getState().getTabEditState(activeTab.id);
+          if (editState) {
+            try {
+              const { saveDetectionFile } = await import("@/lib/tauri-bridge");
+              const savedPath = await saveDetectionFile(
+                editState.yaml,
+                activeTab.fileType,
+                activeTab.filePath,
+                activeTab.name,
+              );
+              if (!savedPath) return;
+              if (!activeTab.filePath) {
+                usePolicyTabsStore.getState().setFilePath(activeTab.id, savedPath);
+              }
+              usePolicyEditStore.getState().markClean(activeTab.id);
+              usePolicyTabsStore.getState().setDirty(activeTab.id, false);
+              return;
+            } catch (err) {
+              console.error("[file.save] Save failed:", err);
+              return;
+            }
+          }
+        }
+        // Fallback to legacy save
+        await saveFile();
+      },
     },
     {
       id: "file.saveAs",
@@ -30,7 +61,33 @@ export function registerFileCommands(deps: FileCommandDeps): void {
       category: "File",
       keybinding: "Meta+Shift+S",
       context: "editor",
-      execute: () => void saveFileAs(),
+      execute: async () => {
+        const activeTab = usePolicyTabsStore.getState().getActiveTab();
+        if (activeTab?.id) {
+          const editState = usePolicyEditStore.getState().getTabEditState(activeTab.id);
+          if (editState) {
+            try {
+              const { saveDetectionFile } = await import("@/lib/tauri-bridge");
+              const savedPath = await saveDetectionFile(
+                editState.yaml,
+                activeTab.fileType,
+                null, // force Save As dialog
+                activeTab.name,
+              );
+              if (!savedPath) return;
+              usePolicyTabsStore.getState().setFilePath(activeTab.id, savedPath);
+              usePolicyEditStore.getState().markClean(activeTab.id);
+              usePolicyTabsStore.getState().setDirty(activeTab.id, false);
+              return;
+            } catch (err) {
+              console.error("[file.saveAs] Save failed:", err);
+              return;
+            }
+          }
+        }
+        // Fallback to legacy save
+        await saveFileAs();
+      },
     },
     {
       id: "file.new",

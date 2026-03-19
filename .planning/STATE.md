@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: Plugin-Contributed Views
 status: in_progress
-stopped_at: Completed 01-01-PLAN.md
-last_updated: "2026-03-19T12:20:56.000Z"
-last_activity: 2026-03-19 -- Completed 01-01 ViewRegistry + ViewContainer (9 min)
+stopped_at: Completed 01-02-PLAN.md
+last_updated: "2026-03-19T12:33:00.000Z"
+last_activity: 2026-03-19 -- Completed 01-02 SDK ViewsApi + PluginLoader view routing + status bar fix (9 min)
 progress:
   total_phases: 4
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 2
-  completed_plans: 1
-  percent: 12
+  completed_plans: 2
+  percent: 25
 ---
 
 # Project State
@@ -21,15 +21,15 @@ progress:
 See: .planning/PROJECT.md
 
 **Core value:** Plugins can contribute React views to any UI slot — editor tabs, bottom panels, right sidebar, activity bar, gutters, context menus
-**Current focus:** Phase 1 ViewRegistry Foundation
+**Current focus:** Phase 1 ViewRegistry Foundation -- COMPLETE
 
 ## Current Position
 
-Phase: 1 of 4 (ViewRegistry Foundation)
-Plan: 1 of 2 complete
-Status: In progress
+Phase: 1 of 4 (ViewRegistry Foundation) -- COMPLETE
+Plan: 2 of 2 complete
+Status: Phase 1 complete, ready for Phase 2
 
-Progress: [█░░░░░░░░░] 12%
+Progress: [██░░░░░░░░] 25%
 
 ## Previous Milestones
 
@@ -50,6 +50,11 @@ Progress: [█░░░░░░░░░] 12%
 - Frozen empty array singleton for empty slot queries ensures useSyncExternalStore reference stability
 - ViewErrorBoundary uses resetKey + key prop for full component remount on error reset
 - Default priority 100 so plugins without explicit priority sort after built-in views
+- Standalone ComponentType alias in SDK avoids @types/react dependency
+- React.lazy wraps resolveViewEntrypoint for deferred manifest-declared view loading
+- Status bar entrypoint resolution is async fire-and-forget with null fallback until resolved
+- SDK view contributions accept ComponentType or lazy factory, manifest contributions use entrypoint strings
+- View IDs namespaced as {pluginId}.{viewId} for uniqueness across plugins
 
 ### Pending Todos
 None.
@@ -60,5 +65,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-03-19
-Stopped at: Completed 01-01-PLAN.md
-Resume file: .planning/phases/01-viewregistry-foundation/01-02-PLAN.md
+Stopped at: Completed 01-02-PLAN.md (Phase 1 complete)
+Resume file: Phase 2 planning needed

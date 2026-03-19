@@ -12,7 +12,7 @@ Close the gap between the plugin system's contribution point types (which alread
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: ViewRegistry Foundation** - Central view registry, ViewContainer with ErrorBoundary/Suspense, status bar fix, SDK ViewsApi
+- [x] **Phase 1: ViewRegistry Foundation** - Central view registry, ViewContainer with ErrorBoundary/Suspense, status bar fix, SDK ViewsApi
 - [ ] **Phase 2: Editor Tab Views** - Plugin components in pane tabs with keep-alive state preservation and LRU eviction
 - [ ] **Phase 3: Bottom Panel and Right Sidebar** - Plugin tabs in bottom panel and right sidebar alongside built-in panels
 - [ ] **Phase 4: Activity Bar, Gutters, and Context Menus** - Dynamic sidebar navigation, CodeMirror gutter extensions, and context menu items
@@ -31,7 +31,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Plans:** 2 plans
 Plans:
 - [x] 01-01-PLAN.md -- ViewRegistry singleton + ViewContainer with ErrorBoundary/Suspense
-- [ ] 01-02-PLAN.md -- SDK ViewsApi + PluginLoader view routing + status bar fix
+- [x] 01-02-PLAN.md -- SDK ViewsApi + PluginLoader view routing + status bar fix
 
 ### Phase 2: Editor Tab Views
 **Goal**: Plugins can open full-panel views in the editor area as tabs, with state preserved across tab switches and split-pane support
@@ -73,7 +73,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. ViewRegistry Foundation | 1/2 | In progress | - |
+| 1. ViewRegistry Foundation | 2/2 | Complete | 2026-03-19 |
 | 2. Editor Tab Views | 0/? | Not started | - |
 | 3. Bottom Panel and Right Sidebar | 0/? | Not started | - |
 | 4. Activity Bar, Gutters, and Context Menus | 0/? | Not started | - |

@@ -13,9 +13,19 @@
 
 import { PluginRegistry, pluginRegistry } from "./plugin-registry";
 import { PluginLoader, pluginLoader } from "./plugin-loader";
-import type { PluginManifest } from "./types";
+import type { PluginManifest, PluginPermission, NetworkPermission } from "./types";
 
 // ---- Types ----
+
+/**
+ * Callback invoked before installing a community plugin with declared permissions.
+ * Receives the manifest and its permissions for the operator to review.
+ * Return true to approve installation, false to reject.
+ */
+export type PermissionPromptCallback = (
+  manifest: PluginManifest,
+  permissions: (PluginPermission | NetworkPermission)[],
+) => Promise<boolean>;
 
 /**
  * Options for install/uninstall functions.
@@ -26,6 +36,12 @@ export interface InstallOptions {
   registry?: PluginRegistry;
   /** Plugin loader instance (defaults to singleton). */
   loader?: PluginLoader;
+  /**
+   * Permission prompt callback. Called before installing a community plugin
+   * with declared permissions. If the callback returns false, installation
+   * is aborted with an error.
+   */
+  onPermissionPrompt?: PermissionPromptCallback;
 }
 
 // ---- Install ----
@@ -49,6 +65,22 @@ export async function installPlugin(
 ): Promise<void> {
   const registry = options?.registry ?? pluginRegistry;
   const loader = options?.loader ?? pluginLoader;
+  const onPermissionPrompt = options?.onPermissionPrompt;
+
+  // Permission prompt for community plugins with declared permissions
+  if (
+    manifest.trust === "community" &&
+    manifest.permissions &&
+    manifest.permissions.length > 0 &&
+    onPermissionPrompt
+  ) {
+    const approved = await onPermissionPrompt(manifest, manifest.permissions);
+    if (!approved) {
+      throw new Error(
+        "Installation cancelled: permissions not approved by operator",
+      );
+    }
+  }
 
   // Register the manifest (validates + checks for duplicates)
   // Throws PluginRegistrationError on failure

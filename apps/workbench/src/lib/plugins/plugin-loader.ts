@@ -24,6 +24,8 @@ import type {
   GuardContribution,
   FileTypeContribution,
   StatusBarItemContribution,
+  NetworkPermission,
+  PluginPermission,
 } from "./types";
 import { PluginRegistry, pluginRegistry } from "./plugin-registry";
 import { verifyPluginTrust } from "./plugin-trust";
@@ -392,8 +394,36 @@ export class PluginLoader {
         );
       }
 
+      // Build permissions for the bridge host
+      const perms = manifest.permissions;
+      let bridgePermissions: string[] | undefined;
+      let bridgeNetworkPermissions: NetworkPermission[] | undefined;
+
+      if (perms !== undefined) {
+        // Manifest declares permissions (possibly empty) -- enforce
+        bridgePermissions = perms.filter(
+          (p): p is PluginPermission => typeof p === "string",
+        );
+        const netPerms = perms.filter(
+          (p): p is NetworkPermission =>
+            typeof p === "object" && p !== null && p.type === "network:fetch",
+        );
+        // Include network:fetch in simple permissions if any NetworkPermission objects exist
+        if (netPerms.length > 0 && !bridgePermissions.includes("network:fetch")) {
+          bridgePermissions.push("network:fetch");
+        }
+        bridgeNetworkPermissions =
+          netPerms.length > 0 ? netPerms : undefined;
+      }
+      // If perms is undefined, both stay undefined => no enforcement (backward compat)
+
       // Create the bridge host
-      const host = new PluginBridgeHost({ pluginId, targetWindow });
+      const host = new PluginBridgeHost({
+        pluginId,
+        targetWindow,
+        permissions: bridgePermissions,
+        networkPermissions: bridgeNetworkPermissions,
+      });
 
       // Create and attach message handler
       const messageHandler = (e: MessageEvent): void => {

@@ -542,11 +542,25 @@ export function ExplorerPanel({
         </div>
       </div>
 
-      {/* Single-root: show project name header like before */}
+      {/* Single-root: collapsible project name header with item count */}
       {!isMultiRoot && (
-        <div className="shrink-0 px-3 py-1.5 border-b border-[#2d3240]/50">
+        <div
+          className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 border-b border-[#2d3240]/50 cursor-pointer hover:bg-[#131721]/20"
+          onClick={() => toggleRootExpanded(firstProject.rootPath)}
+        >
+          <IconChevronRight
+            size={10}
+            stroke={1.5}
+            className={cn(
+              "text-[#6f7f9a]/60 transition-transform",
+              expandedRootsResolved.has(firstProject.rootPath) && "rotate-90",
+            )}
+          />
           <span className="text-[10px] font-mono font-semibold text-[#ece7dc]/80 truncate">
             {firstProject.name}
+          </span>
+          <span className="text-[9px] font-mono text-[#6f7f9a]/40 ml-0.5">
+            ({countFiles(firstProject.files)})
           </span>
         </div>
       )}
@@ -577,6 +591,9 @@ export function ExplorerPanel({
                     <span className="text-[10px] font-mono font-semibold text-[#ece7dc]/80 truncate flex-1">
                       {project.name}
                     </span>
+                    <span className="text-[9px] font-mono text-[#6f7f9a]/40">
+                      ({countFiles(project.files)})
+                    </span>
                   </div>
                   {/* Root section tree content */}
                   {isExpanded && (
@@ -604,26 +621,28 @@ export function ExplorerPanel({
               );
             })
           ) : (
-            // Single-root: render tree directly (preserves existing visual feel)
-            <RootTreeSection
-              project={firstProject}
-              filter={filter}
-              formatFilter={formatFilter}
-              onToggleDir={onToggleDir}
-              onOpenFile={onOpenFile}
-              activeFilePath={activeFilePath}
-              fileStatuses={fileStatuses}
-              onCreateFile={onCreateFile}
-              onRenameFile={onRenameFile}
-              onDeleteFile={onDeleteFile}
-              creatingInDir={creatingInDir}
-              setCreatingInDir={setCreatingInDir}
-              renamingFilePath={renamingFilePath}
-              setRenamingFilePath={setRenamingFilePath}
-              contextMenu={contextMenu}
-              setContextMenu={setContextMenu}
-              setDeletingFile={setDeletingFile}
-            />
+            // Single-root: render tree only when root is expanded
+            expandedRootsResolved.has(firstProject.rootPath) && (
+              <RootTreeSection
+                project={firstProject}
+                filter={filter}
+                formatFilter={formatFilter}
+                onToggleDir={onToggleDir}
+                onOpenFile={onOpenFile}
+                activeFilePath={activeFilePath}
+                fileStatuses={fileStatuses}
+                onCreateFile={onCreateFile}
+                onRenameFile={onRenameFile}
+                onDeleteFile={onDeleteFile}
+                creatingInDir={creatingInDir}
+                setCreatingInDir={setCreatingInDir}
+                renamingFilePath={renamingFilePath}
+                setRenamingFilePath={setRenamingFilePath}
+                contextMenu={contextMenu}
+                setContextMenu={setContextMenu}
+                setDeletingFile={setDeletingFile}
+              />
+            )
           )}
         </div>
 

@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: milestone
-status: completed
-stopped_at: Completed 02-01-PLAN.md
-last_updated: "2026-03-19T12:55:30.813Z"
+status: in_progress
+stopped_at: Completed 02-02-PLAN.md
+last_updated: "2026-03-19T13:30:11Z"
 progress:
   total_phases: 4
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 5
-  completed_plans: 4
-  percent: 80
+  completed_plans: 5
+  percent: 100
 ---
 
 # Project State
@@ -20,15 +20,15 @@ progress:
 See: .planning/PROJECT.md
 
 **Core value:** Plugins can contribute React views to any UI slot — editor tabs, bottom panels, right sidebar, activity bar, gutters, context menus
-**Current focus:** Phase 2 Editor Tab Views -- Plan 1 complete, Plan 2 remaining
+**Current focus:** Phase 2 complete, Phase 4 remaining (Activity Bar, Gutters, Context Menus)
 
 ## Current Position
 
-Phase: 2 of 4 (Editor Tab Views)
-Plan: 1 of 2 complete
-Status: 02-01 complete, 02-02 remaining (tab bar integration + split-pane)
+Phase: 2 of 4 (Editor Tab Views) -- Complete
+Plan: 2 of 2 complete
+Status: All planned phases complete (1, 2, 3). Phase 4 plans TBD.
 
-Progress: [████████░░] 80%
+Progress: [██████████] 100%
 
 ## Previous Milestones
 
@@ -62,6 +62,9 @@ Progress: [████████░░] 80%
 - Direct ErrorBoundary+Suspense wrapping in ViewTabRenderer instead of ViewContainer for full EditorTabProps support
 - PluginEditorTabBridge pattern: thin component injecting setTitle/setDirty callbacks alongside ViewProps
 - [Phase 02]: Monotonic counter for deterministic tab ordering instead of raw Date.now()
+- [Phase 02]: activatePluginViewTab(null) on policy tab switch for clean bidirectional switching
+- [Phase 02]: plugin: prefix on splitTabId for plugin view routing without multi-policy-store type changes
+- [Phase 02]: ViewContainer in split pane (not ViewTabRenderer) for independent state per pane instance
 
 ### Pending Todos
 None.
@@ -71,6 +74,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-19T12:55:23.660Z
-Stopped at: Completed 02-01-PLAN.md
+Last session: 2026-03-19T13:30:11Z
+Stopped at: Completed 02-02-PLAN.md
 Resume file: None

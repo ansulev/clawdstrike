@@ -44,8 +44,8 @@ Plans:
   4. When more than 5 hidden plugin tabs accumulate, the oldest hidden tab is destroyed (LRU eviction) and re-opening it creates a fresh mount
 **Plans:** 2 plans
 Plans:
-- [ ] 02-01-PLAN.md -- PluginViewTabStore + ViewTabRenderer with keep-alive and LRU eviction
-- [ ] 02-02-PLAN.md -- Tab bar integration + split-pane support + human verification
+- [x] 02-01-PLAN.md -- PluginViewTabStore + ViewTabRenderer with keep-alive and LRU eviction
+- [x] 02-02-PLAN.md -- Tab bar integration + split-pane support + human verification
 
 ### Phase 3: Bottom Panel and Right Sidebar
 **Goal**: Plugins can contribute tabs to the bottom panel and panels to the right sidebar, rendered alongside built-in panels
@@ -79,6 +79,6 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. ViewRegistry Foundation | 2/2 | Complete | 2026-03-19 |
-| 2. Editor Tab Views | 1/2 | In Progress | - |
+| 2. Editor Tab Views | 2/2 | Complete | 2026-03-19 |
 | 3. Bottom Panel and Right Sidebar | 1/1 | Complete | 2026-03-19 |
 | 4. Activity Bar, Gutters, and Context Menus | 0/? | Not started | - |

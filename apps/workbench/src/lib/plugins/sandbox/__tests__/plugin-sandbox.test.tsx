@@ -13,18 +13,28 @@ import { render, cleanup } from "@testing-library/react";
 import React from "react";
 
 // ---- Mock bridge-host module ----
+// vi.hoisted() ensures these are available when vi.mock factory runs (hoisted)
 
-const mockDestroy = vi.fn();
-const mockHandleMessage = vi.fn();
-const mockRegisterHandler = vi.fn();
-const mockPushEvent = vi.fn();
+const { mockDestroy, mockHandleMessage, mockRegisterHandler, mockPushEvent, MockPluginBridgeHost, constructorCalls } = vi.hoisted(() => {
+  const mockDestroy = vi.fn();
+  const mockHandleMessage = vi.fn();
+  const mockRegisterHandler = vi.fn();
+  const mockPushEvent = vi.fn();
+  const constructorCalls: unknown[][] = [];
 
-const MockPluginBridgeHost = vi.fn().mockImplementation(() => ({
-  handleMessage: mockHandleMessage,
-  registerHandler: mockRegisterHandler,
-  pushEvent: mockPushEvent,
-  destroy: mockDestroy,
-}));
+  class MockPluginBridgeHost {
+    handleMessage = mockHandleMessage;
+    registerHandler = mockRegisterHandler;
+    pushEvent = mockPushEvent;
+    destroy = mockDestroy;
+
+    constructor(...args: unknown[]) {
+      constructorCalls.push(args);
+    }
+  }
+
+  return { mockDestroy, mockHandleMessage, mockRegisterHandler, mockPushEvent, MockPluginBridgeHost, constructorCalls };
+});
 
 vi.mock("../../bridge/bridge-host", () => ({
   PluginBridgeHost: MockPluginBridgeHost,
@@ -44,6 +54,7 @@ describe("PluginSandbox", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    constructorCalls.length = 0;
   });
 
   afterEach(() => {
@@ -114,7 +125,7 @@ describe("PluginSandbox", () => {
     render(<PluginSandbox {...defaultProps} onReady={onReady} />);
 
     // The host should have been created and onReady called
-    expect(MockPluginBridgeHost).toHaveBeenCalled();
+    expect(constructorCalls.length).toBeGreaterThanOrEqual(1);
     expect(onReady).toHaveBeenCalledOnce();
     // The argument should be the mock host instance
     expect(onReady.mock.calls[0][0]).toHaveProperty("handleMessage");

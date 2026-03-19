@@ -28,7 +28,10 @@ Decimal phases appear between their surrounding integers in numeric order.
   2. A plugin status bar widget declared with an `entrypoint` renders its actual component in the status bar instead of blank space
   3. When a plugin view component throws during render, the ErrorBoundary catches it and displays a fallback with the plugin name, error message, and a working "Reload View" button -- the rest of the workbench remains functional
   4. `useViewsBySlot("editorTab")` re-renders consuming components when a plugin registers or unregisters a view
-**Plans**: TBD
+**Plans:** 2 plans
+Plans:
+- [ ] 01-01-PLAN.md -- ViewRegistry singleton + ViewContainer with ErrorBoundary/Suspense
+- [ ] 01-02-PLAN.md -- SDK ViewsApi + PluginLoader view routing + status bar fix
 
 ### Phase 2: Editor Tab Views
 **Goal**: Plugins can open full-panel views in the editor area as tabs, with state preserved across tab switches and split-pane support
@@ -70,7 +73,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. ViewRegistry Foundation | 0/? | Not started | - |
+| 1. ViewRegistry Foundation | 0/2 | Planning complete | - |
 | 2. Editor Tab Views | 0/? | Not started | - |
 | 3. Bottom Panel and Right Sidebar | 0/? | Not started | - |
 | 4. Activity Bar, Gutters, and Context Menus | 0/? | Not started | - |

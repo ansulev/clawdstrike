@@ -92,12 +92,12 @@ Enable plugins to contribute React components and CodeMirror extensions to every
 | SDKV-01 | Phase 1 | Complete |
 | SDKV-02 | Phase 1 | Complete |
 | SDKV-03 | Phase 1 | Complete |
-| ETAB-01 | Phase 2 | Pending |
-| ETAB-02 | Phase 2 | Pending |
+| ETAB-01 | Phase 2 | Complete |
+| ETAB-02 | Phase 2 | Complete |
 | ETAB-03 | Phase 2 | Pending |
-| ALIVE-01 | Phase 2 | Pending |
-| ALIVE-02 | Phase 2 | Pending |
-| ALIVE-03 | Phase 2 | Pending |
+| ALIVE-01 | Phase 2 | Complete |
+| ALIVE-02 | Phase 2 | Complete |
+| ALIVE-03 | Phase 2 | Complete |
 | BPAN-01 | Phase 3 | Complete |
 | BPAN-02 | Phase 3 | Complete |
 | RSIDE-01 | Phase 3 | Complete |

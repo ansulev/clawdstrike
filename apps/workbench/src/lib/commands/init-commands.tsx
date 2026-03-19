@@ -247,6 +247,7 @@ export function InitCommands() {
       showFleet: () => useActivityBarStore.getState().actions.showPanel("fleet"),
       showCompliance: () => useActivityBarStore.getState().actions.showPanel("compliance"),
       showHeartbeat: () => useActivityBarStore.getState().actions.showPanel("heartbeat"),
+      showObservatory: () => useActivityBarStore.getState().actions.showPanel("observatory"),
       toggleAudit: () => useBottomPaneStore.getState().toggleTab("audit"),
     });
 

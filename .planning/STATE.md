@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 04-01-PLAN.md
-last_updated: "2026-03-19T14:40:11Z"
+stopped_at: Completed 04-02-PLAN.md
+last_updated: "2026-03-19T15:32:06Z"
 progress:
   total_phases: 4
   completed_phases: 3
   total_plans: 8
-  completed_plans: 6
-  percent: 75
+  completed_plans: 7
+  percent: 88
 ---
 
 # Project State
@@ -20,15 +20,15 @@ progress:
 See: .planning/PROJECT.md
 
 **Core value:** Plugins can contribute React views to any UI slot — editor tabs, bottom panels, right sidebar, activity bar, gutters, context menus
-**Current focus:** Phase 4 in progress -- Activity Bar complete, Gutters and Context Menus remaining
+**Current focus:** Phase 4 in progress -- Activity Bar and Gutters complete, Context Menus remaining
 
 ## Current Position
 
 Phase: 4 of 4 (Activity Bar, Gutters, and Context Menus)
-Plan: 1 of 3 complete
-Status: Phase 4 Plan 1 (Activity Bar) complete. Plans 2 (Gutters) and 3 (Context Menus) remaining.
+Plan: 2 of 3 complete
+Status: Phase 4 Plans 1 (Activity Bar) and 2 (Gutters) complete. Plan 3 (Context Menus) remaining.
 
-Progress: [███████░░░] 75%
+Progress: [████████░░] 88%
 
 ## Previous Milestones
 
@@ -70,6 +70,9 @@ Progress: [███████░░░] 75%
 - [Phase 04]: Built-in items inactive when plugin view active (routeActive && activePluginViewId === null)
 - [Phase 04]: ActivityBarPluginView wrapper clones registration with injected isCollapsed via useMemo
 - [Phase 04]: Plugin section uses distinct green accent (#6b8b55) for visual separation
+- [Phase 04]: Compartment.of([]) in useMemo (static) with useEffect reconfigure for dynamic gutter extension updates
+- [Phase 04]: Frozen empty array sentinel for empty gutter registry state ensures useSyncExternalStore reference stability
+- [Phase 04]: Async gutter entrypoint resolution uses fire-and-forget pattern matching status bar routing
 
 ### Pending Todos
 None.
@@ -79,6 +82,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-19T14:40:11Z
-Stopped at: Completed 04-01-PLAN.md
+Last session: 2026-03-19T15:32:06Z
+Stopped at: Completed 04-02-PLAN.md
 Resume file: None

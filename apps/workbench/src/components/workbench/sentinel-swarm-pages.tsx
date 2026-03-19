@@ -26,6 +26,10 @@ import {
   type SwarmBlobPinResponse,
 } from "@/features/swarm/swarm-blob-client";
 import { FAIL_CLOSED_HUB_TRUST_POLICY } from "@/features/swarm/swarm-trust-policy";
+import { useMultiPolicy } from "@/features/policy/stores/multi-policy-store";
+import { useDraftDetection } from "@/lib/workbench/detection-workflow/use-draft-detection";
+import { useSignalStore } from "@/features/findings/stores/signal-store";
+import { usePaneStore } from "@/features/panes/pane-store";
 import { SentinelList } from "./sentinels/sentinel-list";
 import { SentinelCreate } from "./sentinels/sentinel-create";
 import { SentinelDetail } from "./sentinels/sentinel-detail";
@@ -532,6 +536,16 @@ export function FindingDetailPage() {
   const navigate = useNavigate();
   const finding = findings.find((f) => f.id === id);
 
+  // Draft detection wiring
+  const { multiDispatch } = useMultiPolicy();
+  const allSignals = useSignalStore.use.signals();
+  const { draftFromFinding } = useDraftDetection({
+    dispatch: multiDispatch,
+    onNavigateToEditor: () => {
+      usePaneStore.getState().openApp("/editor", "Editor");
+    },
+  });
+
   const promoteFinding = useCallback(
     (findingId: string) => {
       const targetFinding = findings.find((entry) => entry.id === findingId);
@@ -546,6 +560,15 @@ export function FindingDetailPage() {
       promote(findingId, "operator", intel.id);
     },
     [findings, promote, upsertLocalIntel],
+  );
+
+  const handleDraftDetection = useCallback(
+    (findingId: string) => {
+      const targetFinding = findings.find((entry) => entry.id === findingId);
+      if (!targetFinding) return;
+      void draftFromFinding(targetFinding, allSignals);
+    },
+    [findings, allSignals, draftFromFinding],
   );
 
   if (!finding) {
@@ -573,6 +596,7 @@ export function FindingDetailPage() {
           createdAt: new Date().toISOString(),
         })
       }
+      onDraftDetection={handleDraftDetection}
       onBack={() => navigate("/findings")}
     />
   );

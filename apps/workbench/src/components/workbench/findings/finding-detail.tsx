@@ -16,6 +16,7 @@ import {
   IconActivity,
   IconMessage,
   IconChartBar,
+  IconFileCode,
 } from "@tabler/icons-react";
 import { cn } from "@/lib/utils";
 import { EnrichmentSidebar } from "./enrichment-sidebar";
@@ -40,6 +41,7 @@ interface FindingDetailProps {
   onMarkFalsePositive: (findingId: string) => void;
   onAddAnnotation: (findingId: string, text: string) => void;
   onRunEnrichment?: (findingId: string) => void;
+  onDraftDetection?: (findingId: string) => void;
   onBack?: () => void;
 }
 
@@ -100,6 +102,7 @@ export function FindingDetail({
   onMarkFalsePositive,
   onAddAnnotation,
   onRunEnrichment,
+  onDraftDetection,
   onBack,
 }: FindingDetailProps) {
   const [annotationText, setAnnotationText] = useState("");
@@ -236,6 +239,14 @@ export function FindingDetail({
               )}
               {finding.status === "confirmed" && (
                 <>
+                  {onDraftDetection && (
+                    <ActionButton
+                      label="Draft Detection"
+                      icon={<IconFileCode size={12} stroke={1.5} />}
+                      color="#6ea8d9"
+                      onClick={() => onDraftDetection(finding.id)}
+                    />
+                  )}
                   <ActionButton
                     label="Promote to Intel"
                     icon={<IconArrowUpRight size={12} stroke={2} />}

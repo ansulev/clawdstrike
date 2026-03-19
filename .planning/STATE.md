@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: In progress
-stopped_at: Completed 05-01-PLAN.md
-last_updated: "2026-03-19T00:11:17Z"
-last_activity: 2026-03-19 -- Completed 05-01 (EgressAllowlistGuard plugin via createPlugin SDK with 6 integration tests)
+stopped_at: Completed 05-02-PLAN.md
+last_updated: "2026-03-19T00:20:04Z"
+last_activity: 2026-03-19 -- Completed 05-02 (Cross-runtime verdict parity tests for EgressAllowlistGuard plugin)
 progress:
   total_phases: 6
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 10
-  completed_plans: 9
-  percent: 90
+  completed_plans: 10
+  percent: 100
 ---
 
 # Project State
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-18)
 
 **Core value:** Security teams can extend ClawdStrike with custom guards, detection formats, intel sources, and UI panels without forking the workbench.
-**Current focus:** Phase 5: Guard-as-Plugin Proof of Concept
+**Current focus:** Phase 6: Marketplace UI
 
 ## Current Position
 
-Phase: 5 of 6 (Guard-as-Plugin Proof of Concept)
-Plan: 2 of 2 in current phase
+Phase: 6 of 6 (Marketplace UI)
+Plan: 1 of 1 in current phase
 Status: In progress
-Last activity: 2026-03-19 -- Completed 05-01 (EgressAllowlistGuard plugin via createPlugin SDK with 6 integration tests)
+Last activity: 2026-03-19 -- Completed 05-02 (Cross-runtime verdict parity tests for EgressAllowlistGuard plugin)
 
-Progress: [█████████░] 90%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
@@ -56,6 +56,7 @@ Progress: [█████████░] 90%
 | Phase 03 P02 | 4min | 2 tasks | 3 files |
 | Phase 04 P01 | 5min | 1 tasks | 10 files |
 | Phase 05 P01 | 3min | 1 tasks | 2 files |
+| Phase 05 P02 | 7min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -95,6 +96,8 @@ Recent decisions affecting current work:
 - [Phase 05-01]: Plugin uses distinct ID 'egress_allowlist_plugin' to avoid collision with built-in 'egress_allowlist'
 - [Phase 05-01]: Plugin activate() is no-op -- PluginLoader routes contributions from manifest BEFORE calling activate()
 - [Phase 05-01]: ConfigFields are byte-identical copies of built-in egress_allowlist guard metadata for parity validation
+- [Phase 05-02]: Parity tests verify config schema mapping rather than runtime delegation since plugin declares metadata only
+- [Phase 05-02]: Rust factory wraps built-in guard via CustomGuardFactory trait, proving custom_guards path works without WASM
 
 ### Pending Todos
 
@@ -106,6 +109,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-19T00:11:17Z
-Stopped at: Completed 05-01-PLAN.md
+Last session: 2026-03-19T00:20:04Z
+Stopped at: Completed 05-02-PLAN.md
 Resume file: None

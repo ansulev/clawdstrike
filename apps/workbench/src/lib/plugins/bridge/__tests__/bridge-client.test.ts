@@ -43,9 +43,9 @@ describe("PluginBridgeClient", () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     client.destroy();
     vi.restoreAllMocks();
-    vi.useRealTimers();
   });
 
   // ---- call() ----
@@ -97,23 +97,27 @@ describe("PluginBridgeClient", () => {
     it("rejects with TIMEOUT after 30 seconds if no response arrives", async () => {
       vi.useFakeTimers();
 
-      const promise = client.call("storage.get", { key: "test" });
+      const promise = client.call<string>("storage.get", { key: "test" });
+      // Attach rejection handler BEFORE advancing timers to prevent unhandled rejection
+      const caughtError = promise.catch((err: BridgeError) => err);
 
       // Advance time by 30 seconds
-      vi.advanceTimersByTime(30_000);
+      await vi.advanceTimersByTimeAsync(30_000);
 
-      await expect(promise).rejects.toThrow(BridgeError);
-      await expect(promise).rejects.toMatchObject({
-        code: "TIMEOUT",
-      });
+      const err1 = await caughtError;
+      expect(err1).toBeInstanceOf(BridgeError);
+      expect(err1.code).toBe("TIMEOUT");
+      expect(err1.message).toContain("storage.get");
 
-      // Verify timeout message includes method name
-      try {
-        await client.call("storage.get", { key: "test2" });
-        vi.advanceTimersByTime(30_000);
-      } catch (err) {
-        expect((err as BridgeError).message).toContain("storage.get");
-      }
+      // Verify a second call also times out with method name in message
+      const promise2 = client.call<string>("guards.register", { id: "x" });
+      const caughtError2 = promise2.catch((err: BridgeError) => err);
+      await vi.advanceTimersByTimeAsync(30_000);
+
+      const err2 = await caughtError2;
+      expect(err2).toBeInstanceOf(BridgeError);
+      expect(err2.code).toBe("TIMEOUT");
+      expect(err2.message).toContain("guards.register");
     });
 
     it("uses monotonically increasing IDs for correlation", async () => {

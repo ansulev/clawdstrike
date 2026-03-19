@@ -7,14 +7,12 @@
  * - File loading: if no tab exists for the filePath, loads via Tauri bridge
  * - Toolbar: renders FileEditorToolbar with per-file state (testRunner, problems)
  * - Active tab sync: keeps policy-tabs-store.activeTabId in sync
- *
- * NOTE: The <pre> content area is a temporary read-only YAML viewer. The full
- * CodeMirror EditorPane integration requires decoupling from useMultiPolicy(),
- * which is a larger refactor. The existing /editor route with PolicyEditor
- * still works for full editing.
+ * - Live editing: YamlEditor (CodeMirror) wired to policy-edit-store for
+ *   per-tab editing, undo/redo, validation, and dirty tracking
  */
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useParams } from "react-router-dom";
+import { YamlEditor } from "@/components/ui/yaml-editor";
 import { usePolicyTabsStore } from "@/features/policy/stores/policy-tabs-store";
 import { usePolicyEditStore } from "@/features/policy/stores/policy-edit-store";
 import { FileEditorToolbar } from "./file-editor-toolbar";
@@ -58,6 +56,34 @@ export function FileEditorShell() {
   const editState = usePolicyEditStore((s) =>
     tabMeta ? s.editStates.get(tabMeta.id) : undefined,
   );
+
+  // --- Live editing: onChange handler wired to policy-edit-store ---
+  const handleEditorChange = useCallback(
+    (newYaml: string) => {
+      if (!tabMeta) return;
+      usePolicyEditStore.getState().setYaml(
+        tabMeta.id,
+        newYaml,
+        tabMeta.fileType,
+        tabMeta.filePath,
+        tabMeta.name,
+      );
+      // Sync dirty state to policy-tabs-store (drives pane tab dirty dot)
+      const isDirty = usePolicyEditStore.getState().isDirty(tabMeta.id);
+      if (tabMeta.dirty !== isDirty) {
+        usePolicyTabsStore.getState().setDirty(tabMeta.id, isDirty);
+      }
+    },
+    [tabMeta],
+  );
+
+  // Map validation errors to YamlEditor error format
+  const editorErrors = editState
+    ? editState.validation.errors.map((e) => ({
+        line: undefined as number | undefined,
+        message: e.message,
+      }))
+    : [];
 
   // Load file content via Tauri bridge when no matching tab exists
   useEffect(() => {
@@ -126,11 +152,14 @@ export function FileEditorShell() {
         testRunnerOpen={testRunnerOpen}
         problemsOpen={showProblems}
       />
-      <div className="flex-1 min-h-0 overflow-auto">
-        {/* Editor content area -- renders the YAML/visual editor for the tab */}
-        <pre className="p-4 font-mono text-xs text-[#ece7dc] whitespace-pre-wrap leading-relaxed">
-          {editState.yaml}
-        </pre>
+      <div className="flex-1 min-h-0">
+        <YamlEditor
+          value={editState.yaml}
+          onChange={handleEditorChange}
+          fileType={tabMeta.fileType}
+          errors={editorErrors}
+          showDetectionGutters={tabMeta.fileType === "clawdstrike_policy"}
+        />
       </div>
     </div>
   );

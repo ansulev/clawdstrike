@@ -39,6 +39,15 @@ import { registerFileType } from "../workbench/file-type-registry";
 import { statusBarRegistry } from "../workbench/status-bar-registry";
 import { PluginBridgeHost } from "./bridge";
 import { buildPluginSrcdoc } from "./sandbox";
+import {
+  PluginRevocationStore,
+  getPluginRevocationStore,
+} from "./revocation-store";
+
+// ---- Constants ----
+
+/** Time in ms to wait for in-flight bridge calls to complete before removing iframe. */
+const REVOKE_DRAIN_TIMEOUT_MS = 5000;
 
 // ---- Types ----
 
@@ -90,6 +99,8 @@ export interface PluginLoaderOptions {
   iframeContainer?: HTMLElement;
   /** Function to resolve plugin code for community plugins. Returns the bundled JS string. */
   resolvePluginCode?: PluginCodeResolver;
+  /** Revocation store for checking/storing revocations. Defaults to singleton. */
+  revocationStore?: PluginRevocationStore;
 }
 
 // ---- Internal state for a loaded plugin ----
@@ -117,6 +128,7 @@ export class PluginLoader {
   private trustOptions: TrustVerificationOptions;
   private iframeContainer?: HTMLElement;
   private resolvePluginCode?: PluginCodeResolver;
+  private revocationStore: PluginRevocationStore;
 
   /** Plugins that have been loaded and activated. */
   private loadedPlugins = new Map<string, LoadedPlugin>();
@@ -137,6 +149,8 @@ export class PluginLoader {
     this.trustOptions = options?.trustOptions ?? {};
     this.iframeContainer = options?.iframeContainer;
     this.resolvePluginCode = options?.resolvePluginCode;
+    this.revocationStore =
+      options?.revocationStore ?? getPluginRevocationStore();
   }
 
   // ---- Public API ----
@@ -342,6 +356,34 @@ export class PluginLoader {
     this.registry.setState(pluginId, "deactivated");
   }
 
+  /**
+   * Revoke a plugin: store revocation, set state to "revoked", wait for
+   * in-flight calls to drain (5 seconds), then deactivate the plugin.
+   *
+   * The drain timeout (REVOKE_DRAIN_TIMEOUT_MS) gives in-flight bridge
+   * calls time to complete before the iframe is removed. During the drain
+   * period, new bridge calls are rejected with PLUGIN_REVOKED by the
+   * bridge host's revocation guard.
+   */
+  async revokePlugin(
+    pluginId: string,
+    options?: { reason?: string; until?: number | null },
+  ): Promise<void> {
+    // 1. Store the revocation (this immediately causes bridge host to reject new calls)
+    this.revocationStore.revoke(pluginId, options);
+
+    // 2. Set lifecycle state to "revoked"
+    this.registry.setState(pluginId, "revoked", options?.reason);
+
+    // 3. Wait for in-flight calls to drain
+    await new Promise<void>((resolve) =>
+      setTimeout(resolve, REVOKE_DRAIN_TIMEOUT_MS),
+    );
+
+    // 4. Deactivate: dispose contributions, remove iframe, destroy bridge
+    await this.deactivatePlugin(pluginId);
+  }
+
   // ---- Private helpers ----
 
   /**
@@ -423,6 +465,7 @@ export class PluginLoader {
         targetWindow,
         permissions: bridgePermissions,
         networkPermissions: bridgeNetworkPermissions,
+        revocationStore: this.revocationStore,
       });
 
       // Create and attach message handler

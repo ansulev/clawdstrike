@@ -67,6 +67,12 @@ export interface BridgeHostOptions {
    * Receipt generation is fire-and-forget (non-blocking).
    */
   receiptMiddleware?: ReceiptMiddleware | null;
+  /**
+   * Revocation store for checking whether the plugin has been revoked.
+   * When provided, every incoming message is checked against this store
+   * before any other processing. Revoked plugins receive PLUGIN_REVOKED.
+   */
+  revocationStore?: { isRevoked(pluginId: string): boolean } | null;
 }
 
 /**
@@ -131,6 +137,9 @@ export class PluginBridgeHost {
   /** Receipt generation middleware (fire-and-forget). */
   private receiptMiddleware: ReceiptMiddleware | null;
 
+  /** Revocation store for checking whether the plugin is revoked. */
+  private revocationStore: { isRevoked(pluginId: string): boolean } | null;
+
   constructor(options: BridgeHostOptions) {
     this.pluginId = options.pluginId;
     this.targetWindow = options.targetWindow;
@@ -140,6 +149,7 @@ export class PluginBridgeHost {
       : null;
     this.networkPermissions = options.networkPermissions ?? [];
     this.receiptMiddleware = options.receiptMiddleware ?? null;
+    this.revocationStore = options.revocationStore ?? null;
 
     this.registerDefaultHandlers();
   }
@@ -166,6 +176,26 @@ export class PluginBridgeHost {
     }
 
     const { id, method, params } = data;
+
+    // Revocation check -- BEFORE permission enforcement (REVOKE-06)
+    if (
+      this.revocationStore &&
+      this.revocationStore.isRevoked(this.pluginId)
+    ) {
+      this.sendError(
+        id,
+        "PLUGIN_REVOKED",
+        `Plugin "${this.pluginId}" has been revoked`,
+      );
+      if (this.receiptMiddleware) {
+        void this.receiptMiddleware
+          .recordDenied(method, params, "revocation")
+          .catch((e) =>
+            console.warn("[bridge-host] receipt recordDenied failed:", e),
+          );
+      }
+      return;
+    }
 
     // Permission enforcement -- check BEFORE handler dispatch
     if (this.permissionSet !== null) {

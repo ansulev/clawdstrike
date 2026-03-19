@@ -6,8 +6,11 @@
  * events for lazy loading, and integrates trust verification as a
  * pre-activation gate.
  *
- * The loader bridges "plugin is registered" to "plugin's guards/commands/UI
- * are active in the workbench."
+ * Trust-tier fork: Internal plugins load in-process via dynamic import,
+ * while community plugins are isolated in sandboxed iframes with a
+ * postMessage bridge for API access. This ensures community plugins
+ * cannot access the host DOM, Tauri IPC, or any browser APIs beyond
+ * what the bridge explicitly exposes.
  *
  * Error isolation: Promise.allSettled ensures one failing plugin does not
  * block others from activating.
@@ -32,6 +35,8 @@ import {
 import { registerGuard } from "../workbench/guard-registry";
 import { registerFileType } from "../workbench/file-type-registry";
 import { statusBarRegistry } from "../workbench/status-bar-registry";
+import { PluginBridgeHost } from "./bridge";
+import { buildPluginSrcdoc } from "./sandbox";
 
 // ---- Types ----
 
@@ -64,6 +69,12 @@ export interface PluginActivationContext {
 export type ModuleResolver = (manifest: PluginManifest) => Promise<PluginModule>;
 
 /**
+ * A function that resolves a plugin manifest to its bundled JavaScript source.
+ * Used for community plugins loaded into sandboxed iframes.
+ */
+export type PluginCodeResolver = (manifest: PluginManifest) => Promise<string>;
+
+/**
  * Options for constructing a PluginLoader.
  */
 export interface PluginLoaderOptions {
@@ -73,13 +84,20 @@ export interface PluginLoaderOptions {
   resolveModule?: ModuleResolver;
   /** Trust verification options (publisherKey, allowUnsigned). */
   trustOptions?: TrustVerificationOptions;
+  /** Container element for community plugin iframes. Defaults to document.body. */
+  iframeContainer?: HTMLElement;
+  /** Function to resolve plugin code for community plugins. Returns the bundled JS string. */
+  resolvePluginCode?: PluginCodeResolver;
 }
 
 // ---- Internal state for a loaded plugin ----
 
 interface LoadedPlugin {
   disposables: Disposable[];
-  module: PluginModule;
+  module: PluginModule | null; // null for community plugins (code runs in iframe)
+  bridgeHost?: PluginBridgeHost; // only for community plugins
+  messageHandler?: (event: MessageEvent) => void; // for cleanup
+  iframe?: HTMLIFrameElement; // for cleanup
 }
 
 // ---- PluginLoader ----
@@ -95,6 +113,8 @@ export class PluginLoader {
   private registry: PluginRegistry;
   private resolveModule: ModuleResolver;
   private trustOptions: TrustVerificationOptions;
+  private iframeContainer?: HTMLElement;
+  private resolvePluginCode?: PluginCodeResolver;
 
   /** Plugins that have been loaded and activated. */
   private loadedPlugins = new Map<string, LoadedPlugin>();
@@ -113,6 +133,8 @@ export class PluginLoader {
         return import(/* @vite-ignore */ m.main) as Promise<PluginModule>;
       });
     this.trustOptions = options?.trustOptions ?? {};
+    this.iframeContainer = options?.iframeContainer;
+    this.resolvePluginCode = options?.resolvePluginCode;
   }
 
   // ---- Public API ----
@@ -190,18 +212,26 @@ export class PluginLoader {
         return;
       }
 
-      // 2. Set state to "activating"
+      // 2. Trust-tier fork: community plugins load via iframe sandbox
+      if (manifest.trust === "community") {
+        await this.loadCommunityPlugin(pluginId, manifest, disposables);
+        return;
+      }
+
+      // ---- Internal plugin path (in-process) ----
+
+      // 3. Set state to "activating"
       this.registry.setState(pluginId, "activating");
 
-      // 3. Resolve module
+      // 4. Resolve module
       const pluginModule = await this.resolveModule(manifest);
 
-      // 4. Route contributions BEFORE calling activate()
+      // 5. Route contributions BEFORE calling activate()
       if (manifest.contributions) {
         this.routeContributions(manifest, disposables);
       }
 
-      // 5. Create activation context and call activate()
+      // 6. Create activation context and call activate()
       const context: PluginActivationContext = {
         pluginId,
         subscriptions: [],
@@ -215,7 +245,7 @@ export class PluginLoader {
       }
       disposables.push(...context.subscriptions);
 
-      // 6. Store loaded plugin and set state to "activated"
+      // 7. Store loaded plugin and set state to "activated"
       this.loadedPlugins.set(pluginId, {
         disposables,
         module: pluginModule,
@@ -278,9 +308,20 @@ export class PluginLoader {
       return;
     }
 
-    // Call module's deactivate() if it exists
-    if (loaded.module.deactivate) {
+    // Call module's deactivate() if it exists (internal plugins only)
+    if (loaded.module?.deactivate) {
       loaded.module.deactivate();
+    }
+
+    // Clean up community plugin resources
+    if (loaded.bridgeHost) {
+      loaded.bridgeHost.destroy();
+    }
+    if (loaded.messageHandler) {
+      window.removeEventListener("message", loaded.messageHandler);
+    }
+    if (loaded.iframe) {
+      loaded.iframe.remove();
     }
 
     // Dispose all registrations (unregisters contributions)
@@ -300,6 +341,101 @@ export class PluginLoader {
   }
 
   // ---- Private helpers ----
+
+  /**
+   * Load a community plugin into a sandboxed iframe with bridge wiring.
+   *
+   * Creates an invisible iframe with sandbox="allow-scripts" (NO allow-same-origin),
+   * injects the plugin code via srcdoc, wires up a PluginBridgeHost for postMessage
+   * RPC, and routes manifest contributions to host registries.
+   *
+   * The iframe is invisible by default -- community plugins contribute UI through
+   * bridge-registered contribution points, not direct DOM access.
+   */
+  private async loadCommunityPlugin(
+    pluginId: string,
+    manifest: PluginManifest,
+    disposables: Disposable[],
+  ): Promise<void> {
+    // Set state to "activating"
+    this.registry.setState(pluginId, "activating");
+
+    let iframe: HTMLIFrameElement | undefined;
+
+    try {
+      // Resolve plugin code (if resolver provided, otherwise empty string)
+      const pluginCode = this.resolvePluginCode
+        ? await this.resolvePluginCode(manifest)
+        : "";
+
+      // Create and configure the iframe
+      iframe = document.createElement("iframe");
+      // Use setAttribute for sandbox -- the DOMTokenList API is not available in all environments
+      // Explicitly set ONLY "allow-scripts" -- do NOT add allow-same-origin (null-origin isolation)
+      iframe.setAttribute("sandbox", "allow-scripts");
+      iframe.srcdoc = buildPluginSrcdoc({ pluginCode, pluginId });
+      iframe.style.cssText =
+        "width: 0; height: 0; border: none; position: absolute; visibility: hidden";
+
+      // Append to container (defaults to document.body)
+      const container = this.iframeContainer ?? document.body;
+      container.appendChild(iframe);
+
+      // Get the iframe's contentWindow for bridge communication.
+      // contentWindow is available immediately after appendChild -- no need
+      // to wait for onload since we only need the postMessage channel, not
+      // the iframe's internal DOM readiness.
+      const targetWindow = iframe.contentWindow;
+      if (!targetWindow) {
+        throw new Error(
+          `Plugin "${pluginId}" iframe contentWindow is null`,
+        );
+      }
+
+      // Create the bridge host
+      const host = new PluginBridgeHost({ pluginId, targetWindow });
+
+      // Create and attach message handler
+      const messageHandler = (e: MessageEvent): void => {
+        host.handleMessage(e);
+      };
+      window.addEventListener("message", messageHandler);
+
+      // Route manifest contributions (static declarations go through host registries)
+      if (manifest.contributions) {
+        this.routeContributions(manifest, disposables);
+      }
+
+      // Store community plugin state
+      this.loadedPlugins.set(pluginId, {
+        disposables,
+        module: null,
+        bridgeHost: host,
+        messageHandler,
+        iframe,
+      });
+
+      // Set state to "activated"
+      this.registry.setState(pluginId, "activated");
+    } catch (err) {
+      // Clean up iframe on error
+      if (iframe?.parentNode) {
+        iframe.remove();
+      }
+
+      // Clean up any already-registered contributions
+      for (const dispose of disposables) {
+        try {
+          dispose();
+        } catch {
+          // Best-effort cleanup
+        }
+      }
+
+      const message = err instanceof Error ? err.message : String(err);
+      this.registry.setState(pluginId, "error", message);
+    }
+  }
 
   /**
    * Route a plugin's contributions to the appropriate Phase 1 registries.

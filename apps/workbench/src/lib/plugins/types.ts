@@ -315,6 +315,52 @@ export const CONTRIBUTION_POINT_KEYS = [
 /** Union type of all contribution point key strings. */
 export type ContributionPointType = (typeof CONTRIBUTION_POINT_KEYS)[number];
 
+// ---- Permissions ----
+
+/**
+ * Permission string declaring a capability a plugin needs.
+ * Uses "scope:action" format (colon separator).
+ *
+ * Categories:
+ * - Registry: guards, commands, fileTypes, statusBar, sidebar
+ * - Data: storage, policy
+ * - Network: network
+ * - System: clipboard, notifications
+ */
+export type PluginPermission =
+  // Registry
+  | "guards:register"
+  | "guards:read"
+  | "commands:register"
+  | "commands:execute"
+  | "fileTypes:register"
+  | "statusBar:register"
+  | "sidebar:register"
+  // Data
+  | "storage:read"
+  | "storage:write"
+  | "policy:read"
+  | "policy:write"
+  // Network
+  | "network:fetch"
+  // System
+  | "clipboard:read"
+  | "clipboard:write"
+  | "notifications:show";
+
+/**
+ * Structured network permission with domain allowlist.
+ * Used when a plugin needs network access restricted to specific domains.
+ */
+export interface NetworkPermission {
+  /** Must be "network:fetch" to identify this as a network permission. */
+  type: "network:fetch";
+  /** List of domains the plugin is allowed to fetch from. */
+  allowedDomains: string[];
+  /** Optional list of allowed HTTP methods (e.g. ["GET", "POST"]). */
+  methods?: string[];
+}
+
 // ---- Installation Metadata ----
 
 /**
@@ -369,6 +415,12 @@ export interface PluginManifest {
   contributions?: PluginContributions;
   /** Distribution and installation metadata. */
   installation?: InstallationMetadata;
+  /**
+   * Declared permissions (capabilities) the plugin requires.
+   * Community plugins must declare all needed permissions; undeclared
+   * API calls are rejected with PERMISSION_DENIED (fail-closed).
+   */
+  permissions?: (PluginPermission | NetworkPermission)[];
 }
 
 // ---- Registered Plugin ----

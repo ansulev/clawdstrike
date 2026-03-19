@@ -80,7 +80,7 @@
 - [x] **LIVE-02**: Typing updates policy-edit-store and marks pane tab dirty
 - [x] **LIVE-03**: Cmd+Z / Cmd+Shift+Z undo/redo work per-file through edit store undo stack
 - [x] **LIVE-04**: Validation errors appear in Problems panel for active file
-- [ ] **LIVE-05**: Cmd+S saves file to disk via Tauri fs and clears dirty indicator
+- [x] **LIVE-05**: Cmd+S saves file to disk via Tauri fs and clears dirty indicator
 
 ### Visual Polish
 
@@ -169,7 +169,7 @@
 | LIVE-02 | Phase 10 | Complete |
 | LIVE-03 | Phase 10 | Complete |
 | LIVE-04 | Phase 10 | Complete |
-| LIVE-05 | Phase 10 | Pending |
+| LIVE-05 | Phase 10 | Complete |
 
 **Coverage:**
 - v1.1 requirements: 42 total

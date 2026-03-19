@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: milestone
 status: in_progress
-stopped_at: Completed 10-01-PLAN.md
-last_updated: "2026-03-19T00:14:19Z"
-last_activity: 2026-03-18 -- Completed Phase 10 Plan 1 (live CodeMirror editor in FileEditorShell, ProblemsPanel from file-first stores)
+stopped_at: Completed 10-02-PLAN.md
+last_updated: "2026-03-19T00:21:27Z"
+last_activity: 2026-03-19 -- Completed Phase 10 Plan 2 (Cmd+S save handler, file.save/file.saveAs commands for file-first tabs)
 progress:
   total_phases: 12
-  completed_phases: 9
+  completed_phases: 10
   total_plans: 26
-  completed_plans: 21
-  percent: 81
+  completed_plans: 22
+  percent: 85
 ---
 
 # Project State
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-18)
 
 **Core value:** Security operators get a professional-grade IDE with search, quick navigation, and file management
-**Current focus:** Phase 10 Live CodeMirror Editor (in progress)
+**Current focus:** Phase 11 Visual Polish (next)
 
 ## Current Position
 
-Phase: 10 of 12 (Live CodeMirror Editor) IN PROGRESS
-Plan: 1 of 2 complete
-Status: Phase 10 Plan 1 complete -- live CodeMirror editor + ProblemsPanel from file-first stores
-Last activity: 2026-03-18 -- Completed Phase 10 Plan 1 (live CodeMirror editor in FileEditorShell, ProblemsPanel from file-first stores)
+Phase: 10 of 12 (Live CodeMirror Editor) COMPLETE
+Plan: 2 of 2 complete
+Status: Phase 10 complete -- live CodeMirror editor with Cmd+S save, file-first commands
+Last activity: 2026-03-19 -- Completed Phase 10 Plan 2 (Cmd+S save handler, file.save/file.saveAs commands for file-first tabs)
 
-Progress: [████████░░] 81%
+Progress: [████████░░] 85%
 
 ## Previous Milestone (v1.0 — IDE Pivot)
 
@@ -78,6 +78,7 @@ Summary: Delivered IDE shell — activity bar, 7 sidebar panels, pane tab system
 | Phase 08 P04 | 7min | 2 tasks | 8 files |
 | Phase 09 P01 | 2min | 2 tasks | 3 files |
 | Phase 10 P01 | 2min | 2 tasks | 2 files |
+| Phase 10 P02 | 2min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -149,6 +150,9 @@ v1.1 decisions:
 - [Phase 10]: YamlEditor onChange uses getState() for setYaml/isDirty (avoids stale closures in useCallback)
 - [Phase 10]: editorErrors maps ValidationIssue to YamlEditorError with line: undefined (ValidationIssue lacks line numbers)
 - [Phase 10]: ProblemsPanel onClick uses switchTab + paneStore.openFile for file-first navigation (not navigate('/editor'))
+- [Phase 10]: Dynamic import of saveDetectionFile in handleSave (consistent with readDetectionFileByPath pattern)
+- [Phase 10]: file.save tries file-first tab logic before falling back to legacy saveFile
+- [Phase 10]: file.saveAs always passes null filePath to force Save As dialog
 
 ### Pending Todos
 
@@ -160,6 +164,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-19T00:14:19Z
-Stopped at: Completed 10-01-PLAN.md
-Resume file: Continue with 10-02-PLAN.md (Wire Cmd+S save to saveDetectionFile, file.save/file.saveAs commands)
+Last session: 2026-03-19T00:21:27Z
+Stopped at: Completed 10-02-PLAN.md
+Resume file: Continue with Phase 11 (Visual Polish)

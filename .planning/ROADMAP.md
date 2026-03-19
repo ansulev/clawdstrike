@@ -24,7 +24,7 @@ Close the gap from "IDE scaffold" to "professional-grade detection engineering I
 - [ ] **Phase 7: Detection Editor Integration** — Surface 50K LOC of orphaned detection engineering features as proper IDE panels
 - [x] **Phase 8: File-First Editor** — Files are pane tabs, FileEditorShell wraps per-file chrome, kill PolicyTabBar (4 plans)
 - [x] **Phase 9: Default Workspace Bootstrap** — Auto-scaffold ~/.clawdstrike/workspace/, multi-root explorer, example content (2 plans)
-- [ ] **Phase 10: Live CodeMirror Editor** — Replace FileEditorShell pre tag with real CodeMirror, wired to policy-edit-store (2 plans)
+- [x] **Phase 10: Live CodeMirror Editor** — Replace FileEditorShell pre tag with real CodeMirror, wired to policy-edit-store (2 plans)
 - [ ] **Phase 11: Visual Polish** — Fix duplicate Home tabs, relative breadcrumbs, tree refresh, status bar updates
 - [ ] **Phase 12: Session Restore** — Persist pane layout + open files to localStorage, restore on launch
 
@@ -188,8 +188,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 10-01-PLAN.md — Replace pre tag with YamlEditor (CodeMirror), wire onChange to policy-edit-store, update ProblemsPanel
-- [ ] 10-02-PLAN.md — Wire Cmd+S save to saveDetectionFile, update file.save/file.saveAs commands for file-first tabs
+- [x] 10-01-PLAN.md — Replace pre tag with YamlEditor (CodeMirror), wire onChange to policy-edit-store, update ProblemsPanel
+- [x] 10-02-PLAN.md — Wire Cmd+S save to saveDetectionFile, update file.save/file.saveAs commands for file-first tabs
 
 ### Phase 11: Visual Polish
 **Goal**: Fix visual inconsistencies that make the IDE feel like a prototype
@@ -237,6 +237,6 @@ Phase 10 depends on 8. Phase 11 depends on 10. Phase 12 depends on 10. Phases 11
 | 7. Detection Editor Integration | 4/4 | Complete | 2026-03-18 |
 | 8. File-First Editor | 4/4 | Complete | 2026-03-18 |
 | 9. Default Workspace Bootstrap | 2/2 | Complete | 2026-03-18 |
-| 10. Live CodeMirror Editor | 1/2 | In progress | - |
+| 10. Live CodeMirror Editor | 2/2 | Complete | 2026-03-19 |
 | 11. Visual Polish | 0/2 | Not started | - |
 | 12. Session Restore | 0/1 | Not started | - |

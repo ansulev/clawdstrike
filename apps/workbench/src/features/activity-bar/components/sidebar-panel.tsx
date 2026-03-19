@@ -152,6 +152,43 @@ function ExplorerPanelConnected() {
       onDeleteFile={async (file) => {
         await actions.deleteFile(file.path);
       }}
+      onRevealInFinder={async (absPath) => {
+        const { revealInFinder } = await import("@/lib/tauri-bridge");
+        await revealInFinder(absPath);
+      }}
+      onCreateFolder={async (parentPath, folderName) => {
+        const { createDirectory } = await import("@/lib/tauri-bridge");
+        const fullPath = `${parentPath}/${folderName}`;
+        const ok = await createDirectory(fullPath);
+        if (ok) {
+          // Re-scan the root that contains this folder
+          const root = projectRoots.find((r) => parentPath.startsWith(r));
+          if (root) await actions.loadRoot(root);
+        }
+      }}
+      onCollapseChildren={(rootPath, dirPath) => {
+        // Collapse dirPath and all its descendant dirs within the root
+        const project = projectsMap.get(rootPath);
+        if (!project) return;
+        const toCollapse: string[] = [dirPath];
+        function collectChildren(files: ProjectFile[]) {
+          for (const f of files) {
+            if (f.isDirectory && f.path.startsWith(dirPath + "/")) {
+              toCollapse.push(f.path);
+              if (f.children) collectChildren(f.children);
+            }
+          }
+        }
+        collectChildren(project.files);
+        for (const p of toCollapse) {
+          if (project.expandedDirs.has(p)) {
+            actions.toggleDirForRoot(rootPath, p);
+          }
+        }
+      }}
+      onRefreshRoot={async (rootPath) => {
+        await actions.loadRoot(rootPath);
+      }}
     />
   );
 }

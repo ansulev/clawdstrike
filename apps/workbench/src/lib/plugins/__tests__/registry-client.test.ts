@@ -210,7 +210,7 @@ describe("RegistryClient", () => {
     await customClient.search("test");
 
     const calledUrl = mockFetch.mock.calls[0][0] as string;
-    expect(calledUrl).toStartWith("https://registry.clawdstrike.io/v2/");
+    expect(calledUrl.startsWith("https://registry.clawdstrike.io/v2/")).toBe(true);
   });
 
   // Additional test: getDownloadUrl returns correct URL without fetching
@@ -276,7 +276,7 @@ describe("RegistryClient", () => {
     await slashClient.search("test");
 
     const calledUrl = mockFetch.mock.calls[0][0] as string;
-    expect(calledUrl).toStartWith("http://localhost:8080/api/v1/search");
+    expect(calledUrl.startsWith("http://localhost:8080/api/v1/search")).toBe(true);
     // No double slash
     expect(calledUrl).not.toContain("8080//");
   });

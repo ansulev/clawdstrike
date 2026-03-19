@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: milestone
 status: in_progress
-stopped_at: Completed 10-02-PLAN.md
-last_updated: "2026-03-19T00:21:27Z"
-last_activity: 2026-03-19 -- Completed Phase 10 Plan 2 (Cmd+S save handler, file.save/file.saveAs commands for file-first tabs)
+stopped_at: Completed 11-02-PLAN.md
+last_updated: "2026-03-19T00:23:04Z"
+last_activity: 2026-03-19 -- Completed Phase 11 Plan 2 (relative breadcrumbs, explorer refresh, pane-aware status bar)
 progress:
   total_phases: 12
   completed_phases: 10
   total_plans: 26
-  completed_plans: 22
-  percent: 85
+  completed_plans: 24
+  percent: 92
 ---
 
 # Project State
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-18)
 
 **Core value:** Security operators get a professional-grade IDE with search, quick navigation, and file management
-**Current focus:** Phase 11 Visual Polish (next)
+**Current focus:** Phase 11 Visual Polish (in progress)
 
 ## Current Position
 
-Phase: 10 of 12 (Live CodeMirror Editor) COMPLETE
+Phase: 11 of 12 (Visual Polish) IN PROGRESS
 Plan: 2 of 2 complete
-Status: Phase 10 complete -- live CodeMirror editor with Cmd+S save, file-first commands
-Last activity: 2026-03-19 -- Completed Phase 10 Plan 2 (Cmd+S save handler, file.save/file.saveAs commands for file-first tabs)
+Status: Phase 11 Plan 2 complete -- relative breadcrumbs, explorer auto-refresh, pane-aware status bar
+Last activity: 2026-03-19 -- Completed Phase 11 Plan 2 (relative breadcrumbs, explorer refresh, pane-aware status bar)
 
-Progress: [████████░░] 85%
+Progress: [█████████░] 92%
 
 ## Previous Milestone (v1.0 — IDE Pivot)
 
@@ -79,6 +79,7 @@ Summary: Delivered IDE shell — activity bar, 7 sidebar panels, pane tab system
 | Phase 09 P01 | 2min | 2 tasks | 3 files |
 | Phase 10 P01 | 2min | 2 tasks | 2 files |
 | Phase 10 P02 | 2min | 2 tasks | 2 files |
+| Phase 11 P02 | 5min | 3 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -153,6 +154,9 @@ v1.1 decisions:
 - [Phase 10]: Dynamic import of saveDetectionFile in handleSave (consistent with readDetectionFileByPath pattern)
 - [Phase 10]: file.save tries file-first tab logic before falling back to legacy saveFile
 - [Phase 10]: file.saveAs always passes null filePath to force Save As dialog
+- [Phase 11]: Multi-root prefix stripping: iterate projectRoots array first, fall back to single project.rootPath
+- [Phase 11]: Post-mutation loadRoot is fire-and-forget after in-memory tree update (immediate UI + eventual disk consistency)
+- [Phase 11]: Status bar pane context: show file name + dirty + fileType for file routes, view label for app routes
 
 ### Pending Todos
 
@@ -164,6 +168,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-19T00:21:27Z
-Stopped at: Completed 10-02-PLAN.md
-Resume file: Continue with Phase 11 (Visual Polish)
+Last session: 2026-03-19T00:23:04Z
+Stopped at: Completed 11-02-PLAN.md
+Resume file: Continue with Phase 12 (Session Restore)

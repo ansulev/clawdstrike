@@ -204,8 +204,8 @@ Plans:
 **Plans**: TBD
 
 Plans:
-- [ ] 11-01: TBD
-- [ ] 11-02: TBD
+- [x] 11-01-PLAN.md — Fix duplicate Home tabs and pane tab deduplication
+- [x] 11-02-PLAN.md — Fix breadcrumb absolute paths, explorer post-mutation refresh, status bar active file context
 
 ### Phase 12: Session Restore
 **Goal**: Workbench remembers open files and layout across restarts
@@ -238,5 +238,5 @@ Phase 10 depends on 8. Phase 11 depends on 10. Phase 12 depends on 10. Phases 11
 | 8. File-First Editor | 4/4 | Complete | 2026-03-18 |
 | 9. Default Workspace Bootstrap | 2/2 | Complete | 2026-03-18 |
 | 10. Live CodeMirror Editor | 2/2 | Complete | 2026-03-19 |
-| 11. Visual Polish | 0/2 | Not started | - |
+| 11. Visual Polish | 2/2 | Complete | 2026-03-19 |
 | 12. Session Restore | 0/1 | Not started | - |

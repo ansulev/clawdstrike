@@ -85,9 +85,9 @@
 ### Visual Polish
 
 - [ ] **POLISH-01**: Only one Home tab opens on launch (no duplicates)
-- [ ] **POLISH-02**: Breadcrumbs show relative path from project root (not absolute)
-- [ ] **POLISH-03**: Explorer tree refreshes after file create/rename/delete
-- [ ] **POLISH-04**: Status bar shows active file name, line/column, file type, dirty state
+- [x] **POLISH-02**: Breadcrumbs show relative path from project root (not absolute)
+- [x] **POLISH-03**: Explorer tree refreshes after file create/rename/delete
+- [x] **POLISH-04**: Status bar shows active file name, line/column, file type, dirty state
 - [ ] **POLISH-05**: Pane tab deduplication prevents opening same file twice
 
 ### Session Restore
@@ -170,6 +170,12 @@
 | LIVE-03 | Phase 10 | Complete |
 | LIVE-04 | Phase 10 | Complete |
 | LIVE-05 | Phase 10 | Complete |
+
+| POLISH-01 | Phase 11 | Pending |
+| POLISH-02 | Phase 11 | Complete |
+| POLISH-03 | Phase 11 | Complete |
+| POLISH-04 | Phase 11 | Complete |
+| POLISH-05 | Phase 11 | Pending |
 
 **Coverage:**
 - v1.1 requirements: 42 total

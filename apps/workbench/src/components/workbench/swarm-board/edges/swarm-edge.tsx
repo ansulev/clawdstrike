@@ -29,9 +29,16 @@ function ensureKeyframes() {
       0%, 100% { opacity: 0.12; }
       50% { opacity: 0.30; }
     }
+    @keyframes edgeActivityPulse {
+      0%, 100% { stroke-opacity: 0.4; stroke-width: 1; }
+      50% { stroke-opacity: 1; stroke-width: 2.5; }
+    }
   `;
   document.head.appendChild(style);
 }
+
+/** Threshold (ms) for considering an edge "recently active". */
+const ACTIVITY_RECENCY_MS = 3000;
 
 // ---------------------------------------------------------------------------
 // Edge type visual config — restrained, functional colors
@@ -114,7 +121,13 @@ export function SwarmEdge({
   const selectedNodeId = data?.selectedNodeId as string | null | undefined;
   const isConnectedToHovered = hoveredNodeId != null && (source === hoveredNodeId || target === hoveredNodeId);
   const isConnectedToSelected = selectedNodeId != null && (source === selectedNodeId || target === selectedNodeId);
-  const isHighlighted = selected || isConnectedToHovered || isConnectedToSelected;
+
+  // Activity pulse: if `lastActivityAt` timestamp is within ACTIVITY_RECENCY_MS, this edge
+  // just carried a message and should pulse with a brighter animation.
+  const lastActivityAt = data?.lastActivityAt as number | undefined;
+  const isActive = lastActivityAt != null && (Date.now() - lastActivityAt) < ACTIVITY_RECENCY_MS;
+
+  const isHighlighted = selected || isConnectedToHovered || isConnectedToSelected || isActive;
 
   const [edgePath, labelX, labelY] = getSmoothStepPath({
     sourceX,
@@ -126,13 +139,17 @@ export function SwarmEdge({
     borderRadius: 12,
   });
 
-  // Subtle pulse animation for spawned edges
-  const animatedStyle = config.animated
+  // Subtle pulse animation for spawned edges, or activity pulse for recently-active edges
+  const animatedStyle = isActive
     ? {
-        strokeDashoffset: 0,
-        animation: "swarmEdgePulse 3s ease-in-out infinite",
+        animation: "edgeActivityPulse 1.5s ease-in-out infinite",
       }
-    : {};
+    : config.animated
+      ? {
+          strokeDashoffset: 0,
+          animation: "swarmEdgePulse 3s ease-in-out infinite",
+        }
+      : {};
 
   // Determine opacity: very dim by default, bright when connected to hovered/selected node
   const edgeOpacity = isHighlighted ? 0.7 : 0.15;

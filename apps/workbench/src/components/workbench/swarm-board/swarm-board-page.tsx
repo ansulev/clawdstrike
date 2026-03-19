@@ -11,6 +11,7 @@
 
 import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useCoordinatorBoardBridge } from "@/features/swarm/hooks/use-coordinator-board-bridge";
+import { useReceiptFlowBridge } from "@/features/swarm/hooks/use-receipt-flow-bridge";
 import { getCoordinator } from "@/features/swarm/coordinator-instance";
 import {
   ReactFlow,
@@ -113,6 +114,14 @@ function SwarmBoardCanvas() {
   // Bridge SwarmCoordinator messages to board store (live intel/detection nodes)
   const coordinator = useMemo(() => getCoordinator(), []);
   useCoordinatorBoardBridge(coordinator);
+
+  // Bridge feed store findings to receipt nodes on the board
+  useReceiptFlowBridge();
+
+  // Coordinator status for stats bar
+  const coordinatorConnected = coordinator?.isConnected ?? false;
+  const outboxSize = coordinator?.outboxSize ?? 0;
+  const joinedSwarms = coordinator?.joinedSwarmIds?.length ?? 0;
 
   // Context menu
   const [contextMenu, setContextMenu] = useState<NodeContextMenuState | null>(null);
@@ -634,6 +643,9 @@ function SwarmBoardCanvas() {
             totalReceipts={totalReceipts}
             totalEdges={totalEdges}
             followActive={followActive}
+            coordinatorConnected={coordinatorConnected}
+            outboxSize={outboxSize}
+            joinedSwarms={joinedSwarms}
           />
         </div>
       </div>
@@ -717,6 +729,9 @@ function SwarmBoardStatsBar({
   totalReceipts,
   totalEdges,
   followActive,
+  coordinatorConnected,
+  outboxSize,
+  joinedSwarms,
 }: {
   totalNodes: number;
   runningSessions: number;
@@ -724,6 +739,9 @@ function SwarmBoardStatsBar({
   totalReceipts: number;
   totalEdges: number;
   followActive: boolean;
+  coordinatorConnected: boolean;
+  outboxSize: number;
+  joinedSwarms: number;
 }) {
   // Build stat segments, then join with dot separator
   const segments: Array<{ text: string; color?: string }> = [
@@ -734,6 +752,17 @@ function SwarmBoardStatsBar({
   if (totalReceipts > 0) segments.push({ text: `${totalReceipts} receipts` });
   if (totalEdges > 0) segments.push({ text: `${totalEdges} edges` });
   if (followActive) segments.push({ text: "following", color: "#3dbf84" });
+
+  // Coordinator status segments
+  if (coordinatorConnected && joinedSwarms > 0) {
+    segments.push({ text: `${joinedSwarms} swarm${joinedSwarms !== 1 ? "s" : ""}`, color: "#3dbf84" });
+  }
+  if (outboxSize > 0) {
+    segments.push({ text: `${outboxSize} queued`, color: "#d4a84b" });
+  }
+  if (!coordinatorConnected) {
+    segments.push({ text: "offline", color: "#b85450" });
+  }
 
   return (
     <div

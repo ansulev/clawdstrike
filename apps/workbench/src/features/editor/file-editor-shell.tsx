@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/resizable";
 import { EditorVisualPanel } from "@/components/workbench/editor/editor-visual-panel";
 import { TestRunnerPanel } from "@/components/workbench/editor/test-runner-panel";
+import { TestRunnerProvider } from "@/lib/workbench/test-store";
 import { usePolicyTabsStore } from "@/features/policy/stores/policy-tabs-store";
 import { usePolicyEditStore } from "@/features/policy/stores/policy-edit-store";
 import { useWorkbench } from "@/features/policy/stores/multi-policy-store";
@@ -247,34 +248,36 @@ export function FileEditorShell() {
     );
 
   return (
-    <div className="h-full flex flex-col">
-      <FileEditorToolbar
-        tabMeta={tabMeta}
-        editState={editState}
-        onToggleTestRunner={() => setTestRunnerOpen((v) => !v)}
-        onToggleProblems={() => setShowProblems((v) => !v)}
-        onToggleSplit={() => setSplitActive((v) => !v)}
-        testRunnerOpen={testRunnerOpen}
-        problemsOpen={showProblems}
-        splitActive={splitActive}
-      />
-      {testRunnerOpen && isPolicyFileType(tabMeta.fileType) ? (
-        <ResizablePanelGroup direction="vertical" className="flex-1 min-h-0">
-          <ResizablePanel defaultSize={60} minSize={20}>
+    <TestRunnerProvider>
+      <div className="h-full flex flex-col">
+        <FileEditorToolbar
+          tabMeta={tabMeta}
+          editState={editState}
+          onToggleTestRunner={() => setTestRunnerOpen((v) => !v)}
+          onToggleProblems={() => setShowProblems((v) => !v)}
+          onToggleSplit={() => setSplitActive((v) => !v)}
+          testRunnerOpen={testRunnerOpen}
+          problemsOpen={showProblems}
+          splitActive={splitActive}
+        />
+        {testRunnerOpen && isPolicyFileType(tabMeta.fileType) ? (
+          <ResizablePanelGroup direction="vertical" className="flex-1 min-h-0">
+            <ResizablePanel defaultSize={60} minSize={20}>
+              {editorContent}
+            </ResizablePanel>
+            <ResizableHandle
+              className="bg-[#2d3240] hover:bg-[#d4a84b]/40 transition-colors data-[resize-handle-active]:bg-[#d4a84b]"
+            />
+            <ResizablePanel defaultSize={40} minSize={15}>
+              <TestRunnerPanel />
+            </ResizablePanel>
+          </ResizablePanelGroup>
+        ) : (
+          <div className="flex-1 min-h-0">
             {editorContent}
-          </ResizablePanel>
-          <ResizableHandle
-            className="bg-[#2d3240] hover:bg-[#d4a84b]/40 transition-colors data-[resize-handle-active]:bg-[#d4a84b]"
-          />
-          <ResizablePanel defaultSize={40} minSize={15}>
-            <TestRunnerPanel />
-          </ResizablePanel>
-        </ResizablePanelGroup>
-      ) : (
-        <div className="flex-1 min-h-0">
-          {editorContent}
-        </div>
-      )}
-    </div>
+          </div>
+        )}
+      </div>
+    </TestRunnerProvider>
   );
 }

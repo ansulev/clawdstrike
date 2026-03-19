@@ -43,7 +43,10 @@ Plans:
   2. The same plugin manifest with `trust: "internal"` loads in-process (no iframe) and with `trust: "community"` loads via iframe sandbox -- both produce working contributions in the registries
   3. A community plugin that attempts `fetch("https://example.com")` or `new XMLHttpRequest()` fails due to CSP `connect-src 'none'`
   4. The plugin iframe cannot access `__TAURI_INTERNALS__` or invoke Tauri commands
-**Plans**: TBD
+**Plans:** 2 plans
+Plans:
+- [ ] 02-01-PLAN.md -- PluginSandbox component + srcdoc builder with CSP and bridge bootstrap
+- [ ] 02-02-PLAN.md -- PluginLoader trust-tier fork + integration tests
 
 ### Phase 3: Permission System
 **Goal**: Community plugins declare required capabilities in their manifest, and the bridge rejects any API call the plugin did not declare permission for
@@ -87,7 +90,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. postMessage RPC Bridge | 2/2 | Complete | 2026-03-19 |
-| 2. iframe Sandbox | 0/TBD | Not started | - |
+| 2. iframe Sandbox | 0/2 | Not started | - |
 | 3. Permission System | 0/TBD | Not started | - |
 | 4. Plugin Audit Trail | 0/TBD | Not started | - |
 | 5. Emergency Revocation | 0/TBD | Not started | - |

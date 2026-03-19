@@ -13,7 +13,7 @@ Harden the community plugin boundary from trust-based to sandbox-based isolation
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: postMessage RPC Bridge** - Build typed request/response and event subscription protocol over postMessage with host-side dispatch to registries
-- [ ] **Phase 2: iframe Sandbox** - Isolate community plugins in null-origin iframes with strict CSP, fork PluginLoader by trust tier
+- [x] **Phase 2: iframe Sandbox** - Isolate community plugins in null-origin iframes with strict CSP, fork PluginLoader by trust tier
 - [ ] **Phase 3: Permission System** - Capability-based permissions declared in manifest, enforced at bridge middleware, with domain-scoped network access
 - [ ] **Phase 4: Plugin Audit Trail** - Ed25519-signed receipts for every plugin action, local SQLite storage, hushd forwarding, and audit viewer UI
 - [ ] **Phase 5: Emergency Revocation** - Fleet-wide plugin kill via hushd SSE broadcast, offline sync on reconnect, revoked lifecycle state
@@ -46,7 +46,7 @@ Plans:
 **Plans:** 2 plans
 Plans:
 - [x] 02-01-PLAN.md -- PluginSandbox component + srcdoc builder with CSP and bridge bootstrap
-- [ ] 02-02-PLAN.md -- PluginLoader trust-tier fork + integration tests
+- [x] 02-02-PLAN.md -- PluginLoader trust-tier fork + integration tests
 
 ### Phase 3: Permission System
 **Goal**: Community plugins declare required capabilities in their manifest, and the bridge rejects any API call the plugin did not declare permission for
@@ -90,7 +90,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. postMessage RPC Bridge | 2/2 | Complete | 2026-03-19 |
-| 2. iframe Sandbox | 1/2 | In progress | - |
+| 2. iframe Sandbox | 2/2 | Complete | 2026-03-19 |
 | 3. Permission System | 0/TBD | Not started | - |
 | 4. Plugin Audit Trail | 0/TBD | Not started | - |
 | 5. Emergency Revocation | 0/TBD | Not started | - |

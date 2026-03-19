@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: milestone
 status: in-progress
-stopped_at: Completed 02-01-PLAN.md
-last_updated: "2026-03-19T05:03:33Z"
-last_activity: 2026-03-19 -- Completed PluginSandbox component + srcdoc builder (02-01)
+stopped_at: Completed 02-02-PLAN.md
+last_updated: "2026-03-19T05:13:30Z"
+last_activity: 2026-03-19 -- Completed PluginLoader trust-tier fork + integration tests (02-02)
 progress:
   total_phases: 5
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 2
-  completed_plans: 1
-  percent: 30
+  completed_plans: 2
+  percent: 40
 ---
 
 # Project State
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-19)
 
 **Core value:** Community plugins run in sandboxed iframes with capability-based permissions, Ed25519 audit trail, and fleet-wide emergency revocation
-**Current focus:** Phase 2 in progress -- iframe sandbox isolation
+**Current focus:** Phase 2 complete -- ready for Phase 3 (Permission System)
 
 ## Current Position
 
-Phase: 2 of 5 (iframe Sandbox)
-Plan: 1 of 2 complete
-Status: In progress
-Last activity: 2026-03-19 -- Completed PluginSandbox component + srcdoc builder (02-01)
+Phase: 2 of 5 (iframe Sandbox) -- COMPLETE
+Plan: 2 of 2 complete
+Status: Phase complete
+Last activity: 2026-03-19 -- Completed PluginLoader trust-tier fork + integration tests (02-02)
 
-Progress: [###░░░░░░░] 30%
+Progress: [####░░░░░░] 40%
 
 ## Previous Milestones
 
@@ -56,6 +56,10 @@ Progress: [###░░░░░░░] 30%
 - Inlined PluginBridgeClient in srcdoc as self-contained ES5-style class -- no module imports possible in srcdoc iframe (02-01)
 - React srcDoc prop (camelCase) maps to HTML srcdoc attribute -- used JSX convention (02-01)
 - Bridge host created in useEffect with [pluginId, pluginCode] as dependencies for proper lifecycle management (02-01)
+- Use setAttribute('sandbox', 'allow-scripts') instead of DOMTokenList for jsdom compat (02-02)
+- No iframe.onload wait -- contentWindow available immediately after appendChild (02-02)
+- Community plugins store module: null in LoadedPlugin; code runs in iframe not host (02-02)
+- resolvePluginCode defaults to empty string for declarative-only community plugins (02-02)
 
 ### Pending Todos
 None yet.
@@ -65,6 +69,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-19T05:03:33Z
-Stopped at: Completed 02-01-PLAN.md
+Last session: 2026-03-19T05:13:30Z
+Stopped at: Completed 02-02-PLAN.md (Phase 2 complete)
 Resume file: None

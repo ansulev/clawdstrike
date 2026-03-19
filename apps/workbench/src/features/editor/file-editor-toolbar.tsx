@@ -10,7 +10,6 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import {
   IconPlayerPlay,
-  IconCode,
   IconLayoutColumns,
   IconTestPipe,
   IconAlertTriangle,
@@ -276,12 +275,6 @@ export function FileEditorToolbar({
             icon={IconPlayerPlay}
             label="Run Quick Test"
             onClick={runQuickTest}
-          />
-          <ToolbarButton
-            icon={IconCode}
-            label="Toggle Visual / YAML"
-            active={splitActive}
-            onClick={onToggleSplit}
           />
           <ToolbarButton
             icon={IconLayoutColumns}

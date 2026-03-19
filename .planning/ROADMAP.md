@@ -52,7 +52,9 @@ Plans:
   1. A plugin-contributed bottom panel tab appears alongside Problems, Test Runner, Evidence Pack, and Explainability -- selecting it renders the plugin component with the correct `panelHeight` prop
   2. A plugin-contributed right sidebar panel appears alongside Guard Config, Compare, and Version History -- selecting it renders the plugin component with the correct `sidebarWidth` prop
   3. Uninstalling a plugin that contributed panel views removes its tabs/panels from both the bottom panel and right sidebar without breaking other panels
-**Plans**: TBD
+**Plans:** 1 plan
+Plans:
+- [ ] 03-01-PLAN.md -- BottomPanelTabs + RightSidebarPanels components with plugin view integration
 
 ### Phase 4: Activity Bar, Gutters, and Context Menus
 **Goal**: Plugins can add sidebar navigation items, CodeMirror gutter decorations, and context menu items to the workbench
@@ -75,5 +77,5 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 |-------|----------------|--------|-----------|
 | 1. ViewRegistry Foundation | 2/2 | Complete | 2026-03-19 |
 | 2. Editor Tab Views | 0/? | Not started | - |
-| 3. Bottom Panel and Right Sidebar | 0/? | Not started | - |
+| 3. Bottom Panel and Right Sidebar | 0/1 | In progress | - |
 | 4. Activity Bar, Gutters, and Context Menus | 0/? | Not started | - |

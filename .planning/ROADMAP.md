@@ -30,7 +30,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   4. `useViewsBySlot("editorTab")` re-renders consuming components when a plugin registers or unregisters a view
 **Plans:** 2 plans
 Plans:
-- [ ] 01-01-PLAN.md -- ViewRegistry singleton + ViewContainer with ErrorBoundary/Suspense
+- [x] 01-01-PLAN.md -- ViewRegistry singleton + ViewContainer with ErrorBoundary/Suspense
 - [ ] 01-02-PLAN.md -- SDK ViewsApi + PluginLoader view routing + status bar fix
 
 ### Phase 2: Editor Tab Views
@@ -73,7 +73,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. ViewRegistry Foundation | 0/2 | Planning complete | - |
+| 1. ViewRegistry Foundation | 1/2 | In progress | - |
 | 2. Editor Tab Views | 0/? | Not started | - |
 | 3. Bottom Panel and Right Sidebar | 0/? | Not started | - |
 | 4. Activity Bar, Gutters, and Context Menus | 0/? | Not started | - |

@@ -80,14 +80,14 @@ Enable plugins to contribute React components and CodeMirror extensions to every
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| VREG-01 | Phase 1 | Pending |
-| VREG-02 | Phase 1 | Pending |
-| VREG-03 | Phase 1 | Pending |
-| VREG-04 | Phase 1 | Pending |
+| VREG-01 | Phase 1 | Complete |
+| VREG-02 | Phase 1 | Complete |
+| VREG-03 | Phase 1 | Complete |
+| VREG-04 | Phase 1 | Complete |
 | VREG-05 | Phase 1 | Pending |
-| VCONT-01 | Phase 1 | Pending |
-| VCONT-02 | Phase 1 | Pending |
-| VCONT-03 | Phase 1 | Pending |
+| VCONT-01 | Phase 1 | Complete |
+| VCONT-02 | Phase 1 | Complete |
+| VCONT-03 | Phase 1 | Complete |
 | SBAR-01 | Phase 1 | Pending |
 | SDKV-01 | Phase 1 | Pending |
 | SDKV-02 | Phase 1 | Pending |

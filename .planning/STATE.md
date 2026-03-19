@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: Plugin-Contributed Views
-status: not_started
-stopped_at: Milestone activated
-last_updated: "2026-03-19T06:00:00.000Z"
-last_activity: 2026-03-19 -- v3.0 Plugin-Contributed Views milestone activated
+status: in_progress
+stopped_at: Completed 01-01-PLAN.md
+last_updated: "2026-03-19T12:20:56.000Z"
+last_activity: 2026-03-19 -- Completed 01-01 ViewRegistry + ViewContainer (9 min)
 progress:
   total_phases: 4
   completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
-  percent: 0
+  total_plans: 2
+  completed_plans: 1
+  percent: 12
 ---
 
 # Project State
@@ -26,10 +26,10 @@ See: .planning/PROJECT.md
 ## Current Position
 
 Phase: 1 of 4 (ViewRegistry Foundation)
-Plan: Not yet planned
-Status: Not started
+Plan: 1 of 2 complete
+Status: In progress
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [█░░░░░░░░░] 12%
 
 ## Previous Milestones
 
@@ -47,6 +47,9 @@ Progress: [░░░░░░░░░░] 0%
 - Keep-alive via display:none with LRU eviction for tab state preservation
 - ErrorBoundary wrapping for all plugin views
 - iframe sandbox for community views deferred to v3.1+
+- Frozen empty array singleton for empty slot queries ensures useSyncExternalStore reference stability
+- ViewErrorBoundary uses resetKey + key prop for full component remount on error reset
+- Default priority 100 so plugins without explicit priority sort after built-in views
 
 ### Pending Todos
 None.
@@ -57,5 +60,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-03-19
-Stopped at: v3.0 milestone activated
-Resume file: .planning/ROADMAP.md
+Stopped at: Completed 01-01-PLAN.md
+Resume file: .planning/phases/01-viewregistry-foundation/01-02-PLAN.md

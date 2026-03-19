@@ -103,12 +103,12 @@ Plans:
   2. Clicking "Install" on a plugin card downloads it from the registry, verifies its signature, and activates it -- the plugin's contributions appear in the workbench without a restart
   3. The "Installed Plugins" section shows all installed plugins with their current state, and "Uninstall" removes the plugin and its contributions
   4. Search in the Plugins tab queries the `clawdstrike-registry` API and returns matching results
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 06-01: Registry client module (TypeScript client for clawdstrike-registry API)
-- [ ] 06-02: Plugin cards and Marketplace tab in Library gallery
-- [ ] 06-03: Install/uninstall flow with trust verification and lifecycle management
+- [ ] 06-01-PLAN.md -- Registry client module with typed access to clawdstrike-registry API (search, info, popular, attestation)
+- [ ] 06-02-PLAN.md -- PluginCard component, PluginsBrowser, and Plugins tab in Library gallery
+- [ ] 06-03-PLAN.md -- Install/uninstall lifecycle orchestration wired into PluginsBrowser UI
 
 ## Progress
 

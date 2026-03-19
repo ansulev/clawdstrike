@@ -15,6 +15,7 @@ import {
   type StatusBarApi,
   type StorageApi,
   type SidebarApi,
+  type ViewsApi,
   type ActivityBarItemContribution,
   type PluginContributions,
   type KeybindingContribution,
@@ -30,6 +31,16 @@ import {
   type PluginLifecycleState,
   type PluginCategory,
   type ActivationEvent,
+  type EditorTabViewContribution,
+  type BottomPanelTabViewContribution,
+  type RightSidebarPanelViewContribution,
+  type StatusBarWidgetViewContribution,
+  type ViewProps,
+  type EditorTabProps,
+  type BottomPanelTabProps,
+  type RightSidebarPanelProps,
+  type ActivityBarPanelProps,
+  type StatusBarWidgetProps,
 } from "../src/index";
 
 // ---- Test Helpers ----
@@ -72,6 +83,12 @@ function makeMockContext(overrides?: Partial<PluginContext>): PluginContext {
     storage: {
       get: (key: string): unknown => storage.get(key),
       set: (key: string, value: unknown): void => { storage.set(key, value); },
+    },
+    views: {
+      registerEditorTab: (_contrib: EditorTabViewContribution): Disposable => () => {},
+      registerBottomPanelTab: (_contrib: BottomPanelTabViewContribution): Disposable => () => {},
+      registerRightSidebarPanel: (_contrib: RightSidebarPanelViewContribution): Disposable => () => {},
+      registerStatusBarWidget: (_contrib: StatusBarWidgetViewContribution): Disposable => () => {},
     },
     ...overrides,
   };

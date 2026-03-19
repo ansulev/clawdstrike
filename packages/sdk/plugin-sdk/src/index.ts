@@ -20,6 +20,8 @@
 export type {
   // Disposable
   Disposable,
+  // React Compatibility
+  ComponentType,
   // Trust & Lifecycle
   PluginTrustTier,
   PluginLifecycleState,
@@ -47,6 +49,18 @@ export type {
   // Installation & Manifest
   InstallationMetadata,
   PluginManifest,
+  // View Prop Interfaces (for plugin component authors)
+  ViewProps,
+  EditorTabProps,
+  BottomPanelTabProps,
+  RightSidebarPanelProps,
+  ActivityBarPanelProps,
+  StatusBarWidgetProps,
+  // SDK View Contributions (used in activate() hook)
+  EditorTabViewContribution,
+  BottomPanelTabViewContribution,
+  RightSidebarPanelViewContribution,
+  StatusBarWidgetViewContribution,
 } from "./types";
 
 // ---- Context ----
@@ -57,6 +71,7 @@ export type {
   StatusBarApi,
   SidebarApi,
   StorageApi,
+  ViewsApi,
   PluginContext,
 } from "./context";
 

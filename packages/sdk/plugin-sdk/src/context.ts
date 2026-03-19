@@ -14,6 +14,10 @@ import type {
   FileTypeContribution,
   StatusBarItemContribution,
   ActivityBarItemContribution,
+  EditorTabViewContribution,
+  BottomPanelTabViewContribution,
+  RightSidebarPanelViewContribution,
+  StatusBarWidgetViewContribution,
 } from "./types";
 
 // ---- Namespaced API Interfaces ----
@@ -68,6 +72,24 @@ export interface StorageApi {
   set(key: string, value: unknown): void;
 }
 
+/**
+ * API for registering plugin-contributed views in workbench UI slots.
+ *
+ * Each method accepts an SDK view contribution (with a component or lazy factory)
+ * and returns a Disposable that unregisters the view. Plugin authors should push
+ * the disposable to `ctx.subscriptions` for automatic cleanup on deactivation.
+ */
+export interface ViewsApi {
+  /** Register an editor tab view. */
+  registerEditorTab(contribution: EditorTabViewContribution): Disposable;
+  /** Register a bottom panel tab view. */
+  registerBottomPanelTab(contribution: BottomPanelTabViewContribution): Disposable;
+  /** Register a right sidebar panel view. */
+  registerRightSidebarPanel(contribution: RightSidebarPanelViewContribution): Disposable;
+  /** Register a status bar widget view. */
+  registerStatusBarWidget(contribution: StatusBarWidgetViewContribution): Disposable;
+}
+
 // ---- PluginContext ----
 
 /**
@@ -94,4 +116,6 @@ export interface PluginContext {
   sidebar: SidebarApi;
   /** Plugin-scoped key-value storage API. */
   storage: StorageApi;
+  /** View registration API for contributing to UI slots. */
+  views: ViewsApi;
 }

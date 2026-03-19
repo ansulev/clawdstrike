@@ -8,6 +8,14 @@
  * Source of truth: apps/workbench/src/lib/plugins/types.ts
  */
 
+// ---- React Compatibility ----
+// Standalone type alias to avoid a hard dependency on @types/react.
+// Plugin authors will use the real React types; the SDK only needs the shape.
+
+/** A React component type. Mirrors React.ComponentType<P>. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type ComponentType<P = any> = ((props: P) => unknown) | (new (props: P) => unknown);
+
 // ---- Disposable ----
 
 /** A dispose function that cleans up a resource. */
@@ -367,4 +375,108 @@ export interface PluginManifest {
   contributions?: PluginContributions;
   /** Distribution and installation metadata. */
   installation?: InstallationMetadata;
+}
+
+// ---- View Prop Interfaces (for plugin component authors) ----
+
+/**
+ * Base props passed to every plugin view component by ViewContainer.
+ * Mirrors ViewProps from the workbench view-registry.
+ */
+export interface ViewProps {
+  /** Qualified view ID ("{pluginId}.{viewId}"). */
+  viewId: string;
+  /** Whether this view is currently visible/active. */
+  isActive: boolean;
+  /** Per-view key/value storage. */
+  storage: {
+    get(key: string): unknown;
+    set(key: string, value: unknown): void;
+  };
+}
+
+/** Props for plugin editor tab components. */
+export interface EditorTabProps extends ViewProps {
+  /** Update the tab's display title. */
+  setTitle: (title: string) => void;
+  /** Mark the tab as having unsaved changes. */
+  setDirty: (dirty: boolean) => void;
+}
+
+/** Props for plugin bottom panel tab components. */
+export interface BottomPanelTabProps extends ViewProps {
+  /** Current height of the bottom panel in pixels. */
+  panelHeight: number;
+}
+
+/** Props for plugin right sidebar panel components. */
+export interface RightSidebarPanelProps extends ViewProps {
+  /** Current width of the right sidebar in pixels. */
+  sidebarWidth: number;
+}
+
+/** Props for plugin activity bar panel components. */
+export interface ActivityBarPanelProps extends ViewProps {
+  /** Whether the sidebar is in collapsed state. */
+  isCollapsed: boolean;
+}
+
+/** Props for plugin status bar widget components. */
+export interface StatusBarWidgetProps {
+  /** Qualified view ID for this widget. */
+  viewId: string;
+}
+
+// ---- SDK View Contributions (used in activate() hook) ----
+
+/**
+ * SDK-side editor tab view contribution.
+ * Unlike manifest EditorTabContribution (which has an entrypoint string),
+ * the SDK version accepts a component directly or a lazy import factory.
+ */
+export interface EditorTabViewContribution {
+  /** Unique identifier for this editor tab view. */
+  id: string;
+  /** Display label for the tab. */
+  label: string;
+  /** Optional icon identifier (Lucide name or custom). */
+  icon?: string;
+  /** React component or lazy import factory. */
+  component: ComponentType | (() => Promise<{ default: ComponentType }>);
+}
+
+/** SDK-side bottom panel tab view contribution. */
+export interface BottomPanelTabViewContribution {
+  /** Unique identifier for this panel tab. */
+  id: string;
+  /** Display label. */
+  label: string;
+  /** Optional icon identifier. */
+  icon?: string;
+  /** React component or lazy import factory. */
+  component: ComponentType | (() => Promise<{ default: ComponentType }>);
+}
+
+/** SDK-side right sidebar panel view contribution. */
+export interface RightSidebarPanelViewContribution {
+  /** Unique identifier for this panel. */
+  id: string;
+  /** Display label. */
+  label: string;
+  /** Optional icon identifier. */
+  icon?: string;
+  /** React component or lazy import factory. */
+  component: ComponentType | (() => Promise<{ default: ComponentType }>);
+}
+
+/** SDK-side status bar widget view contribution. */
+export interface StatusBarWidgetViewContribution {
+  /** Unique identifier for this widget. */
+  id: string;
+  /** Which side of the status bar ("left" or "right"). */
+  side: "left" | "right";
+  /** Sort order within the side. Lower numbers render first. */
+  priority: number;
+  /** React component or lazy import factory. */
+  component: ComponentType | (() => Promise<{ default: ComponentType }>);
 }

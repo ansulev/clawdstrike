@@ -56,6 +56,7 @@ const ALL_FILE_TYPES: FileType[] = [
   "sigma_rule",
   "yara_rule",
   "ocsf_event",
+  "swarm_bundle",
 ];
 
 /**
@@ -788,6 +789,7 @@ function countFilesByType(projects: DetectionProject[]): Record<FileType, number
     sigma_rule: 0,
     yara_rule: 0,
     ocsf_event: 0,
+    swarm_bundle: 0,
   };
   function walk(files: ProjectFile[]) {
     for (const f of files) {

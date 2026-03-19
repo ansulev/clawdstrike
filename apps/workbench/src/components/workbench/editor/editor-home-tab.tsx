@@ -23,6 +23,7 @@ import {
   IconRadar2,
   IconBug,
   IconSchema,
+  IconHexagons,
 } from "@tabler/icons-react";
 
 // ---------------------------------------------------------------------------
@@ -85,6 +86,7 @@ const FORMAT_ICONS: Record<FileType, typeof IconShieldLock> = {
   sigma_rule: IconRadar2,
   yara_rule: IconBug,
   ocsf_event: IconSchema,
+  swarm_bundle: IconHexagons,
 };
 
 // ---------------------------------------------------------------------------

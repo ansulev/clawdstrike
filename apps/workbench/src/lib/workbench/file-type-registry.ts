@@ -3,7 +3,7 @@
 // language support, validation backend, icons, and colors.
 
 /** Discriminated union of all supported file types. */
-export type FileType = "clawdstrike_policy" | "sigma_rule" | "yara_rule" | "ocsf_event";
+export type FileType = "clawdstrike_policy" | "sigma_rule" | "yara_rule" | "ocsf_event" | "swarm_bundle";
 
 /** Descriptor for a registered file type. */
 export interface FileTypeDescriptor {
@@ -151,6 +151,16 @@ export const FILE_TYPE_REGISTRY: Record<FileType, FileTypeDescriptor> = {
     testable: false,
     convertibleTo: [],
   },
+  swarm_bundle: {
+    id: "swarm_bundle",
+    label: "Swarm Bundle",
+    shortLabel: "Swarm",
+    extensions: [".swarm"],
+    iconColor: "#8b5cf6",
+    defaultContent: "",
+    testable: false,
+    convertibleTo: [],
+  },
 };
 
 // ---- Detection helpers ----
@@ -185,6 +195,9 @@ export function getFileTypeByExtension(filename: string): FileType | null {
 
   if (lower.endsWith(".yar") || lower.endsWith(".yara")) {
     return "yara_rule";
+  }
+  if (lower.endsWith(".swarm")) {
+    return "swarm_bundle";
   }
   // .yaml / .yml are ambiguous between policy and sigma.
   // .json is ambiguous between policy exports, OCSF events, and

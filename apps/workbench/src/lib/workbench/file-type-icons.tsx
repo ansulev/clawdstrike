@@ -1,4 +1,4 @@
-import { IconShield, IconBraces, IconFile } from "@tabler/icons-react";
+import { IconShield, IconBraces, IconFile, IconHexagons } from "@tabler/icons-react";
 import { FILE_TYPE_REGISTRY, type FileType } from "@/lib/workbench/file-type-registry";
 
 // ---- Props ----
@@ -100,6 +100,17 @@ export function FileTypeIcon({
     case "ocsf_event":
       return (
         <IconBraces
+          size={size}
+          stroke={stroke}
+          style={{ color: getIconColor(fileType) }}
+          aria-label={getLabel(fileType)}
+          className={className}
+        />
+      );
+
+    case "swarm_bundle":
+      return (
+        <IconHexagons
           size={size}
           stroke={stroke}
           style={{ color: getIconColor(fileType) }}

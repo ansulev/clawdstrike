@@ -26,7 +26,8 @@ Close the gap from "IDE scaffold" to "professional-grade detection engineering I
 - [x] **Phase 9: Default Workspace Bootstrap** — Auto-scaffold ~/.clawdstrike/workspace/, multi-root explorer, example content (2 plans)
 - [x] **Phase 10: Live CodeMirror Editor** — Replace FileEditorShell pre tag with real CodeMirror, wired to policy-edit-store (2 plans)
 - [ ] **Phase 11: Visual Polish** — Fix duplicate Home tabs, relative breadcrumbs, tree refresh, status bar updates
-- [ ] **Phase 12: Session Restore** — Persist pane layout + open files to localStorage, restore on launch
+- [x] **Phase 12: Session Restore** — Persist pane layout + open files to localStorage, restore on launch
+- [ ] **Phase 13: Full Editor Experience** — Visual/YAML split, guard cards, run button + quick tests, test runner panel, sidebar toggles, native validation
 
 ## Phase Details
 
@@ -201,7 +202,7 @@ Plans:
   3. Explorer tree refreshes after file create/rename/delete (no stale "No detection files found")
   4. Status bar shows active file name, line/column, file type, and dirty state
   5. Pane tab deduplication prevents opening the same file twice
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
 - [x] 11-01-PLAN.md — Fix duplicate Home tabs and pane tab deduplication
@@ -221,10 +222,30 @@ Plans:
 Plans:
 - [ ] 12-01-PLAN.md — Pane session serialize/restore, beforeunload save, launch restore with toast
 
+### Phase 13: Full Editor Experience
+**Goal**: FileEditorShell provides the complete editing experience — visual/YAML split, guard cards, run button with quick tests, test runner panel, and sidebar panel toggles
+**Depends on**: Phase 10 (live CodeMirror), Phase 11 (polish)
+**Requirements**: EDIT-01, EDIT-02, EDIT-03, EDIT-04, EDIT-05, EDIT-06, EDIT-07, EDIT-08
+**Success Criteria** (what must be TRUE):
+  1. Policy files show a Visual/YAML split toggle — clicking it renders EditorVisualPanel (guard cards) alongside YamlEditor
+  2. Guard cards display with enable/disable toggles, config fields, and drag-to-reorder
+  3. Run button with dropdown shows 3 quick test presets (File Access, Shell Command, Network Egress) that execute inline
+  4. Test Runner panel renders below the editor when toggled, with results, coverage strip, and suite execution
+  5. FileEditorToolbar has sidebar toggle buttons for History, Evidence, Explain, Publish that open the right sidebar panels
+  6. Native validation (Tauri) runs on policy changes and shows richer error diagnostics
+  7. Auto-versioning creates a snapshot on each save
+  8. All features gated to policy file types only — non-policy files (Sigma, YARA, OCSF) show only their visual builder + CodeMirror
+**Plans**: 3 plans
+
+Plans:
+- [ ] 13-01-PLAN.md — Visual/YAML split editor: toggle in toolbar, EditorVisualPanel + YamlEditor in resizable split
+- [ ] 13-02-PLAN.md — Run button with quick test presets, TestRunnerPanel below editor with coverage strip
+- [ ] 13-03-PLAN.md — Sidebar toggle buttons (History, Evidence, Explain), native validation, auto-versioning
+
 ## Progress
 
 **Execution Order:**
-Phase 10 depends on 8. Phase 11 depends on 10. Phase 12 depends on 10. Phases 11 and 12 are independent of each other.
+Phase 10 depends on 8. Phases 11, 12 depend on 10 (independent of each other). Phase 13 depends on 10 + 11.
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -239,4 +260,5 @@ Phase 10 depends on 8. Phase 11 depends on 10. Phase 12 depends on 10. Phases 11
 | 9. Default Workspace Bootstrap | 2/2 | Complete | 2026-03-18 |
 | 10. Live CodeMirror Editor | 2/2 | Complete | 2026-03-19 |
 | 11. Visual Polish | 2/2 | Complete | 2026-03-19 |
-| 12. Session Restore | 0/1 | Not started | - |
+| 12. Session Restore | 1/1 | Complete | 2026-03-19 |
+| 13. Full Editor Experience | 0/3 | Not started | - |

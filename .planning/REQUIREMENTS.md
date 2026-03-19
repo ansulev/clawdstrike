@@ -1,91 +1,113 @@
-# Requirements: Plugin Sandboxing (v2.0)
+# Requirements: Plugin-Contributed Views (v3.0)
 
 ## Overview
 
-Isolate community plugins in sandboxed iframes with a typed postMessage bridge, capability-based permissions, cryptographic audit trail, and fleet-wide emergency revocation. Community plugins get zero direct access to the host window, Tauri IPC, or React state -- every interaction is mediated, permission-checked, and receipted.
+Enable plugins to contribute React components and CodeMirror extensions to every visual slot in the ClawdStrike workbench -- editor tabs, bottom panel tabs, right sidebar panels, activity bar panels, gutter decorations, status bar widgets, and context menus. Internal (in-process) plugins render directly in the host React tree via React.lazy with ErrorBoundary isolation and keep-alive state preservation.
 
 ## Scope
 
-**v2.0 (this milestone):** postMessage RPC bridge, iframe sandbox with strict CSP, capability-based permission system, Ed25519-signed plugin action receipts, emergency revocation via hushd SSE.
+**v3.0 (this milestone):** ViewRegistry, in-process view rendering for all 7 contribution slots, keep-alive tab state with LRU eviction, ErrorBoundary crash isolation, SDK ViewsApi.
 
-**Deferred:** WASM sandbox alternative for guard-only plugins, plugin hot reload dev mode, cross-plugin communication scoping, plugin resource limits (CPU/memory monitoring).
+**v3.1+ (deferred):** iframe-sandboxed view rendering for community plugins, plugin-provided React context providers, view-level permission scoping, plugin view theming API, hot-reload for external plugin views.
 
 ## Requirements
 
-### BRIDGE: postMessage RPC Bridge
+### VREG: View Registry
 
-- **BRIDGE-01**: `PluginBridgeClient` class runs inside the plugin iframe and provides `call(method, params): Promise<T>` for request/response RPC and `subscribe(event, handler): Unsubscribe` for host-pushed events, communicating exclusively via `window.postMessage`
-- **BRIDGE-02**: `PluginBridgeHost` class runs in the host window and dispatches incoming bridge requests to the appropriate registries (command registry, guard registry, file type registry, status bar registry, storage), returning serialized results
-- **BRIDGE-03**: Message protocol uses a typed `BridgeMessage` envelope with `id` (correlation), `type` (request | response | event | error), `method` (namespaced, e.g. `"guards.register"`), `params`, `result`, and `error` fields
-- **BRIDGE-04**: Request/response correlation uses monotonically increasing IDs with a 30-second timeout that rejects leaked promises with a descriptive error
-- **BRIDGE-05**: All existing `PluginContext` API surfaces (`commands.register`, `guards.register`, `fileTypes.register`, `statusBar.register`, `storage.get`, `storage.set`) have bridge method equivalents that produce identical results to the in-process API
-- **BRIDGE-06**: Bridge host validates that `event.origin` matches the expected null origin and rejects messages from unexpected sources
+- **VREG-01**: A `ViewRegistry` singleton stores `ViewRegistration` objects keyed by `"{pluginId}.{viewId}"`, providing `registerView()`, `getView()`, `getViewsBySlot()`, and `onViewRegistryChange()` methods
+- **VREG-02**: `ViewRegistration` includes `id`, `slot` (one of: `editorTab`, `activityBarPanel`, `bottomPanelTab`, `rightSidebarPanel`, `statusBarWidget`, `gutterDecoration`, `contextMenuItem`), `label`, `icon`, `component` (React ComponentType or CodeMirror Extension factory), `priority`, and `meta`
+- **VREG-03**: The registry uses the Map + snapshot + listeners pattern (matching `status-bar-registry.ts`) with `useSyncExternalStore` for React integration via a `useViewsBySlot(slot)` hook
+- **VREG-04**: `registerView()` returns a dispose function; calling it removes the view and notifies listeners
+- **VREG-05**: The PluginLoader's `routeContributions()` method routes `editorTabs`, `bottomPanelTabs`, `rightSidebarPanels`, `activityBarItems`, `gutterDecorations`, and `contextMenuItems` manifest contributions to the ViewRegistry
 
-### SANDBOX: iframe Sandbox
+### VCONT: View Container
 
-- **SANDBOX-01**: `PluginSandbox` React component creates an `<iframe sandbox="allow-scripts">` (no `allow-same-origin`, no `allow-top-navigation`, no `allow-popups`) with the plugin's bundled JavaScript injected via `srcdoc`
-- **SANDBOX-02**: Plugin iframes load with a null origin (via `srcdoc` or `blob:` URL), preventing access to the host's cookies, localStorage, and sessionStorage
-- **SANDBOX-03**: Each plugin iframe has a strict CSP: `default-src 'none'; script-src 'unsafe-inline' blob:; style-src 'unsafe-inline'; img-src data: blob:; connect-src 'none'; frame-src 'none'; worker-src 'none'; object-src 'none'; form-action 'none'`
-- **SANDBOX-04**: `PluginLoader` forks loading path by trust tier: `internal` plugins load in-process (existing path, no iframe), `community` plugins load via `PluginSandbox` with bridge
-- **SANDBOX-05**: The `PluginBridgeClient` SDK and a design system CSS file are injected into the iframe's `srcdoc` alongside the plugin's bundled code
-- **SANDBOX-06**: Plugin iframes cannot access Tauri IPC (`__TAURI_INTERNALS__`, `ipc:` protocol, `http://ipc.localhost`) -- the sandbox attribute blocks this without additional configuration
+- **VCONT-01**: A `ViewContainer` component wraps every plugin view in `<ErrorBoundary>` + `<Suspense>`, passing slot-specific props (`viewId`, `isActive`, `storage`)
+- **VCONT-02**: The ErrorBoundary renders a fallback UI showing the plugin name, error message, and a "Reload View" button that remounts the component -- a plugin view crash does not take down the workbench
+- **VCONT-03**: The Suspense fallback renders a loading skeleton appropriate to the slot (full-panel spinner for editor tabs, inline spinner for status bar widgets)
 
-### PERM: Permission System
+### SBAR: Status Bar Fix
 
-- **PERM-01**: `PluginManifest` gains a `permissions` field declaring the capabilities the plugin requires, using `"scope:action"` format (e.g., `"guards:register"`, `"storage:write"`, `"network:fetch"`, `"policy:read"`)
-- **PERM-02**: `PluginBridgeHost` enforces permissions as middleware: every incoming bridge request is checked against the plugin's declared permissions before dispatch, and undeclared permissions return a `PERMISSION_DENIED` error (fail-closed)
-- **PERM-03**: A `METHOD_TO_PERMISSION` mapping connects each bridge method to its required permission, so new bridge methods cannot bypass enforcement
-- **PERM-04**: Network permissions (`network:fetch`) include domain scoping via `allowedDomains` patterns, and the bridge host validates request URLs against declared domains before proxying
-- **PERM-05**: Manifest validation rejects plugins that declare unknown or malformed permissions at install time
-- **PERM-06**: The plugin install flow shows a permission prompt UI listing the plugin's declared permissions before the operator confirms installation
+- **SBAR-01**: The PluginLoader's `routeStatusBarItemContribution()` resolves the entrypoint module and uses the exported component as the render function, replacing the current `render: () => null` placeholder
 
-### AUDIT: Plugin Audit Trail
+### ETAB: Editor Tab Views
 
-- **AUDIT-01**: Every bridge call from a community plugin generates an Ed25519-signed `PluginActionReceipt` containing plugin identity (id, version, publisher, trust tier), action type, params hash (SHA-256, not full params), result (allowed | denied | error), permission checked, and duration
-- **AUDIT-02**: Permission denial events always generate a receipt regardless of audit configuration
-- **AUDIT-03**: Plugin action receipts are stored in a local SQLite database (following the existing `SqliteRevocationStore` pattern) with indexes on plugin_id, action_type, result, and timestamp
-- **AUDIT-04**: Plugin action receipts are forwarded to hushd via the existing `AuditForwarder` pattern when a daemon connection is available, enabling fleet-wide aggregation and SIEM export
-- **AUDIT-05**: A plugin audit view in the workbench displays receipts filterable by plugin, action type, result, and time range
+- **ETAB-01**: A `ViewTab` type exists alongside `PolicyTab` in the tab system, so plugin editor tabs appear in the tab bar with label, icon, and close button
+- **ETAB-02**: Plugin editor tab components receive `EditorTabProps` extending `ViewProps` with `setTitle()` and `setDirty()` callbacks
+- **ETAB-03**: Plugin views are openable via `paneStore.openApp("plugin:{pluginId}.{viewId}")` for split-pane support, with each pane receiving its own component instance
 
-### REVOKE: Emergency Revocation
+### ALIVE: Keep-Alive Tab State
 
-- **REVOKE-01**: hushd exposes `POST /api/v1/plugins/{plugin_id}/revoke` and `GET /api/v1/plugins/revocations` API routes, with revocation stored in `SqliteRevocationStore` using the `plugin:{plugin_id}` scope
-- **REVOKE-02**: hushd broadcasts a `plugin_revoked` event via SSE (`/api/v1/events`) to all connected workbench instances when a plugin is revoked
-- **REVOKE-03**: Workbench instances receiving a `plugin_revoked` SSE event deactivate the plugin (dispose contributions, remove iframe), set its lifecycle state to `"revoked"`, store the revocation locally, and generate a signed receipt
-- **REVOKE-04**: `PluginLifecycleState` gains a `"revoked"` state; revoked plugins display a warning badge in the marketplace UI and cannot be reactivated until the revocation is lifted
-- **REVOKE-05**: When a workbench instance reconnects after being offline, it fetches the current revocation list from hushd, diffs against local state, deactivates newly-revoked plugins, and reactivates plugins whose time-limited revocations have expired
-- **REVOKE-06**: The `PluginBridgeHost` checks the revocation store before processing each message; if a plugin is revoked mid-call, it returns `PLUGIN_REVOKED` error and the iframe is removed after a 5-second drain timeout
+- **ALIVE-01**: A `ViewTabRenderer` renders all opened plugin editor tabs simultaneously, hiding inactive tabs via `display: none` instead of unmounting, preserving component state (scroll position, form inputs, selections)
+- **ALIVE-02**: The `isActive` prop is passed to plugin components so they can pause expensive operations (timers, subscriptions) when hidden
+- **ALIVE-03**: An LRU eviction policy destroys the oldest hidden plugin view when the count of kept-alive views exceeds a configurable maximum (default 5)
+
+### BPAN: Bottom Panel Tab Views
+
+- **BPAN-01**: The bottom panel tab bar renders plugin-contributed tabs alongside built-in tabs (Problems, Test Runner, Evidence Pack, Explainability), sourced from the ViewRegistry `bottomPanelTab` slot
+- **BPAN-02**: Plugin bottom panel tab components receive `BottomPanelTabProps` extending `ViewProps` with `panelHeight: number`
+
+### RSIDE: Right Sidebar Panel Views
+
+- **RSIDE-01**: The right sidebar renders plugin-contributed panels alongside built-in panels (Guard Config, Compare, Version History), sourced from the ViewRegistry `rightSidebarPanel` slot
+- **RSIDE-02**: Plugin right sidebar panel components receive `RightSidebarPanelProps` extending `ViewProps` with `sidebarWidth: number`
+
+### ABAR: Activity Bar Panel Views
+
+- **ABAR-01**: The `navSections` array in `DesktopSidebar` is backed by a registry so plugins can add sidebar navigation items dynamically alongside built-in items
+- **ABAR-02**: When a plugin activity bar item is active, the main content area renders the plugin panel component directly (bypassing react-router) via the ViewRegistry
+- **ABAR-03**: Plugin activity bar panel components receive `ActivityBarPanelProps` extending `ViewProps` with `isCollapsed: boolean`
+
+### GUTR: Gutter Decoration Extensions
+
+- **GUTR-01**: A `GutterExtensionRegistry` collects CodeMirror `Extension` objects contributed by plugins, keyed by `"{pluginId}.{decorationId}"`
+- **GUTR-02**: The yaml-editor includes all registered gutter extensions in its CodeMirror `EditorState` extension array, recompartmentalizing when extensions are added or removed
+- **GUTR-03**: Plugin gutter contributions export a CodeMirror Extension factory function (not a React component), receiving a `GutterConfig` with editor state access
+
+### CTXM: Context Menu Extensions
+
+- **CTXM-01**: A `ContextMenuRegistry` stores context menu item declarations contributed by plugins, including `id`, `label`, `command` (command ID to execute), `icon`, `when` (visibility predicate), and `menu` (target: `editor`, `sidebar`, `tab`, `finding`, `sentinel`)
+- **CTXM-02**: Context menu rendering evaluates the `when` predicate against current workbench context and shows/hides items accordingly
+- **CTXM-03**: Clicking a plugin context menu item executes the referenced command via the existing command registry
+
+### SDKV: SDK Views API
+
+- **SDKV-01**: The `PluginContext` in `@clawdstrike/plugin-sdk` exposes a `views` namespace with `registerEditorTab()`, `registerBottomPanelTab()`, `registerRightSidebarPanel()`, and `registerStatusBarWidget()` methods, each returning a `Disposable`
+- **SDKV-02**: SDK view contribution types accept either a React `ComponentType` directly (in-process) or a `() => Promise<{ default: ComponentType }>` lazy import function
+- **SDKV-03**: The SDK exports all view prop interfaces (`ViewProps`, `EditorTabProps`, `BottomPanelTabProps`, `RightSidebarPanelProps`, `ActivityBarPanelProps`, `StatusBarWidgetProps`) for plugin authors to type their components
 
 ## Traceability
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| BRIDGE-01 | Phase 1 | Complete |
-| BRIDGE-02 | Phase 1 | Complete |
-| BRIDGE-03 | Phase 1 | Complete |
-| BRIDGE-04 | Phase 1 | Complete |
-| BRIDGE-05 | Phase 1 | Complete |
-| BRIDGE-06 | Phase 1 | Complete |
-| SANDBOX-01 | Phase 2 | Complete |
-| SANDBOX-02 | Phase 2 | Complete |
-| SANDBOX-03 | Phase 2 | Complete |
-| SANDBOX-04 | Phase 2 | Complete |
-| SANDBOX-05 | Phase 2 | Complete |
-| SANDBOX-06 | Phase 2 | Complete |
-| PERM-01 | Phase 3 | Complete |
-| PERM-02 | Phase 3 | Complete |
-| PERM-03 | Phase 3 | Complete |
-| PERM-04 | Phase 3 | Complete |
-| PERM-05 | Phase 3 | Complete |
-| PERM-06 | Phase 3 | Complete |
-| AUDIT-01 | Phase 4 | Complete |
-| AUDIT-02 | Phase 4 | Complete |
-| AUDIT-03 | Phase 4 | Complete |
-| AUDIT-04 | Phase 4 | Complete |
-| AUDIT-05 | Phase 4 | Complete |
-| REVOKE-01 | Phase 5 | Complete |
-| REVOKE-02 | Phase 5 | Complete |
-| REVOKE-03 | Phase 5 | Complete |
-| REVOKE-04 | Phase 5 | Complete |
-| REVOKE-05 | Phase 5 | Complete |
-| REVOKE-06 | Phase 5 | Complete |
+| VREG-01 | Phase 1 | Pending |
+| VREG-02 | Phase 1 | Pending |
+| VREG-03 | Phase 1 | Pending |
+| VREG-04 | Phase 1 | Pending |
+| VREG-05 | Phase 1 | Pending |
+| VCONT-01 | Phase 1 | Pending |
+| VCONT-02 | Phase 1 | Pending |
+| VCONT-03 | Phase 1 | Pending |
+| SBAR-01 | Phase 1 | Pending |
+| SDKV-01 | Phase 1 | Pending |
+| SDKV-02 | Phase 1 | Pending |
+| SDKV-03 | Phase 1 | Pending |
+| ETAB-01 | Phase 2 | Pending |
+| ETAB-02 | Phase 2 | Pending |
+| ETAB-03 | Phase 2 | Pending |
+| ALIVE-01 | Phase 2 | Pending |
+| ALIVE-02 | Phase 2 | Pending |
+| ALIVE-03 | Phase 2 | Pending |
+| BPAN-01 | Phase 3 | Pending |
+| BPAN-02 | Phase 3 | Pending |
+| RSIDE-01 | Phase 3 | Pending |
+| RSIDE-02 | Phase 3 | Pending |
+| ABAR-01 | Phase 4 | Pending |
+| ABAR-02 | Phase 4 | Pending |
+| ABAR-03 | Phase 4 | Pending |
+| GUTR-01 | Phase 4 | Pending |
+| GUTR-02 | Phase 4 | Pending |
+| GUTR-03 | Phase 4 | Pending |
+| CTXM-01 | Phase 4 | Pending |
+| CTXM-02 | Phase 4 | Pending |
+| CTXM-03 | Phase 4 | Pending |

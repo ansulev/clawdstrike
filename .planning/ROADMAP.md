@@ -1,8 +1,8 @@
-# Roadmap: Plugin Sandboxing (v2.0)
+# Roadmap: Plugin-Contributed Views (v3.0)
 
 ## Overview
 
-Harden the community plugin boundary from trust-based to sandbox-based isolation. The journey starts with a typed postMessage RPC bridge (the only gateway between plugin and host), wraps it in a null-origin iframe with strict CSP, layers capability-based permissions on top, adds cryptographic audit receipts for every plugin action, and finishes with fleet-wide emergency revocation via hushd. After this milestone, a malicious community plugin cannot access the host DOM, Tauri IPC, filesystem, network, or any API it did not declare in its manifest -- and every action it takes is Ed25519-signed and auditable.
+Close the gap between the plugin system's contribution point types (which already exist from v1.0) and actual view rendering. The ViewRegistry becomes the central switchboard routing plugin components to 7 visual slots. The journey starts with the registry + container foundation and status bar fix, then opens the highest-value slot (editor tabs with keep-alive), extends to bottom/right panels, and finishes with activity bar navigation, gutter decorations, and context menus.
 
 ## Phases
 
@@ -12,94 +12,65 @@ Harden the community plugin boundary from trust-based to sandbox-based isolation
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [x] **Phase 1: postMessage RPC Bridge** - Build typed request/response and event subscription protocol over postMessage with host-side dispatch to registries
-- [x] **Phase 2: iframe Sandbox** - Isolate community plugins in null-origin iframes with strict CSP, fork PluginLoader by trust tier
-- [x] **Phase 3: Permission System** - Capability-based permissions declared in manifest, enforced at bridge middleware, with domain-scoped network access
-- [x] **Phase 4: Plugin Audit Trail** - Ed25519-signed receipts for every plugin action, local storage, hushd forwarding, and audit viewer UI
-- [x] **Phase 5: Emergency Revocation** - Fleet-wide plugin kill via hushd SSE broadcast, offline sync on reconnect, revoked lifecycle state
+- [ ] **Phase 1: ViewRegistry Foundation** - Central view registry, ViewContainer with ErrorBoundary/Suspense, status bar fix, SDK ViewsApi
+- [ ] **Phase 2: Editor Tab Views** - Plugin components in pane tabs with keep-alive state preservation and LRU eviction
+- [ ] **Phase 3: Bottom Panel and Right Sidebar** - Plugin tabs in bottom panel and right sidebar alongside built-in panels
+- [ ] **Phase 4: Activity Bar, Gutters, and Context Menus** - Dynamic sidebar navigation, CodeMirror gutter extensions, and context menu items
 
 ## Phase Details
 
-### Phase 1: postMessage RPC Bridge
-**Goal**: Community plugins can make typed API calls and receive events through a message-passing bridge that produces identical results to the in-process PluginContext API
-**Depends on**: Nothing (first phase -- builds on v1.0 plugin infrastructure)
-**Requirements**: BRIDGE-01, BRIDGE-02, BRIDGE-03, BRIDGE-04, BRIDGE-05, BRIDGE-06
+### Phase 1: ViewRegistry Foundation
+**Goal**: A central registry exists for plugin view contributions, every plugin view renders inside ErrorBoundary + Suspense isolation, and the status bar placeholder gap is closed
+**Depends on**: Nothing (first phase; assumes v1.0 plugin infrastructure is complete)
+**Requirements**: VREG-01, VREG-02, VREG-03, VREG-04, VREG-05, VCONT-01, VCONT-02, VCONT-03, SBAR-01, SDKV-01, SDKV-02, SDKV-03
 **Success Criteria** (what must be TRUE):
-  1. A test plugin running in a mock iframe can call `bridge.call("guards.register", guardContribution)` and the guard appears in the host-side guard registry
-  2. A test plugin can call `bridge.subscribe("policy.changed")` and receives an event when policy changes in the host
-  3. A bridge call with an invalid method returns a structured error with code and message, and a call that exceeds 30 seconds rejects with a timeout error
-  4. Every PluginContext API method (commands.register, guards.register, fileTypes.register, statusBar.register, storage.get, storage.set) has a bridge equivalent that produces the same observable result
-**Plans:** 2 plans
-Plans:
-- [x] 01-01-PLAN.md -- Bridge protocol types + PluginBridgeClient (call/subscribe/timeout)
-- [x] 01-02-PLAN.md -- PluginBridgeHost dispatch + origin validation + integration tests
+  1. A plugin calling `ctx.views.registerEditorTab()` in its `activate()` hook causes the view to appear in `viewRegistry.getViewsBySlot("editorTab")`, and calling the returned dispose function removes it
+  2. A plugin status bar widget declared with an `entrypoint` renders its actual component in the status bar instead of blank space
+  3. When a plugin view component throws during render, the ErrorBoundary catches it and displays a fallback with the plugin name, error message, and a working "Reload View" button -- the rest of the workbench remains functional
+  4. `useViewsBySlot("editorTab")` re-renders consuming components when a plugin registers or unregisters a view
+**Plans**: TBD
 
-### Phase 2: iframe Sandbox
-**Goal**: Community plugins run in isolated null-origin iframes with zero access to the host window, Tauri IPC, cookies, localStorage, or network
+### Phase 2: Editor Tab Views
+**Goal**: Plugins can open full-panel views in the editor area as tabs, with state preserved across tab switches and split-pane support
 **Depends on**: Phase 1
-**Requirements**: SANDBOX-01, SANDBOX-02, SANDBOX-03, SANDBOX-04, SANDBOX-05, SANDBOX-06
+**Requirements**: ETAB-01, ETAB-02, ETAB-03, ALIVE-01, ALIVE-02, ALIVE-03
 **Success Criteria** (what must be TRUE):
-  1. A community plugin loaded via PluginLoader renders inside an `<iframe sandbox="allow-scripts">` element, and its JavaScript cannot access `window.parent.document`, `localStorage`, or `document.cookie`
-  2. The same plugin manifest with `trust: "internal"` loads in-process (no iframe) and with `trust: "community"` loads via iframe sandbox -- both produce working contributions in the registries
-  3. A community plugin that attempts `fetch("https://example.com")` or `new XMLHttpRequest()` fails due to CSP `connect-src 'none'`
-  4. The plugin iframe cannot access `__TAURI_INTERNALS__` or invoke Tauri commands
-**Plans:** 2 plans
-Plans:
-- [x] 02-01-PLAN.md -- PluginSandbox component + srcdoc builder with CSP and bridge bootstrap
-- [x] 02-02-PLAN.md -- PluginLoader trust-tier fork + integration tests
+  1. A plugin editor tab appears in the tab bar with its label and icon, and clicking it shows the plugin component in the editor area -- clicking a policy tab switches back to the policy editor
+  2. Switching away from a plugin tab and back preserves the component's internal state (scroll position, form inputs, selections) without re-mounting
+  3. Opening a plugin view via `paneStore.openApp("plugin:myPlugin.myView")` renders the plugin component in a split pane, and each pane instance has independent state
+  4. When more than 5 hidden plugin tabs accumulate, the oldest hidden tab is destroyed (LRU eviction) and re-opening it creates a fresh mount
+**Plans**: TBD
 
-### Phase 3: Permission System
-**Goal**: Community plugins declare required capabilities in their manifest, and the bridge rejects any API call the plugin did not declare permission for
-**Depends on**: Phase 2
-**Requirements**: PERM-01, PERM-02, PERM-03, PERM-04, PERM-05, PERM-06
+### Phase 3: Bottom Panel and Right Sidebar
+**Goal**: Plugins can contribute tabs to the bottom panel and panels to the right sidebar, rendered alongside built-in panels
+**Depends on**: Phase 1
+**Requirements**: BPAN-01, BPAN-02, RSIDE-01, RSIDE-02
 **Success Criteria** (what must be TRUE):
-  1. A community plugin with `permissions: ["guards:register", "storage:read"]` can register guards and read storage, but calling `bridge.call("storage.set", ...)` returns a `PERMISSION_DENIED` error
-  2. A plugin with `permissions: [{ type: "network:fetch", allowedDomains: ["api.virustotal.com"] }]` can fetch from VirusTotal via the bridge proxy, but a fetch to any other domain is denied
-  3. Installing a plugin that declares `["policy:write", "network:fetch"]` shows a permission prompt listing both capabilities before the operator confirms
-  4. A manifest declaring an unknown permission (e.g., `"filesystem:write"`) is rejected at install time with a validation error
-**Plans:** 2 plans
-Plans:
-- [x] 03-01-PLAN.md -- Permission types + METHOD_TO_PERMISSION mapping + bridge host enforcement middleware
-- [x] 03-02-PLAN.md -- Network domain scoping + manifest validation + loader wiring + install prompt
+  1. A plugin-contributed bottom panel tab appears alongside Problems, Test Runner, Evidence Pack, and Explainability -- selecting it renders the plugin component with the correct `panelHeight` prop
+  2. A plugin-contributed right sidebar panel appears alongside Guard Config, Compare, and Version History -- selecting it renders the plugin component with the correct `sidebarWidth` prop
+  3. Uninstalling a plugin that contributed panel views removes its tabs/panels from both the bottom panel and right sidebar without breaking other panels
+**Plans**: TBD
 
-### Phase 4: Plugin Audit Trail
-**Goal**: Every action a community plugin takes through the bridge is recorded as an Ed25519-signed receipt, queryable locally and forwardable to hushd for fleet aggregation
-**Depends on**: Phase 3
-**Requirements**: AUDIT-01, AUDIT-02, AUDIT-03, AUDIT-04, AUDIT-05
+### Phase 4: Activity Bar, Gutters, and Context Menus
+**Goal**: Plugins can add sidebar navigation items, CodeMirror gutter decorations, and context menu items to the workbench
+**Depends on**: Phase 1, Phase 3
+**Requirements**: ABAR-01, ABAR-02, ABAR-03, GUTR-01, GUTR-02, GUTR-03, CTXM-01, CTXM-02, CTXM-03
 **Success Criteria** (what must be TRUE):
-  1. After a community plugin registers a guard and reads storage, querying the local receipt store returns two signed receipts with correct plugin_id, action_type, and `result: "allowed"`
-  2. After a permission-denied bridge call, a receipt with `result: "denied"` exists in the store regardless of audit verbosity settings
-  3. When connected to hushd, plugin action receipts appear in the daemon's audit ledger and are available to SIEM exporters
-  4. The workbench audit view shows plugin receipts filterable by plugin name, action type (e.g., "network.fetch"), result, and time range
-**Plans:** 2 plans
-Plans:
-- [x] 04-01-PLAN.md -- Receipt types + receipt store + receipt generation middleware wired into bridge host
-- [x] 04-02-PLAN.md -- hushd receipt forwarding + plugin audit viewer UI with filtering
-
-### Phase 5: Emergency Revocation
-**Goal**: An operator can revoke a community plugin fleet-wide via hushd, and all connected workbench instances immediately kill the plugin and persist the revocation for offline restarts
-**Depends on**: Phase 4
-**Requirements**: REVOKE-01, REVOKE-02, REVOKE-03, REVOKE-04, REVOKE-05, REVOKE-06
-**Success Criteria** (what must be TRUE):
-  1. Calling `POST /api/v1/plugins/{plugin_id}/revoke` on hushd causes all connected workbench instances to deactivate the plugin within seconds -- its guards are unregistered, its iframe is removed, and its lifecycle state is `"revoked"`
-  2. A revoked plugin shows a warning badge in the marketplace UI and cannot be reactivated (Install/Activate buttons are disabled with an explanation)
-  3. A workbench instance that was offline during revocation deactivates the plugin on reconnect after syncing the revocation list from hushd
-  4. If a revoked plugin has a bridge call in-flight, the call returns `PLUGIN_REVOKED` error and the iframe is removed after draining (5-second timeout)
-  5. A time-limited revocation (e.g., revoked for 24 hours) automatically allows reactivation after the expiration period
-**Plans:** 2 plans
-Plans:
-- [x] 05-01-PLAN.md -- Revocation store + "revoked" lifecycle state + bridge host revocation guard + drain timeout
-- [x] 05-02-PLAN.md -- hushd SSE revocation listener + reconnect sync + revocation badge UI
+  1. A plugin-contributed activity bar item appears in the sidebar navigation, and clicking it renders the plugin panel component in the main content area without a page navigation/route change
+  2. A plugin-contributed gutter decoration (e.g., severity markers) appears in the CodeMirror editor gutter for open policy files, and installing/uninstalling the plugin adds/removes the gutter without reloading the editor
+  3. A plugin-contributed context menu item appears when right-clicking in the specified context (editor, sidebar, tab, finding), respects the `when` visibility predicate, and executes the referenced command when clicked
+  4. Built-in sidebar items, gutters, and context menus continue to work identically after the dynamic registration changes
+**Plans**: TBD
 
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
+Phases execute in numeric order: 1 -> 2 -> 3 -> 4
+(Phases 2 and 3 can execute in parallel after Phase 1 completes.)
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. postMessage RPC Bridge | 2/2 | Complete | 2026-03-19 |
-| 2. iframe Sandbox | 2/2 | Complete | 2026-03-19 |
-| 3. Permission System | 2/2 | Complete | 2026-03-19 |
-| 4. Plugin Audit Trail | 2/2 | Complete | 2026-03-19 |
-| 5. Emergency Revocation | 2/2 | Complete | 2026-03-19 |
+| 1. ViewRegistry Foundation | 0/? | Not started | - |
+| 2. Editor Tab Views | 0/? | Not started | - |
+| 3. Bottom Panel and Right Sidebar | 0/? | Not started | - |
+| 4. Activity Bar, Gutters, and Context Menus | 0/? | Not started | - |

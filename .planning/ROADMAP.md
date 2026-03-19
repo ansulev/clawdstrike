@@ -13,7 +13,7 @@ Close the gap between the plugin system's contribution point types (which alread
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: ViewRegistry Foundation** - Central view registry, ViewContainer with ErrorBoundary/Suspense, status bar fix, SDK ViewsApi
-- [ ] **Phase 2: Editor Tab Views** - Plugin components in pane tabs with keep-alive state preservation and LRU eviction
+- [x] **Phase 2: Editor Tab Views** - Plugin components in pane tabs with keep-alive state preservation and LRU eviction
 - [x] **Phase 3: Bottom Panel and Right Sidebar** - Plugin tabs in bottom panel and right sidebar alongside built-in panels
 - [ ] **Phase 4: Activity Bar, Gutters, and Context Menus** - Dynamic sidebar navigation, CodeMirror gutter extensions, and context menu items
 
@@ -68,7 +68,11 @@ Plans:
   2. A plugin-contributed gutter decoration (e.g., severity markers) appears in the CodeMirror editor gutter for open policy files, and installing/uninstalling the plugin adds/removes the gutter without reloading the editor
   3. A plugin-contributed context menu item appears when right-clicking in the specified context (editor, sidebar, tab, finding), respects the `when` visibility predicate, and executes the referenced command when clicked
   4. Built-in sidebar items, gutters, and context menus continue to work identically after the dynamic registration changes
-**Plans**: TBD
+**Plans:** 3 plans
+Plans:
+- [ ] 04-01-PLAN.md -- Activity bar plugin items in DesktopSidebar + panel rendering in DesktopLayout
+- [ ] 04-02-PLAN.md -- GutterExtensionRegistry + CodeMirror Compartment integration in yaml-editor
+- [ ] 04-03-PLAN.md -- ContextMenuRegistry with when-clause predicates + PluginContextMenuItems component
 
 ## Progress
 
@@ -81,4 +85,4 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 | 1. ViewRegistry Foundation | 2/2 | Complete | 2026-03-19 |
 | 2. Editor Tab Views | 2/2 | Complete | 2026-03-19 |
 | 3. Bottom Panel and Right Sidebar | 1/1 | Complete | 2026-03-19 |
-| 4. Activity Bar, Gutters, and Context Menus | 0/? | Not started | - |
+| 4. Activity Bar, Gutters, and Context Menus | 0/3 | Not started | - |

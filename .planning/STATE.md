@@ -1,125 +1,63 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.0
-milestone_name: milestone
-status: completed
-stopped_at: Completed 06-03-PLAN.md
-last_updated: "2026-03-19T00:43:53.584Z"
-last_activity: 2026-03-19 -- Completed 06-03 (Install/Uninstall lifecycle wired to PluginsBrowser)
+milestone: v2.0
+milestone_name: Plugin Sandboxing
+status: in_progress
+stopped_at: Completed 01-01-PLAN.md
+last_updated: "2026-03-19T04:41:56Z"
+last_activity: 2026-03-19 -- Completed bridge protocol types + PluginBridgeClient (01-01)
 progress:
-  total_phases: 6
-  completed_phases: 6
-  total_plans: 13
-  completed_plans: 13
-  percent: 100
+  total_phases: 5
+  completed_phases: 0
+  total_plans: 2
+  completed_plans: 1
+  percent: 10
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-03-18)
+See: .planning/PROJECT.md (updated 2026-03-19)
 
-**Core value:** Security teams can extend ClawdStrike with custom guards, detection formats, intel sources, and UI panels without forking the workbench.
-**Current focus:** All phases complete
+**Core value:** Community plugins run in sandboxed iframes with capability-based permissions, Ed25519 audit trail, and fleet-wide emergency revocation
+**Current focus:** Phase 1 postMessage RPC Bridge
 
 ## Current Position
 
-Phase: 6 of 6 (Marketplace UI)
-Plan: 3 of 3 in current phase
-Status: Complete
-Last activity: 2026-03-19 -- Completed 06-03 (Install/Uninstall lifecycle wired to PluginsBrowser)
+Phase: 1 of 5 (postMessage RPC Bridge)
+Plan: 1 of 2 complete
+Status: In progress
+Last activity: 2026-03-19 -- Completed bridge protocol types + PluginBridgeClient (01-01)
 
-Progress: [██████████] 100%
+Progress: [#░░░░░░░░░] 10%
 
-## Performance Metrics
+## Previous Milestones
 
-**Velocity:**
-- Total plans completed: 3
-- Average duration: 7min
-- Total execution time: 0.35 hours
-
-**By Phase:**
-
-| Phase | Plans | Total | Avg/Plan |
-|-------|-------|-------|----------|
-| 1: Open Closed Seams | 3 | 21min | 7min |
-
-**Recent Trend:**
-- Last 5 plans: 01-02 (4min), 01-03 (7min), 01-01 (10min)
-- Trend: Steady
-
-*Updated after each plan completion*
-| Phase 02 P01 | 5min | 2 tasks | 3 files |
-| Phase 02 P02 | 2min | 1 tasks | 2 files |
-| Phase 03 P01 | 2min | 1 tasks | 2 files |
-| Phase 03 P02 | 4min | 2 tasks | 3 files |
-| Phase 04 P01 | 5min | 1 tasks | 10 files |
-| Phase 05 P01 | 3min | 1 tasks | 2 files |
-| Phase 05 P02 | 7min | 2 tasks | 3 files |
-| Phase 06 P01 | 3min | 1 tasks | 2 files |
-| Phase 06 P02 | 2min | 2 tasks | 3 files |
-| Phase 06 P03 | 2min | 2 tasks | 3 files |
+### v1.0 — Plugin Foundation (Complete 2026-03-18)
+6 phases, 13 plans: Open seams, manifest/registry, loader/trust, SDK, guard PoC, marketplace UI
 
 ## Accumulated Context
 
 ### Decisions
-
-Decisions are logged in PROJECT.md Key Decisions table.
-Recent decisions affecting current work:
-
-- [Roadmap]: 6-phase structure derived from research -- seams first, then manifest/registry/loader/SDK, then proof-of-concept, then marketplace
-- [Roadmap]: Standard granularity (6 phases, 13 plans) -- natural delivery boundaries from requirement categories
-- [Roadmap]: Phase 6 depends on Phase 3 (not Phase 5) -- marketplace UI needs loader but not the guard-as-plugin PoC
-- [01-02]: Used Map + Proxy pattern for FILE_TYPE_REGISTRY backward compatibility instead of breaking the Record<> API
-- [01-02]: Plugin detectors run after built-in content heuristics but before default fallback
-- [01-02]: getFileTypeByExtension() checks plugin-registered extensions for unambiguous matches only
-- [01-03]: Used Map-based registry pattern for CapsuleRendererRegistry and StatusBarRegistry (consistent with guard/file-type registries)
-- [01-03]: Used useSyncExternalStore for StatusBar registry subscription with snapshot cache for referential stability
-- [01-03]: Used Proxy wrapper for backward-compatible PLUGIN_ICONS Record type
-- [01-01]: Used Proxy pattern for GUARD_REGISTRY backward compat -- 19+ consumer files continue to use .filter(), .map(), .find() without changes
-- [01-01]: Added GuardConfigMap index signature for plugin guard configs
-- [01-01]: registerGuard auto-creates categories; dispose cleans up empty non-built-in categories
-- [Phase 02]: Manual type guards for validation instead of Zod/io-ts -- zero deps, lighter weight
-- [Phase 02]: Open string types for PluginCategory and ActivationEvent with const arrays for well-known values
-- [Phase 02]: Contribution point interfaces include entrypoint field for dynamic module loading in Phase 3
-- [Phase 02-02]: Class-based singleton pattern for PluginRegistry (matches Athas ExtensionRegistry and guard-registry)
-- [Phase 02-02]: PluginRegistrationError with optional validationErrors array for rich error reporting
-- [Phase 02-02]: reset() emits unregistered for each plugin before clearing (hot reload + test cleanup)
-- [Phase 03-01]: Reused operator-crypto verifyCanonical instead of custom Ed25519 -- consistent with existing crypto patterns
-- [Phase 03-01]: Signature verification removes installation.signature via structuredClone + delete (signs content, not itself)
-- [Phase 03-01]: Empty string signature treated as missing -- prevents bypass via empty signature field
-- [Phase 03]: Dependency injection via resolveModule option for testability instead of mocking dynamic import()
-- [Phase 03]: Contributions routed BEFORE activate() called -- registrations happen first, then plugin code runs
-- [Phase 03]: Activation event matching is pure functions in separate module (no side effects)
-- [Phase 04]: Zero runtime deps for SDK -- types + identity function only; runtime injection happens in PluginLoader
-- [Phase 04]: Types copied from workbench, not imported -- SDK is standalone publishable package
-- [Phase 04]: createPlugin() is identity function for type-safe call site inference
-- [Phase 04]: PluginContext uses namespaced API interfaces matching workbench registry patterns
-- [Phase 05-01]: Plugin uses distinct ID 'egress_allowlist_plugin' to avoid collision with built-in 'egress_allowlist'
-- [Phase 05-01]: Plugin activate() is no-op -- PluginLoader routes contributions from manifest BEFORE calling activate()
-- [Phase 05-01]: ConfigFields are byte-identical copies of built-in egress_allowlist guard metadata for parity validation
-- [Phase 05-02]: Parity tests verify config schema mapping rather than runtime delegation since plugin declares metadata only
-- [Phase 05-02]: Rust factory wraps built-in guard via CustomGuardFactory trait, proving custom_guards path works without WASM
-- [Phase 06]: snake_case response types matching Rust serde output -- no camelCase conversion layer
-- [Phase 06]: search() fail-open for browsing; getPackageInfo/getAttestation throw on error for specific lookups
-- [Phase 06]: getDownloadUrl() is pure function returning URL string -- actual download handled by install flow
-- [Phase 06-02]: Stub install/uninstall callbacks with console.log -- 06-03 wires to PluginLoader
-- [Phase 06-02]: asManifest() converts RegistrySearchResult to PluginManifest shape for PluginCard rendering
-- [Phase 06-02]: Available plugins filtered to exclude already-installed plugins by ID match
-- [Phase 06]: Standalone functions (not class) for install/uninstall -- composing registry and loader singletons via DI
-- [Phase 06]: installPlugin lets loader set error state on failure -- plugin stays registered with error state for user visibility
+- v1.0 established: dynamic registries, PluginManifest type, PluginRegistry singleton, PluginLoader with trust gating, createPlugin() SDK, guard-as-plugin PoC
+- Figma sandbox model recommended (null-origin iframe, strict CSP)
+- Capability-based permissions (Chrome extension model)
+- Receipt system for audit trail (existing hush-core primitives)
+- Revocation via hushd SSE (existing infrastructure)
+- BridgeError extends Error as a class for instanceof checks and stack traces (01-01)
+- Events have no id field -- fire-and-forget, not correlated with requests (01-01)
+- BRIDGE_METHODS uses nested object structure mirroring PluginContext namespace hierarchy (01-01)
+- BridgeMethodName type uses recursive conditional type extraction from BRIDGE_METHODS values (01-01)
 
 ### Pending Todos
-
 None yet.
 
 ### Blockers/Concerns
-
-- Research notes two separate command palette implementations in the workbench that may need unification -- defer to future milestone unless it blocks seam opening
+None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-19T00:43:02.745Z
-Stopped at: Completed 06-03-PLAN.md
-Resume file: None
+Last session: 2026-03-19
+Stopped at: Completed 01-01-PLAN.md (bridge protocol types + PluginBridgeClient)
+Resume file: .planning/phases/01-postmessage-rpc-bridge/01-02-PLAN.md

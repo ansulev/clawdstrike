@@ -31,7 +31,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   4. Every PluginContext API method (commands.register, guards.register, fileTypes.register, statusBar.register, storage.get, storage.set) has a bridge equivalent that produces the same observable result
 **Plans:** 2 plans
 Plans:
-- [ ] 01-01-PLAN.md -- Bridge protocol types + PluginBridgeClient (call/subscribe/timeout)
+- [x] 01-01-PLAN.md -- Bridge protocol types + PluginBridgeClient (call/subscribe/timeout)
 - [ ] 01-02-PLAN.md -- PluginBridgeHost dispatch + origin validation + integration tests
 
 ### Phase 2: iframe Sandbox
@@ -86,7 +86,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. postMessage RPC Bridge | 0/2 | Planning complete | - |
+| 1. postMessage RPC Bridge | 1/2 | In progress | - |
 | 2. iframe Sandbox | 0/TBD | Not started | - |
 | 3. Permission System | 0/TBD | Not started | - |
 | 4. Plugin Audit Trail | 0/TBD | Not started | - |

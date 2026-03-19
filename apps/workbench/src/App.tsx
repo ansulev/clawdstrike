@@ -10,6 +10,8 @@ import { useHintSettingsSafe } from "@/features/settings/use-hint-settings";
 import { useMultiPolicyBootstrap } from "@/features/policy/stores/multi-policy-store";
 import { secureStore, migrateCredentialsToStronghold } from "@/features/settings/secure-store";
 import { useProjectStore } from "@/features/project/stores/project-store";
+import { useToast } from "@/components/ui/toast";
+import { usePaneStore } from "@/features/panes/pane-store";
 
 function LoadingFallback() {
   return (
@@ -112,12 +114,36 @@ function useWorkspaceBootstrap() {
   }, []);
 }
 
+/**
+ * On app launch, check if a pane session was restored from localStorage.
+ * If file views were restored, show an info toast.
+ *
+ * Note: The pane store already initializes from the saved session at
+ * module load time (synchronous), so the tree is available before React
+ * renders. This hook only handles the notification.
+ */
+function useSessionRestore() {
+  const { toast } = useToast();
+  useEffect(() => {
+    const count = usePaneStore.getState().restoreSession();
+    if (count > 0) {
+      toast({
+        type: "info",
+        title: `Restored ${count} file${count === 1 ? "" : "s"}`,
+        description: "Your previous session has been restored",
+        duration: 3000,
+      });
+    }
+  }, [toast]);
+}
+
 function WorkbenchBootstraps() {
   useOperator();
   useFleetConnection();
   useHintSettingsSafe();
   useMultiPolicyBootstrap();
   useWorkspaceBootstrap();
+  useSessionRestore();
   return null;
 }
 

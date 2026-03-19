@@ -20,6 +20,7 @@ import {
   updatePaneSizes,
 } from "./pane-tree";
 import { usePolicyTabsStore, pushRecentFile } from "@/features/policy/stores/policy-tabs-store";
+import { loadPaneSession, countFileViews } from "./pane-session";
 import type { PaneFocusDirection, PaneGroup, PaneNode, PaneSplitDirection, PaneView } from "./pane-types";
 
 function createPaneView(route: string): PaneView {
@@ -68,14 +69,20 @@ export interface PaneStore {
   closeOtherViews: (paneId: string, viewId: string) => void;
   /** Open a file as a pane tab. Bridges to policy-tabs-store for content loading. */
   openFile: (filePath: string, label?: string, fileType?: string) => void;
+  /** Restore pane tree from localStorage. Returns count of file views restored. */
+  restoreSession: () => number;
   _reset: () => void;
 }
 
-const initialRoot = createInitialRoot();
+// Attempt to restore a saved session at store creation time so the tree is
+// immediately available (no flash of default Home before React hydrates).
+const savedSession = loadPaneSession();
+const initialRoot = savedSession?.root ?? createInitialRoot();
+const initialActivePaneId = savedSession?.activePaneId ?? (initialRoot as PaneGroup).id;
 
 export const usePaneStore = create<PaneStore>((set, get) => ({
   root: initialRoot,
-  activePaneId: initialRoot.id,
+  activePaneId: initialActivePaneId,
 
   syncRoute: (route) => {
     const normalized = normalizeWorkbenchRoute(route);
@@ -286,6 +293,13 @@ export const usePaneStore = create<PaneStore>((set, get) => ({
     const route = `/file/${filePath}`;
     get().openApp(route, label ?? filePath.split("/").pop() ?? "File");
     pushRecentFile(filePath);
+  },
+
+  restoreSession: () => {
+    const session = loadPaneSession();
+    if (!session) return 0;
+    set({ root: session.root, activePaneId: session.activePaneId });
+    return countFileViews(session.root);
   },
 
   _reset: () => {

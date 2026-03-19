@@ -16,6 +16,7 @@ import { RightSidebarResizeHandle } from "@/features/right-sidebar/components/ri
 import { useRightSidebarStore } from "@/features/right-sidebar/stores/right-sidebar-store";
 import { PaneRoot } from "@/features/panes/pane-root";
 import { getActivePaneRoute, usePaneStore } from "@/features/panes/pane-store";
+import { savePaneSession } from "@/features/panes/pane-session";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import { InitCommands } from "@/lib/commands/init-commands";
 import { useMultiPolicy } from "@/features/policy/stores/multi-policy-store";
@@ -37,9 +38,13 @@ export function DesktopLayout() {
   const rawRoute = `${location.pathname}${location.search}` || "/";
   const currentRoute = normalizeWorkbenchRoute(rawRoute);
 
-  // Warn on window close / reload when there are unsaved changes
+  // Save pane layout on window close / reload, and warn on unsaved changes
   useEffect(() => {
     const handler = (e: BeforeUnloadEvent) => {
+      // Always persist pane layout before the page unloads.
+      const { root, activePaneId } = usePaneStore.getState();
+      savePaneSession(root, activePaneId);
+
       if (hasDirtyTabs) {
         e.preventDefault();
         e.returnValue = "";
@@ -48,6 +53,16 @@ export function DesktopLayout() {
     window.addEventListener("beforeunload", handler);
     return () => window.removeEventListener("beforeunload", handler);
   }, [hasDirtyTabs]);
+
+  // Periodic save every 30s to protect against crash/force-quit where
+  // beforeunload does not fire.
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const { root, activePaneId } = usePaneStore.getState();
+      savePaneSession(root, activePaneId);
+    }, 30_000);
+    return () => clearInterval(interval);
+  }, []);
 
   useLayoutEffect(() => {
     usePaneStore.getState().syncRoute(currentRoute);

@@ -42,7 +42,10 @@ Plans:
   2. Switching away from a plugin tab and back preserves the component's internal state (scroll position, form inputs, selections) without re-mounting
   3. Opening a plugin view via `paneStore.openApp("plugin:myPlugin.myView")` renders the plugin component in a split pane, and each pane instance has independent state
   4. When more than 5 hidden plugin tabs accumulate, the oldest hidden tab is destroyed (LRU eviction) and re-opening it creates a fresh mount
-**Plans**: TBD
+**Plans:** 2 plans
+Plans:
+- [ ] 02-01-PLAN.md -- PluginViewTabStore + ViewTabRenderer with keep-alive and LRU eviction
+- [ ] 02-02-PLAN.md -- Tab bar integration + split-pane support + human verification
 
 ### Phase 3: Bottom Panel and Right Sidebar
 **Goal**: Plugins can contribute tabs to the bottom panel and panels to the right sidebar, rendered alongside built-in panels
@@ -76,6 +79,6 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. ViewRegistry Foundation | 2/2 | Complete | 2026-03-19 |
-| 2. Editor Tab Views | 0/? | Not started | - |
-| 3. Bottom Panel and Right Sidebar | 0/1 | In progress | - |
+| 2. Editor Tab Views | 0/2 | Not started | - |
+| 3. Bottom Panel and Right Sidebar | 0/1 | Not started | - |
 | 4. Activity Bar, Gutters, and Context Menus | 0/? | Not started | - |

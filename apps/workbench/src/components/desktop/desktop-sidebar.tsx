@@ -32,6 +32,9 @@ import { fleetClient } from "@/lib/workbench/fleet-client";
 import { DEMO_APPROVAL_REQUESTS } from "@/lib/workbench/approval-demo-data";
 import { SIGIL_SYMBOLS } from "@/components/workbench/settings/identity-settings";
 import type { SigilType } from "@/lib/workbench/sentinel-manager";
+import { useViewsBySlot } from "@/lib/plugins/view-registry";
+import type { ViewRegistration } from "@/lib/plugins/view-registry";
+import { useActivePluginView, setActivePluginView } from "./active-plugin-view";
 
 // ---- Data ----
 
@@ -81,6 +84,35 @@ const navSections: readonly NavSection[] = [
     ],
   },
 ] as const;
+
+// ---- Plugin Nav Icon ----
+
+/** Fallback icon for plugin activity bar items. Renders a small colored circle
+ * containing the first letter of the label, sized to match Sigil icons. */
+function PluginNavIcon({
+  label,
+  size = 15,
+  className,
+  style,
+}: {
+  label: string;
+  size?: number;
+  stroke?: number;
+  className?: string;
+  style?: React.CSSProperties;
+}) {
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center justify-center rounded-full bg-[#6b8b55]/20 text-[#6b8b55] shrink-0",
+        className,
+      )}
+      style={{ width: size, height: size, fontSize: size * 0.6, lineHeight: 1, ...style }}
+    >
+      {label.charAt(0).toUpperCase()}
+    </span>
+  );
+}
 
 // ---- System Heartbeat ----
 
@@ -320,6 +352,7 @@ function SystemHeartbeat({
       <Link
         to="/home"
         title={tooltipLines}
+        onClick={() => setActivePluginView(null)}
         className={cn(
           "transition-all duration-200 group",
           collapsed
@@ -375,6 +408,10 @@ export function DesktopSidebar() {
   const { connection } = useFleetConnection();
   const fleetConnected = connection.connected;
   const approvalsConnected = fleetConnected && connection.controlApiUrl.trim().length > 0;
+
+  // Plugin activity bar views
+  const pluginViews = useViewsBySlot("activityBarPanel");
+  const activePluginViewId = useActivePluginView();
 
   const [showShortcutHint, setShowShortcutHint] = useState(() => {
     return localStorage.getItem("clawdstrike_shortcut_hint_dismissed") !== "1";
@@ -439,7 +476,8 @@ export function DesktopSidebar() {
     return false;
   };
 
-  const settingsActive = pathname === "/settings" || pathname.startsWith("/settings/");
+  const settingsRouteMatch = pathname === "/settings" || pathname.startsWith("/settings/");
+  const settingsActive = settingsRouteMatch && activePluginViewId === null;
 
   return (
     <aside
@@ -498,7 +536,9 @@ export function DesktopSidebar() {
             )}
 
             {section.items.map((item) => {
-              const active = pathname === item.href || pathname.startsWith(item.href + "/");
+              const routeActive = pathname === item.href || pathname.startsWith(item.href + "/");
+              // Built-in items are only visually active when their route matches AND no plugin view is active
+              const active = routeActive && activePluginViewId === null;
               const Icon = item.icon;
               const badgeCount = getBadgeCount(item);
               const showBadge = badgeCount > 0;
@@ -512,6 +552,7 @@ export function DesktopSidebar() {
                   key={item.href}
                   to={item.href}
                   title={tooltip}
+                  onClick={() => setActivePluginView(null)}
                   className={cn(
                     "sidebar-link relative flex items-center gap-2.5 mx-2 rounded-lg",
                     "transition-all duration-150",
@@ -574,12 +615,94 @@ export function DesktopSidebar() {
             })}
           </div>
         ))}
+
+        {/* ---- Plugin activity bar section ---- */}
+        {pluginViews.length > 0 && (
+          <div className="flex flex-col gap-px mt-3">
+            {/* Section header */}
+            {collapsed ? (
+              <div
+                className="mx-2 my-1.5 h-px"
+                style={{ background: "linear-gradient(to right, #6b8b5530, transparent 70%)" }}
+              />
+            ) : (
+              <div className="flex items-center gap-2 mx-3 mb-1.5">
+                <span
+                  className="w-[2px] h-2.5 rounded-full shrink-0"
+                  style={{
+                    backgroundColor: "#6b8b55",
+                    boxShadow: "0 0 6px #6b8b5540",
+                  }}
+                />
+                <span
+                  className="text-[8px] font-semibold uppercase tracking-[0.14em] select-none whitespace-nowrap"
+                  style={{ color: "#6b8b55" }}
+                >
+                  Plugins
+                </span>
+                <span
+                  className="h-px flex-1"
+                  style={{ background: "linear-gradient(to right, #6b8b5525, transparent)" }}
+                />
+              </div>
+            )}
+
+            {pluginViews.map((view) => {
+              const isPluginActive = activePluginViewId === view.id;
+              const tooltip = collapsed
+                ? `Plugins: ${view.label}`
+                : undefined;
+
+              return (
+                <button
+                  key={view.id}
+                  type="button"
+                  title={tooltip}
+                  onClick={() => setActivePluginView(view.id)}
+                  className={cn(
+                    "sidebar-link relative flex items-center gap-2.5 mx-2 rounded-lg",
+                    "transition-all duration-150 text-left",
+                    collapsed ? "justify-center px-0 py-1.5" : "px-3 py-[7px]",
+                    isPluginActive
+                      ? "text-[#ece7dc]"
+                      : "text-[#6f7f9a] hover:text-[#ece7dc]/80 hover:bg-[#131721]/30 hover:translate-x-px",
+                  )}
+                  style={isPluginActive ? {
+                    background: "linear-gradient(to right, rgba(19,23,33,0.9), rgba(19,23,33,0.3))",
+                  } : undefined}
+                >
+                  {isPluginActive && (
+                    <span
+                      className="sidebar-accent-bar absolute left-0 top-1.5 bottom-1.5 w-[2px] rounded-r-full bg-[#6b8b55]"
+                      style={{ boxShadow: "0 0 8px rgba(107,139,85,0.3)" }}
+                    />
+                  )}
+                  <PluginNavIcon
+                    label={view.label}
+                    size={15}
+                    className={cn(
+                      "transition-all duration-150",
+                      isPluginActive ? "bg-[#6b8b55]/30 text-[#6b8b55]" : "",
+                    )}
+                    style={isPluginActive ? { filter: "drop-shadow(0 0 4px rgba(107,139,85,0.25))" } : undefined}
+                  />
+                  {!collapsed && (
+                    <span className="text-[10px] font-mono tracking-[0.03em] truncate">
+                      {view.label}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        )}
       </nav>
 
       <div className="shrink-0 px-2 pb-1">
         <Link
           to="/settings"
           title={collapsed ? "Settings" : undefined}
+          onClick={() => setActivePluginView(null)}
           className={cn(
             "sidebar-link relative flex items-center gap-2.5 rounded-lg",
             "transition-all duration-150",

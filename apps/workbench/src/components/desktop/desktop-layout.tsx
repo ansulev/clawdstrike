@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { Outlet, useLocation } from "react-router-dom";
 import { motion } from "motion/react";
 import { Titlebar } from "@/components/desktop/titlebar";
@@ -7,14 +7,58 @@ import { DesktopSidebar } from "@/components/desktop/desktop-sidebar";
 import { ShortcutProvider } from "@/components/desktop/shortcut-provider";
 import { CommandPalette } from "@/components/desktop/command-palette";
 import { CrashRecoveryBanner } from "@/components/desktop/crash-recovery-banner";
-import { useMultiPolicy } from "@/lib/workbench/multi-policy-store";
+import { useMultiPolicy, useWorkbench } from "@/lib/workbench/multi-policy-store";
 import { useAutoSave } from "@/lib/workbench/use-auto-save";
+import { useActivePluginView, setActivePluginView } from "@/components/desktop/active-plugin-view";
+import { getView } from "@/lib/plugins/view-registry";
+import type { ViewRegistration, ViewProps } from "@/lib/plugins/view-registry";
+import { ViewContainer } from "@/components/plugins/view-container";
+
+// ---------------------------------------------------------------------------
+// Internal: Plugin view wrapper that injects isCollapsed (ActivityBarPanelProps)
+// ---------------------------------------------------------------------------
+
+function ActivityBarPluginView({
+  registration,
+  isCollapsed,
+}: {
+  registration: ViewRegistration;
+  isCollapsed: boolean;
+}) {
+  const wrappedRegistration = useMemo(
+    () => ({
+      ...registration,
+      component: (props: ViewProps) => {
+        const Component = registration.component;
+        return <Component {...props} isCollapsed={isCollapsed} />;
+      },
+    }),
+    [registration, isCollapsed],
+  );
+
+  return <ViewContainer registration={wrappedRegistration} isActive={true} />;
+}
 
 export function DesktopLayout() {
   const { tabs } = useMultiPolicy();
+  const { state } = useWorkbench();
+  const isCollapsed = state.ui.sidebarCollapsed;
   const { pendingRecovery, dismissRecovery, restoreRecovery } = useAutoSave();
   const location = useLocation();
   const hasDirtyTabs = tabs.some((tab) => tab.dirty);
+
+  const activePluginViewId = useActivePluginView();
+  const activePluginRegistration = activePluginViewId
+    ? getView(activePluginViewId)
+    : undefined;
+
+  // If the active plugin view was unregistered (e.g., plugin uninstalled),
+  // clear the active plugin view automatically.
+  useEffect(() => {
+    if (activePluginViewId && !activePluginRegistration) {
+      setActivePluginView(null);
+    }
+  }, [activePluginViewId, activePluginRegistration]);
 
   // Warn on window close / reload when there are unsaved changes
   useEffect(() => {
@@ -51,15 +95,30 @@ export function DesktopLayout() {
         <DesktopSidebar />
 
         <main className="flex-1 min-w-0 overflow-hidden select-text">
-          <motion.div
-            key={location.pathname}
-            initial={{ opacity: 0, y: 6 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.15, ease: "easeOut" }}
-            className="h-full overflow-auto"
-          >
-            <Outlet />
-          </motion.div>
+          {activePluginViewId && activePluginRegistration ? (
+            <motion.div
+              key={`plugin:${activePluginViewId}`}
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.15, ease: "easeOut" }}
+              className="h-full overflow-auto"
+            >
+              <ActivityBarPluginView
+                registration={activePluginRegistration}
+                isCollapsed={isCollapsed}
+              />
+            </motion.div>
+          ) : (
+            <motion.div
+              key={location.pathname}
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.15, ease: "easeOut" }}
+              className="h-full overflow-auto"
+            >
+              <Outlet />
+            </motion.div>
+          )}
         </main>
       </div>
 

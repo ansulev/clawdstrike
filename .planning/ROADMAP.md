@@ -63,12 +63,14 @@ Plans:
   3. All 13 built-in guards have a dedicated page with threat description, configuration options, annotated source snippet from the real implementation, a live playground with pre-configured inputs, and 1-3 bypass challenges
   4. Guard pages are organized by difficulty tier (green/yellow/orange/red) with complexity zone ratings and prerequisite knowledge listed
   5. At least one security regression scenario from the actual codebase (e.g., URL spoofing, path traversal) is recreated as an interactive lesson
-**Plans**: TBD
+**Plans**: 5 plans
 
 Plans:
-- [ ] 03-01: TBD
-- [ ] 03-02: TBD
-- [ ] 03-03: TBD
+- [ ] 03-01-PLAN.md -- Generic guard playground dispatcher and guard gallery index page with tier-colored cards
+- [ ] 03-02-PLAN.md -- @academy source markers in 15 Rust files (24 tags) and extraction manifest population
+- [ ] 03-03-PLAN.md -- Track 1 threat scenario lessons (Unprotected Agent, Guarded Agent, Fail-Closed, Enforcement Tiers, URL Spoofing)
+- [ ] 03-04-PLAN.md -- Guard gallery green + yellow tier pages (ForbiddenPath, PathAllowlist, EgressAllowlist, SecretLeak, ShellCommand, PatchIntegrity, McpTool)
+- [ ] 03-05-PLAN.md -- Guard gallery orange + red tier pages (PromptInjection, Jailbreak, ComputerUse, SpiderSense, RemoteDesktop, InputInjection)
 
 ### Phase 4: Policy Lab and Polish
 **Goal**: A new engineer can write, validate, and test YAML policies in the browser, compare built-in rulesets, visualize inheritance chains, and navigate the entire app efficiently with search and keyboard shortcuts
@@ -95,5 +97,5 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 |-------|----------------|--------|-----------|
 | 1. Foundation and WASM Integration | 2/3 | In Progress | - |
 | 2. Shared Components and Content Infrastructure | 3/3 | Complete | 2026-03-20 |
-| 3. Threat Scenarios and Guard Gallery | 0/3 | Not started | - |
+| 3. Threat Scenarios and Guard Gallery | 0/5 | Not started | - |
 | 4. Policy Lab and Polish | 0/2 | Not started | - |

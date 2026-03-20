@@ -4,6 +4,7 @@ import { LessonNav } from '@/components/layout/lesson-nav';
 import { GuardPlayground } from '@/components/playground/guard-playground-loader';
 import { AnnotatedSource } from '@/components/mdx/annotated-source';
 import { LessonCompleteButton } from '@/components/mdx/lesson-complete-button';
+import { BypassChallenge } from '@/components/mdx/bypass-challenge';
 
 export function useMDXComponents(components: MDXComponents): MDXComponents {
   return {
@@ -13,5 +14,6 @@ export function useMDXComponents(components: MDXComponents): MDXComponents {
     GuardPlayground,
     AnnotatedSource,
     LessonCompleteButton,
+    BypassChallenge,
   };
 }

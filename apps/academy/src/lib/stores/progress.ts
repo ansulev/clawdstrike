@@ -1,6 +1,5 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
-import type { StateStorage } from 'zustand/middleware';
+import { persist, createJSONStorage } from 'zustand/middleware';
 
 interface ProgressState {
   completedLessons: string[];
@@ -13,30 +12,34 @@ interface ProgressState {
 }
 
 /**
- * Browser-safe JSON storage adapter. Wraps localStorage with JSON
- * serialization. Returns a no-op store during SSR or in test environments
- * where localStorage methods may not be directly accessible.
+ * Browser-safe storage getter for createJSONStorage.
+ *
+ * Returns a Storage-compatible object. In environments where localStorage
+ * methods are not directly accessible (e.g., happy-dom in tests, SSR),
+ * returns an in-memory Map-backed fallback.
  */
-function createBrowserStorage(): StateStorage {
-  const canUse =
+function getBrowserStorage(): Storage {
+  // Check if we're in a browser with a fully functional localStorage
+  if (
     typeof window !== 'undefined' &&
     typeof window.localStorage !== 'undefined' &&
-    typeof window.localStorage.getItem === 'function';
-
-  if (!canUse) {
-    // In-memory fallback for SSR and environments with incomplete localStorage
-    const mem = new Map<string, string>();
-    return {
-      getItem: (name: string) => mem.get(name) ?? null,
-      setItem: (name: string, value: string) => { mem.set(name, value); },
-      removeItem: (name: string) => { mem.delete(name); },
-    };
+    typeof window.localStorage.getItem === 'function'
+  ) {
+    return window.localStorage;
   }
 
+  // In-memory fallback for SSR and environments with incomplete localStorage
+  const mem = new Map<string, string>();
   return {
-    getItem: (name: string) => window.localStorage.getItem(name),
-    setItem: (name: string, value: string) => window.localStorage.setItem(name, value),
-    removeItem: (name: string) => window.localStorage.removeItem(name),
+    get length() { return mem.size; },
+    key(index: number) {
+      const keys = [...mem.keys()];
+      return keys[index] ?? null;
+    },
+    getItem(name: string) { return mem.get(name) ?? null; },
+    setItem(name: string, value: string) { mem.set(name, value); },
+    removeItem(name: string) { mem.delete(name); },
+    clear() { mem.clear(); },
   };
 }
 
@@ -75,7 +78,7 @@ export const useProgressStore = create<ProgressState>()(
     {
       name: 'clawdstrike-academy-progress',
       version: 1,
-      storage: createBrowserStorage(),
+      storage: createJSONStorage(() => getBrowserStorage()),
     },
   ),
 );

@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { ThemeToggle } from '@/components/layout/theme-toggle';
 
 export default function Home() {
@@ -19,6 +20,12 @@ export default function Home() {
           security policies -- all powered by the real WASM engine running in
           your browser.
         </p>
+        <Link
+          href="/test-mdx"
+          className="text-primary underline underline-offset-4 hover:text-primary/80"
+        >
+          View MDX Test Page
+        </Link>
       </main>
     </div>
   );

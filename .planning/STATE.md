@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.5
 milestone_name: milestone
 status: executing
-stopped_at: Completed 02-02-PLAN.md (Source Extraction Pipeline and Annotated Source Viewer)
-last_updated: "2026-03-20T20:28:55.946Z"
+stopped_at: Completed 02-01-PLAN.md (Guard Types and TS Simulations)
+last_updated: "2026-03-20T20:31:06.934Z"
 last_activity: 2026-03-20 -- Completed 02-02 (Source Extraction Pipeline and Annotated Source Viewer)
 progress:
   total_phases: 4
   completed_phases: 1
   total_plans: 6
-  completed_plans: 4
+  completed_plans: 5
   percent: 67
 ---
 
@@ -52,6 +52,7 @@ Progress: [███████░░░] 67%
 - Trend: stable
 
 *Updated after each plan completion*
+| Phase 02 P01 | 6min | 2 tasks | 18 files |
 
 ## Accumulated Context
 
@@ -70,6 +71,9 @@ Recent decisions affecting current work:
 - [Phase 02-02]: Extraction runs at prebuild, chained before both build and dev scripts
 - [Phase 02-02]: Shiki line transformer adds data-line attributes for annotation targeting
 - [Phase 02-02]: Manifest starts empty; tags added to source files as lessons are authored in Phase 3
+- [Phase 02]: picomatch with dot:true for glob matching to match Rust globset behavior
+- [Phase 02]: Lazy dynamic imports for TS guard modules to avoid bundling unused guards
+- [Phase 02]: CUA guards (computer_use, remote_desktop) as stubs with custom action type dispatch
 
 ### Pending Todos
 
@@ -82,6 +86,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-20T20:28:55.943Z
-Stopped at: Completed 02-02-PLAN.md (Source Extraction Pipeline and Annotated Source Viewer)
+Last session: 2026-03-20T20:31:06.932Z
+Stopped at: Completed 02-01-PLAN.md (Guard Types and TS Simulations)
 Resume file: None

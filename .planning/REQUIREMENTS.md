@@ -13,7 +13,7 @@
 - [x] **FOUN-04**: Lessons display in sequential order with Previous/Next navigation links
 - [x] **FOUN-05**: Code blocks render with Shiki syntax highlighting, dark/light theme support, and copy-to-clipboard button
 - [ ] **FOUN-06**: WASM-exported guards (jailbreak, prompt injection, output sanitizer, spider sense, instruction hierarchy) evaluate in real-time in the playground
-- [ ] **FOUN-07**: Non-WASM guards (forbidden path, egress, secret leak, shell command, MCP, patch, CUA, remote desktop) have TypeScript simulation or extended WASM exports for playground evaluation
+- [x] **FOUN-07**: Non-WASM guards (forbidden path, egress, secret leak, shell command, MCP, patch, CUA, remote desktop) have TypeScript simulation or extended WASM exports for playground evaluation
 
 ### Design
 
@@ -101,7 +101,7 @@
 | FOUN-04 | Phase 1 | Complete |
 | FOUN-05 | Phase 1 | Complete |
 | FOUN-06 | Phase 1 | Pending |
-| FOUN-07 | Phase 2 | Pending |
+| FOUN-07 | Phase 2 | Complete |
 | DSGN-01 | Phase 1 | Complete |
 | DSGN-02 | Phase 2 | Pending |
 | DSGN-03 | Phase 4 | Pending |

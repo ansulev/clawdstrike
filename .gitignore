@@ -87,6 +87,10 @@ apps/terminal/.beads/
 # Regorus .NET build artifacts
 infra/vendor/regorus/**/obj/
 
+# WASM build artifacts (wasm-pack output, ~2.4MB binary)
+crates/libs/hush-wasm/pkg/
+crates/libs/hush-wasm/pkg-node/
+
 # Vendored dependencies (local)
 vendor/
 !infra/vendor/

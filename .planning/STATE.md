@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.5
 milestone_name: milestone
 status: executing
-stopped_at: Completed 03-01-PLAN.md (Guard Playground Dispatcher and Gallery Index)
-last_updated: "2026-03-20T21:42:55.402Z"
-last_activity: 2026-03-20 -- Completed 03-01 (Guard Playground Dispatcher and Gallery Index)
+stopped_at: Completed 03-02-PLAN.md (Source Extraction Markers and Manifest)
+last_updated: "2026-03-20T21:47:40Z"
+last_activity: 2026-03-20 -- Completed 03-02 (Source Extraction Markers and Manifest)
 progress:
   total_phases: 4
   completed_phases: 2
   total_plans: 11
-  completed_plans: 7
-  percent: 64
+  completed_plans: 8
+  percent: 73
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-03-20)
 ## Current Position
 
 Phase: 3 of 4 (Threat Scenarios and Guard Gallery)
-Plan: 1 of 5 in current phase -- COMPLETE
+Plan: 2 of 5 in current phase -- COMPLETE
 Status: In Progress
-Last activity: 2026-03-20 -- Completed 03-01 (Guard Playground Dispatcher and Gallery Index)
+Last activity: 2026-03-20 -- Completed 03-02 (Source Extraction Markers and Manifest)
 
-Progress: [██████░░░░] 64%
+Progress: [███████░░░] 73%
 
 ## Performance Metrics
 
@@ -54,6 +54,7 @@ Progress: [██████░░░░] 64%
 | Phase 02 P01 | 6min | 2 tasks | 18 files |
 | Phase 02 P03 | 11min | 2 tasks | 6 files |
 | Phase 03 P01 | 3min | 2 tasks | 3 files |
+| Phase 03 P02 | 10min | 2 tasks | 16 files |
 
 ## Accumulated Context
 
@@ -80,6 +81,9 @@ Recent decisions affecting current work:
 - [Phase 03]: GenericGuardPlayground uses textarea instead of CodeMirror for lightweight non-WASM guard evaluation
 - [Phase 03]: WASM guards besides prompt_injection reuse PromptInjectionPlayground until guard-specific playgrounds are built
 - [Phase 03]: Guard gallery index is a React Server Component (.tsx not .mdx) per locked architectural decision
+- [Phase 03-02]: Markers placed around key methods (check, is_forbidden, scan, search) for focused gallery display
+- [Phase 03-02]: secret-leak-patterns wraps first 5 patterns to show structure without 18-pattern verbosity
+- [Phase 03-02]: Fixed latent REPO_ROOT path depth bug in manifest.ts (6 levels to 5)
 
 ### Pending Todos
 
@@ -92,6 +96,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-20T21:42:55.399Z
-Stopped at: Completed 03-01-PLAN.md (Guard Playground Dispatcher and Gallery Index)
+Last session: 2026-03-20T21:47:40Z
+Stopped at: Completed 03-02-PLAN.md (Source Extraction Markers and Manifest)
 Resume file: None

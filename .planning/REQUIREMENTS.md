@@ -35,7 +35,7 @@
 ### Track 2: Guard Gallery
 
 - [ ] **GARD-01**: Each of the 13 built-in guards has a dedicated page with threat description, how it works, and configuration options
-- [ ] **GARD-02**: Each guard page includes an annotated source code snippet from the real Rust/TS implementation
+- [x] **GARD-02**: Each guard page includes an annotated source code snippet from the real Rust/TS implementation
 - [x] **GARD-03**: Each guard page includes an embedded Guard Playground with pre-configured example inputs
 - [ ] **GARD-04**: Each guard page includes 1-3 bypass challenge scenarios where users try to craft payloads that evade detection
 - [x] **GARD-05**: Guards are organized by difficulty tier (green/yellow/orange/red) with visual indicators
@@ -55,7 +55,7 @@
 - [x] **INTX-01**: Annotated source code viewer displays real .rs/.ts files with highlighted lines and hover/click annotations
 - [x] **INTX-02**: Source snippets are extracted at build time from the actual codebase (not copy-pasted snapshots)
 - [x] **INTX-03**: Bypass challenges check user's payload against expected verdict (ALLOW when DENY expected, or vice versa)
-- [ ] **INTX-04**: Security regression scenarios recreate real bugs from security_regressions.rs as interactive lessons
+- [x] **INTX-04**: Security regression scenarios recreate real bugs from security_regressions.rs as interactive lessons
 
 ## v2 Requirements
 
@@ -114,7 +114,7 @@
 | THR-04 | Phase 3 | Pending |
 | THR-05 | Phase 3 | Pending |
 | GARD-01 | Phase 3 | Pending |
-| GARD-02 | Phase 3 | Pending |
+| GARD-02 | Phase 3 | Complete |
 | GARD-03 | Phase 3 | Complete |
 | GARD-04 | Phase 3 | Pending |
 | GARD-05 | Phase 3 | Complete |
@@ -128,7 +128,7 @@
 | INTX-01 | Phase 2 | Complete |
 | INTX-02 | Phase 2 | Complete |
 | INTX-03 | Phase 2 | Complete |
-| INTX-04 | Phase 3 | Pending |
+| INTX-04 | Phase 3 | Complete |
 
 **Coverage:**
 - v1 requirements: 34 total

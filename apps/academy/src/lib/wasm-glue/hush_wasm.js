@@ -1320,7 +1320,9 @@ async function __wbg_init(module_or_path) {
     }
 
     if (module_or_path === undefined) {
-        module_or_path = new URL('hush_wasm_bg.wasm', import.meta.url);
+        // Default path disabled for Turbopack compatibility.
+        // The caller (wasm.ts) always provides an explicit URL.
+        throw new Error('WASM module path must be provided explicitly');
     }
     const imports = __wbg_get_imports();
 

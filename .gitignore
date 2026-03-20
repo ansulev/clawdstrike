@@ -91,6 +91,9 @@ infra/vendor/regorus/**/obj/
 crates/libs/hush-wasm/pkg/
 crates/libs/hush-wasm/pkg-node/
 
+# Academy extracted sources (generated at build time)
+apps/academy/src/data/extracted-sources/*.json
+
 # Vendored dependencies (local)
 vendor/
 !infra/vendor/

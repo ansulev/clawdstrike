@@ -4,8 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "next dev --turbopack",
-    "build": "next build",
+    "prebuild": "node --import tsx src/lib/source-extraction/extract.ts",
+    "dev": "npm run prebuild && next dev --turbopack",
+    "build": "npm run prebuild && next build",
     "start": "next start",
     "lint": "next lint"
   },
@@ -39,11 +40,14 @@
     "zustand": "^5.0.12"
   },
   "devDependencies": {
-    "typescript": "^5.8.0",
+    "@tailwindcss/postcss": "^4.0.0",
+    "@types/node": "^22.0.0",
+    "@types/picomatch": "^3.0.2",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
-    "@types/node": "^22.0.0",
-    "@tailwindcss/postcss": "^4.0.0",
-    "tailwindcss": "^4.0.0"
+    "happy-dom": "^20.8.4",
+    "tailwindcss": "^4.0.0",
+    "typescript": "^5.8.0",
+    "vitest": "^4.1.0"
   }
 }

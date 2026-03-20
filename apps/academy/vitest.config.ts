@@ -3,17 +3,12 @@ import path from 'node:path';
 
 export default defineConfig({
   test: {
-    globals: true,
-    environment: 'node',
-    include: ['src/**/*.test.ts'],
-    coverage: {
-      provider: 'v8',
-      reporter: ['text', 'json', 'html'],
-    },
+    environment: 'happy-dom',
+    include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
   },
   resolve: {
     alias: {
-      '@': path.resolve(__dirname, 'src'),
+      '@': path.resolve(__dirname, './src'),
     },
   },
 });

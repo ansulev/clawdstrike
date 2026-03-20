@@ -86,10 +86,11 @@ Plans:
   3. Plugin context menu items appear in tab right-click menu with when-clause filtering
   4. Plugin activate() receives a PluginContext with working views.registerEditorTab() method
   5. ActivityBarItemContribution uses entrypoint (not href) for module loading
-**Plans**: TBD
+**Plans:** 2 plans
 
 Plans:
-- [ ] 05-01: TBD
+- [ ] 05-01-PLAN.md -- Mount BottomPanelTabs + RightSidebarPanels + PluginContextMenuItems in app layout
+- [ ] 05-02-PLAN.md -- Inject ViewsApi into PluginActivationContext + fix entrypoint bug
 
 ## Progress
 
@@ -102,4 +103,4 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 | 2. Editor Tab Views | 2/2 | Complete | 2026-03-19 |
 | 3. Bottom Panel and Right Sidebar | 1/1 | Complete | 2026-03-19 |
 | 4. Activity Bar, Gutters, and Context Menus | 3/3 | Complete | 2026-03-19 |
-| 5. Layout Wiring + SDK Injection | 0/1 | Not started | - |
+| 5. Layout Wiring + SDK Injection | 0/2 | Not started | - |

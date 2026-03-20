@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.5
 milestone_name: milestone
 status: executing
-stopped_at: Completed 03-02-PLAN.md (Source Extraction Markers and Manifest)
-last_updated: "2026-03-20T21:47:40Z"
-last_activity: 2026-03-20 -- Completed 03-02 (Source Extraction Markers and Manifest)
+stopped_at: Completed 03-05-PLAN.md
+last_updated: "2026-03-20T21:58:57.926Z"
+last_activity: 2026-03-20 -- Completed 03-05 (Orange+Red Tier Guard Gallery Pages)
 progress:
   total_phases: 4
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 11
-  completed_plans: 8
-  percent: 73
+  completed_plans: 11
+  percent: 100
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-03-20)
 ## Current Position
 
 Phase: 3 of 4 (Threat Scenarios and Guard Gallery)
-Plan: 2 of 5 in current phase -- COMPLETE
+Plan: 5 of 5 in current phase -- COMPLETE
 Status: In Progress
-Last activity: 2026-03-20 -- Completed 03-02 (Source Extraction Markers and Manifest)
+Last activity: 2026-03-20 -- Completed 03-05 (Orange+Red Tier Guard Gallery Pages)
 
-Progress: [███████░░░] 73%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
@@ -55,6 +55,9 @@ Progress: [███████░░░] 73%
 | Phase 02 P03 | 11min | 2 tasks | 6 files |
 | Phase 03 P01 | 3min | 2 tasks | 3 files |
 | Phase 03 P02 | 10min | 2 tasks | 16 files |
+| Phase 03 P03 | 5min | 2 tasks | 5 files |
+| Phase 03 P04 | 5min | 2 tasks | 7 files |
+| Phase 03 P05 | 6min | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -84,6 +87,15 @@ Recent decisions affecting current work:
 - [Phase 03-02]: Markers placed around key methods (check, is_forbidden, scan, search) for focused gallery display
 - [Phase 03-02]: secret-leak-patterns wraps first 5 patterns to show structure without 18-pattern verbosity
 - [Phase 03-02]: Fixed latent REPO_ROOT path depth bug in manifest.ts (6 levels to 5)
+- [Phase 03-03]: Annotation line numbers derived from extracted JSON snippets (1-indexed within snippet)
+- [Phase 03-03]: Lesson 1 playground framed as guard preview (guard always active in browser)
+- [Phase 03-03]: Lesson 3 uses inline code blocks for fail-closed pattern (no tagged source region)
+- [Phase 03-03]: Lesson 4 uses ASCII-art diagrams for enforcement tier architectures
+- [Phase 03-04]: LessonCompleteButton uses lessonSlug prop (not lessonId) matching component interface
+- [Phase 03-04]: Shell command guard page uses two AnnotatedSource components for its two-phase design
+- [Phase 03]: Migrated prompt injection from 01- to 08- with expanded content preserving original prose spirit
+- [Phase 03]: InputInjection hard challenge uses expectedVerdict=deny to teach fail-closed-on-missing-field design
+- [Phase 03]: InputInjection playground routes through computer_use guard with input.inject customActionType
 
 ### Pending Todos
 
@@ -96,6 +108,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-20T21:47:40Z
-Stopped at: Completed 03-02-PLAN.md (Source Extraction Markers and Manifest)
+Last session: 2026-03-20T21:58:57.924Z
+Stopped at: Completed 03-05-PLAN.md
 Resume file: None

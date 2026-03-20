@@ -26,18 +26,18 @@
 
 ### Track 1: Threat Scenarios
 
-- [ ] **THR-01**: Opening lesson demonstrates an unprotected AI agent performing dangerous actions (read secrets, exfiltrate data, execute destructive commands)
-- [ ] **THR-02**: Second lesson shows the same actions blocked by ClawdStrike guards with visible verdicts and receipts
-- [ ] **THR-03**: Lesson explains the fail-closed design principle with interactive example (guard error still denies)
-- [ ] **THR-04**: Lesson covers the three enforcement tiers (in-process, sidecar, centralized) with diagrams
-- [ ] **THR-05**: Each lesson includes at least one embedded Guard Playground for hands-on interaction
+- [x] **THR-01**: Opening lesson demonstrates an unprotected AI agent performing dangerous actions (read secrets, exfiltrate data, execute destructive commands)
+- [x] **THR-02**: Second lesson shows the same actions blocked by ClawdStrike guards with visible verdicts and receipts
+- [x] **THR-03**: Lesson explains the fail-closed design principle with interactive example (guard error still denies)
+- [x] **THR-04**: Lesson covers the three enforcement tiers (in-process, sidecar, centralized) with diagrams
+- [x] **THR-05**: Each lesson includes at least one embedded Guard Playground for hands-on interaction
 
 ### Track 2: Guard Gallery
 
-- [ ] **GARD-01**: Each of the 13 built-in guards has a dedicated page with threat description, how it works, and configuration options
+- [x] **GARD-01**: Each of the 13 built-in guards has a dedicated page with threat description, how it works, and configuration options
 - [x] **GARD-02**: Each guard page includes an annotated source code snippet from the real Rust/TS implementation
 - [x] **GARD-03**: Each guard page includes an embedded Guard Playground with pre-configured example inputs
-- [ ] **GARD-04**: Each guard page includes 1-3 bypass challenge scenarios where users try to craft payloads that evade detection
+- [x] **GARD-04**: Each guard page includes 1-3 bypass challenge scenarios where users try to craft payloads that evade detection
 - [x] **GARD-05**: Guards are organized by difficulty tier (green/yellow/orange/red) with visual indicators
 - [x] **GARD-06**: Guard pages display complexity zone rating and prerequisite knowledge needed
 
@@ -108,15 +108,15 @@
 | DSGN-04 | Phase 4 | Pending |
 | DSGN-05 | Phase 1 | Complete |
 | DSGN-06 | Phase 1 | Pending |
-| THR-01 | Phase 3 | Pending |
-| THR-02 | Phase 3 | Pending |
-| THR-03 | Phase 3 | Pending |
-| THR-04 | Phase 3 | Pending |
-| THR-05 | Phase 3 | Pending |
-| GARD-01 | Phase 3 | Pending |
+| THR-01 | Phase 3 | Complete |
+| THR-02 | Phase 3 | Complete |
+| THR-03 | Phase 3 | Complete |
+| THR-04 | Phase 3 | Complete |
+| THR-05 | Phase 3 | Complete |
+| GARD-01 | Phase 3 | Complete |
 | GARD-02 | Phase 3 | Complete |
 | GARD-03 | Phase 3 | Complete |
-| GARD-04 | Phase 3 | Pending |
+| GARD-04 | Phase 3 | Complete |
 | GARD-05 | Phase 3 | Complete |
 | GARD-06 | Phase 3 | Complete |
 | POLI-01 | Phase 4 | Pending |

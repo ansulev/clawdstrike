@@ -216,6 +216,7 @@ impl McpToolGuard {
         }
     }
 
+    // @academy:start mcp-tool-decision
     /// Check if a tool is allowed
     pub fn is_allowed(&self, tool_name: &str) -> ToolDecision {
         // Blocked takes precedence
@@ -245,6 +246,7 @@ impl McpToolGuard {
             ToolDecision::Allow
         }
     }
+    // @academy:end mcp-tool-decision
 }
 
 impl Default for McpToolGuard {
@@ -275,6 +277,7 @@ impl Guard for McpToolGuard {
         matches!(action, GuardAction::McpTool(_, _))
     }
 
+    // @academy:start mcp-tool-check
     async fn check(&self, action: &GuardAction<'_>, _context: &GuardContext) -> GuardResult {
         if !self.enabled {
             return GuardResult::allow(&self.name);
@@ -330,6 +333,7 @@ impl Guard for McpToolGuard {
             })),
         }
     }
+    // @academy:end mcp-tool-check
 }
 
 #[cfg(test)]

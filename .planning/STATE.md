@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.5
 milestone_name: milestone
 status: executing
-stopped_at: Completed 02-03-PLAN.md (Progress Tracking and Bypass Challenges)
-last_updated: "2026-03-20T20:45:05Z"
-last_activity: 2026-03-20 -- Completed 02-03 (Progress Tracking and Bypass Challenges)
+stopped_at: Completed 03-01-PLAN.md (Guard Playground Dispatcher and Gallery Index)
+last_updated: "2026-03-20T21:42:55.402Z"
+last_activity: 2026-03-20 -- Completed 03-01 (Guard Playground Dispatcher and Gallery Index)
 progress:
   total_phases: 4
   completed_phases: 2
-  total_plans: 6
-  completed_plans: 6
-  percent: 83
+  total_plans: 11
+  completed_plans: 7
+  percent: 64
 ---
 
 # Project State
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-20)
 
 **Core value:** A new engineer understands why ClawdStrike exists and how it works by interacting with the real engine in their browser
-**Current focus:** Phase 2: Shared Components and Content Infrastructure
+**Current focus:** Phase 3: Threat Scenarios and Guard Gallery
 
 ## Current Position
 
-Phase: 2 of 4 (Shared Components and Content Infrastructure) -- COMPLETE
-Plan: 3 of 3 in current phase
-Status: Phase Complete
-Last activity: 2026-03-20 -- Completed 02-03 (Progress Tracking and Bypass Challenges)
+Phase: 3 of 4 (Threat Scenarios and Guard Gallery)
+Plan: 1 of 5 in current phase -- COMPLETE
+Status: In Progress
+Last activity: 2026-03-20 -- Completed 03-01 (Guard Playground Dispatcher and Gallery Index)
 
-Progress: [████████░░] 83%
+Progress: [██████░░░░] 64%
 
 ## Performance Metrics
 
@@ -53,6 +53,7 @@ Progress: [████████░░] 83%
 *Updated after each plan completion*
 | Phase 02 P01 | 6min | 2 tasks | 18 files |
 | Phase 02 P03 | 11min | 2 tasks | 6 files |
+| Phase 03 P01 | 3min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -76,6 +77,9 @@ Recent decisions affecting current work:
 - [Phase 02]: CUA guards (computer_use, remote_desktop) as stubs with custom action type dispatch
 - [Phase 02-03]: Custom getBrowserStorage adapter for Zustand persist (happy-dom compat)
 - [Phase 02-03]: Hydration guard pattern for SSR mismatch prevention on completion state
+- [Phase 03]: GenericGuardPlayground uses textarea instead of CodeMirror for lightweight non-WASM guard evaluation
+- [Phase 03]: WASM guards besides prompt_injection reuse PromptInjectionPlayground until guard-specific playgrounds are built
+- [Phase 03]: Guard gallery index is a React Server Component (.tsx not .mdx) per locked architectural decision
 
 ### Pending Todos
 
@@ -88,6 +92,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-20T20:45:05Z
-Stopped at: Completed 02-03-PLAN.md (Progress Tracking and Bypass Challenges)
+Last session: 2026-03-20T21:42:55.399Z
+Stopped at: Completed 03-01-PLAN.md (Guard Playground Dispatcher and Gallery Index)
 Resume file: None

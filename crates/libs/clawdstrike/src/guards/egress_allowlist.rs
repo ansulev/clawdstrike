@@ -396,6 +396,7 @@ impl Guard for EgressAllowlistGuard {
         self.config.enabled && matches!(action, GuardAction::NetworkEgress(_, _))
     }
 
+    // @academy:start egress-allowlist-check
     async fn check(&self, action: &GuardAction<'_>, context: &GuardContext) -> GuardResult {
         if !self.config.enabled {
             return GuardResult::allow(&self.name);
@@ -415,12 +416,15 @@ impl Guard for EgressAllowlistGuard {
             }
         }
     }
+    // @academy:end egress-allowlist-check
 }
 
+// @academy:start egress-domain-eval
 fn evaluate_domain_policy(name: &str, policy: &DomainPolicy, host: &str, port: u16) -> GuardResult {
     let result = policy.evaluate_detailed(host);
     guard_result_from_policy_result(name, host, port, &result)
 }
+// @academy:end egress-domain-eval
 
 fn evaluate_combined_domain_policies(
     name: &str,

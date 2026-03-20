@@ -36,10 +36,10 @@
 
 - [ ] **GARD-01**: Each of the 13 built-in guards has a dedicated page with threat description, how it works, and configuration options
 - [ ] **GARD-02**: Each guard page includes an annotated source code snippet from the real Rust/TS implementation
-- [ ] **GARD-03**: Each guard page includes an embedded Guard Playground with pre-configured example inputs
+- [x] **GARD-03**: Each guard page includes an embedded Guard Playground with pre-configured example inputs
 - [ ] **GARD-04**: Each guard page includes 1-3 bypass challenge scenarios where users try to craft payloads that evade detection
-- [ ] **GARD-05**: Guards are organized by difficulty tier (green/yellow/orange/red) with visual indicators
-- [ ] **GARD-06**: Guard pages display complexity zone rating and prerequisite knowledge needed
+- [x] **GARD-05**: Guards are organized by difficulty tier (green/yellow/orange/red) with visual indicators
+- [x] **GARD-06**: Guard pages display complexity zone rating and prerequisite knowledge needed
 
 ### Track 3: Policy Lab
 
@@ -115,10 +115,10 @@
 | THR-05 | Phase 3 | Pending |
 | GARD-01 | Phase 3 | Pending |
 | GARD-02 | Phase 3 | Pending |
-| GARD-03 | Phase 3 | Pending |
+| GARD-03 | Phase 3 | Complete |
 | GARD-04 | Phase 3 | Pending |
-| GARD-05 | Phase 3 | Pending |
-| GARD-06 | Phase 3 | Pending |
+| GARD-05 | Phase 3 | Complete |
+| GARD-06 | Phase 3 | Complete |
 | POLI-01 | Phase 4 | Pending |
 | POLI-02 | Phase 4 | Pending |
 | POLI-03 | Phase 4 | Pending |

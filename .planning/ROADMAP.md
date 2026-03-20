@@ -13,7 +13,7 @@ ClawdStrike Academy delivers an interactive browser-based onboarding experience 
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [ ] **Phase 1: Foundation and WASM Integration** - Next.js app scaffold with working WASM engine, MDX pipeline, theming, and proof-of-concept playground
-- [ ] **Phase 2: Shared Components and Content Infrastructure** - Reusable interactive components (source viewer, challenge system, progress tracking) and non-WASM guard simulation layer
+- [x] **Phase 2: Shared Components and Content Infrastructure** - Reusable interactive components (source viewer, challenge system, progress tracking) and non-WASM guard simulation layer
 - [ ] **Phase 3: Threat Scenarios and Guard Gallery** - Tracks 1 and 2 content: motivational threat lessons and all 13 guard deep-dive pages with playgrounds and bypass challenges
 - [ ] **Phase 4: Policy Lab and Polish** - Track 3 content (policy editor, inheritance, rulesets) plus search and keyboard navigation
 
@@ -49,9 +49,9 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 02-01-PLAN.md -- Test framework, guard types, and all 8 non-WASM guard TS simulations with unified evaluateGuard dispatcher
-- [ ] 02-02-PLAN.md -- Build-time source extraction script and AnnotatedSource component with Shiki highlighting and callout annotations
-- [ ] 02-03-PLAN.md -- Zustand progress store with localStorage persistence, sidebar checkmarks, LessonCompleteButton, and BypassChallenge component
+- [x] 02-01-PLAN.md -- Test framework, guard types, and all 8 non-WASM guard TS simulations with unified evaluateGuard dispatcher
+- [x] 02-02-PLAN.md -- Build-time source extraction script and AnnotatedSource component with Shiki highlighting and callout annotations
+- [x] 02-03-PLAN.md -- Zustand progress store with localStorage persistence, sidebar checkmarks, LessonCompleteButton, and BypassChallenge component
 
 ### Phase 3: Threat Scenarios and Guard Gallery
 **Goal**: A new engineer can work through Track 1 (understanding why ClawdStrike exists) and Track 2 (deep-diving into every guard), interacting with embedded playgrounds, reading annotated source, and attempting bypass challenges along the way
@@ -94,6 +94,6 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundation and WASM Integration | 2/3 | In Progress | - |
-| 2. Shared Components and Content Infrastructure | 0/3 | Not started | - |
+| 2. Shared Components and Content Infrastructure | 3/3 | Complete | 2026-03-20 |
 | 3. Threat Scenarios and Guard Gallery | 0/3 | Not started | - |
 | 4. Policy Lab and Polish | 0/2 | Not started | - |

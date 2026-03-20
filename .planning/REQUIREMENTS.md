@@ -18,7 +18,7 @@
 ### Design
 
 - [x] **DSGN-01**: Dark/light mode toggle persists preference across sessions
-- [ ] **DSGN-02**: Per-lesson completion tracking via localStorage with checkmarks visible in sidebar
+- [x] **DSGN-02**: Per-lesson completion tracking via localStorage with checkmarks visible in sidebar
 - [ ] **DSGN-03**: Client-side search indexes all MDX content and returns results with context snippets
 - [ ] **DSGN-04**: Keyboard navigation: arrow keys for prev/next lesson, Cmd+K for search
 - [x] **DSGN-05**: Clean modern UI using shadcn/ui components with consistent spacing and typography
@@ -54,7 +54,7 @@
 
 - [x] **INTX-01**: Annotated source code viewer displays real .rs/.ts files with highlighted lines and hover/click annotations
 - [x] **INTX-02**: Source snippets are extracted at build time from the actual codebase (not copy-pasted snapshots)
-- [ ] **INTX-03**: Bypass challenges check user's payload against expected verdict (ALLOW when DENY expected, or vice versa)
+- [x] **INTX-03**: Bypass challenges check user's payload against expected verdict (ALLOW when DENY expected, or vice versa)
 - [ ] **INTX-04**: Security regression scenarios recreate real bugs from security_regressions.rs as interactive lessons
 
 ## v2 Requirements
@@ -103,7 +103,7 @@
 | FOUN-06 | Phase 1 | Pending |
 | FOUN-07 | Phase 2 | Complete |
 | DSGN-01 | Phase 1 | Complete |
-| DSGN-02 | Phase 2 | Pending |
+| DSGN-02 | Phase 2 | Complete |
 | DSGN-03 | Phase 4 | Pending |
 | DSGN-04 | Phase 4 | Pending |
 | DSGN-05 | Phase 1 | Complete |
@@ -127,7 +127,7 @@
 | POLI-06 | Phase 4 | Pending |
 | INTX-01 | Phase 2 | Complete |
 | INTX-02 | Phase 2 | Complete |
-| INTX-03 | Phase 2 | Pending |
+| INTX-03 | Phase 2 | Complete |
 | INTX-04 | Phase 3 | Pending |
 
 **Coverage:**

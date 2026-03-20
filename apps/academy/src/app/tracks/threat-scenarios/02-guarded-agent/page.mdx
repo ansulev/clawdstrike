@@ -1,0 +1,27 @@
+---
+title: "The Guarded Agent"
+order: 2
+track: "threat-scenarios"
+---
+
+# The Guarded Agent
+
+With ClawdStrike's guard pipeline active, the same dangerous actions are blocked
+before they can execute.
+
+## How Guards Work
+
+Each action passes through a chain of guards. If any guard returns DENY,
+the action is blocked and a signed receipt is produced as evidence.
+
+```typescript
+// The guard evaluation pipeline
+const verdict = await engine.check({
+  actionType: 'file',
+  path: '~/.ssh/id_rsa',
+  operation: 'read',
+});
+// verdict: { allowed: false, guard: 'ForbiddenPathGuard', severity: 'critical' }
+```
+
+<LessonNav trackSlug="threat-scenarios" lessonSlug="02-guarded-agent" />

@@ -1,0 +1,25 @@
+---
+title: "Prompt Injection Guard"
+order: 1
+track: "guard-gallery"
+---
+
+# Prompt Injection Guard
+
+The Prompt Injection Guard detects attempts to override an AI agent's instructions
+through crafted text inputs.
+
+## How It Works
+
+The guard analyzes input text for patterns commonly used in prompt injection attacks:
+
+```python
+# Common prompt injection patterns:
+"Ignore all previous instructions and..."
+"You are now DAN (Do Anything Now)..."
+"SYSTEM OVERRIDE: new instructions follow"
+```
+
+Try it yourself in the playground below -- enter a text payload and see if the guard catches it.
+
+<LessonNav trackSlug="guard-gallery" lessonSlug="01-prompt-injection" />

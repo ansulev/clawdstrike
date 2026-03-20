@@ -73,6 +73,19 @@ html.dark .shiki span {
   font-family: var(--font-mono);
 }
 
+/* Annotated source: line highlighting and badge positioning */
+.annotated-source .shiki code {
+  counter-reset: line;
+}
+
+.annotated-source [data-line] {
+  position: relative;
+}
+
+.annotated-source [data-line].annotated-line {
+  background-color: hsl(var(--color-primary) / 0.08);
+}
+
 @layer base {
   * {
     @apply border-border;

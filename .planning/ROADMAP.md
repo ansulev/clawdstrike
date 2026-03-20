@@ -69,7 +69,7 @@ Plans:
 - [x] 03-01-PLAN.md -- Generic guard playground dispatcher and guard gallery index page with tier-colored cards
 - [ ] 03-02-PLAN.md -- @academy source markers in 15 Rust files (24 tags) and extraction manifest population
 - [ ] 03-03-PLAN.md -- Track 1 threat scenario lessons (Unprotected Agent, Guarded Agent, Fail-Closed, Enforcement Tiers, URL Spoofing)
-- [ ] 03-04-PLAN.md -- Guard gallery green + yellow tier pages (ForbiddenPath, PathAllowlist, EgressAllowlist, SecretLeak, ShellCommand, PatchIntegrity, McpTool)
+- [x] 03-04-PLAN.md -- Guard gallery green + yellow tier pages (ForbiddenPath, PathAllowlist, EgressAllowlist, SecretLeak, ShellCommand, PatchIntegrity, McpTool)
 - [ ] 03-05-PLAN.md -- Guard gallery orange + red tier pages (PromptInjection, Jailbreak, ComputerUse, SpiderSense, RemoteDesktop, InputInjection)
 
 ### Phase 4: Policy Lab and Polish
@@ -97,5 +97,5 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 |-------|----------------|--------|-----------|
 | 1. Foundation and WASM Integration | 2/3 | In Progress | - |
 | 2. Shared Components and Content Infrastructure | 3/3 | Complete | 2026-03-20 |
-| 3. Threat Scenarios and Guard Gallery | 1/5 | In Progress|  |
+| 3. Threat Scenarios and Guard Gallery | 4/5 | In Progress |  |
 | 4. Policy Lab and Polish | 0/2 | Not started | - |

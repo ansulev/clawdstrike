@@ -16,6 +16,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 2: Editor Tab Views** - Plugin components in pane tabs with keep-alive state preservation and LRU eviction
 - [x] **Phase 3: Bottom Panel and Right Sidebar** - Plugin tabs in bottom panel and right sidebar alongside built-in panels
 - [x] **Phase 4: Activity Bar, Gutters, and Context Menus** - Dynamic sidebar navigation, CodeMirror gutter extensions, and context menu items
+- [ ] **Phase 5: Layout Wiring + SDK Injection** - Mount orphaned components in app layout, inject ViewsApi into PluginActivationContext, fix href/entrypoint bug
 
 ## Phase Details
 
@@ -74,11 +75,26 @@ Plans:
 - [x] 04-02-PLAN.md -- GutterExtensionRegistry + CodeMirror Compartment integration in yaml-editor
 - [x] 04-03-PLAN.md -- ContextMenuRegistry with when-clause predicates + PluginContextMenuItems component
 
+### Phase 5: Layout Wiring + SDK Injection
+**Goal**: All orphaned plugin view components are mounted in the live app layout, ViewsApi is injected into PluginActivationContext, and the href/entrypoint bug is fixed
+**Depends on**: Phase 4
+**Requirements**: BPAN-01, BPAN-02, RSIDE-01, RSIDE-02, CTXM-03
+**Gap Closure**: Closes gaps from v3.0 audit
+**Success Criteria** (what must be TRUE):
+  1. Plugin bottom panel tabs appear alongside built-in tabs in the policy editor bottom panel
+  2. Plugin right sidebar panels appear alongside built-in panels in the editor right sidebar
+  3. Plugin context menu items appear in tab right-click menu with when-clause filtering
+  4. Plugin activate() receives a PluginContext with working views.registerEditorTab() method
+  5. ActivityBarItemContribution uses entrypoint (not href) for module loading
+**Plans**: TBD
+
+Plans:
+- [ ] 05-01: TBD
+
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 -> 2 -> 3 -> 4
-(Phases 2 and 3 can execute in parallel after Phase 1 completes.)
+Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -86,3 +102,4 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 | 2. Editor Tab Views | 2/2 | Complete | 2026-03-19 |
 | 3. Bottom Panel and Right Sidebar | 1/1 | Complete | 2026-03-19 |
 | 4. Activity Bar, Gutters, and Context Menus | 3/3 | Complete | 2026-03-19 |
+| 5. Layout Wiring + SDK Injection | 0/1 | Not started | - |

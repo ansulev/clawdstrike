@@ -98,10 +98,10 @@ Enable plugins to contribute React components and CodeMirror extensions to every
 | ALIVE-01 | Phase 2 | Complete |
 | ALIVE-02 | Phase 2 | Complete |
 | ALIVE-03 | Phase 2 | Complete |
-| BPAN-01 | Phase 3 | Complete |
-| BPAN-02 | Phase 3 | Complete |
-| RSIDE-01 | Phase 3 | Complete |
-| RSIDE-02 | Phase 3 | Complete |
+| BPAN-01 | Phase 5 | Pending |
+| BPAN-02 | Phase 5 | Pending |
+| RSIDE-01 | Phase 5 | Pending |
+| RSIDE-02 | Phase 5 | Pending |
 | ABAR-01 | Phase 4 | Complete |
 | ABAR-02 | Phase 4 | Complete |
 | ABAR-03 | Phase 4 | Complete |
@@ -110,4 +110,4 @@ Enable plugins to contribute React components and CodeMirror extensions to every
 | GUTR-03 | Phase 4 | Complete |
 | CTXM-01 | Phase 4 | Complete |
 | CTXM-02 | Phase 4 | Complete |
-| CTXM-03 | Phase 4 | Complete |
+| CTXM-03 | Phase 5 | Pending |

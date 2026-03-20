@@ -36,6 +36,25 @@
 - [ ] **CTX-03**: Folder context menu with New File, New Folder, Collapse All, Reveal in Finder
 - [ ] **CTX-04**: Context menu viewport-clamped (no overflow offscreen)
 
+## v1.3 Requirements (Gap Closure)
+
+### Integration Wiring Fixes
+
+- [ ] **DET-01**: Gutter play button runs test scenarios in FileEditorShell (not just legacy PolicyEditor)
+- [ ] **DET-03**: Guard test results appear in TestRunnerPanel when triggered from FileEditorShell gutter
+- [ ] **FLAT-07**: edit.newTab (Cmd+T) creates a pane tab via pane-store (not legacy multi-policy-store)
+- [ ] **FLAT-08**: All navigate("/editor") call sites replaced with pane-store openFile/openApp
+
+### Swarm Board Evolution
+
+- [ ] **SWARM-01**: "Launch Swarm" button in editor toolbar spawns new swarm session with active policy
+- [ ] **SWARM-02**: Swarm Board opens as a pane tab alongside editor (split view)
+- [ ] **SWARM-03**: Swarm session pre-configured with active policy and connected sentinels
+- [ ] **SWARM-04**: Agent nodes pulse/glow when evaluating a policy (real-time)
+- [ ] **SWARM-05**: Receipts appear as animated edges flowing between nodes
+- [ ] **SWARM-06**: Trust graph updates live as agents join/leave
+- [ ] **SWARM-07**: Click receipt edge to open receipt inspector in pane tab
+
 ## Traceability
 
 | Requirement | Phase | Status |
@@ -59,8 +78,21 @@
 | CTX-02 | Phase 4 | Pending |
 | CTX-03 | Phase 4 | Pending |
 | CTX-04 | Phase 4 | Pending |
+| DET-01 | Phase 11 | Pending |
+| DET-03 | Phase 11 | Pending |
+| FLAT-07 | Phase 11 | Pending |
+| FLAT-08 | Phase 11 | Pending |
+| SWARM-01 | Phase 12 | Pending |
+| SWARM-02 | Phase 12 | Pending |
+| SWARM-03 | Phase 12 | Pending |
+| SWARM-04 | Phase 13 | Pending |
+| SWARM-05 | Phase 13 | Pending |
+| SWARM-06 | Phase 13 | Pending |
+| SWARM-07 | Phase 13 | Pending |
 
 **Coverage:**
-- v1.2 requirements: 19 total
-- Mapped to phases: 19
+- v1.2 requirements: 19 total (4 complete, 15 pending)
+- v1.3 gap closure requirements: 11 total (0 complete, 11 pending)
+- Total: 30 requirements
+- Mapped to phases: 30
 - Unmapped: 0

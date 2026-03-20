@@ -89,13 +89,49 @@ Plans:
 Plans:
 - [x] C2-01-PLAN.md -- Finding mapper, draftFromFinding hook, Draft Detection button (complete)
 
+## Gap Closure (from v1.3 Audit)
+
+### Phase 11: Integration Wiring Fixes
+**Goal**: Fix broken cross-phase wiring from file-first editor cutover — dead gutter buttons, stale navigate("/editor") calls, legacy store dispatch, dead code cleanup
+**Gap Closure**: Closes integration gaps from v1.3 audit
+**Requirements**: DET-01, DET-03, FLAT-07, FLAT-08
+**Success Criteria**:
+  1. Clicking gutter play button in FileEditorShell generates and runs test scenarios (not a no-op)
+  2. file.new (Cmd+N), file.open (Cmd+O), edit.newTab (Cmd+T) all open files in the pane system
+  3. All navigate("/editor") call sites replaced with pane-store openFile/openApp calls
+  4. Dead PolicyEditor code removed; duplicate commands cleaned up
+**Plans**: TBD
+
+### Phase 12: Editor-to-Swarm Bridge
+**Goal**: Launch a swarm session directly from the policy editor or command palette, opening as a pane tab
+**Requirements**: SWARM-01, SWARM-02, SWARM-03
+**Success Criteria**:
+  1. "Launch Swarm" button in the editor toolbar spawns a new swarm session with the active policy
+  2. Swarm Board opens as a pane tab alongside the editor (split view)
+  3. Swarm session is pre-configured with the active policy and connected sentinels
+**Plans**: TBD
+
+### Phase 13: Real-Time Swarm Visualization
+**Goal**: Live agent coordination visible on the graph — receipts flowing, decisions animating
+**Depends on**: Phase 12
+**Requirements**: SWARM-04, SWARM-05, SWARM-06, SWARM-07
+**Success Criteria**:
+  1. Agent nodes pulse/glow when they evaluate a policy (real-time via SSE or polling)
+  2. Receipts appear as animated edges flowing between nodes
+  3. Trust graph updates live as agents join/leave or trust relationships change
+  4. Click a receipt edge to open the receipt inspector in a pane tab
+**Plans**: TBD
+
 ## Progress
 
 | Track | Phase | Status |
 |-------|-------|--------|
 | A. Fleet Dashboard | A1: Data Layer | Complete (1 plan) |
 | A. Fleet Dashboard | A2: Viz & Actions | Complete (1 plan) |
-| B. Swarm Board | B1: Editor Bridge | Not started |
-| B. Swarm Board | B2: Real-Time Viz | Not started |
+| B. Swarm Board | B1: Editor Bridge | Not started → Phase 12 |
+| B. Swarm Board | B2: Real-Time Viz | Not started → Phase 13 |
 | C. Threat Intel | C1: Signal Clustering | Complete (2 plans) |
 | C. Threat Intel | C2: Promote-to-Detection | Complete (1 plan: C2-01) |
+| Gap Closure | Phase 11: Integration Wiring | Not started |
+| Gap Closure | Phase 12: Swarm Bridge | Not started |
+| Gap Closure | Phase 13: Swarm Viz | Not started |

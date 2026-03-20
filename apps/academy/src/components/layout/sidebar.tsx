@@ -1,10 +1,12 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { BookOpen, FileText, ChevronRight } from 'lucide-react';
+import { BookOpen, FileText, ChevronRight, CheckCircle2 } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
+import { useProgressStore } from '@/lib/stores/progress';
 import type { TrackMeta } from '@/lib/content';
 
 interface SidebarProps {
@@ -13,6 +15,13 @@ interface SidebarProps {
 
 export function Sidebar({ tracks }: SidebarProps) {
   const pathname = usePathname();
+  const completedLessons = useProgressStore((s) => s.completedLessons);
+
+  // Hydration guard: avoid SSR mismatch by only showing checkmarks after mount
+  const [hydrated, setHydrated] = useState(false);
+  useEffect(() => {
+    setHydrated(true);
+  }, []);
 
   return (
     <ScrollArea className="h-full">
@@ -34,6 +43,8 @@ export function Sidebar({ tracks }: SidebarProps) {
               <ul className="ml-4 mt-1 space-y-1">
                 {track.lessons.map((lesson) => {
                   const isActive = pathname === lesson.path;
+                  const isComplete =
+                    hydrated && completedLessons.includes(lesson.path);
 
                   return (
                     <li key={lesson.slug}>
@@ -46,7 +57,11 @@ export function Sidebar({ tracks }: SidebarProps) {
                             : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
                         )}
                       >
-                        <FileText className="h-3.5 w-3.5 shrink-0" />
+                        {isComplete ? (
+                          <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-green-500" />
+                        ) : (
+                          <FileText className="h-3.5 w-3.5 shrink-0" />
+                        )}
                         <span>{lesson.title}</span>
                       </Link>
                     </li>

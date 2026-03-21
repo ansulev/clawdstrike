@@ -347,7 +347,6 @@ export function PolicyEditor() {
   const panelParam = searchParams.get("panel");
   const [showCommandCenter, setShowCommandCenter] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
-  const [historyOpen, setHistoryOpen] = useState(false);
   const [testRunnerOpen, setTestRunnerOpen] = useState(false);
   const [diffDialogOpen, setDiffDialogOpen] = useState(false);
   const [diffFromId, setDiffFromId] = useState<string | undefined>();
@@ -358,9 +357,6 @@ export function PolicyEditor() {
   const [showCoverage, setShowCoverage] = useState(false);
   const [showExplorer, setShowExplorer] = useState(false);
   const [showProblems, setShowProblems] = useState(false);
-  const [evidenceOpen, setEvidenceOpen] = useState(false);
-  const [explainOpen, setExplainOpen] = useState(false);
-  const [publishOpen, setPublishOpen] = useState(false);
   const [bottomPanelActiveTab, setBottomPanelActiveTab] = useState<string | null>("test-runner");
   const [rightSidebarPanelId, setRightSidebarPanelId] = useState<string | null>(null);
   const activePluginViewTabId = useActivePluginViewTabId();
@@ -512,7 +508,7 @@ export function PolicyEditor() {
     setShowCommandCenter(false);
     setShowGuards(false);
     setShowCompare(false);
-    setHistoryOpen(false);
+    setRightSidebarPanelId(null);
     setTestRunnerOpen(false);
   }, [isPolicyTab]);
 
@@ -983,11 +979,11 @@ export function PolicyEditor() {
             </button>
             <button
               type="button"
-              onClick={() => setHistoryOpen((prev) => !prev)}
+              onClick={() => setRightSidebarPanelId((prev) => prev === "history" ? null : "history")}
               disabled={!isPolicyTab}
               className={cn(
                 "inline-flex items-center gap-1 px-2 py-1 text-[9px] font-mono rounded transition-colors disabled:opacity-40 disabled:hover:text-[#6f7f9a] disabled:hover:border-transparent",
-                historyOpen
+                rightSidebarPanelId === "history"
                   ? "bg-[#d4a84b]/15 text-[#d4a84b] border border-[#d4a84b]/30"
                   : "text-[#6f7f9a] hover:text-[#ece7dc] border border-transparent hover:border-[#2d3240]",
               )}
@@ -998,10 +994,10 @@ export function PolicyEditor() {
             </button>
             <button
               type="button"
-              onClick={() => setEvidenceOpen((prev) => !prev)}
+              onClick={() => setRightSidebarPanelId((prev) => prev === "evidence" ? null : "evidence")}
               className={cn(
                 "inline-flex items-center gap-1 px-2 py-1 text-[9px] font-mono rounded transition-colors",
-                evidenceOpen
+                rightSidebarPanelId === "evidence"
                   ? "bg-[#d4a84b]/15 text-[#d4a84b] border border-[#d4a84b]/30"
                   : "text-[#6f7f9a] hover:text-[#ece7dc] border border-transparent hover:border-[#2d3240]",
               )}
@@ -1012,10 +1008,10 @@ export function PolicyEditor() {
             </button>
             <button
               type="button"
-              onClick={() => setExplainOpen((prev) => !prev)}
+              onClick={() => setRightSidebarPanelId((prev) => prev === "explainability" ? null : "explainability")}
               className={cn(
                 "inline-flex items-center gap-1 px-2 py-1 text-[9px] font-mono rounded transition-colors",
-                explainOpen
+                rightSidebarPanelId === "explainability"
                   ? "bg-[#d4a84b]/15 text-[#d4a84b] border border-[#d4a84b]/30"
                   : "text-[#6f7f9a] hover:text-[#ece7dc] border border-transparent hover:border-[#2d3240]",
               )}
@@ -1026,10 +1022,10 @@ export function PolicyEditor() {
             </button>
             <button
               type="button"
-              onClick={() => setPublishOpen((prev) => !prev)}
+              onClick={() => setRightSidebarPanelId((prev) => prev === "publish" ? null : "publish")}
               className={cn(
                 "inline-flex items-center gap-1 px-2 py-1 text-[9px] font-mono rounded transition-colors",
-                publishOpen
+                rightSidebarPanelId === "publish"
                   ? "bg-[#3dbf84]/15 text-[#3dbf84] border border-[#3dbf84]/30"
                   : "text-[#6f7f9a] hover:text-[#ece7dc] border border-transparent hover:border-[#2d3240]",
               )}
@@ -1123,52 +1119,13 @@ export function PolicyEditor() {
             )}
           </div>
 
-          {historyOpen && !showHome && isPolicyTab && (
-            <div className="w-[280px] shrink-0">
-              <VersionHistoryPanel
-                policyId={versionDocumentId}
-                currentYaml={state.yaml}
-                currentPolicy={state.activePolicy}
-                onRollback={handleRollback}
-                onCompare={handleCompare}
-              />
-            </div>
-          )}
-
-          {evidenceOpen && !showHome && (
-            <div className="w-[280px] shrink-0">
-              <EvidencePackPanel
-                documentId={activeTab?.documentId}
-                fileType={activeTab?.fileType}
-              />
-            </div>
-          )}
-
-          {explainOpen && !showHome && (
-            <div className="w-[280px] shrink-0">
-              <ExplainabilityPanel
-                documentId={activeTab?.documentId}
-                lastRun={labExecution.lastRun}
-                baselineRun={labExecution.runHistory.length > 1 ? labExecution.runHistory[1] : null}
-                onJumpToLine={(line) => {
-                  window.dispatchEvent(
-                    new CustomEvent("workbench:jump-to-line", { detail: { line } }),
-                  );
-                }}
-              />
-            </div>
-          )}
-
-          {publishOpen && !showHome && (
-            <div className="w-[280px] shrink-0 border-l border-[#2d3240]">
-              <PublishPanel
-                documentId={activeTab?.documentId}
-                fileType={activeTab?.fileType}
-                source={state.yaml}
-                validationValid={state.validation.valid && state.nativeValidation.valid !== false}
-                lastLabRun={labExecution.lastRun}
-              />
-            </div>
+          {!showHome && (
+            <RightSidebarPanels
+              builtInPanels={builtInPanels}
+              sidebarWidth={280}
+              activePanelId={rightSidebarPanelId}
+              onPanelChange={setRightSidebarPanelId}
+            />
           )}
 
           <ClaudeCodeHint hintId="editor.validate" />

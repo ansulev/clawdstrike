@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v4.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 02-01-PLAN.md
-last_updated: "2026-03-21T13:54:23.244Z"
+stopped_at: Completed 04-02-PLAN.md
+last_updated: "2026-03-21T14:20:00.000Z"
 progress:
   total_phases: 5
   completed_phases: 1
   total_plans: 13
-  completed_plans: 7
-  percent: 46
+  completed_plans: 9
+  percent: 69
 ---
 
 # Project State
@@ -28,7 +28,7 @@ Phase: 4 of 5 (EQL Adapter Plugin)
 Plan: 1 of 3
 Status: In progress
 
-Progress: [████░░░░░░] 46%
+Progress: [██████░░░░] 61%
 
 ## Previous Milestones
 
@@ -75,6 +75,9 @@ Progress: [████░░░░░░] 46%
 - [03-01] KQL->Sigma reverse mapping built dynamically from getAllFieldMappings() sentinel entries
 - [03-01] Untranslatable KQL features (summarize, join, union, extend, ago, etc.) detected and reported
 - [03-01] Sentinel Analytics Rule JSON uses standard queryFrequency/queryPeriod PT5H defaults
+- [03-02] Round-trip reconstruction for KQL visual panel: parse -> edit -> reconstruct -> onSourceChange
+- [03-02] Custom table names shown with '(custom)' suffix when not in predefined Sentinel table list
+- [03-02] Extend expressions rendered read-only in visual panel (complex computed columns, editing deferred)
 - [Phase 02]: [02-01] Regex-based SPL parsing; AND condition matching; CIM field mapping via translateField; plugin_trace with spl_match traceType; case-insensitive field lookup
 
 ### Pending Todos
@@ -85,6 +88,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-21T13:54:23.242Z
-Stopped at: Completed 02-01-PLAN.md
+Last session: 2026-03-21T14:08:00.000Z
+Stopped at: Completed 03-02-PLAN.md
 Resume file: None

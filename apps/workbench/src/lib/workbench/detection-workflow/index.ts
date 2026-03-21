@@ -93,6 +93,14 @@ export { yaraAdapter } from "./yara-adapter";
 export { ocsfAdapter } from "./ocsf-adapter";
 export { eqlAdapter } from "./eql-adapter";
 export { yaralAdapter } from "./yaral-adapter";
+export { kqlAdapter } from "./kql-adapter";
+export { kqlTranslationProvider } from "./kql-translation";
+
+// KQL parser types
+export type { KqlParsedQuery, KqlWhereClause } from "./kql-adapter";
+
+// KQL parser functions
+export { parseKqlQuery, extractKqlWhereFields, clientSideKqlMatch } from "./kql-adapter";
 
 // ---- Stores ----
 
@@ -252,3 +260,5 @@ import "./yara-adapter";
 import "./ocsf-adapter";
 import "./eql-adapter";
 import "./yaral-adapter";
+import "./kql-adapter";
+import "./kql-translation";

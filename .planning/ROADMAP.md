@@ -15,8 +15,8 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 1: Core Detection Plugin Infrastructure** - Dynamic registries for visual panels, translations, and field mappings that all detection adapter plugins depend on
 - [x] **Phase 2: SPL Adapter Plugin** - Splunk SPL as a first-class detection format with visual pipe-chain builder and bidirectional Sigma translation (completed 2026-03-21)
 - [x] **Phase 3: KQL Adapter Plugin** - Microsoft Sentinel KQL as a first-class detection format with tabular expression editor and bidirectional Sigma translation (completed 2026-03-21)
-- [ ] **Phase 4: EQL Adapter Plugin** - Elastic EQL as a first-class detection format with multi-event sequence builder and bidirectional Sigma translation
-- [ ] **Phase 5: YARA-L Adapter Plugin** - Google Chronicle YARA-L as a first-class detection format with multi-event correlation panel and bidirectional Sigma translation
+- [x] **Phase 4: EQL Adapter Plugin** - Elastic EQL as a first-class detection format with multi-event sequence builder and bidirectional Sigma translation (completed 2026-03-21)
+- [x] **Phase 5: YARA-L Adapter Plugin** - Google Chronicle YARA-L as a first-class detection format with multi-event correlation panel and bidirectional Sigma translation (completed 2026-03-21)
 
 ## Phase Details
 
@@ -61,8 +61,8 @@ Plans:
   4. User can translate an SPL rule to KQL (hub-and-spoke via SPL -> Sigma -> KQL) and the output contains correct Sentinel field names, demonstrating cross-format translation working end-to-end
 **Plans:** 2/2 plans complete
 Plans:
-- [ ] 03-01-PLAN.md -- KQL adapter core (file type, adapter, translation provider)
-- [ ] 03-02-PLAN.md -- KQL visual panel and plugin manifest example
+- [x] 03-01-PLAN.md -- KQL adapter core (file type, adapter, translation provider)
+- [x] 03-02-PLAN.md -- KQL visual panel and plugin manifest example
 
 ### Phase 4: EQL Adapter Plugin
 **Goal**: Security teams using Elastic can draft, test, and translate EQL detection rules -- including multi-event sequence rules -- natively in the workbench
@@ -77,7 +77,7 @@ Plans:
 Plans:
 - [x] 04-01-PLAN.md -- EQL parser/generator and adapter with file type registration and publication
 - [x] 04-02-PLAN.md -- EQL visual panel with sequence builder and condition editor
-- [ ] 04-03-PLAN.md -- Bidirectional Sigma-EQL translation provider and full lab execution
+- [x] 04-03-PLAN.md -- Bidirectional Sigma-EQL translation provider and full lab execution
 
 ### Phase 5: YARA-L Adapter Plugin
 **Goal**: Security teams using Google Chronicle/SecOps can draft, test, and translate YARA-L detection rules natively in the workbench, completing the adapter ecosystem
@@ -90,8 +90,8 @@ Plans:
   4. All four adapter plugins are installed and operational: user can translate between any pair of {Sigma, SPL, KQL, EQL, YARA-L} via hub-and-spoke routing, with translation diagnostics showing field mapping details and any untranslatable features
 **Plans:** 3 plans
 Plans:
-- [ ] 05-01-PLAN.md -- YARA-L adapter with file type registration, drafting, lab execution, and publication
-- [ ] 05-02-PLAN.md -- YARA-L visual panel with meta editor, event variable cards, and condition editor
+- [x] 05-01-PLAN.md -- YARA-L adapter with file type registration, drafting, lab execution, and publication
+- [x] 05-02-PLAN.md -- YARA-L visual panel with meta editor, event variable cards, and condition editor
 - [x] 05-03-PLAN.md -- Bidirectional Sigma<->YARA-L translation provider
 
 ## Progress
@@ -104,6 +104,6 @@ Note: Phases 2-5 each depend only on Phase 1, so adapter plugins can be develope
 |-------|----------------|--------|-----------|
 | 1. Core Detection Plugin Infrastructure | 3/3 | Complete | 2026-03-21 |
 | 2. SPL Adapter Plugin | 2/2 | Complete | 2026-03-21 |
-| 3. KQL Adapter Plugin | 2/2 | Complete   | 2026-03-21 |
-| 4. EQL Adapter Plugin | 1/3 | In progress | - |
+| 3. KQL Adapter Plugin | 2/2 | Complete | 2026-03-21 |
+| 4. EQL Adapter Plugin | 3/3 | Complete | 2026-03-21 |
 | 5. YARA-L Adapter Plugin | 3/3 | Complete | 2026-03-21 |

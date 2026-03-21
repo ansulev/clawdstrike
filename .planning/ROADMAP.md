@@ -100,7 +100,10 @@ Plans:
   2. file.new (Cmd+N), file.open (Cmd+O), edit.newTab (Cmd+T) all open files in the pane system
   3. All navigate("/editor") call sites replaced with pane-store openFile/openApp calls
   4. Dead PolicyEditor code removed; duplicate commands cleaned up
-**Plans**: TBD
+**Plans**: 2 plans
+Plans:
+- [ ] 11-01-PLAN.md — Wire gutter play button in FileEditorShell (onRunGuardTest + test runner dispatch)
+- [ ] 11-02-PLAN.md — Replace navigate("/editor") calls, fix edit.newTab, delete dead PolicyEditor, consolidate commands
 
 ### Phase 12: Editor-to-Swarm Bridge
 **Goal**: Launch a swarm session directly from the policy editor or command palette, opening as a pane tab
@@ -128,10 +131,10 @@ Plans:
 |-------|-------|--------|
 | A. Fleet Dashboard | A1: Data Layer | Complete (1 plan) |
 | A. Fleet Dashboard | A2: Viz & Actions | Complete (1 plan) |
-| B. Swarm Board | B1: Editor Bridge | Not started → Phase 12 |
-| B. Swarm Board | B2: Real-Time Viz | Not started → Phase 13 |
+| B. Swarm Board | B1: Editor Bridge | Not started |
+| B. Swarm Board | B2: Real-Time Viz | Not started |
 | C. Threat Intel | C1: Signal Clustering | Complete (2 plans) |
 | C. Threat Intel | C2: Promote-to-Detection | Complete (1 plan: C2-01) |
-| Gap Closure | Phase 11: Integration Wiring | Not started |
+| Gap Closure | Phase 11: Integration Wiring | Planned (2 plans) |
 | Gap Closure | Phase 12: Swarm Bridge | Not started |
 | Gap Closure | Phase 13: Swarm Viz | Not started |

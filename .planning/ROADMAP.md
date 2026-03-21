@@ -51,7 +51,9 @@ Plans:
   1. "Launch Swarm" button in the editor toolbar spawns a new swarm session with the active policy
   2. Swarm Board opens as a pane tab alongside the editor (split view)
   3. Swarm session is pre-configured with the active policy and connected sentinels
-**Plans**: TBD
+**Plans**: 1 plan
+Plans:
+- [ ] 12-01-PLAN.md — createSwarmBundleFromPolicy bridge, Launch Swarm toolbar button, swarm.launchFromEditor command
 
 ### Phase B2: Real-Time Swarm Visualization
 **Goal**: Live agent coordination visible on the graph — receipts flowing, decisions animating
@@ -112,7 +114,9 @@ Plans:
   1. "Launch Swarm" button in the editor toolbar spawns a new swarm session with the active policy
   2. Swarm Board opens as a pane tab alongside the editor (split view)
   3. Swarm session is pre-configured with the active policy and connected sentinels
-**Plans**: TBD
+**Plans**: 1 plan
+Plans:
+- [ ] 12-01-PLAN.md — createSwarmBundleFromPolicy bridge, Launch Swarm toolbar button, swarm.launchFromEditor command
 
 ### Phase 13: Real-Time Swarm Visualization
 **Goal**: Live agent coordination visible on the graph — receipts flowing, decisions animating
@@ -131,10 +135,10 @@ Plans:
 |-------|-------|--------|
 | A. Fleet Dashboard | A1: Data Layer | Complete (1 plan) |
 | A. Fleet Dashboard | A2: Viz & Actions | Complete (1 plan) |
-| B. Swarm Board | B1: Editor Bridge | Not started |
+| B. Swarm Board | B1: Editor Bridge | Planned (1 plan) |
 | B. Swarm Board | B2: Real-Time Viz | Not started |
 | C. Threat Intel | C1: Signal Clustering | Complete (2 plans) |
 | C. Threat Intel | C2: Promote-to-Detection | Complete (1 plan: C2-01) |
 | Gap Closure | Phase 11: Integration Wiring | In progress (1/2 plans complete) |
-| Gap Closure | Phase 12: Swarm Bridge | Not started |
+| Gap Closure | Phase 12: Swarm Bridge | Planned (1 plan) |
 | Gap Closure | Phase 13: Swarm Viz | Not started |

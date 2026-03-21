@@ -84,6 +84,9 @@ Progress: [████████░░] 85%
 - [05-02] YARA-L visual panel uses internal regex parser with regenerator for round-trip editing
 - [05-02] Event variables rendered as individual cards with inline-editable UDM field predicates
 - [05-02] Optional match/outcome sections rendered as raw TextArea (less commonly used)
+- [05-03] Duplicated parseYaralRule in yaral-translation.ts (not exported from yaral-adapter); extended with hasMatchSection/hasOutcomeSection
+- [05-03] Reverse UDM mapping built dynamically from getAllFieldMappings() for YARA-L->Sigma field lookup
+- [05-03] Regex-with-nocase maps to Sigma |contains; anchored regexes map to |startswith/|endswith
 - [Phase 02]: [02-01] Regex-based SPL parsing; AND condition matching; CIM field mapping via translateField; plugin_trace with spl_match traceType; case-insensitive field lookup
 
 ### Pending Todos
@@ -94,6 +97,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-21T14:30:00.000Z
-Stopped at: Completed 05-02-PLAN.md
+Last session: 2026-03-21T14:38:00.000Z
+Stopped at: Completed 05-03-PLAN.md
 Resume file: None

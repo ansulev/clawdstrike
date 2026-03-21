@@ -92,7 +92,7 @@ Plans:
 Plans:
 - [ ] 05-01-PLAN.md -- YARA-L adapter with file type registration, drafting, lab execution, and publication
 - [ ] 05-02-PLAN.md -- YARA-L visual panel with meta editor, event variable cards, and condition editor
-- [ ] 05-03-PLAN.md -- Bidirectional Sigma<->YARA-L translation provider
+- [x] 05-03-PLAN.md -- Bidirectional Sigma<->YARA-L translation provider
 
 ## Progress
 
@@ -106,4 +106,4 @@ Note: Phases 2-5 each depend only on Phase 1, so adapter plugins can be develope
 | 2. SPL Adapter Plugin | 0/2 | Not started | - |
 | 3. KQL Adapter Plugin | 2/2 | Complete   | 2026-03-21 |
 | 4. EQL Adapter Plugin | 1/3 | In progress | - |
-| 5. YARA-L Adapter Plugin | 2/3 | In progress | - |
+| 5. YARA-L Adapter Plugin | 3/3 | Complete | 2026-03-21 |

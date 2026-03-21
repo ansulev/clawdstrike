@@ -59,7 +59,10 @@ Plans:
   2. User can open the Lab with a KQL rule and evidence items, click Run, and see per-condition match results in the explainability trace showing which KQL where-clauses matched which evidence fields
   3. User can translate a Sigma rule to KQL and get syntactically valid KQL output with correct Sentinel table and field names, and user can translate a KQL rule back to Sigma and get a valid Sigma YAML
   4. User can translate an SPL rule to KQL (hub-and-spoke via SPL -> Sigma -> KQL) and the output contains correct Sentinel field names, demonstrating cross-format translation working end-to-end
-**Plans**: TBD
+**Plans:** 2 plans
+Plans:
+- [ ] 03-01-PLAN.md -- KQL adapter core (file type, adapter, translation provider)
+- [ ] 03-02-PLAN.md -- KQL visual panel and plugin manifest example
 
 ### Phase 4: EQL Adapter Plugin
 **Goal**: Security teams using Elastic can draft, test, and translate EQL detection rules -- including multi-event sequence rules -- natively in the workbench
@@ -70,7 +73,11 @@ Plans:
   2. User can build a multi-event sequence rule using the visual sequence builder (adding/removing/reordering event steps, setting maxspan), and the generated EQL text is syntactically valid with `sequence by` syntax
   3. User can open the Lab with an EQL sequence rule and multi-event evidence, click Run, and see per-step matching in the explainability trace showing which events matched which sequence steps
   4. Translating a multi-event EQL rule to Sigma produces a valid Sigma rule with the first event's conditions, plus an `untranslatableFeatures` list clearly stating "sequence correlation with N events not preserved"
-**Plans**: TBD
+**Plans:** 3 plans
+Plans:
+- [ ] 04-01-PLAN.md -- EQL parser/generator and adapter with file type registration and publication
+- [ ] 04-02-PLAN.md -- EQL visual panel with sequence builder and condition editor
+- [ ] 04-03-PLAN.md -- Bidirectional Sigma-EQL translation provider and full lab execution
 
 ### Phase 5: YARA-L Adapter Plugin
 **Goal**: Security teams using Google Chronicle/SecOps can draft, test, and translate YARA-L detection rules natively in the workbench, completing the adapter ecosystem
@@ -97,6 +104,6 @@ Note: Phases 2-5 each depend only on Phase 1, so adapter plugins can be develope
 |-------|----------------|--------|-----------|
 | 1. Core Detection Plugin Infrastructure | 3/3 | Complete | 2026-03-21 |
 | 2. SPL Adapter Plugin | 0/2 | Not started | - |
-| 3. KQL Adapter Plugin | 0/? | Not started | - |
-| 4. EQL Adapter Plugin | 0/? | Not started | - |
+| 3. KQL Adapter Plugin | 0/2 | In progress | - |
+| 4. EQL Adapter Plugin | 0/3 | Not started | - |
 | 5. YARA-L Adapter Plugin | 0/3 | Not started | - |

@@ -64,6 +64,10 @@ Progress: [████████░░] 85%
 - [04-01] EQL parser uses separate AST node types (EqlSingleQuery vs EqlSequenceQuery) matching Elastic grammar
 - [04-01] Client-side ECS field resolution supports both flat dotted keys and nested objects
 - [04-01] Sequence draft triggers on multiple categories, defaults to sequence by host.id with 5m maxspan
+- [04-03] EQL translation uses same bidirectional pattern as kql-translation.ts for consistency
+- [04-03] Sequence EQL->Sigma degrades to first step only, untranslatableFeatures lists all lost semantics
+- [04-03] Lab execution split: eql_match traces for single queries, eql_sequence_match for sequences
+- [04-03] matchSequenceQuery evaluates steps independently (no temporal ordering) as client-side approximation
 
 - [05-01] YARA-L parser uses regex-based best-effort parsing, sufficient for client-side simulation
 - [05-01] Multi-variable YARA-L conditions use OR semantics between variable groups, AND within each group
@@ -97,6 +101,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-21T14:38:00.000Z
-Stopped at: Completed 05-03-PLAN.md
+Last session: 2026-03-21T14:45:00.000Z
+Stopped at: Completed 04-03-PLAN.md (EQL translation + lab execution)
 Resume file: None

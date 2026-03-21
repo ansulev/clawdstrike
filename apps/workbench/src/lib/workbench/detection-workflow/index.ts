@@ -251,3 +251,4 @@ import "./sigma-adapter";
 import "./yara-adapter";
 import "./ocsf-adapter";
 import "./eql-adapter";
+import "./yaral-adapter";

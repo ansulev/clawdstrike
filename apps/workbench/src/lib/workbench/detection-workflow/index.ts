@@ -23,9 +23,22 @@ export type {
   CoverageGapCandidate,
   ExplainabilityTrace,
   EvaluationPathStep,
+  DetectionVisualPanelProps,
+  TranslationProvider,
+  TranslationRequest,
+  TranslationResult,
+  TranslationDiagnostic,
+  FieldMapping,
+  PublishTargetDescriptor,
 } from "./shared-types";
 
-export { createEmptyDatasets } from "./shared-types";
+export {
+  createEmptyDatasets,
+  BUILTIN_PUBLISH_TARGETS,
+  registerPublishTarget,
+  getPublishTarget,
+  getAllPublishTargets,
+} from "./shared-types";
 
 export type {
   DetectionExecutionRequest,
@@ -42,10 +55,26 @@ export type {
 export type { DetectionWorkflowAdapter } from "./adapters";
 export {
   registerAdapter,
+  unregisterAdapter,
   getAdapter,
   hasAdapter,
   getRegisteredFileTypes,
 } from "./adapters";
+
+// Visual panel registry
+export {
+  registerVisualPanel,
+  getVisualPanel,
+  getRegisteredVisualPanelTypes,
+} from "./visual-panels";
+
+// Translation provider registry
+export {
+  registerTranslationProvider,
+  getTranslationPath,
+  getAllTranslationProviders,
+  getTranslatableTargets,
+} from "./translations";
 
 export { policyAdapter } from "./policy-adapter";
 export { sigmaAdapter } from "./sigma-adapter";

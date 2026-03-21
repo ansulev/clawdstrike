@@ -20,14 +20,114 @@ import {
 } from "@/components/ui/resizable";
 import { EditorVisualPanel } from "@/components/workbench/editor/editor-visual-panel";
 import { TestRunnerPanel } from "@/components/workbench/editor/test-runner-panel";
-import { TestRunnerProvider } from "@/lib/workbench/test-store";
+import { TestRunnerProvider, useTestRunnerOptional } from "@/lib/workbench/test-store";
 import { usePolicyTabsStore } from "@/features/policy/stores/policy-tabs-store";
 import { usePolicyEditStore } from "@/features/policy/stores/policy-edit-store";
 import { useWorkbench } from "@/features/policy/stores/multi-policy-store";
 import { useNativeValidation } from "@/features/policy/use-native-validation";
 import { useAutoVersion } from "@/features/policy/use-auto-version";
 import { isPolicyFileType } from "@/lib/workbench/file-type-registry";
+import { generateScenariosFromPolicy } from "@/lib/workbench/scenario-generator";
+import { useToast } from "@/components/ui/toast";
+import type { SuiteScenario } from "@/lib/workbench/suite-parser";
+import type { TestScenario } from "@/lib/workbench/types";
+import type { FileType } from "@/lib/workbench/file-type-registry";
+import type { YamlEditorError } from "@/components/ui/yaml-editor";
 import { FileEditorToolbar } from "./file-editor-toolbar";
+
+/** Convert a TestScenario to the SuiteScenario format used by the test runner. */
+function extractTarget(s: TestScenario): string {
+  const p = s.payload;
+  if (typeof p.path === "string") return p.path;
+  if (typeof p.host === "string") return p.host;
+  if (typeof p.command === "string") return p.command;
+  if (typeof p.tool === "string") return p.tool;
+  if (typeof p.text === "string") return p.text.slice(0, 120);
+  return JSON.stringify(p).slice(0, 120);
+}
+
+function testScenarioToSuite(s: TestScenario): SuiteScenario {
+  const suite: SuiteScenario = {
+    id: s.id,
+    name: s.name,
+    action: s.actionType,
+    target: extractTarget(s),
+    description: s.description,
+  };
+  if (s.expectedVerdict) suite.expect = s.expectedVerdict;
+  if (typeof s.payload.content === "string") suite.content = s.payload.content;
+  if (s.category) suite.tags = [s.category];
+  return suite;
+}
+
+/**
+ * Inner wrapper rendered inside TestRunnerProvider so useTestRunnerOptional()
+ * can access the context. FileEditorShell itself creates the provider, so
+ * calling the hook at the FileEditorShell level would always return null.
+ */
+function GuardTestYamlEditor({
+  value,
+  onChange,
+  fileType,
+  errors,
+  showDetectionGutters,
+  activePolicy,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  fileType?: FileType;
+  errors?: YamlEditorError[];
+  showDetectionGutters?: boolean;
+  activePolicy: ReturnType<typeof useWorkbench>["state"]["activePolicy"];
+}) {
+  const { toast } = useToast();
+  const testRunner = useTestRunnerOptional();
+
+  const handleRunGuardTest = useCallback(
+    (guardId: string) => {
+      const result = generateScenariosFromPolicy(activePolicy);
+      const prefix = `auto-${guardId}-`;
+      const guardScenarios = result.scenarios.filter((s) => s.id.startsWith(prefix));
+
+      if (guardScenarios.length === 0) {
+        toast({
+          type: "info",
+          title: "No scenarios generated",
+          description: `No test scenarios could be generated for guard "${guardId}". Enable the guard first.`,
+        });
+        return;
+      }
+
+      if (testRunner) {
+        const suiteScenarios: SuiteScenario[] = guardScenarios.map(testScenarioToSuite);
+        testRunner.dispatch({ type: "IMPORT_SCENARIOS", scenarios: suiteScenarios });
+        toast({
+          type: "success",
+          title: "Tests imported",
+          description: `${suiteScenarios.length} scenario${suiteScenarios.length !== 1 ? "s" : ""} imported for ${guardId}`,
+        });
+      } else {
+        toast({
+          type: "info",
+          title: "Test Runner not available",
+          description: `Open Test Runner to execute tests for ${guardId}`,
+        });
+      }
+    },
+    [activePolicy, testRunner, toast],
+  );
+
+  return (
+    <YamlEditor
+      value={value}
+      onChange={onChange}
+      fileType={fileType}
+      errors={errors}
+      showDetectionGutters={showDetectionGutters}
+      onRunGuardTest={fileType === "clawdstrike_policy" ? handleRunGuardTest : undefined}
+    />
+  );
+}
 
 export function FileEditorShell() {
   const params = useParams();
@@ -236,22 +336,24 @@ export function FileEditorShell() {
           withHandle
         />
         <ResizablePanel defaultSize={55} minSize={25}>
-          <YamlEditor
+          <GuardTestYamlEditor
             value={editState.yaml}
             onChange={handleEditorChange}
             fileType={tabMeta.fileType}
             errors={editorErrors}
             showDetectionGutters={tabMeta.fileType === "clawdstrike_policy"}
+            activePolicy={workbenchState.activePolicy}
           />
         </ResizablePanel>
       </ResizablePanelGroup>
     ) : (
-      <YamlEditor
+      <GuardTestYamlEditor
         value={editState.yaml}
         onChange={handleEditorChange}
         fileType={tabMeta.fileType}
         errors={editorErrors}
         showDetectionGutters={tabMeta.fileType === "clawdstrike_policy"}
+        activePolicy={workbenchState.activePolicy}
       />
     );
 

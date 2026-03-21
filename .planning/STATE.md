@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v4.0
 milestone_name: milestone
-status: in_progress
-stopped_at: Completed 05-01-PLAN.md
-last_updated: "2026-03-21T13:51:38Z"
+status: executing
+stopped_at: Completed 03-01-PLAN.md
+last_updated: "2026-03-21T13:54:00.579Z"
 progress:
   total_phases: 5
   completed_phases: 1
   total_plans: 13
   completed_plans: 7
-  percent: 54
+  percent: 46
 ---
 
 # Project State
@@ -65,6 +65,17 @@ Progress: [████░░░░░░] 46%
 - [04-01] Client-side ECS field resolution supports both flat dotted keys and nested objects
 - [04-01] Sequence draft triggers on multiple categories, defaults to sequence by host.id with 5m maxspan
 
+- [05-01] YARA-L parser uses regex-based best-effort parsing, sufficient for client-side simulation
+- [05-01] Multi-variable YARA-L conditions use OR semantics between variable groups, AND within each group
+- [05-01] UDM field resolution: dot-path traversal first, inverse Sigma mapping fallback second
+- [05-01] Full implementation in single file pass (both tasks target same file)
+
+- [03-01] Client-side KQL execution via where-clause parsing and clientSideKqlMatch (no native backend needed)
+- [03-01] KQL parser handles 14 operators including negated forms, regex, and in-list
+- [03-01] KQL->Sigma reverse mapping built dynamically from getAllFieldMappings() sentinel entries
+- [03-01] Untranslatable KQL features (summarize, join, union, extend, ago, etc.) detected and reported
+- [03-01] Sentinel Analytics Rule JSON uses standard queryFrequency/queryPeriod PT5H defaults
+
 ### Pending Todos
 None.
 
@@ -73,6 +84,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-21T13:51:15Z
-Stopped at: Completed 04-01-PLAN.md
-Resume file: .planning/phases/04-eql-adapter-plugin/04-02-PLAN.md
+Last session: 2026-03-21T13:54:00.577Z
+Stopped at: Completed 03-01-PLAN.md
+Resume file: None

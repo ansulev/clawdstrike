@@ -151,12 +151,33 @@ export interface FileTypeContribution {
 /**
  * Detection adapter contribution provides a detection format adapter
  * (e.g., Splunk SPL, KQL, Elastic ESQL).
+ *
+ * Bundles all the registration details an adapter plugin needs to declare:
+ * - The file type and adapter module entrypoint (required)
+ * - An optional file type descriptor for auto-registration in the file type registry
+ * - Whether the adapter includes a visual panel component
+ * - Translation capabilities the adapter declares (from/to pairs)
  */
 export interface DetectionAdapterContribution {
-  /** File type this adapter handles. */
+  /** Unique file type identifier (e.g. "splunk_spl"). */
   fileType: string;
   /** Path to the adapter module within the plugin package. */
   entrypoint: string;
+  /** File type descriptor for registry integration (omit id -- derived from fileType). */
+  fileTypeDescriptor?: Omit<FileTypeContribution, "id">;
+  /** Whether the adapter includes a visual panel component. */
+  hasVisualPanel?: boolean;
+  /** Translation capabilities this adapter declares. */
+  translations?: Array<{
+    /** Source file type for translation. */
+    from: string;
+    /** Target file type for translation. */
+    to: string;
+    /** Whether the translation is lossless (no information loss). */
+    lossless: boolean;
+    /** Description of what is lost in a lossy translation. */
+    lossDescription?: string;
+  }>;
 }
 
 /**

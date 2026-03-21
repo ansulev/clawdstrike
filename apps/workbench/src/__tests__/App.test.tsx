@@ -17,12 +17,12 @@ vi.mock("@/components/workbench/home/home-page", () => ({
   HomePage: () => <div data-testid="page-home">HomePage</div>,
 }));
 
-vi.mock("@/components/workbench/editor/policy-editor", () => ({
-  PolicyEditor: () => <div data-testid="page-editor">PolicyEditor</div>,
-}));
-
 vi.mock("@/components/workbench/lab/lab-layout", () => ({
   LabLayout: () => <div data-testid="page-lab">LabLayout</div>,
+}));
+
+vi.mock("@/components/workbench/compare/compare-layout", () => ({
+  CompareLayout: () => <div data-testid="page-compare">CompareLayout</div>,
 }));
 
 vi.mock("@/components/workbench/topology/topology-layout", () => ({
@@ -90,13 +90,13 @@ describe("App", () => {
     });
   });
 
-  it("renders the editor route", async () => {
+  it("redirects /editor to /home", async () => {
     // HashRouter uses window.location.hash, set it before render
     window.location.hash = "#/editor";
     render(<App />);
 
     await waitFor(() => {
-      expect(screen.getByTestId("page-editor")).toBeTruthy();
+      expect(screen.getByTestId("page-home")).toBeTruthy();
     });
   });
 
@@ -110,13 +110,12 @@ describe("App", () => {
     });
   });
 
-  it("redirects compare legacy route to /editor?panel=compare", async () => {
+  it("renders the compare route", async () => {
     window.location.hash = "#/compare";
     render(<App />);
 
     await waitFor(() => {
-      expect(screen.getByTestId("page-editor")).toBeTruthy();
-      expect(window.location.hash).toContain("/editor?panel=compare");
+      expect(screen.getByTestId("page-compare")).toBeTruthy();
     });
   });
 

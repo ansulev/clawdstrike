@@ -208,39 +208,7 @@ export function registerNavigateCommands(): void {
           .openApp("/trustprint/thresholds", "TrustPrint Thresholds"),
     },
 
-    // ---- New app.* commands (CMD-06) ----
-    {
-      id: "app.missions",
-      title: "Open Mission Control",
-      category: "Navigate",
-      execute: () =>
-        usePaneStore.getState().openApp("/missions", "Mission Control"),
-    },
-    {
-      id: "app.approvals",
-      title: "Open Approvals",
-      category: "Navigate",
-      execute: () =>
-        usePaneStore.getState().openApp("/approvals", "Approvals"),
-    },
-    {
-      id: "app.audit",
-      title: "Open Audit Log",
-      category: "Navigate",
-      execute: () => usePaneStore.getState().openApp("/audit", "Audit"),
-    },
-    {
-      id: "app.receipts",
-      title: "Open Receipts",
-      category: "Navigate",
-      execute: () => usePaneStore.getState().openApp("/receipts", "Receipts"),
-    },
-    {
-      id: "app.topology",
-      title: "Open Topology",
-      category: "Navigate",
-      execute: () => usePaneStore.getState().openApp("/topology", "Topology"),
-    },
+    // ---- Unique app.* commands (no nav.* duplicate) ----
     {
       id: "app.swarmBoard",
       title: "Open Swarm Board",
@@ -285,13 +253,6 @@ export function registerNavigateCommands(): void {
       title: "Open Threat Hunt",
       category: "Navigate",
       execute: () => usePaneStore.getState().openApp("/hunt", "Hunt"),
-    },
-    {
-      id: "app.simulator",
-      title: "Open Simulator",
-      category: "Navigate",
-      execute: () =>
-        usePaneStore.getState().openApp("/simulator", "Simulator"),
     },
   ];
 

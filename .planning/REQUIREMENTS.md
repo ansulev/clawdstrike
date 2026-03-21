@@ -45,7 +45,7 @@
 
 - [x] **POLI-01**: Interactive YAML policy editor with live schema validation against v1.5.0 spec
 - [x] **POLI-02**: Editor shows validation errors inline with guard-level specificity (not just "invalid YAML")
-- [ ] **POLI-03**: Lesson demonstrates policy inheritance via `extends` with visual tree showing parent-child relationships
+- [x] **POLI-03**: Lesson demonstrates policy inheritance via `extends` with visual tree showing parent-child relationships
 - [x] **POLI-04**: Side-by-side comparison view showing differences between all 10 built-in rulesets
 - [ ] **POLI-05**: Guided exercise: user creates a custom policy for a specific scenario and tests it in the playground
 - [ ] **POLI-06**: Lesson covers the observe-synth-tighten workflow for iterative policy development
@@ -121,7 +121,7 @@
 | GARD-06 | Phase 3 | Complete |
 | POLI-01 | Phase 4 | Complete |
 | POLI-02 | Phase 4 | Complete |
-| POLI-03 | Phase 4 | Pending |
+| POLI-03 | Phase 4 | Complete |
 | POLI-04 | Phase 4 | Complete |
 | POLI-05 | Phase 4 | Pending |
 | POLI-06 | Phase 4 | Pending |

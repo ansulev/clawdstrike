@@ -2,6 +2,8 @@ import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { PolicyTabBar } from "@/components/workbench/editor/policy-tab-bar";
 import { ViewTabRenderer } from "@/components/plugins/view-tab-renderer";
+import { BottomPanelTabs, type BuiltInTab } from "@/components/workbench/editor/bottom-panel-tabs";
+import { RightSidebarPanels, type BuiltInPanel } from "@/components/workbench/editor/right-sidebar-panels";
 import { useActivePluginViewTabId } from "@/lib/plugins/plugin-view-tab-store";
 import { CommandPalette } from "@/components/workbench/editor/command-palette";
 import { ProblemsPanel, type ProblemEntry } from "@/components/workbench/editor/problems-panel";
@@ -359,6 +361,8 @@ export function PolicyEditor() {
   const [evidenceOpen, setEvidenceOpen] = useState(false);
   const [explainOpen, setExplainOpen] = useState(false);
   const [publishOpen, setPublishOpen] = useState(false);
+  const [bottomPanelActiveTab, setBottomPanelActiveTab] = useState<string | null>("test-runner");
+  const [rightSidebarPanelId, setRightSidebarPanelId] = useState<string | null>(null);
   const activePluginViewTabId = useActivePluginViewTabId();
   const isPolicyTab = activeTab ? isPolicyFileType(activeTab.fileType) : true;
   const publishedCoverage = usePublishedCoverage();
@@ -618,6 +622,59 @@ export function PolicyEditor() {
     });
   }, [tabs]);
 
+  // Built-in bottom panel tabs for BottomPanelTabs
+  const builtInTabs = useMemo<BuiltInTab[]>(
+    () => [
+      {
+        id: "problems",
+        label: "Problems",
+        icon: IconAlertCircle,
+        content: <ProblemsPanel diagnostics={problems} className="h-full" />,
+      },
+      {
+        id: "test-runner",
+        label: "Test Runner",
+        icon: IconTestPipe,
+        content: <TestRunnerPanel />,
+      },
+      {
+        id: "evidence",
+        label: "Evidence Pack",
+        icon: IconPackage,
+        content: (
+          <EvidencePackPanel
+            documentId={activeTab?.documentId}
+            fileType={activeTab?.fileType}
+          />
+        ),
+      },
+      {
+        id: "explainability",
+        label: "Explainability",
+        icon: IconBulb,
+        content: (
+          <ExplainabilityPanel
+            documentId={activeTab?.documentId}
+            lastRun={labExecution.lastRun}
+            baselineRun={
+              labExecution.runHistory.length > 1
+                ? labExecution.runHistory[1]
+                : null
+            }
+            onJumpToLine={(line: number) => {
+              window.dispatchEvent(
+                new CustomEvent("workbench:jump-to-line", {
+                  detail: { line },
+                }),
+              );
+            }}
+          />
+        ),
+      },
+    ],
+    [problems, activeTab?.documentId, activeTab?.fileType, labExecution.lastRun, labExecution.runHistory],
+  );
+
   const versionDocumentId = activeTab?.documentId;
   const { versions } = useVersionHistory(versionDocumentId);
 
@@ -645,6 +702,78 @@ export function PolicyEditor() {
       setDiffDialogOpen(true);
     },
     [],
+  );
+
+  // Built-in right sidebar panels for RightSidebarPanels
+  const builtInPanels = useMemo<BuiltInPanel[]>(
+    () => [
+      {
+        id: "history",
+        label: "Version History",
+        icon: IconHistory,
+        content: (
+          <VersionHistoryPanel
+            policyId={versionDocumentId}
+            currentYaml={state.yaml}
+            currentPolicy={state.activePolicy}
+            onRollback={handleRollback}
+            onCompare={handleCompare}
+          />
+        ),
+      },
+      {
+        id: "evidence",
+        label: "Evidence Pack",
+        icon: IconPackage,
+        content: (
+          <EvidencePackPanel
+            documentId={activeTab?.documentId}
+            fileType={activeTab?.fileType}
+          />
+        ),
+      },
+      {
+        id: "explainability",
+        label: "Explainability",
+        icon: IconBulb,
+        content: (
+          <ExplainabilityPanel
+            documentId={activeTab?.documentId}
+            lastRun={labExecution.lastRun}
+            baselineRun={
+              labExecution.runHistory.length > 1
+                ? labExecution.runHistory[1]
+                : null
+            }
+            onJumpToLine={(line: number) => {
+              window.dispatchEvent(
+                new CustomEvent("workbench:jump-to-line", {
+                  detail: { line },
+                }),
+              );
+            }}
+          />
+        ),
+      },
+      {
+        id: "publish",
+        label: "Publish",
+        icon: IconFileExport,
+        content: (
+          <PublishPanel
+            documentId={activeTab?.documentId}
+            fileType={activeTab?.fileType}
+            source={state.yaml}
+            validationValid={
+              state.validation.valid &&
+              state.nativeValidation.valid !== false
+            }
+            lastLabRun={labExecution.lastRun}
+          />
+        ),
+      },
+    ],
+    [versionDocumentId, state.yaml, state.activePolicy, state.validation.valid, state.nativeValidation.valid, handleRollback, handleCompare, activeTab?.documentId, activeTab?.fileType, labExecution.lastRun, labExecution.runHistory],
   );
 
   const handleOpenExplorerFile = useCallback(
@@ -965,11 +1094,6 @@ export function PolicyEditor() {
                     <div className="flex-1 min-h-0">
                       <SplitEditor />
                     </div>
-                    {showProblems && (
-                      <div className="h-[180px] shrink-0">
-                        <ProblemsPanel diagnostics={problems} className="h-full" />
-                      </div>
-                    )}
                   </div>
                 </ResizablePanel>
                 <ResizableHandle
@@ -977,7 +1101,12 @@ export function PolicyEditor() {
                   withHandle
                 />
                 <ResizablePanel defaultSize={35} minSize={15}>
-                  <TestRunnerPanel />
+                  <BottomPanelTabs
+                    builtInTabs={builtInTabs}
+                    panelHeight={200}
+                    activeTabId={bottomPanelActiveTab}
+                    onTabChange={setBottomPanelActiveTab}
+                  />
                 </ResizablePanel>
               </ResizablePanelGroup>
             ) : (

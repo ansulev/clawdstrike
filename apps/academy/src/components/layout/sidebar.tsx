@@ -43,8 +43,9 @@ export function Sidebar({ tracks }: SidebarProps) {
               <ul className="ml-4 mt-1 space-y-1">
                 {track.lessons.map((lesson) => {
                   const isActive = pathname === lesson.path;
+                  const lessonSlug = lesson.path.replace(/^\/tracks\//, '');
                   const isComplete =
-                    hydrated && completedLessons.includes(lesson.path);
+                    hydrated && (completedLessons.includes(lesson.path) || completedLessons.includes(lessonSlug));
 
                   return (
                     <li key={lesson.slug}>

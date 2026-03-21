@@ -240,7 +240,14 @@ async function evaluateWasmGuard(
 
     case 'spider_sense': {
       const { screenSpiderSense } = await import('@/lib/wasm-api');
-      const result = await screenSpiderSense(text);
+      // screenSpiderSense expects a JSON-encoded embedding vector, not raw text.
+      // For the academy playground, we pass a demo 3-dim embedding derived from text length.
+      const demoEmbedding = [
+        Math.sin(text.length * 0.1),
+        Math.cos(text.length * 0.2),
+        Math.sin(text.length * 0.3),
+      ];
+      const result = await screenSpiderSense(JSON.stringify(demoEmbedding));
       return {
         allowed: result.verdict === 'allow',
         guard: name,
@@ -258,7 +265,9 @@ async function evaluateWasmGuard(
 
     case 'instruction_hierarchy': {
       const { enforceInstructionHierarchy } = await import('@/lib/wasm-api');
-      const result = await enforceInstructionHierarchy(text);
+      // enforceInstructionHierarchy expects a JSON array of message objects, not raw text.
+      const messages = [{ role: 'user', content: text }];
+      const result = await enforceInstructionHierarchy(JSON.stringify(messages));
       return {
         allowed: result.allowed,
         guard: name,

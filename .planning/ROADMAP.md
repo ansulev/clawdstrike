@@ -17,6 +17,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 3: KQL Adapter Plugin** - Microsoft Sentinel KQL as a first-class detection format with tabular expression editor and bidirectional Sigma translation (completed 2026-03-21)
 - [x] **Phase 4: EQL Adapter Plugin** - Elastic EQL as a first-class detection format with multi-event sequence builder and bidirectional Sigma translation (completed 2026-03-21)
 - [x] **Phase 5: YARA-L Adapter Plugin** - Google Chronicle YARA-L as a first-class detection format with multi-event correlation panel and bidirectional Sigma translation (completed 2026-03-21)
+- [ ] **Phase 6: Translation UI & Hub-and-Spoke Routing** - Wire translation providers to a user-facing "Translate to..." command and build multi-hop cross-format routing through Sigma
 
 ## Phase Details
 
@@ -94,11 +95,24 @@ Plans:
 - [x] 05-02-PLAN.md -- YARA-L visual panel with meta editor, event variable cards, and condition editor
 - [x] 05-03-PLAN.md -- Bidirectional Sigma<->YARA-L translation provider
 
+### Phase 6: Translation UI & Hub-and-Spoke Routing
+**Goal**: Users can translate detection rules between any supported format pair via a "Translate to..." command, with multi-hop routing through Sigma as hub
+**Depends on**: Phase 1 (translations registry), Phases 2-5 (translation providers)
+**Gap Closure**: Closes TRANSLATION_UI, HUB_AND_SPOKE_ROUTING integration gaps and Flows C, E from v4.0 audit
+**Success Criteria** (what must be TRUE):
+  1. User can open a Sigma rule, invoke "Translate to..." from command palette or context menu, select "SPL" / "KQL" / "EQL" / "YARA-L", and see the translated output with field mapping diagnostics
+  2. User can open an SPL rule and translate to KQL — the system automatically routes through Sigma (SPL→Sigma→KQL) and produces valid KQL output
+  3. Translation results display field mapping table, diagnostics, and untranslatable features in a results panel
+  4. `chainTranslation(from, to)` function resolves multi-hop paths through the translation registry and chains provider calls
+**Plans:** 1 plan
+Plans:
+- [ ] 06-01-PLAN.md -- useTranslation hook, chainTranslation orchestrator, "Translate to..." command, results UI
+
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
-Note: Phases 2-5 each depend only on Phase 1, so adapter plugins can be developed in parallel after Phase 1 completes. The listed order reflects demand priority (SPL > KQL > EQL > YARA-L).
+Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
+Note: Phases 2-5 each depend only on Phase 1, so adapter plugins can be developed in parallel after Phase 1 completes. Phase 6 depends on all prior phases.
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -107,3 +121,4 @@ Note: Phases 2-5 each depend only on Phase 1, so adapter plugins can be develope
 | 3. KQL Adapter Plugin | 2/2 | Complete | 2026-03-21 |
 | 4. EQL Adapter Plugin | 3/3 | Complete | 2026-03-21 |
 | 5. YARA-L Adapter Plugin | 3/3 | Complete | 2026-03-21 |
+| 6. Translation UI & Hub-and-Spoke | 0/1 | Not started | - |

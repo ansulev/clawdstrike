@@ -76,6 +76,17 @@ export {
   getTranslatableTargets,
 } from "./translations";
 
+// Field mapping registry
+export type { FieldMappingEntry, FieldMappingTarget } from "./field-mappings";
+export {
+  BUILTIN_FIELD_MAPPINGS,
+  registerFieldMappings,
+  getFieldMapping,
+  translateField,
+  getAllFieldMappings,
+  getFieldMappingsByCategory,
+} from "./field-mappings";
+
 export { policyAdapter } from "./policy-adapter";
 export { sigmaAdapter } from "./sigma-adapter";
 export { yaraAdapter } from "./yara-adapter";

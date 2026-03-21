@@ -12,10 +12,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { EditorVisualPanel } from "@/components/workbench/editor/editor-visual-panel";
-import { SigmaVisualPanel } from "@/components/workbench/editor/sigma-visual-panel";
-import { OcsfVisualPanel } from "@/components/workbench/editor/ocsf-visual-panel";
-import { YaraVisualPanel } from "@/components/workbench/editor/yara-visual-panel";
 import { YamlPreviewPanel } from "@/components/workbench/editor/yaml-preview-panel";
+// Side-effect imports: these panels self-register in the visual panel registry at module load.
+import "@/components/workbench/editor/sigma-visual-panel";
+import "@/components/workbench/editor/ocsf-visual-panel";
+import "@/components/workbench/editor/yara-visual-panel";
+import { getVisualPanel } from "@/lib/workbench/detection-workflow/visual-panels";
+import { getDescriptor } from "@/lib/workbench/file-type-registry";
 import { ViewContainer } from "@/components/plugins/view-container";
 import { useMultiPolicy, useWorkbench, type SplitMode } from "@/lib/workbench/multi-policy-store";
 import { useNativeValidation } from "@/lib/workbench/use-native-validation";
@@ -145,31 +148,23 @@ function EditorPane() {
   );
 
   const renderVisualPanel = () => {
-    switch (fileType) {
-      case "sigma_rule":
-        return (
-          <SigmaVisualPanel
-            yaml={activeTab!.yaml}
-            onYamlChange={(yaml) => multiDispatch({ type: "SET_YAML", yaml })}
-          />
-        );
-      case "ocsf_event":
-        return (
-          <OcsfVisualPanel
-            json={activeTab!.yaml}
-            onJsonChange={(json) => multiDispatch({ type: "SET_YAML", yaml: json })}
-          />
-        );
-      case "yara_rule":
-        return (
-          <YaraVisualPanel
-            source={activeTab!.yaml}
-            onSourceChange={(source) => multiDispatch({ type: "SET_YAML", yaml: source })}
-          />
-        );
-      default:
-        return <EditorVisualPanel />;
+    if (!fileType) return <EditorVisualPanel />;
+
+    const Panel = getVisualPanel(fileType);
+    if (Panel) {
+      const descriptor = getDescriptor(fileType);
+      return (
+        <Panel
+          source={activeTab!.yaml}
+          onSourceChange={(source) => multiDispatch({ type: "SET_YAML", yaml: source })}
+          readOnly={false}
+          accentColor={descriptor.iconColor}
+        />
+      );
     }
+
+    // Fallback for file types without a visual panel (e.g. policy uses its own panel)
+    return <EditorVisualPanel />;
   };
 
   return (

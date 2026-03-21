@@ -11,6 +11,7 @@ import type { FileType } from "../file-type-registry";
 import type { PublicationManifest, PublishTarget, LabRun } from "./shared-types";
 import type { PublicationRequest } from "./execution-types";
 import { getAdapter, hasAdapter } from "./adapters";
+import { getTranslatableTargets } from "./translations";
 import { getPublicationStore } from "./publication-store";
 import { extractDocumentCoverage } from "./coverage-projection";
 import { signPublicationOutput } from "./publication-provenance";
@@ -69,19 +70,32 @@ export interface UsePublicationReturn {
 
 // ---- Available targets per file type ----
 
+/** Built-in publish target mapping for known file types. */
+const builtinTargetMap: Record<string, PublishTarget[]> = {
+  clawdstrike_policy: ["native_policy", "fleet_deploy"],
+  sigma_rule: ["native_policy", "fleet_deploy", "json_export", "spl", "kql", "esql"],
+  yara_rule: ["json_export"],
+  ocsf_event: ["json_export"],
+};
+
+/**
+ * Get the publish targets available for a given file type.
+ *
+ * For built-in file types, returns the hardcoded target list (preserving existing behavior).
+ * For plugin file types that have a registered adapter but no built-in targets,
+ * offers json_export as a baseline plus any formats reachable via translation.
+ */
 export function getAvailableTargets(fileType: FileType): PublishTarget[] {
-  switch (fileType) {
-    case "clawdstrike_policy":
-      return ["native_policy", "fleet_deploy"];
-    case "sigma_rule":
-      return ["native_policy", "fleet_deploy", "json_export", "spl", "kql", "esql"];
-    case "yara_rule":
-      return ["json_export"];
-    case "ocsf_event":
-      return ["json_export"];
-    default:
-      return [];
+  const targets = builtinTargetMap[fileType];
+  if (targets) return targets;
+
+  // Plugin file types: offer json_export baseline + translatable formats
+  if (hasAdapter(fileType)) {
+    const translatable = getTranslatableTargets(fileType);
+    return ["json_export", ...translatable];
   }
+
+  return [];
 }
 
 // ---- Hook ----

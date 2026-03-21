@@ -750,6 +750,18 @@ export class PluginLoader {
       }
     }
 
+    // Route detection adapter contributions
+    // The actual registerAdapter() call happens when the plugin's activate()
+    // function runs through the SDK bridge. The manifest contribution here is
+    // declarative -- it tells the system which file types the plugin handles.
+    if (contributions.detectionAdapters) {
+      for (const adapter of contributions.detectionAdapters) {
+        console.debug(
+          `[PluginLoader] Detection adapter declared for "${(adapter as { fileType: string }).fileType}" by plugin "${manifest.id}"`,
+        );
+      }
+    }
+
     // Route context menu item contributions to ContextMenuRegistry
     if (contributions.contextMenuItems) {
       for (const item of contributions.contextMenuItems) {

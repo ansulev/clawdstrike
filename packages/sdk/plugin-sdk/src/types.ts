@@ -199,6 +199,8 @@ export interface ActivityBarItemContribution {
   icon: string;
   /** Route path for navigation. */
   href: string;
+  /** Module path for lazy-loaded panel component. Used instead of href for view loading. */
+  entrypoint?: string;
   /** Sort order within the section. Lower numbers appear first. */
   order?: number;
 }

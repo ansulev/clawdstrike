@@ -171,8 +171,10 @@ export interface ActivityBarItemContribution {
   label: string;
   /** Icon identifier (Lucide icon name or custom). */
   icon: string;
-  /** Route path for navigation. */
+  /** Route path for navigation (used for built-in nav items). */
   href: string;
+  /** Module path for lazy-loaded panel component. Used instead of href for view loading. */
+  entrypoint?: string;
   /** Sort order within the section. Lower numbers appear first. */
   order?: number;
 }

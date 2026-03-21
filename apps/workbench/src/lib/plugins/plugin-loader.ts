@@ -719,9 +719,11 @@ export class PluginLoader {
           slot: "activityBarPanel",
           label: item.label,
           icon: item.icon,
-          component: lazy(() => this.resolveViewEntrypoint(item.href)),
+          component: item.entrypoint
+            ? lazy(() => this.resolveViewEntrypoint(item.entrypoint!))
+            : (() => null) as ComponentType<any>,
           priority: item.order,
-          meta: { section: item.section, href: item.href },
+          meta: { section: item.section, href: item.href, entrypoint: item.entrypoint },
         });
         disposables.push(dispose);
       }

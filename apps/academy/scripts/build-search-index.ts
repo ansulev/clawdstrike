@@ -7,7 +7,6 @@
 import * as pagefind from 'pagefind';
 import fs from 'node:fs';
 import path from 'node:path';
-import matter from 'gray-matter';
 
 const TRACKS_DIR = path.resolve(process.cwd(), 'src/app/tracks');
 
@@ -62,16 +61,30 @@ async function buildIndex() {
         if (!fs.existsSync(mdxPath)) continue;
 
         const raw = fs.readFileSync(mdxPath, 'utf8');
-        const { data, content } = matter(raw);
+        // Parse exported metadata object literal
+        const metaMatch = raw.match(
+          /export\s+const\s+metadata\s*=\s*(\{[\s\S]*?\n\})/,
+        );
+        let title = lessonDir.name;
+        if (metaMatch) {
+          try {
+            // eslint-disable-next-line no-new-func
+            const parsed = new Function(`return (${metaMatch[1]});`)() as { title?: string };
+            if (parsed.title) title = parsed.title;
+          } catch { /* use fallback title */ }
+        }
+        // Content is everything after the export const metadata block
+        const content = raw.replace(
+          /export\s+const\s+metadata\s*=\s*\{[\s\S]*?\n\}\s*/,
+          '',
+        );
         const textContent = stripMdxComponents(content);
 
         await index.addCustomRecord({
           url: `/tracks/${trackSlug}/${lessonDir.name}`,
           content: textContent,
           language: 'en',
-          meta: {
-            title: (data.title as string) || lessonDir.name,
-          },
+          meta: { title },
         });
         pageCount++;
       }

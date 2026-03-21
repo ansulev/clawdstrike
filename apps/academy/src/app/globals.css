@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@plugin "@tailwindcss/typography";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -49,17 +50,30 @@
   --color-ring: hsl(240 4.9% 83.9%);
 }
 
-/* Shiki multi-theme: light mode uses --shiki-light, dark mode uses --shiki-dark */
-.shiki,
-.shiki span {
+/*
+ * Shiki theme switching.
+ *
+ * CodeBlock: uses single-theme mode (theme-aware, inline styles, no CSS needed).
+ * AnnotatedSource: uses Shiki dual-theme with defaultColor:false. Colors are
+ *   stored in --shiki-light/--shiki-dark CSS custom properties (no inline
+ *   color/background-color). These rules switch between them.
+ */
+.annotated-source .shiki {
   color: var(--shiki-light);
   background-color: var(--shiki-light-bg);
 }
 
-html.dark .shiki,
-html.dark .shiki span {
+.annotated-source .shiki span {
+  color: var(--shiki-light);
+}
+
+html.dark .annotated-source .shiki {
   color: var(--shiki-dark);
   background-color: var(--shiki-dark-bg);
+}
+
+html.dark .annotated-source .shiki span {
+  color: var(--shiki-dark);
 }
 
 /* Code block container styling */

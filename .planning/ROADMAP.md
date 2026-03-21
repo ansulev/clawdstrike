@@ -88,7 +88,7 @@ Note: Phases 2-5 each depend only on Phase 1, so adapter plugins can be develope
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Core Detection Plugin Infrastructure | 0/3 | In progress | - |
+| 1. Core Detection Plugin Infrastructure | 2/3 | In progress | - |
 | 2. SPL Adapter Plugin | 0/? | Not started | - |
 | 3. KQL Adapter Plugin | 0/? | Not started | - |
 | 4. EQL Adapter Plugin | 0/? | Not started | - |

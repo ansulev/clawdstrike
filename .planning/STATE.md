@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v4.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 01-01-PLAN.md
+stopped_at: Completed 01-02-PLAN.md
 last_updated: "2026-03-21T12:59:37.484Z"
 progress:
   total_phases: 5
   completed_phases: 0
   total_plans: 3
-  completed_plans: 1
-  percent: 33
+  completed_plans: 2
+  percent: 67
 ---
 
 # Project State
@@ -25,10 +25,10 @@ See: .planning/PROJECT.md
 ## Current Position
 
 Phase: 1 of 5 (Core Detection Plugin Infrastructure)
-Plan: 2 of 3
+Plan: 3 of 3
 Status: In progress
 
-Progress: [███░░░░░░░] 33%
+Progress: [██████░░░░] 67%
 
 ## Previous Milestones
 
@@ -53,6 +53,9 @@ Progress: [███░░░░░░░] 33%
 - [01-01] Translation providers use array storage since one provider may handle multiple pairs
 - [01-01] Visual panel registry throws on duplicate registration (fail-fast, matches registerFileType)
 - [01-01] registerAdapter returns dispose function (backward compatible)
+- [01-02] Merge-on-register for field mappings: plugins fill undefined platform fields without overwriting
+- [01-02] Category-based grouping for field mappings (process/file/network/dns/registry/authentication)
+- [01-02] FieldMappingTable uses confidence indicators (exact/approximate/unmapped) with colored dots
 
 ### Pending Todos
 None.
@@ -62,6 +65,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-21T12:59:37.482Z
-Stopped at: Completed 01-01-PLAN.md
-Resume file: None
+Last session: 2026-03-21T12:59:14Z
+Stopped at: Completed 01-02-PLAN.md
+Resume file: .planning/ROADMAP.md

@@ -81,7 +81,11 @@ Plans:
   2. User can build a multi-event YARA-L rule using the visual panel with event variable cards (`$e1`, `$e2`), each showing UDM field predicates, and the generated YARA-L text is syntactically valid
   3. User can open the Lab with a YARA-L rule and evidence items, click Run, and see per-event-variable matching in the explainability trace
   4. All four adapter plugins are installed and operational: user can translate between any pair of {Sigma, SPL, KQL, EQL, YARA-L} via hub-and-spoke routing, with translation diagnostics showing field mapping details and any untranslatable features
-**Plans**: TBD
+**Plans:** 3 plans
+Plans:
+- [ ] 05-01-PLAN.md -- YARA-L adapter with file type registration, drafting, lab execution, and publication
+- [ ] 05-02-PLAN.md -- YARA-L visual panel with meta editor, event variable cards, and condition editor
+- [ ] 05-03-PLAN.md -- Bidirectional Sigma<->YARA-L translation provider
 
 ## Progress
 
@@ -95,4 +99,4 @@ Note: Phases 2-5 each depend only on Phase 1, so adapter plugins can be develope
 | 2. SPL Adapter Plugin | 0/2 | Not started | - |
 | 3. KQL Adapter Plugin | 0/? | Not started | - |
 | 4. EQL Adapter Plugin | 0/? | Not started | - |
-| 5. YARA-L Adapter Plugin | 0/? | Not started | - |
+| 5. YARA-L Adapter Plugin | 0/3 | Not started | - |

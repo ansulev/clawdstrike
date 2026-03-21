@@ -96,6 +96,7 @@ export { yaralAdapter } from "./yaral-adapter";
 export { kqlAdapter } from "./kql-adapter";
 export { kqlTranslationProvider } from "./kql-translation";
 export { eqlTranslationProvider } from "./eql-translation";
+export { yaralTranslationProvider } from "./yaral-translation";
 
 // KQL parser types
 export type { KqlParsedQuery, KqlWhereClause } from "./kql-adapter";
@@ -264,3 +265,4 @@ import "./yaral-adapter";
 import "./kql-adapter";
 import "./kql-translation";
 import "./eql-translation";
+import "./yaral-translation";

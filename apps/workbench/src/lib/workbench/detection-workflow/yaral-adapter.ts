@@ -31,6 +31,9 @@ import type {
 } from "./execution-types";
 import { translateField } from "./field-mappings";
 
+// Side-effect import: registers YARA-L translation provider
+import "./yaral-translation";
+
 // ---- SHA-256 ----
 
 async function sha256Hex(text: string): Promise<string> {

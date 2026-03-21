@@ -1,8 +1,8 @@
-# Roadmap: Plugin-Contributed Views (v3.0)
+# Roadmap: Detection Adapter Plugins (v4.0)
 
 ## Overview
 
-Close the gap between the plugin system's contribution point types (which already exist from v1.0) and actual view rendering. The ViewRegistry becomes the central switchboard routing plugin components to 7 visual slots. The journey starts with the registry + container foundation and status bar fix, then opens the highest-value slot (editor tabs with keep-alive), extends to bottom/right panels, and finishes with activity bar navigation, gutter decorations, and context menus.
+Make SIEM-native detection formats first-class citizens in the ClawdStrike workbench. The journey starts by building the core detection plugin infrastructure (registries for visual panels, translation providers, and field mappings), then delivers four adapter plugins in demand order (SPL, KQL, EQL, YARA-L). Each adapter registers a file type, detection workflow adapter, visual panel, and bidirectional Sigma translation -- enabling hub-and-spoke cross-format translation as an emergent property of the adapter ecosystem.
 
 ## Phases
 
@@ -12,95 +12,80 @@ Close the gap between the plugin system's contribution point types (which alread
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [x] **Phase 1: ViewRegistry Foundation** - Central view registry, ViewContainer with ErrorBoundary/Suspense, status bar fix, SDK ViewsApi
-- [x] **Phase 2: Editor Tab Views** - Plugin components in pane tabs with keep-alive state preservation and LRU eviction
-- [x] **Phase 3: Bottom Panel and Right Sidebar** - Plugin tabs in bottom panel and right sidebar alongside built-in panels
-- [x] **Phase 4: Activity Bar, Gutters, and Context Menus** - Dynamic sidebar navigation, CodeMirror gutter extensions, and context menu items
-- [x] **Phase 5: Layout Wiring + SDK Injection** - Mount orphaned components in app layout, inject ViewsApi into PluginActivationContext, fix href/entrypoint bug
+- [ ] **Phase 1: Core Detection Plugin Infrastructure** - Dynamic registries for visual panels, translations, and field mappings that all detection adapter plugins depend on
+- [ ] **Phase 2: SPL Adapter Plugin** - Splunk SPL as a first-class detection format with visual pipe-chain builder and bidirectional Sigma translation
+- [ ] **Phase 3: KQL Adapter Plugin** - Microsoft Sentinel KQL as a first-class detection format with tabular expression editor and bidirectional Sigma translation
+- [ ] **Phase 4: EQL Adapter Plugin** - Elastic EQL as a first-class detection format with multi-event sequence builder and bidirectional Sigma translation
+- [ ] **Phase 5: YARA-L Adapter Plugin** - Google Chronicle YARA-L as a first-class detection format with multi-event correlation panel and bidirectional Sigma translation
 
 ## Phase Details
 
-### Phase 1: ViewRegistry Foundation
-**Goal**: A central registry exists for plugin view contributions, every plugin view renders inside ErrorBoundary + Suspense isolation, and the status bar placeholder gap is closed
-**Depends on**: Nothing (first phase; assumes v1.0 plugin infrastructure is complete)
-**Requirements**: VREG-01, VREG-02, VREG-03, VREG-04, VREG-05, VCONT-01, VCONT-02, VCONT-03, SBAR-01, SDKV-01, SDKV-02, SDKV-03
+### Phase 1: Core Detection Plugin Infrastructure
+**Goal**: Any plugin can register a detection adapter with visual panel, translation capabilities, and field mappings through dynamic registries -- without modifying core workbench code
+**Depends on**: Nothing (first phase; assumes v1.0 plugin SDK and file type seams already exist)
+**Requirements**: CORE-01, CORE-02, CORE-03, CORE-04, CORE-05, CORE-06, CORE-07, CORE-08, CORE-09
 **Success Criteria** (what must be TRUE):
-  1. A plugin calling `ctx.views.registerEditorTab()` in its `activate()` hook causes the view to appear in `viewRegistry.getViewsBySlot("editorTab")`, and calling the returned dispose function removes it
-  2. A plugin status bar widget declared with an `entrypoint` renders its actual component in the status bar instead of blank space
-  3. When a plugin view component throws during render, the ErrorBoundary catches it and displays a fallback with the plugin name, error message, and a working "Reload View" button -- the rest of the workbench remains functional
-  4. `useViewsBySlot("editorTab")` re-renders consuming components when a plugin registers or unregisters a view
-**Plans:** 2 plans
-Plans:
-- [x] 01-01-PLAN.md -- ViewRegistry singleton + ViewContainer with ErrorBoundary/Suspense
-- [x] 01-02-PLAN.md -- SDK ViewsApi + PluginLoader view routing + status bar fix
+  1. A test can call `registerVisualPanel("test_format", TestPanel)` and the editor dynamically renders `TestPanel` when a file of that type is opened, without any hardcoded switch case for `"test_format"`
+  2. A test can call `registerTranslationProvider(provider)` where the provider declares `canTranslate("sigma_rule", "test_format")`, and `getTranslationPath("sigma_rule", "test_format")` returns that provider
+  3. The field mapping registry contains 50+ entries mapping common Sigma field names (CommandLine, SourceIp, TargetFilename, etc.) to their Splunk CIM, Sentinel, ECS, and UDM equivalents, and a plugin can extend the table with `registerFieldMappings()`
+  4. Existing built-in visual panels (Sigma, YARA, OCSF) render identically after being migrated to the standardized `DetectionVisualPanelProps` contract and registered through the visual panel registry
+  5. A plugin can provide a single `DetectionAdapterContribution` object that bundles file type, adapter, visual panel, and translations, and all four registrations happen atomically
+**Plans**: TBD
 
-### Phase 2: Editor Tab Views
-**Goal**: Plugins can open full-panel views in the editor area as tabs, with state preserved across tab switches and split-pane support
+### Phase 2: SPL Adapter Plugin
+**Goal**: Security teams using Splunk can draft, test, and translate SPL detection rules natively in the workbench, and Sigma rules can be translated to/from SPL
 **Depends on**: Phase 1
-**Requirements**: ETAB-01, ETAB-02, ETAB-03, ALIVE-01, ALIVE-02, ALIVE-03
+**Requirements**: SPL-01, SPL-02, SPL-03, SPL-04, SPL-05, SPL-06
 **Success Criteria** (what must be TRUE):
-  1. A plugin editor tab appears in the tab bar with its label and icon, and clicking it shows the plugin component in the editor area -- clicking a policy tab switches back to the policy editor
-  2. Switching away from a plugin tab and back preserves the component's internal state (scroll position, form inputs, selections) without re-mounting
-  3. Opening a plugin view via `paneStore.openApp("plugin:myPlugin.myView")` renders the plugin component in a split pane, and each pane instance has independent state
-  4. When more than 5 hidden plugin tabs accumulate, the oldest hidden tab is destroyed (LRU eviction) and re-opening it creates a fresh mount
-**Plans:** 2 plans
-Plans:
-- [x] 02-01-PLAN.md -- PluginViewTabStore + ViewTabRenderer with keep-alive and LRU eviction
-- [x] 02-02-PLAN.md -- Tab bar integration + split-pane support + human verification
+  1. User can create a new SPL file from the command palette, and the editor opens with a valid SPL starter template, syntax-appropriate icon color, and the SPL visual panel in the sidebar
+  2. User can open the Lab with an SPL rule and evidence items, click Run, and see per-field match results in the explainability trace showing which SPL conditions matched which evidence fields
+  3. User can translate a Sigma rule to SPL and get syntactically valid SPL output with correct CIM field name mappings, and user can translate an SPL rule back to Sigma and get a valid Sigma YAML with detection blocks derived from the SPL field conditions
+  4. The SPL visual panel displays the pipe chain as a vertical sequence of command cards, and editing a field value in a card updates the SPL source text in real time
+**Plans**: TBD
 
-### Phase 3: Bottom Panel and Right Sidebar
-**Goal**: Plugins can contribute tabs to the bottom panel and panels to the right sidebar, rendered alongside built-in panels
+### Phase 3: KQL Adapter Plugin
+**Goal**: Security teams using Microsoft Sentinel can draft, test, and translate KQL detection rules natively in the workbench, and Sigma rules can be translated to/from KQL
 **Depends on**: Phase 1
-**Requirements**: BPAN-01, BPAN-02, RSIDE-01, RSIDE-02
+**Requirements**: KQL-01, KQL-02, KQL-03, KQL-04, KQL-05, KQL-06
 **Success Criteria** (what must be TRUE):
-  1. A plugin-contributed bottom panel tab appears alongside Problems, Test Runner, Evidence Pack, and Explainability -- selecting it renders the plugin component with the correct `panelHeight` prop
-  2. A plugin-contributed right sidebar panel appears alongside Guard Config, Compare, and Version History -- selecting it renders the plugin component with the correct `sidebarWidth` prop
-  3. Uninstalling a plugin that contributed panel views removes its tabs/panels from both the bottom panel and right sidebar without breaking other panels
-**Plans:** 1 plan
-Plans:
-- [x] 03-01-PLAN.md -- BottomPanelTabs + RightSidebarPanels components with plugin view integration
+  1. User can create a new KQL file from the command palette, and the editor opens with a valid KQL starter template, Microsoft blue icon color, and the KQL visual panel in the sidebar
+  2. User can open the Lab with a KQL rule and evidence items, click Run, and see per-condition match results in the explainability trace showing which KQL where-clauses matched which evidence fields
+  3. User can translate a Sigma rule to KQL and get syntactically valid KQL output with correct Sentinel table and field names, and user can translate a KQL rule back to Sigma and get a valid Sigma YAML
+  4. User can translate an SPL rule to KQL (hub-and-spoke via SPL -> Sigma -> KQL) and the output contains correct Sentinel field names, demonstrating cross-format translation working end-to-end
+**Plans**: TBD
 
-### Phase 4: Activity Bar, Gutters, and Context Menus
-**Goal**: Plugins can add sidebar navigation items, CodeMirror gutter decorations, and context menu items to the workbench
-**Depends on**: Phase 1, Phase 3
-**Requirements**: ABAR-01, ABAR-02, ABAR-03, GUTR-01, GUTR-02, GUTR-03, CTXM-01, CTXM-02, CTXM-03
+### Phase 4: EQL Adapter Plugin
+**Goal**: Security teams using Elastic can draft, test, and translate EQL detection rules -- including multi-event sequence rules -- natively in the workbench
+**Depends on**: Phase 1
+**Requirements**: EQL-01, EQL-02, EQL-03, EQL-04, EQL-05, EQL-06
 **Success Criteria** (what must be TRUE):
-  1. A plugin-contributed activity bar item appears in the sidebar navigation, and clicking it renders the plugin panel component in the main content area without a page navigation/route change
-  2. A plugin-contributed gutter decoration (e.g., severity markers) appears in the CodeMirror editor gutter for open policy files, and installing/uninstalling the plugin adds/removes the gutter without reloading the editor
-  3. A plugin-contributed context menu item appears when right-clicking in the specified context (editor, sidebar, tab, finding), respects the `when` visibility predicate, and executes the referenced command when clicked
-  4. Built-in sidebar items, gutters, and context menus continue to work identically after the dynamic registration changes
-**Plans:** 3 plans
-Plans:
-- [x] 04-01-PLAN.md -- Activity bar plugin items in DesktopSidebar + panel rendering in DesktopLayout
-- [x] 04-02-PLAN.md -- GutterExtensionRegistry + CodeMirror Compartment integration in yaml-editor
-- [x] 04-03-PLAN.md -- ContextMenuRegistry with when-clause predicates + PluginContextMenuItems component
+  1. User can create a new EQL file from the command palette, and the editor opens with a valid EQL starter template with event category prefix, Elastic pink icon, and the EQL visual panel
+  2. User can build a multi-event sequence rule using the visual sequence builder (adding/removing/reordering event steps, setting maxspan), and the generated EQL text is syntactically valid with `sequence by` syntax
+  3. User can open the Lab with an EQL sequence rule and multi-event evidence, click Run, and see per-step matching in the explainability trace showing which events matched which sequence steps
+  4. Translating a multi-event EQL rule to Sigma produces a valid Sigma rule with the first event's conditions, plus an `untranslatableFeatures` list clearly stating "sequence correlation with N events not preserved"
+**Plans**: TBD
 
-### Phase 5: Layout Wiring + SDK Injection
-**Goal**: All orphaned plugin view components are mounted in the live app layout, ViewsApi is injected into PluginActivationContext, and the href/entrypoint bug is fixed
-**Depends on**: Phase 4
-**Requirements**: BPAN-01, BPAN-02, RSIDE-01, RSIDE-02, CTXM-03
-**Gap Closure**: Closes gaps from v3.0 audit
+### Phase 5: YARA-L Adapter Plugin
+**Goal**: Security teams using Google Chronicle/SecOps can draft, test, and translate YARA-L detection rules natively in the workbench, completing the adapter ecosystem
+**Depends on**: Phase 1
+**Requirements**: YARAL-01, YARAL-02, YARAL-03, YARAL-04, YARAL-05, YARAL-06
 **Success Criteria** (what must be TRUE):
-  1. Plugin bottom panel tabs appear alongside built-in tabs in the policy editor bottom panel
-  2. Plugin right sidebar panels appear alongside built-in panels in the editor right sidebar
-  3. Plugin context menu items appear in tab right-click menu with when-clause filtering
-  4. Plugin activate() receives a PluginContext with working views.registerEditorTab() method
-  5. ActivityBarItemContribution uses entrypoint (not href) for module loading
-**Plans:** 2 plans
-
-Plans:
-- [x] 05-01-PLAN.md -- Mount BottomPanelTabs + RightSidebarPanels + PluginContextMenuItems in app layout
-- [x] 05-02-PLAN.md -- Inject ViewsApi into PluginActivationContext + fix entrypoint bug
+  1. User can create a new YARA-L file from the command palette, and the editor opens with a valid YARA-L starter template with `rule {}` structure, Google blue icon, and the YARA-L visual panel
+  2. User can build a multi-event YARA-L rule using the visual panel with event variable cards (`$e1`, `$e2`), each showing UDM field predicates, and the generated YARA-L text is syntactically valid
+  3. User can open the Lab with a YARA-L rule and evidence items, click Run, and see per-event-variable matching in the explainability trace
+  4. All four adapter plugins are installed and operational: user can translate between any pair of {Sigma, SPL, KQL, EQL, YARA-L} via hub-and-spoke routing, with translation diagnostics showing field mapping details and any untranslatable features
+**Plans**: TBD
 
 ## Progress
 
 **Execution Order:**
 Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
+Note: Phases 2-5 each depend only on Phase 1, so adapter plugins can be developed in parallel after Phase 1 completes. The listed order reflects demand priority (SPL > KQL > EQL > YARA-L).
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. ViewRegistry Foundation | 2/2 | Complete | 2026-03-19 |
-| 2. Editor Tab Views | 2/2 | Complete | 2026-03-19 |
-| 3. Bottom Panel and Right Sidebar | 1/1 | Complete | 2026-03-19 |
-| 4. Activity Bar, Gutters, and Context Menus | 3/3 | Complete | 2026-03-19 |
-| 5. Layout Wiring + SDK Injection | 2/2 | Complete | 2026-03-21 |
+| 1. Core Detection Plugin Infrastructure | 0/? | Not started | - |
+| 2. SPL Adapter Plugin | 0/? | Not started | - |
+| 3. KQL Adapter Plugin | 0/? | Not started | - |
+| 4. EQL Adapter Plugin | 0/? | Not started | - |
+| 5. YARA-L Adapter Plugin | 0/? | Not started | - |

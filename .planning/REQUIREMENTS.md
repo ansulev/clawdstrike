@@ -1,113 +1,99 @@
-# Requirements: Plugin-Contributed Views (v3.0)
+# Requirements: Detection Adapter Plugins (v4.0)
 
 ## Overview
 
-Enable plugins to contribute React components and CodeMirror extensions to every visual slot in the ClawdStrike workbench -- editor tabs, bottom panel tabs, right sidebar panels, activity bar panels, gutter decorations, status bar widgets, and context menus. Internal (in-process) plugins render directly in the host React tree via React.lazy with ErrorBoundary isolation and keep-alive state preservation.
+Enable SIEM-native detection formats (SPL, KQL, EQL, YARA-L) as first-class workbench citizens through the plugin adapter system. Security teams can draft, test, translate, and publish detection rules in their platform's native query language without leaving the workbench. Cross-format translation routes through Sigma as a hub, leveraging the existing SigmaHQ ecosystem.
 
 ## Scope
 
-**v3.0 (this milestone):** ViewRegistry, in-process view rendering for all 7 contribution slots, keep-alive tab state with LRU eviction, ErrorBoundary crash isolation, SDK ViewsApi.
+**v1 (this milestone):** Core detection plugin infrastructure (registries, field mappings, shared panel kit), four adapter plugins (SPL, KQL, EQL, YARA-L), cross-format translation pipeline with hub-and-spoke routing through Sigma.
 
-**v3.1+ (deferred):** iframe-sandboxed view rendering for community plugins, plugin-provided React context providers, view-level permission scoping, plugin view theming API, hot-reload for external plugin views.
+**v2 (deferred):** Sumo Logic adapter (lower market share, LOW confidence in research), connected SIEM execution mode (requires API credentials), user-editable field mapping overrides, version-specific syntax variants, direct pairwise translations for quality (SPL<->KQL, EQL->YARA-L).
 
 ## Requirements
 
-### VREG: View Registry
+### CORE: Core Detection Plugin Infrastructure
 
-- **VREG-01**: A `ViewRegistry` singleton stores `ViewRegistration` objects keyed by `"{pluginId}.{viewId}"`, providing `registerView()`, `getView()`, `getViewsBySlot()`, and `onViewRegistryChange()` methods
-- **VREG-02**: `ViewRegistration` includes `id`, `slot` (one of: `editorTab`, `activityBarPanel`, `bottomPanelTab`, `rightSidebarPanel`, `statusBarWidget`, `gutterDecoration`, `contextMenuItem`), `label`, `icon`, `component` (React ComponentType or CodeMirror Extension factory), `priority`, and `meta`
-- **VREG-03**: The registry uses the Map + snapshot + listeners pattern (matching `status-bar-registry.ts`) with `useSyncExternalStore` for React integration via a `useViewsBySlot(slot)` hook
-- **VREG-04**: `registerView()` returns a dispose function; calling it removes the view and notifies listeners
-- **VREG-05**: The PluginLoader's `routeContributions()` method routes `editorTabs`, `bottomPanelTabs`, `rightSidebarPanels`, `activityBarItems`, `gutterDecorations`, and `contextMenuItems` manifest contributions to the ViewRegistry
+- **CORE-01**: `adapters.ts` has an `unregisterAdapter()` function that removes a detection adapter by FileType and returns void, matching the dispose pattern already used by `registerFileType()`
+- **CORE-02**: A visual panel registry (`detection-workflow/visual-panels.ts`) provides `registerVisualPanel(fileType, component)` returning a dispose function, and `getVisualPanel(fileType)` returning the component or null; the editor resolves panels dynamically instead of switching on hardcoded file types
+- **CORE-03**: A translation provider registry (`detection-workflow/translations.ts`) provides `registerTranslationProvider(provider)` returning a dispose function, and `getTranslationPath(from, to)` returning a matching provider or null
+- **CORE-04**: `TranslationProvider` interface declares `canTranslate(from, to): boolean` and `translate(request): Promise<TranslationResult>`, where `TranslationResult` includes `output`, `diagnostics`, `fieldMappings`, and `untranslatableFeatures`
+- **CORE-05**: A field mapping registry (`detection-workflow/field-mappings.ts`) provides a shared `FieldMappingEntry[]` table (50+ entries) mapping Sigma field names to Splunk CIM, Sentinel, ECS, and UDM equivalents, with `registerFieldMappings()` for plugin extensions
+- **CORE-06**: `PublishTarget` type is changed from a fixed string union to `string`, with valid targets registered dynamically via a target registry
+- **CORE-07**: `DetectionVisualPanelProps` interface standardizes visual panel props to `source`, `onSourceChange`, `readOnly`, and `accentColor`; existing panels (Sigma, YARA, OCSF) are updated to accept this contract
+- **CORE-08**: A `DetectionVisualPanelKit` re-exports shared form primitives (`Section`, `FieldLabel`, `TextInput`, `TextArea`, `SelectInput`) plus new detection-specific components (`SeverityBadge`, `AttackTagBadge`, `FieldMappingTable`) for plugin panel authors
+- **CORE-09**: `DetectionAdapterContribution` interface bundles `fileType`, `fileTypeDescriptor`, `adapter`, optional `visualPanel`, and optional `translations[]` into a single registration unit that plugins provide via the SDK
 
-### VCONT: View Container
+### SPL: Splunk SPL Adapter Plugin
 
-- **VCONT-01**: A `ViewContainer` component wraps every plugin view in `<ErrorBoundary>` + `<Suspense>`, passing slot-specific props (`viewId`, `isActive`, `storage`)
-- **VCONT-02**: The ErrorBoundary renders a fallback UI showing the plugin name, error message, and a "Reload View" button that remounts the component -- a plugin view crash does not take down the workbench
-- **VCONT-03**: The Suspense fallback renders a loading skeleton appropriate to the slot (full-panel spinner for editor tabs, inline spinner for status bar widgets)
+- **SPL-01**: `splunk_spl` file type is registered with extensions `[".spl"]`, icon color `#65a637`, content-based detection for SPL syntax (pipe chains, `index=`, `sourcetype=`), and a default starter template
+- **SPL-02**: SPL adapter implements `canDraftFrom()` returning true for process, file, network, and registry data source hints; `buildDraft()` generates syntactically valid SPL from seed data with CIM field names and logsource-to-index/sourcetype mapping
+- **SPL-03**: SPL adapter implements `runLab()` in simulated mode: parses SPL field conditions and matches them against evidence items client-side, emitting `plugin_trace` explainability traces with matched/unmatched field details
+- **SPL-04**: SPL adapter implements `buildPublication()` supporting `"spl"` and `"json_export"` publish targets, where `"spl"` outputs the raw query and `"json_export"` wraps it with metadata (title, description, severity, MITRE tactics)
+- **SPL-05**: SPL visual panel provides a pipe-chain visualization showing each SPL command as a card in a vertical pipeline, with editable field-value pairs in each command card, round-tripping changes back to SPL text
+- **SPL-06**: SPL translation provider declares `from: "sigma_rule", to: "splunk_spl"` (extending existing `convertSigmaToQuery()` SPL output) and `from: "splunk_spl", to: "sigma_rule"` (parsing SPL field conditions into Sigma detection blocks)
 
-### SBAR: Status Bar Fix
+### KQL: KQL Adapter Plugin
 
-- **SBAR-01**: The PluginLoader's `routeStatusBarItemContribution()` resolves the entrypoint module and uses the exported component as the render function, replacing the current `render: () => null` placeholder
+- **KQL-01**: `kql_rule` file type is registered with extensions `[".kql"]`, icon color `#0078d4`, content-based detection for KQL syntax (table name prefix, pipe operators, `where`/`project`/`extend`), and a default starter template
+- **KQL-02**: KQL adapter implements `canDraftFrom()` returning true for process, file, network, and authentication data source hints; `buildDraft()` generates syntactically valid KQL from seed data with Sentinel table names and field mappings
+- **KQL-03**: KQL adapter implements `runLab()` in simulated mode: parses KQL where-clause conditions and matches them against evidence items client-side, emitting `plugin_trace` explainability traces
+- **KQL-04**: KQL adapter implements `buildPublication()` supporting `"kql"` and `"json_export"` publish targets, where `"kql"` outputs the raw query and `"json_export"` wraps it in an Analytics Rule JSON structure with scheduling, severity, tactics, and entity mapping
+- **KQL-05**: KQL visual panel provides a tabular expression visualization showing the source table, filter chain, and projection columns, with editable where-clause conditions and table selector
+- **KQL-06**: KQL translation provider declares `from: "sigma_rule", to: "kql_rule"` (extending existing `convertSigmaToQuery()` KQL output) and `from: "kql_rule", to: "sigma_rule"` (parsing KQL where-clauses into Sigma detection blocks)
 
-### ETAB: Editor Tab Views
+### EQL: Elastic EQL Adapter Plugin
 
-- **ETAB-01**: A `ViewTab` type exists alongside `PolicyTab` in the tab system, so plugin editor tabs appear in the tab bar with label, icon, and close button
-- **ETAB-02**: Plugin editor tab components receive `EditorTabProps` extending `ViewProps` with `setTitle()` and `setDirty()` callbacks
-- **ETAB-03**: Plugin views are openable via `paneStore.openApp("plugin:{pluginId}.{viewId}")` for split-pane support, with each pane receiving its own component instance
+- **EQL-01**: `eql_rule` file type is registered with extensions `[".eql"]`, icon color `#f04e98`, content-based detection for EQL syntax (event category prefix like `process where`, `file where`, `sequence by`), and a default starter template
+- **EQL-02**: EQL adapter implements `canDraftFrom()` returning true for process, file, network, and registry data source hints, plus multi-event correlation seeds; `buildDraft()` generates syntactically valid EQL from seed data with ECS field names and event category prefixes
+- **EQL-03**: EQL adapter implements `runLab()` in simulated mode: parses EQL conditions (including sequence queries) and matches them against evidence items client-side, emitting `plugin_trace` explainability traces that show per-event-step matching for sequences
+- **EQL-04**: EQL adapter implements `buildPublication()` supporting `"eql"` and `"json_export"` publish targets, where `"eql"` outputs the raw query and `"json_export"` wraps it in an NDJSON detection rule with risk score, MITRE mapping, and rule type
+- **EQL-05**: EQL visual panel provides a sequence builder for multi-event correlation: each event step is a card showing event category and conditions, steps can be reordered, and `maxspan`/`until` clauses are editable; single-event queries show a simpler condition editor
+- **EQL-06**: EQL translation provider declares `from: "sigma_rule", to: "eql_rule"` (single-event Sigma rules to EQL) and `from: "eql_rule", to: "sigma_rule"` (single-event EQL to Sigma, with `untranslatableFeatures` populated for sequence queries)
 
-### ALIVE: Keep-Alive Tab State
+### YARAL: YARA-L Adapter Plugin
 
-- **ALIVE-01**: A `ViewTabRenderer` renders all opened plugin editor tabs simultaneously, hiding inactive tabs via `display: none` instead of unmounting, preserving component state (scroll position, form inputs, selections)
-- **ALIVE-02**: The `isActive` prop is passed to plugin components so they can pause expensive operations (timers, subscriptions) when hidden
-- **ALIVE-03**: An LRU eviction policy destroys the oldest hidden plugin view when the count of kept-alive views exceeds a configurable maximum (default 5)
-
-### BPAN: Bottom Panel Tab Views
-
-- **BPAN-01**: The bottom panel tab bar renders plugin-contributed tabs alongside built-in tabs (Problems, Test Runner, Evidence Pack, Explainability), sourced from the ViewRegistry `bottomPanelTab` slot
-- **BPAN-02**: Plugin bottom panel tab components receive `BottomPanelTabProps` extending `ViewProps` with `panelHeight: number`
-
-### RSIDE: Right Sidebar Panel Views
-
-- **RSIDE-01**: The right sidebar renders plugin-contributed panels alongside built-in panels (Guard Config, Compare, Version History), sourced from the ViewRegistry `rightSidebarPanel` slot
-- **RSIDE-02**: Plugin right sidebar panel components receive `RightSidebarPanelProps` extending `ViewProps` with `sidebarWidth: number`
-
-### ABAR: Activity Bar Panel Views
-
-- **ABAR-01**: The `navSections` array in `DesktopSidebar` is backed by a registry so plugins can add sidebar navigation items dynamically alongside built-in items
-- **ABAR-02**: When a plugin activity bar item is active, the main content area renders the plugin panel component directly (bypassing react-router) via the ViewRegistry
-- **ABAR-03**: Plugin activity bar panel components receive `ActivityBarPanelProps` extending `ViewProps` with `isCollapsed: boolean`
-
-### GUTR: Gutter Decoration Extensions
-
-- **GUTR-01**: A `GutterExtensionRegistry` collects CodeMirror `Extension` objects contributed by plugins, keyed by `"{pluginId}.{decorationId}"`
-- **GUTR-02**: The yaml-editor includes all registered gutter extensions in its CodeMirror `EditorState` extension array, recompartmentalizing when extensions are added or removed
-- **GUTR-03**: Plugin gutter contributions export a CodeMirror Extension factory function (not a React component), receiving a `GutterConfig` with editor state access
-
-### CTXM: Context Menu Extensions
-
-- **CTXM-01**: A `ContextMenuRegistry` stores context menu item declarations contributed by plugins, including `id`, `label`, `command` (command ID to execute), `icon`, `when` (visibility predicate), and `menu` (target: `editor`, `sidebar`, `tab`, `finding`, `sentinel`)
-- **CTXM-02**: Context menu rendering evaluates the `when` predicate against current workbench context and shows/hides items accordingly
-- **CTXM-03**: Clicking a plugin context menu item executes the referenced command via the existing command registry
-
-### SDKV: SDK Views API
-
-- **SDKV-01**: The `PluginContext` in `@clawdstrike/plugin-sdk` exposes a `views` namespace with `registerEditorTab()`, `registerBottomPanelTab()`, `registerRightSidebarPanel()`, and `registerStatusBarWidget()` methods, each returning a `Disposable`
-- **SDKV-02**: SDK view contribution types accept either a React `ComponentType` directly (in-process) or a `() => Promise<{ default: ComponentType }>` lazy import function
-- **SDKV-03**: The SDK exports all view prop interfaces (`ViewProps`, `EditorTabProps`, `BottomPanelTabProps`, `RightSidebarPanelProps`, `ActivityBarPanelProps`, `StatusBarWidgetProps`) for plugin authors to type their components
+- **YARAL-01**: `yaral_rule` file type is registered with extensions `[".yaral"]`, icon color `#4285f4`, content-based detection for YARA-L syntax (`rule {`, `events:`, `condition:`, UDM field paths), and a default starter template
+- **YARAL-02**: YARA-L adapter implements `canDraftFrom()` returning true for process, file, network, and authentication data source hints; `buildDraft()` generates syntactically valid YARA-L from seed data with UDM field paths, meta section, events section, and condition section
+- **YARAL-03**: YARA-L adapter implements `runLab()` in simulated mode: parses YARA-L event predicates and matches them against evidence items client-side, emitting `plugin_trace` explainability traces that show per-event-variable matching
+- **YARAL-04**: YARA-L adapter implements `buildPublication()` supporting `"yaral"` and `"json_export"` publish targets, where `"yaral"` outputs the raw rule text and `"json_export"` wraps it with Chronicle metadata (severity, risk score, MITRE mapping)
+- **YARAL-05**: YARA-L visual panel provides a multi-event correlation visualization: meta fields in an editable header, each event variable (`$e1`, `$e2`) as a card with its predicates, condition section with temporal constraints, and optional outcome/match sections
+- **YARAL-06**: YARA-L translation provider declares `from: "sigma_rule", to: "yaral_rule"` (Sigma to YARA-L with single-event mapping) and `from: "yaral_rule", to: "sigma_rule"` (single-event YARA-L to Sigma, with `untranslatableFeatures` populated for multi-event rules and outcome blocks)
 
 ## Traceability
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| VREG-01 | Phase 1 | Complete |
-| VREG-02 | Phase 1 | Complete |
-| VREG-03 | Phase 1 | Complete |
-| VREG-04 | Phase 1 | Complete |
-| VREG-05 | Phase 1 | Complete |
-| VCONT-01 | Phase 1 | Complete |
-| VCONT-02 | Phase 1 | Complete |
-| VCONT-03 | Phase 1 | Complete |
-| SBAR-01 | Phase 1 | Complete |
-| SDKV-01 | Phase 1 | Complete |
-| SDKV-02 | Phase 1 | Complete |
-| SDKV-03 | Phase 1 | Complete |
-| ETAB-01 | Phase 2 | Complete |
-| ETAB-02 | Phase 2 | Complete |
-| ETAB-03 | Phase 2 | Complete |
-| ALIVE-01 | Phase 2 | Complete |
-| ALIVE-02 | Phase 2 | Complete |
-| ALIVE-03 | Phase 2 | Complete |
-| BPAN-01 | Phase 5 | Complete |
-| BPAN-02 | Phase 5 | Complete |
-| RSIDE-01 | Phase 5 | Complete |
-| RSIDE-02 | Phase 5 | Complete |
-| ABAR-01 | Phase 4 | Complete |
-| ABAR-02 | Phase 4 | Complete |
-| ABAR-03 | Phase 4 | Complete |
-| GUTR-01 | Phase 4 | Complete |
-| GUTR-02 | Phase 4 | Complete |
-| GUTR-03 | Phase 4 | Complete |
-| CTXM-01 | Phase 4 | Complete |
-| CTXM-02 | Phase 4 | Complete |
-| CTXM-03 | Phase 5 | Complete |
+| CORE-01 | Phase 1 | Pending |
+| CORE-02 | Phase 1 | Pending |
+| CORE-03 | Phase 1 | Pending |
+| CORE-04 | Phase 1 | Pending |
+| CORE-05 | Phase 1 | Pending |
+| CORE-06 | Phase 1 | Pending |
+| CORE-07 | Phase 1 | Pending |
+| CORE-08 | Phase 1 | Pending |
+| CORE-09 | Phase 1 | Pending |
+| SPL-01 | Phase 2 | Pending |
+| SPL-02 | Phase 2 | Pending |
+| SPL-03 | Phase 2 | Pending |
+| SPL-04 | Phase 2 | Pending |
+| SPL-05 | Phase 2 | Pending |
+| SPL-06 | Phase 2 | Pending |
+| KQL-01 | Phase 3 | Pending |
+| KQL-02 | Phase 3 | Pending |
+| KQL-03 | Phase 3 | Pending |
+| KQL-04 | Phase 3 | Pending |
+| KQL-05 | Phase 3 | Pending |
+| KQL-06 | Phase 3 | Pending |
+| EQL-01 | Phase 4 | Pending |
+| EQL-02 | Phase 4 | Pending |
+| EQL-03 | Phase 4 | Pending |
+| EQL-04 | Phase 4 | Pending |
+| EQL-05 | Phase 4 | Pending |
+| EQL-06 | Phase 4 | Pending |
+| YARAL-01 | Phase 5 | Pending |
+| YARAL-02 | Phase 5 | Pending |
+| YARAL-03 | Phase 5 | Pending |
+| YARAL-04 | Phase 5 | Pending |
+| YARAL-05 | Phase 5 | Pending |
+| YARAL-06 | Phase 5 | Pending |

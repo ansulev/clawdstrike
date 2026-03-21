@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v4.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 04-02-PLAN.md
-last_updated: "2026-03-21T14:20:00.000Z"
+stopped_at: Completed 05-02-PLAN.md
+last_updated: "2026-03-21T14:30:00.000Z"
 progress:
   total_phases: 5
   completed_phases: 1
   total_plans: 13
-  completed_plans: 9
-  percent: 69
+  completed_plans: 10
+  percent: 77
 ---
 
 # Project State
@@ -20,15 +20,15 @@ progress:
 See: .planning/PROJECT.md
 
 **Core value:** Third-party detection format adapters (SPL, KQL, EQL, YARA-L) as plugins with cross-format translation
-**Current focus:** Phase 4 EQL Adapter Plugin -- Plan 1 complete
+**Current focus:** Phase 5 YARA-L Adapter Plugin -- Plan 2 complete
 
 ## Current Position
 
-Phase: 4 of 5 (EQL Adapter Plugin)
-Plan: 1 of 3
+Phase: 5 of 5 (YARA-L Adapter Plugin)
+Plan: 2 of 3
 Status: In progress
 
-Progress: [██████░░░░] 61%
+Progress: [████████░░] 77%
 
 ## Previous Milestones
 
@@ -78,6 +78,12 @@ Progress: [██████░░░░] 61%
 - [03-02] Round-trip reconstruction for KQL visual panel: parse -> edit -> reconstruct -> onSourceChange
 - [03-02] Custom table names shown with '(custom)' suffix when not in predefined Sentinel table list
 - [03-02] Extend expressions rendered read-only in visual panel (complex computed columns, editing deferred)
+- [04-02] Two-mode EQL visual panel: SingleQueryEditor for simple queries, SequenceBuilder for sequences, branching on ast.type
+- [04-02] ConditionRow shared between SingleQueryEditor and SequenceBuilder via StepConditions wrapper
+- [04-02] Until clause uses collapsible UI with muted border color to differentiate from sequence steps
+- [05-02] YARA-L visual panel uses internal regex parser with regenerator for round-trip editing
+- [05-02] Event variables rendered as individual cards with inline-editable UDM field predicates
+- [05-02] Optional match/outcome sections rendered as raw TextArea (less commonly used)
 - [Phase 02]: [02-01] Regex-based SPL parsing; AND condition matching; CIM field mapping via translateField; plugin_trace with spl_match traceType; case-insensitive field lookup
 
 ### Pending Todos
@@ -88,6 +94,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-21T14:08:00.000Z
-Stopped at: Completed 03-02-PLAN.md
+Last session: 2026-03-21T14:30:00.000Z
+Stopped at: Completed 05-02-PLAN.md
 Resume file: None

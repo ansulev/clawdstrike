@@ -103,12 +103,37 @@ Here are the most important differences between the built-in rulesets:
 security difference between rulesets: without detection guards, prompt injections
 pass through unchecked.
 
-| Ruleset | Prompt Injection | Jailbreak |
-|---------|-----------------|-----------|
-| `permissive` | not configured | not configured |
-| `default` | not configured | not configured |
-| `strict` | enabled, block at `suspicious` | enabled, block at score 40 |
-| `ai-agent` | enabled, block at `high` | enabled, block at score 70 |
+<table className="w-full text-sm border-collapse my-6">
+<thead className="border-b-2 border-border">
+<tr>
+<th className="text-left py-2 px-3 font-semibold">Ruleset</th>
+<th className="text-left py-2 px-3 font-semibold">Prompt Injection</th>
+<th className="text-left py-2 px-3 font-semibold">Jailbreak</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td className="py-2 px-3 border-b border-border"><code>permissive</code></td>
+<td className="py-2 px-3 border-b border-border">not configured</td>
+<td className="py-2 px-3 border-b border-border">not configured</td>
+</tr>
+<tr>
+<td className="py-2 px-3 border-b border-border"><code>default</code></td>
+<td className="py-2 px-3 border-b border-border">not configured</td>
+<td className="py-2 px-3 border-b border-border">not configured</td>
+</tr>
+<tr>
+<td className="py-2 px-3 border-b border-border"><code>strict</code></td>
+<td className="py-2 px-3 border-b border-border">enabled, block at <code>suspicious</code></td>
+<td className="py-2 px-3 border-b border-border">enabled, block at score 40</td>
+</tr>
+<tr>
+<td className="py-2 px-3 border-b border-border"><code>ai-agent</code></td>
+<td className="py-2 px-3 border-b border-border">enabled, block at <code>high</code></td>
+<td className="py-2 px-3 border-b border-border">enabled, block at score 70</td>
+</tr>
+</tbody>
+</table>
 
 ### Egress Control
 

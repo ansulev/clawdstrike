@@ -25,13 +25,36 @@ version: "1.5.0"
 
 ClawdStrike maintains backward compatibility across schema versions:
 
-| Version | Added |
-|---------|-------|
-| 1.1.0 | Initial schema: guards, settings, extends |
-| 1.2.0 | Posture states, CUA guards (computer_use, remote_desktop_side_channel, input_injection_capability) |
-| 1.3.0 | Spider Sense guard, custom guard promotion path |
-| 1.4.0 | Origin Enclaves, origin profiles, trust adapters |
-| 1.5.0 | Broker subsystem, capability lifecycle, secret backends |
+<table className="w-full text-sm border-collapse my-6">
+<thead className="border-b-2 border-border">
+<tr>
+<th className="text-left py-2 px-3 font-semibold">Version</th>
+<th className="text-left py-2 px-3 font-semibold">Added</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td className="py-2 px-3 border-b border-border">1.1.0</td>
+<td className="py-2 px-3 border-b border-border">Initial schema: guards, settings, extends</td>
+</tr>
+<tr>
+<td className="py-2 px-3 border-b border-border">1.2.0</td>
+<td className="py-2 px-3 border-b border-border">Posture states, CUA guards (<code>computer_use</code>, <code>remote_desktop_side_channel</code>, <code>input_injection_capability</code>)</td>
+</tr>
+<tr>
+<td className="py-2 px-3 border-b border-border">1.3.0</td>
+<td className="py-2 px-3 border-b border-border">Spider Sense guard, custom guard promotion path</td>
+</tr>
+<tr>
+<td className="py-2 px-3 border-b border-border">1.4.0</td>
+<td className="py-2 px-3 border-b border-border">Origin Enclaves, origin profiles, trust adapters</td>
+</tr>
+<tr>
+<td className="py-2 px-3 border-b border-border">1.5.0</td>
+<td className="py-2 px-3 border-b border-border">Broker subsystem, capability lifecycle, secret backends</td>
+</tr>
+</tbody>
+</table>
 
 Policies written for an older version continue to work with newer engines. The engine
 validates the document against the declared version's schema.
@@ -70,21 +93,68 @@ settings:
 The `guards` block contains configuration for up to 13 built-in guards. Each guard
 can be enabled or disabled, and has its own configuration fields depending on what it does:
 
-| Guard | Purpose |
-|-------|---------|
-| `forbidden_path` | Blocks access to sensitive filesystem paths |
-| `path_allowlist` | Allowlist-based path access control |
-| `egress_allowlist` | Controls network egress by domain |
-| `secret_leak` | Detects secrets in file writes |
-| `patch_integrity` | Validates patch safety (size limits, forbidden patterns) |
-| `shell_command` | Blocks dangerous shell commands before execution |
-| `mcp_tool` | Restricts MCP tool invocations |
-| `prompt_injection` | Detects prompt injection attempts |
-| `jailbreak` | Multi-layer jailbreak detection |
-| `computer_use` | Controls CUA actions for remote desktop |
-| `remote_desktop_side_channel` | Side-channel controls (clipboard, audio, file transfer) |
-| `input_injection_capability` | Restricts input injection in CUA environments |
-| `spider_sense` | Hierarchical threat screening via embedding similarity |
+<table className="w-full text-sm border-collapse my-6">
+<thead className="border-b-2 border-border">
+<tr>
+<th className="text-left py-2 px-3 font-semibold">Guard</th>
+<th className="text-left py-2 px-3 font-semibold">Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td className="py-2 px-3 border-b border-border"><code>forbidden_path</code></td>
+<td className="py-2 px-3 border-b border-border">Blocks access to sensitive filesystem paths</td>
+</tr>
+<tr>
+<td className="py-2 px-3 border-b border-border"><code>path_allowlist</code></td>
+<td className="py-2 px-3 border-b border-border">Allowlist-based path access control</td>
+</tr>
+<tr>
+<td className="py-2 px-3 border-b border-border"><code>egress_allowlist</code></td>
+<td className="py-2 px-3 border-b border-border">Controls network egress by domain</td>
+</tr>
+<tr>
+<td className="py-2 px-3 border-b border-border"><code>secret_leak</code></td>
+<td className="py-2 px-3 border-b border-border">Detects secrets in file writes</td>
+</tr>
+<tr>
+<td className="py-2 px-3 border-b border-border"><code>patch_integrity</code></td>
+<td className="py-2 px-3 border-b border-border">Validates patch safety (size limits, forbidden patterns)</td>
+</tr>
+<tr>
+<td className="py-2 px-3 border-b border-border"><code>shell_command</code></td>
+<td className="py-2 px-3 border-b border-border">Blocks dangerous shell commands before execution</td>
+</tr>
+<tr>
+<td className="py-2 px-3 border-b border-border"><code>mcp_tool</code></td>
+<td className="py-2 px-3 border-b border-border">Restricts MCP tool invocations</td>
+</tr>
+<tr>
+<td className="py-2 px-3 border-b border-border"><code>prompt_injection</code></td>
+<td className="py-2 px-3 border-b border-border">Detects prompt injection attempts</td>
+</tr>
+<tr>
+<td className="py-2 px-3 border-b border-border"><code>jailbreak</code></td>
+<td className="py-2 px-3 border-b border-border">Multi-layer jailbreak detection</td>
+</tr>
+<tr>
+<td className="py-2 px-3 border-b border-border"><code>computer_use</code></td>
+<td className="py-2 px-3 border-b border-border">Controls CUA actions for remote desktop</td>
+</tr>
+<tr>
+<td className="py-2 px-3 border-b border-border"><code>remote_desktop_side_channel</code></td>
+<td className="py-2 px-3 border-b border-border">Side-channel controls (clipboard, audio, file transfer)</td>
+</tr>
+<tr>
+<td className="py-2 px-3 border-b border-border"><code>input_injection_capability</code></td>
+<td className="py-2 px-3 border-b border-border">Restricts input injection in CUA environments</td>
+</tr>
+<tr>
+<td className="py-2 px-3 border-b border-border"><code>spider_sense</code></td>
+<td className="py-2 px-3 border-b border-border">Hierarchical threat screening via embedding similarity</td>
+</tr>
+</tbody>
+</table>
 
 Guards that are not mentioned in the policy use their default behavior, which depends on
 the base ruleset. Guards can be explicitly disabled by setting `enabled: false`.

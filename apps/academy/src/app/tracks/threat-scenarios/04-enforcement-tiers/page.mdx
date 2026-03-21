@@ -93,13 +93,48 @@ availability is critical.
 
 ## Comparison
 
-| Dimension        | In-Process (Guards) | Sidecar (brokerd)       | Centralized (hushd)       |
-|------------------|---------------------|-------------------------|---------------------------|
-| **Latency**      | Microseconds        | Milliseconds (localhost)| Milliseconds (network)    |
-| **Isolation**    | Same process        | Separate process        | Separate machine          |
-| **Secret Handling** | Agent has access | Agent never sees secrets| Fleet-wide secret mgmt   |
-| **Audit Trail**  | Local logs          | Local + signed receipts | Signed bundles + central DB|
-| **Best For**     | Dev / prototyping   | Production APIs         | Enterprise / compliance   |
+<table className="w-full text-sm border-collapse my-6">
+<thead className="border-b-2 border-border">
+<tr>
+<th className="text-left py-2 px-3 font-semibold">Dimension</th>
+<th className="text-left py-2 px-3 font-semibold">In-Process (Guards)</th>
+<th className="text-left py-2 px-3 font-semibold">Sidecar (brokerd)</th>
+<th className="text-left py-2 px-3 font-semibold">Centralized (hushd)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td className="py-2 px-3 border-b border-border"><strong>Latency</strong></td>
+<td className="py-2 px-3 border-b border-border">Microseconds</td>
+<td className="py-2 px-3 border-b border-border">Milliseconds (localhost)</td>
+<td className="py-2 px-3 border-b border-border">Milliseconds (network)</td>
+</tr>
+<tr>
+<td className="py-2 px-3 border-b border-border"><strong>Isolation</strong></td>
+<td className="py-2 px-3 border-b border-border">Same process</td>
+<td className="py-2 px-3 border-b border-border">Separate process</td>
+<td className="py-2 px-3 border-b border-border">Separate machine</td>
+</tr>
+<tr>
+<td className="py-2 px-3 border-b border-border"><strong>Secret Handling</strong></td>
+<td className="py-2 px-3 border-b border-border">Agent has access</td>
+<td className="py-2 px-3 border-b border-border">Agent never sees secrets</td>
+<td className="py-2 px-3 border-b border-border">Fleet-wide secret mgmt</td>
+</tr>
+<tr>
+<td className="py-2 px-3 border-b border-border"><strong>Audit Trail</strong></td>
+<td className="py-2 px-3 border-b border-border">Local logs</td>
+<td className="py-2 px-3 border-b border-border">Local + signed receipts</td>
+<td className="py-2 px-3 border-b border-border">Signed bundles + central DB</td>
+</tr>
+<tr>
+<td className="py-2 px-3 border-b border-border"><strong>Best For</strong></td>
+<td className="py-2 px-3 border-b border-border">Dev / prototyping</td>
+<td className="py-2 px-3 border-b border-border">Production APIs</td>
+<td className="py-2 px-3 border-b border-border">Enterprise / compliance</td>
+</tr>
+</tbody>
+</table>
 
 ## When to Use Each
 

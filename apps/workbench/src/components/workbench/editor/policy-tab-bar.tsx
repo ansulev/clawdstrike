@@ -11,6 +11,8 @@ import {
   openPluginViewTab,
 } from "@/lib/plugins/plugin-view-tab-store";
 import { useViewsBySlot } from "@/lib/plugins/view-registry";
+import { PluginContextMenuItems } from "@/components/plugins/plugin-context-menu";
+import type { WhenContext } from "@/lib/plugins/context-menu-registry";
 import { cn } from "@/lib/utils";
 import {
   IconPlus,
@@ -100,6 +102,14 @@ function TabContextMenu({
           </button>
         );
       })}
+      <PluginContextMenuItems
+        menu="tab"
+        context={{ tabId: menu.tabId } as WhenContext}
+        onExecuteCommand={(commandId) => {
+          console.log(`[TabContextMenu] Execute command: ${commandId}`);
+          onClose();
+        }}
+      />
     </div>
   );
 }

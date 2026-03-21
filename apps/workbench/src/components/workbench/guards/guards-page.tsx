@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import { usePaneStore } from "@/features/panes/pane-store";
 import { useWorkbench } from "@/features/policy/stores/multi-policy-store";
 import { GUARD_REGISTRY, GUARD_CATEGORIES } from "@/lib/workbench/guard-registry";
 import type { GuardMeta, GuardCategory, GuardId } from "@/lib/workbench/types";
@@ -528,7 +528,6 @@ interface GuardsPageProps {
 
 export function GuardsPage({ onNavigateToEditor: onNavigateToEditorProp }: GuardsPageProps = {}) {
   const { state, dispatch } = useWorkbench();
-  const navigate = useNavigate();
   const { toast } = useToast();
 
   const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>("all");
@@ -619,9 +618,9 @@ export function GuardsPage({ onNavigateToEditor: onNavigateToEditorProp }: Guard
     if (onNavigateToEditorProp) {
       onNavigateToEditorProp();
     } else {
-      navigate("/editor");
+      usePaneStore.getState().openApp("/editor", "Editor");
     }
-  }, [navigate, onNavigateToEditorProp]);
+  }, [onNavigateToEditorProp]);
 
   const handleGenerateTests = useCallback(
     (guard: GuardMeta) => {

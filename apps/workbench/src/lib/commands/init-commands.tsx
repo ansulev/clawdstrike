@@ -8,7 +8,6 @@
  * closures are always fresh.
  */
 import { useEffect, useRef, useCallback, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import { useBottomPaneStore } from "@/features/bottom-pane/bottom-pane-store";
 import { usePaneStore } from "@/features/panes/pane-store";
 import { getAllPaneGroups } from "@/features/panes/pane-tree";
@@ -30,7 +29,6 @@ import { ShortcutHelpDialog } from "@/components/desktop/shortcut-help-dialog";
  * Placed inside DesktopLayout so it has access to router + workbench contexts.
  */
 export function InitCommands() {
-  const navigate = useNavigate();
   const {
     state,
     dispatch,
@@ -78,7 +76,6 @@ export function InitCommands() {
     registerNavigateCommands();
 
     registerFileCommands({
-      navigate,
       saveFile,
       saveFileAs,
       newPolicy,
@@ -88,7 +85,6 @@ export function InitCommands() {
     });
 
     registerEditCommands({
-      navigate,
       dispatch,
       multiDispatch,
       undo,
@@ -97,7 +93,6 @@ export function InitCommands() {
     });
 
     registerPolicyCommands({
-      navigate,
       dispatch,
       getActiveTab: () => activeTabRef.current,
       getActivePolicy: () => stateRef.current.activePolicy,
@@ -149,7 +144,6 @@ export function InitCommands() {
     // No cleanup needed — commands are re-registered (overwritten) when deps change.
     // The registry uses a Map keyed by id, so re-registration is idempotent.
   }, [
-    navigate,
     dispatch,
     multiDispatch,
     saveFile,

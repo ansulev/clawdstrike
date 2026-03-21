@@ -1,11 +1,10 @@
-import type { NavigateFunction } from "react-router-dom";
 import { commandRegistry } from "@/lib/command-registry";
 import type { Command } from "@/lib/command-registry";
 import { usePolicyTabsStore } from "@/features/policy/stores/policy-tabs-store";
 import { usePolicyEditStore } from "@/features/policy/stores/policy-edit-store";
+import { usePaneStore } from "@/features/panes/pane-store";
 
 export interface FileCommandDeps {
-  navigate: NavigateFunction;
   saveFile: () => Promise<void>;
   saveFileAs: () => Promise<void>;
   newPolicy: () => void;
@@ -15,7 +14,7 @@ export interface FileCommandDeps {
 }
 
 export function registerFileCommands(deps: FileCommandDeps): void {
-  const { navigate, saveFile, saveFileAs, newPolicy, openFile, exportYaml, copyYaml } = deps;
+  const { saveFile, saveFileAs, newPolicy, openFile, exportYaml, copyYaml } = deps;
 
   const commands: Command[] = [
     {
@@ -96,7 +95,7 @@ export function registerFileCommands(deps: FileCommandDeps): void {
       keybinding: "Meta+N",
       execute: () => {
         newPolicy();
-        navigate("/editor");
+        usePaneStore.getState().openApp("/editor", "Editor");
       },
     },
     {
@@ -106,7 +105,7 @@ export function registerFileCommands(deps: FileCommandDeps): void {
       keybinding: "Meta+O",
       execute: async () => {
         await openFile();
-        navigate("/editor");
+        usePaneStore.getState().openApp("/editor", "Editor");
       },
     },
     {

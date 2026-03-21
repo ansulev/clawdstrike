@@ -1,4 +1,3 @@
-import type { NavigateFunction } from "react-router-dom";
 import type React from "react";
 import { commandRegistry } from "@/lib/command-registry";
 import type { Command } from "@/lib/command-registry";
@@ -7,9 +6,10 @@ import type { MultiPolicyAction } from "@/features/policy/stores/multi-policy-st
 import type { PolicyTab } from "@/features/policy/stores/multi-policy-store";
 import { openSearchPanel, searchKeymap, gotoLine } from "@codemirror/search";
 import { getActiveEditorView } from "@/components/ui/yaml-editor";
+import { usePolicyTabsStore } from "@/features/policy/stores/policy-tabs-store";
+import { usePaneStore } from "@/features/panes/pane-store";
 
 export interface EditCommandDeps {
-  navigate: NavigateFunction;
   dispatch: React.Dispatch<WorkbenchAction>;
   multiDispatch: React.Dispatch<MultiPolicyAction>;
   undo: () => void;
@@ -18,7 +18,7 @@ export interface EditCommandDeps {
 }
 
 export function registerEditCommands(deps: EditCommandDeps): void {
-  const { navigate, dispatch, multiDispatch, undo, redo, getActiveTab } = deps;
+  const { dispatch, multiDispatch, undo, redo, getActiveTab } = deps;
 
   const commands: Command[] = [
     {
@@ -44,8 +44,10 @@ export function registerEditCommands(deps: EditCommandDeps): void {
       keybinding: "Meta+T",
       context: "editor",
       execute: () => {
-        multiDispatch({ type: "NEW_TAB" });
-        navigate("/editor");
+        const newTabId = usePolicyTabsStore.getState().newTab();
+        if (newTabId) {
+          usePaneStore.getState().openApp(`/file/__new__/${newTabId}`, "Untitled");
+        }
       },
     },
     {

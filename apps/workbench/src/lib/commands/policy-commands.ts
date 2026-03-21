@@ -1,4 +1,3 @@
-import type { NavigateFunction } from "react-router-dom";
 import type React from "react";
 import { commandRegistry } from "@/lib/command-registry";
 import type { Command } from "@/lib/command-registry";
@@ -9,9 +8,9 @@ import { isDesktop } from "@/lib/tauri-bridge";
 import { isPolicyFileType } from "@/lib/workbench/file-type-registry";
 import { policyToYaml } from "@/features/policy/yaml-utils";
 import { triggerNativeValidation } from "@/features/policy/use-native-validation";
+import { usePaneStore } from "@/features/panes/pane-store";
 
 export interface PolicyCommandDeps {
-  navigate: NavigateFunction;
   dispatch: React.Dispatch<WorkbenchAction>;
   getActiveTab: () => PolicyTab | undefined;
   getActivePolicy: () => WorkbenchPolicy;
@@ -20,7 +19,7 @@ export interface PolicyCommandDeps {
 }
 
 export function registerPolicyCommands(deps: PolicyCommandDeps): void {
-  const { navigate, dispatch, getActiveTab, getActivePolicy, getYaml, getDirty } = deps;
+  const { dispatch, getActiveTab, getActivePolicy, getYaml, getDirty } = deps;
 
   const commands: Command[] = [
     {
@@ -48,20 +47,20 @@ export function registerPolicyCommands(deps: PolicyCommandDeps): void {
           void triggerNativeValidation(tab.fileType, source, dispatch);
         }
 
-        navigate("/editor");
+        usePaneStore.getState().openApp("/editor", "Editor");
       },
     },
     {
       id: "policy.createSentinel",
       title: "Create Sentinel",
       category: "Sentinel",
-      execute: () => navigate("/sentinels/create"),
+      execute: () => usePaneStore.getState().openApp("/sentinels/create", "Create Sentinel"),
     },
     {
       id: "policy.connectFleet",
       title: "Connect to Fleet",
       category: "Fleet",
-      execute: () => navigate("/settings"),
+      execute: () => usePaneStore.getState().openApp("/settings", "Settings"),
     },
   ];
 

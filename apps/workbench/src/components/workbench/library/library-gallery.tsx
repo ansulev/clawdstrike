@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
-import { useWorkbench, useMultiPolicy } from "@/features/policy/stores/multi-policy-store";
+import { useWorkbench } from "@/features/policy/stores/multi-policy-store";
+import { usePolicyTabsStore } from "@/features/policy/stores/policy-tabs-store";
+import { usePaneStore } from "@/features/panes/pane-store";
 import { getRecentFiles } from "@/features/policy/stores/policy-store";
 import { BUILTIN_RULESETS, type BuiltinRuleset } from "@/features/policy/builtin-rulesets";
 import {
@@ -197,8 +198,6 @@ function LibraryCopyableCard({ label, prompt }: { label: string; prompt: string 
 
 export function LibraryGallery() {
   const { state, openFile, openFileByPath } = useWorkbench();
-  const { multiDispatch } = useMultiPolicy();
-  const navigate = useNavigate();
   const [viewYaml, setViewYaml] = useState<{ name: string; yaml: string } | null>(null);
   const { rulesets, loading, nativeAvailable } = useBuiltinRulesets();
   const [activeTab, setActiveTab] = useState<LibraryTab>("my-policies");
@@ -249,12 +248,13 @@ export function LibraryGallery() {
       ) : activeTab === "sigmahq" ? (
         <SigmaHQBrowser
           onImport={(yaml) => {
-            multiDispatch({
-              type: "NEW_TAB",
+            const newTabId = usePolicyTabsStore.getState().newTab({
               fileType: "sigma_rule",
               yaml,
             });
-            navigate("/editor");
+            if (newTabId) {
+              usePaneStore.getState().openApp(`/file/__new__/${newTabId}`, "Sigma Rule");
+            }
           }}
         />
       ) : (

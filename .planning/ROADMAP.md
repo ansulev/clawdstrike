@@ -75,7 +75,7 @@ Plans:
   4. Translating a multi-event EQL rule to Sigma produces a valid Sigma rule with the first event's conditions, plus an `untranslatableFeatures` list clearly stating "sequence correlation with N events not preserved"
 **Plans:** 3 plans
 Plans:
-- [ ] 04-01-PLAN.md -- EQL parser/generator and adapter with file type registration and publication
+- [x] 04-01-PLAN.md -- EQL parser/generator and adapter with file type registration and publication
 - [ ] 04-02-PLAN.md -- EQL visual panel with sequence builder and condition editor
 - [ ] 04-03-PLAN.md -- Bidirectional Sigma-EQL translation provider and full lab execution
 
@@ -105,5 +105,5 @@ Note: Phases 2-5 each depend only on Phase 1, so adapter plugins can be develope
 | 1. Core Detection Plugin Infrastructure | 3/3 | Complete | 2026-03-21 |
 | 2. SPL Adapter Plugin | 0/2 | Not started | - |
 | 3. KQL Adapter Plugin | 0/2 | In progress | - |
-| 4. EQL Adapter Plugin | 0/3 | Not started | - |
+| 4. EQL Adapter Plugin | 1/3 | In progress | - |
 | 5. YARA-L Adapter Plugin | 0/3 | Not started | - |

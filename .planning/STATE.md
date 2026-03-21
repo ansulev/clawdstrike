@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v4.0
 milestone_name: milestone
-status: completed
-stopped_at: Completed 01-03-PLAN.md (Phase 1 complete)
-last_updated: "2026-03-21T13:32:59.126Z"
+status: in_progress
+stopped_at: Completed 05-01-PLAN.md
+last_updated: "2026-03-21T13:51:38Z"
 progress:
   total_phases: 5
   completed_phases: 1
-  total_plans: 3
-  completed_plans: 3
-  percent: 100
+  total_plans: 13
+  completed_plans: 7
+  percent: 54
 ---
 
 # Project State
@@ -20,15 +20,15 @@ progress:
 See: .planning/PROJECT.md
 
 **Core value:** Third-party detection format adapters (SPL, KQL, EQL, YARA-L) as plugins with cross-format translation
-**Current focus:** Phase 1 Core Detection Plugin Infrastructure -- COMPLETE
+**Current focus:** Phase 4 EQL Adapter Plugin -- Plan 1 complete
 
 ## Current Position
 
-Phase: 1 of 5 (Core Detection Plugin Infrastructure) -- COMPLETE
-Plan: 3 of 3 (Complete)
-Status: Phase complete
+Phase: 4 of 5 (EQL Adapter Plugin)
+Plan: 1 of 3
+Status: In progress
 
-Progress: [██████████] 100%
+Progress: [████░░░░░░] 46%
 
 ## Previous Milestones
 
@@ -61,6 +61,10 @@ Progress: [██████████] 100%
 - [01-03] Plugin file types get json_export baseline + translatable targets from translation registry
 - [01-03] detectionAdapters routing is declarative only; actual registration happens in plugin activate()
 
+- [04-01] EQL parser uses separate AST node types (EqlSingleQuery vs EqlSequenceQuery) matching Elastic grammar
+- [04-01] Client-side ECS field resolution supports both flat dotted keys and nested objects
+- [04-01] Sequence draft triggers on multiple categories, defaults to sequence by host.id with 5m maxspan
+
 ### Pending Todos
 None.
 
@@ -69,6 +73,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-21T13:24:00Z
-Stopped at: Completed 01-03-PLAN.md (Phase 1 complete)
-Resume file: .planning/ROADMAP.md
+Last session: 2026-03-21T13:51:15Z
+Stopped at: Completed 04-01-PLAN.md
+Resume file: .planning/phases/04-eql-adapter-plugin/04-02-PLAN.md

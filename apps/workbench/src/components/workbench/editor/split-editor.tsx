@@ -17,6 +17,8 @@ import { YamlPreviewPanel } from "@/components/workbench/editor/yaml-preview-pan
 import "@/components/workbench/editor/sigma-visual-panel";
 import "@/components/workbench/editor/ocsf-visual-panel";
 import "@/components/workbench/editor/yara-visual-panel";
+// KQL visual panel self-registration
+import "@/components/workbench/editor/kql-visual-panel";
 import { getVisualPanel } from "@/lib/workbench/detection-workflow/visual-panels";
 import { getDescriptor } from "@/lib/workbench/file-type-registry";
 import { ViewContainer } from "@/components/plugins/view-container";

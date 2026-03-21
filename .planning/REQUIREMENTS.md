@@ -42,8 +42,8 @@
 
 - [x] **DET-01**: Gutter play button runs test scenarios in FileEditorShell (not just legacy PolicyEditor)
 - [x] **DET-03**: Guard test results appear in TestRunnerPanel when triggered from FileEditorShell gutter
-- [ ] **FLAT-07**: edit.newTab (Cmd+T) creates a pane tab via pane-store (not legacy multi-policy-store)
-- [ ] **FLAT-08**: All navigate("/editor") call sites replaced with pane-store openFile/openApp
+- [x] **FLAT-07**: edit.newTab (Cmd+T) creates a pane tab via pane-store (not legacy multi-policy-store)
+- [x] **FLAT-08**: All navigate("/editor") call sites replaced with pane-store openFile/openApp
 
 ### Swarm Board Evolution
 
@@ -80,8 +80,8 @@
 | CTX-04 | Phase 4 | Pending |
 | DET-01 | Phase 11 | Complete |
 | DET-03 | Phase 11 | Complete |
-| FLAT-07 | Phase 11 | Pending |
-| FLAT-08 | Phase 11 | Pending |
+| FLAT-07 | Phase 11 | Complete |
+| FLAT-08 | Phase 11 | Complete |
 | SWARM-01 | Phase 12 | Pending |
 | SWARM-02 | Phase 12 | Pending |
 | SWARM-03 | Phase 12 | Pending |

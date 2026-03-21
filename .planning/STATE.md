@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: Audit)
-status: executing
-stopped_at: Completed 11-01-PLAN.md
-last_updated: "2026-03-21T12:52:36Z"
-last_activity: 2026-03-21 -- Phase 11 Plan 01 (gutter play button wiring) completed
+status: completed
+stopped_at: Completed 11-02-PLAN.md (Phase 11 complete)
+last_updated: "2026-03-21T12:57:15.522Z"
+last_activity: 2026-03-21 -- Phase 11 Plan 02 completed
 progress:
   total_phases: 3
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 2
-  completed_plans: 1
-  percent: 20
+  completed_plans: 2
+  percent: 33
 ---
 
 # Project State
@@ -24,12 +24,12 @@ See: .planning/PROJECT.md
 
 ## Current Position
 
-Phase: 11 (Integration Wiring Fixes)
-Plan: 1 of 2 -- COMPLETE
-Status: Executing
-Last activity: 2026-03-21 -- Phase 11 Plan 01 completed
+Phase: 11 (Integration Wiring Fixes) -- COMPLETE
+Plan: 2 of 2 -- COMPLETE
+Status: Phase Complete
+Last activity: 2026-03-21 -- Phase 11 Plan 02 completed
 
-Progress: [█████░░░░░] 50%
+Progress: [███░░░░░░░] 33%
 
 ## Previous Milestones
 
@@ -64,8 +64,11 @@ Progress: [█████░░░░░] 50%
 - Fleet agent detail: useParams + store lookup for /fleet/:id pages
 - Fleet bulk select: Set<string> with indeterminate header checkbox
 - Gutter play button: GuardTestYamlEditor wrapper pattern for TestRunnerContext access (FileEditorShell creates Provider, so hook must be in child component)
+- Navigate-to-editor: all command/UI navigation uses usePaneStore.getState().openApp() instead of navigate()
+- New tab creation: commands use usePolicyTabsStore.getState().newTab() then open via pane-store
+- Dead code: PolicyEditor (1071 lines) deleted, 6 duplicate app.* commands removed from palette
 
 ## Session Continuity
 
-Last session: 2026-03-21
-Stopped at: Completed 11-01-PLAN.md
+Last session: 2026-03-21T12:57:15.520Z
+Stopped at: Completed 11-02-PLAN.md (Phase 11 complete)

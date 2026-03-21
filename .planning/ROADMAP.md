@@ -85,7 +85,7 @@ Plans:
 **Plans**: 4 plans
 
 Plans:
-- [ ] 04-01-PLAN.md -- Install deps (ajv, cmdk, pagefind, yaml), JSON Schema for policy v1.5.0, CodeMirror lint source with Ajv validation, build-time ruleset extraction to JSON
+- [x] 04-01-PLAN.md -- Install deps (ajv, cmdk, pagefind, yaml), JSON Schema for policy v1.5.0, CodeMirror lint source with Ajv validation, build-time ruleset extraction to JSON
 - [ ] 04-02-PLAN.md -- Pagefind search index build script, Cmd+K search modal with cmdk, keyboard arrow navigation hook with editor focus guard
 - [ ] 04-03-PLAN.md -- PolicyEditor component (CodeMirror 6 + Ajv diagnostics), InheritanceTree visualizer, RulesetComparison table, MDX registration
 - [ ] 04-04-PLAN.md -- Track 3 MDX lessons: Policy Anatomy, Inheritance, Ruleset Comparison, Build Your Policy exercise, Observe-Synth-Tighten workflow
@@ -100,4 +100,4 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 | 1. Foundation and WASM Integration | 2/3 | In Progress | - |
 | 2. Shared Components and Content Infrastructure | 3/3 | Complete | 2026-03-20 |
 | 3. Threat Scenarios and Guard Gallery | 4/5 | In Progress |  |
-| 4. Policy Lab and Polish | 0/4 | Not started | - |
+| 4. Policy Lab and Polish | 1/4 | In Progress | - |

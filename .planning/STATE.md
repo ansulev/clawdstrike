@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.5
 milestone_name: milestone
 status: executing
-stopped_at: Completed 03-05-PLAN.md
-last_updated: "2026-03-20T21:58:57.926Z"
-last_activity: 2026-03-20 -- Completed 03-05 (Orange+Red Tier Guard Gallery Pages)
+stopped_at: Completed 04-01-PLAN.md
+last_updated: "2026-03-21T13:02:42Z"
+last_activity: 2026-03-21 -- Completed 04-01 (Schema, Linter, Ruleset Extraction)
 progress:
   total_phases: 4
   completed_phases: 3
-  total_plans: 11
-  completed_plans: 11
-  percent: 100
+  total_plans: 15
+  completed_plans: 14
+  percent: 93
 ---
 
 # Project State
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-20)
 
 **Core value:** A new engineer understands why ClawdStrike exists and how it works by interacting with the real engine in their browser
-**Current focus:** Phase 3: Threat Scenarios and Guard Gallery
+**Current focus:** Phase 4: Policy Lab and Polish
 
 ## Current Position
 
-Phase: 3 of 4 (Threat Scenarios and Guard Gallery)
-Plan: 5 of 5 in current phase -- COMPLETE
+Phase: 4 of 4 (Policy Lab and Polish)
+Plan: 2 of 4 in current phase
 Status: In Progress
-Last activity: 2026-03-20 -- Completed 03-05 (Orange+Red Tier Guard Gallery Pages)
+Last activity: 2026-03-21 -- Completed 04-01 (Schema, Linter, Ruleset Extraction)
 
-Progress: [██████████] 100%
+Progress: [█████████░] 93%
 
 ## Performance Metrics
 
@@ -58,6 +58,8 @@ Progress: [██████████] 100%
 | Phase 03 P03 | 5min | 2 tasks | 5 files |
 | Phase 03 P04 | 5min | 2 tasks | 7 files |
 | Phase 03 P05 | 6min | 2 tasks | 7 files |
+| Phase 04 P01 | 7min | 2 tasks | 8 files |
+| Phase 04 P02 | 6min | 2 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -96,6 +98,13 @@ Recent decisions affecting current work:
 - [Phase 03]: Migrated prompt injection from 01- to 08- with expanded content preserving original prose spirit
 - [Phase 03]: InputInjection hard challenge uses expectedVerdict=deny to teach fail-closed-on-missing-field design
 - [Phase 03]: InputInjection playground routes through computer_use guard with input.inject customActionType
+- [Phase 04-02]: ClientShell wrapper bridges server layout to client-side search and keyboard nav
+- [Phase 04-02]: Pagefind lazy-loaded via dynamic import with webpackIgnore for runtime-only JS
+- [Phase 04-02]: Keyboard nav receives full tracks array from server to derive prev/next client-side
+- [Phase 04-02]: Focus guard checks .cm-editor, textarea, input, contenteditable before handling arrow keys
+- [Phase 04-01]: Ajv draft-07 (definitions) instead of draft-2020-12 ($defs) for Ajv v8 compatibility
+- [Phase 04-01]: validatePolicyYaml exported as testable function separate from CodeMirror linter wrapper
+- [Phase 04-01]: Ruleset JSON files gitignored as build artifacts (same pattern as extracted-sources)
 
 ### Pending Todos
 
@@ -108,6 +117,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-20T21:58:57.924Z
-Stopped at: Completed 03-05-PLAN.md
+Last session: 2026-03-21T13:02:42Z
+Stopped at: Completed 04-01-PLAN.md
 Resume file: None

@@ -19,8 +19,8 @@
 
 - [x] **DSGN-01**: Dark/light mode toggle persists preference across sessions
 - [x] **DSGN-02**: Per-lesson completion tracking via localStorage with checkmarks visible in sidebar
-- [ ] **DSGN-03**: Client-side search indexes all MDX content and returns results with context snippets
-- [ ] **DSGN-04**: Keyboard navigation: arrow keys for prev/next lesson, Cmd+K for search
+- [x] **DSGN-03**: Client-side search indexes all MDX content and returns results with context snippets
+- [x] **DSGN-04**: Keyboard navigation: arrow keys for prev/next lesson, Cmd+K for search
 - [x] **DSGN-05**: Clean modern UI using shadcn/ui components with consistent spacing and typography
 - [ ] **DSGN-06**: Responsive split-pane layout for playground (editor left, output right) on desktop viewports
 
@@ -43,10 +43,10 @@
 
 ### Track 3: Policy Lab
 
-- [ ] **POLI-01**: Interactive YAML policy editor with live schema validation against v1.5.0 spec
-- [ ] **POLI-02**: Editor shows validation errors inline with guard-level specificity (not just "invalid YAML")
+- [x] **POLI-01**: Interactive YAML policy editor with live schema validation against v1.5.0 spec
+- [x] **POLI-02**: Editor shows validation errors inline with guard-level specificity (not just "invalid YAML")
 - [ ] **POLI-03**: Lesson demonstrates policy inheritance via `extends` with visual tree showing parent-child relationships
-- [ ] **POLI-04**: Side-by-side comparison view showing differences between all 10 built-in rulesets
+- [x] **POLI-04**: Side-by-side comparison view showing differences between all 10 built-in rulesets
 - [ ] **POLI-05**: Guided exercise: user creates a custom policy for a specific scenario and tests it in the playground
 - [ ] **POLI-06**: Lesson covers the observe-synth-tighten workflow for iterative policy development
 
@@ -104,8 +104,8 @@
 | FOUN-07 | Phase 2 | Complete |
 | DSGN-01 | Phase 1 | Complete |
 | DSGN-02 | Phase 2 | Complete |
-| DSGN-03 | Phase 4 | Pending |
-| DSGN-04 | Phase 4 | Pending |
+| DSGN-03 | Phase 4 | Complete |
+| DSGN-04 | Phase 4 | Complete |
 | DSGN-05 | Phase 1 | Complete |
 | DSGN-06 | Phase 1 | Pending |
 | THR-01 | Phase 3 | Complete |
@@ -119,10 +119,10 @@
 | GARD-04 | Phase 3 | Complete |
 | GARD-05 | Phase 3 | Complete |
 | GARD-06 | Phase 3 | Complete |
-| POLI-01 | Phase 4 | Pending |
-| POLI-02 | Phase 4 | Pending |
+| POLI-01 | Phase 4 | Complete |
+| POLI-02 | Phase 4 | Complete |
 | POLI-03 | Phase 4 | Pending |
-| POLI-04 | Phase 4 | Pending |
+| POLI-04 | Phase 4 | Complete |
 | POLI-05 | Phase 4 | Pending |
 | POLI-06 | Phase 4 | Pending |
 | INTX-01 | Phase 2 | Complete |

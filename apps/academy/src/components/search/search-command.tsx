@@ -64,6 +64,7 @@ export function SearchCommand() {
     if (!window.__pagefind) {
       try {
         window.__pagefind = await import(
+          // @ts-expect-error -- Pagefind JS is generated at postbuild into public/pagefind/
           /* webpackIgnore: true */ '/pagefind/pagefind.js'
         );
       } catch {

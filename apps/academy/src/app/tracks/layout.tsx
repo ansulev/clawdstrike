@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { Menu } from 'lucide-react';
 import { getAllTracks } from '@/lib/content';
 import { Sidebar } from '@/components/layout/sidebar';
+import { ClientShell } from '@/components/layout/client-shell';
 import { ThemeToggle } from '@/components/layout/theme-toggle';
 import {
   Sheet,
@@ -43,6 +44,8 @@ export default function TracksLayout({
         </div>
         <ThemeToggle />
       </header>
+
+      <ClientShell tracks={tracks} />
 
       <div className="flex">
         {/* Desktop sidebar */}

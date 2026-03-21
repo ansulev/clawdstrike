@@ -64,15 +64,15 @@ Enable SIEM-native detection formats (SPL, KQL, EQL, YARA-L) as first-class work
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| CORE-01 | Phase 1 | Pending |
-| CORE-02 | Phase 1 | Pending |
-| CORE-03 | Phase 1 | Pending |
-| CORE-04 | Phase 1 | Pending |
+| CORE-01 | Phase 1 | Complete |
+| CORE-02 | Phase 1 | Complete |
+| CORE-03 | Phase 1 | Complete |
+| CORE-04 | Phase 1 | Complete |
 | CORE-05 | Phase 1 | Pending |
-| CORE-06 | Phase 1 | Pending |
+| CORE-06 | Phase 1 | Complete |
 | CORE-07 | Phase 1 | Pending |
 | CORE-08 | Phase 1 | Pending |
-| CORE-09 | Phase 1 | Pending |
+| CORE-09 | Phase 1 | Complete |
 | SPL-01 | Phase 2 | Pending |
 | SPL-02 | Phase 2 | Pending |
 | SPL-03 | Phase 2 | Pending |

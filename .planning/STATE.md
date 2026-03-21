@@ -1,17 +1,16 @@
 ---
 gsd_state_version: 1.0
 milestone: v4.0
-milestone_name: Detection Adapter Plugins
-status: not_started
-stopped_at: Milestone activated
-last_updated: "2026-03-21T00:00:00.000Z"
-last_activity: 2026-03-21 -- v4.0 Detection Adapter Plugins milestone activated
+milestone_name: milestone
+status: executing
+stopped_at: Completed 01-01-PLAN.md
+last_updated: "2026-03-21T12:59:37.484Z"
 progress:
   total_phases: 5
   completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
-  percent: 0
+  total_plans: 3
+  completed_plans: 1
+  percent: 33
 ---
 
 # Project State
@@ -26,10 +25,10 @@ See: .planning/PROJECT.md
 ## Current Position
 
 Phase: 1 of 5 (Core Detection Plugin Infrastructure)
-Plan: Not yet planned
-Status: Not started
+Plan: 2 of 3
+Status: In progress
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [███░░░░░░░] 33%
 
 ## Previous Milestones
 
@@ -50,6 +49,10 @@ Progress: [░░░░░░░░░░] 0%
 - Existing sigma-conversion.ts already outputs SPL/KQL/ES|QL — plugins add the inverse (parsing)
 - Multi-event correlation (EQL sequences) is major impedance mismatch
 - Field mapping table should be extensible
+- [01-01] PublishTarget changed from union to extensible string with BUILTIN_PUBLISH_TARGETS const
+- [01-01] Translation providers use array storage since one provider may handle multiple pairs
+- [01-01] Visual panel registry throws on duplicate registration (fail-fast, matches registerFileType)
+- [01-01] registerAdapter returns dispose function (backward compatible)
 
 ### Pending Todos
 None.
@@ -59,6 +62,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-21
-Stopped at: v4.0 milestone activated
-Resume file: .planning/ROADMAP.md
+Last session: 2026-03-21T12:59:37.482Z
+Stopped at: Completed 01-01-PLAN.md
+Resume file: None

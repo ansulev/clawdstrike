@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "prebuild": "node --import tsx src/lib/source-extraction/extract.ts",
+    "prebuild": "node --import tsx scripts/extract-rulesets.ts && node --import tsx src/lib/source-extraction/extract.ts",
     "dev": "npm run prebuild && next dev --turbopack",
     "build": "npm run prebuild && next build",
     "postbuild": "node --import tsx scripts/build-search-index.ts",

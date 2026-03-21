@@ -94,6 +94,9 @@ crates/libs/hush-wasm/pkg-node/
 # Academy extracted sources (generated at build time)
 apps/academy/src/data/extracted-sources/*.json
 
+# Academy extracted rulesets (generated at build time)
+apps/academy/src/data/rulesets/*.json
+
 # Academy Pagefind search index (generated at postbuild)
 apps/academy/public/pagefind/
 

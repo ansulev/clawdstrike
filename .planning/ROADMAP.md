@@ -45,7 +45,10 @@ Plans:
   2. User can open the Lab with an SPL rule and evidence items, click Run, and see per-field match results in the explainability trace showing which SPL conditions matched which evidence fields
   3. User can translate a Sigma rule to SPL and get syntactically valid SPL output with correct CIM field name mappings, and user can translate an SPL rule back to Sigma and get a valid Sigma YAML with detection blocks derived from the SPL field conditions
   4. The SPL visual panel displays the pipe chain as a vertical sequence of command cards, and editing a field value in a card updates the SPL source text in real time
-**Plans**: TBD
+**Plans:** 2 plans
+Plans:
+- [ ] 02-01-PLAN.md -- SPL parser utilities and detection workflow adapter (file type, draft, lab, publication)
+- [ ] 02-02-PLAN.md -- SPL visual panel (pipe-chain builder) and bidirectional Sigma translation provider
 
 ### Phase 3: KQL Adapter Plugin
 **Goal**: Security teams using Microsoft Sentinel can draft, test, and translate KQL detection rules natively in the workbench, and Sigma rules can be translated to/from KQL
@@ -89,7 +92,7 @@ Note: Phases 2-5 each depend only on Phase 1, so adapter plugins can be develope
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Core Detection Plugin Infrastructure | 3/3 | Complete | 2026-03-21 |
-| 2. SPL Adapter Plugin | 0/? | Not started | - |
+| 2. SPL Adapter Plugin | 0/2 | Not started | - |
 | 3. KQL Adapter Plugin | 0/? | Not started | - |
 | 4. EQL Adapter Plugin | 0/? | Not started | - |
 | 5. YARA-L Adapter Plugin | 0/? | Not started | - |

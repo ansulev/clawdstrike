@@ -97,6 +97,14 @@ export { kqlAdapter } from "./kql-adapter";
 export { kqlTranslationProvider } from "./kql-translation";
 export { eqlTranslationProvider } from "./eql-translation";
 export { yaralTranslationProvider } from "./yaral-translation";
+export { splAdapter } from "./spl-adapter";
+export { splTranslationProvider } from "./spl-translation-provider";
+
+// SPL parser types
+export type { SplCommand, SplFieldCondition } from "./spl-parser";
+
+// SPL parser functions
+export { parseSplPipeChain, parseSplFieldConditions, matchSplConditions, buildSplFromSeed } from "./spl-parser";
 
 // KQL parser types
 export type { KqlParsedQuery, KqlWhereClause } from "./kql-adapter";
@@ -266,3 +274,5 @@ import "./kql-adapter";
 import "./kql-translation";
 import "./eql-translation";
 import "./yaral-translation";
+import "./spl-adapter";
+import "./spl-translation-provider";

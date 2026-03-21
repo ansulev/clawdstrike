@@ -21,6 +21,7 @@ import "@/components/workbench/editor/yara-visual-panel";
 import "@/components/workbench/editor/kql-visual-panel";
 import "@/components/workbench/editor/eql-visual-panel";
 import "@/components/workbench/editor/yaral-visual-panel";
+import "@/components/workbench/editor/spl-visual-panel";
 import { getVisualPanel } from "@/lib/workbench/detection-workflow/visual-panels";
 import { getDescriptor } from "@/lib/workbench/file-type-registry";
 import { ViewContainer } from "@/components/plugins/view-container";

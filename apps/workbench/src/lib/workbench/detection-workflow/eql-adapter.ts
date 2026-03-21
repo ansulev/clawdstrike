@@ -2,9 +2,14 @@
  * EQL workflow adapter -- implements DetectionWorkflowAdapter for eql_rule.
  *
  * Generates Elastic EQL queries from DraftSeeds, builds starter evidence
- * packs with ECS-normalized event payloads, provides stub lab execution
- * with client-side approximate matching, and publishes to "eql" and
- * "json_export" targets with NDJSON detection rule wrapping.
+ * packs with ECS-normalized event payloads, provides full client-side lab
+ * execution with per-step sequence matching and plugin_trace explainability,
+ * and publishes to "eql" and "json_export" targets with NDJSON detection
+ * rule wrapping.
+ *
+ * Lab execution uses evaluateEqlCondition for dotted-path ECS field resolution,
+ * matchSingleQuery for single-event queries, and matchSequenceQuery for
+ * multi-step sequence queries with per-step result tracking.
  */
 
 import type { DetectionWorkflowAdapter } from "./adapters";
@@ -16,6 +21,7 @@ import type {
   EvidencePack,
   EvidenceItem,
   LabRun,
+  LabCaseResult,
   ExplainabilityTrace,
   EvidenceDatasetKind,
 } from "./shared-types";
@@ -36,6 +42,7 @@ import {
   extractEqlFields,
   type EqlCondition,
   type EqlSingleQuery,
+  type EqlSequenceQuery,
   type EqlSequenceStep,
   type EqlEventCategory,
 } from "./eql-parser";
@@ -224,16 +231,20 @@ function normalizeEventPayloadForEql(
 // ---- Client-Side EQL Matching ----
 
 /**
- * Resolve a dotted ECS field path from an event payload.
- * Supports both flat keys ("process.name") and nested objects.
+ * Resolve a dotted field path from a payload object.
+ * Supports both flat dotted keys ("process.name") and nested objects.
+ *
+ * @param obj - The object to traverse
+ * @param path - Dotted field path (e.g. "process.command_line")
+ * @returns The resolved value, or undefined if the path does not exist
  */
-function resolveEcsField(payload: Record<string, unknown>, field: string): unknown {
+function getNestedValue(obj: Record<string, unknown>, path: string): unknown {
   // Try flat key first (our normalized payloads use flat dotted keys)
-  if (field in payload) return payload[field];
+  if (path in obj) return obj[path];
 
-  // Try nested resolution
-  const parts = field.split(".");
-  let current: unknown = payload;
+  // Try nested resolution by splitting on "."
+  const parts = path.split(".");
+  let current: unknown = obj;
   for (const part of parts) {
     if (current === null || current === undefined || typeof current !== "object") {
       return undefined;
@@ -244,30 +255,39 @@ function resolveEcsField(payload: Record<string, unknown>, field: string): unkno
 }
 
 /**
- * Check if a single condition matches against an event payload.
+ * Evaluate a single EQL condition against an event payload.
+ *
+ * Resolves the dotted field path from the payload, converts both sides to
+ * strings for comparison, then switches on the operator. Handles wildcard
+ * (:), regex (~), numeric comparisons (>= <= > <), in-list, and equality.
+ * Applies negation if condition.negated is true.
+ *
+ * @param condition - The EQL condition to evaluate
+ * @param payload - The event payload to evaluate against
+ * @returns true if the condition matches
  */
-function matchCondition(
+function evaluateEqlCondition(
+  condition: EqlCondition,
   payload: Record<string, unknown>,
-  cond: EqlCondition,
 ): boolean {
-  const eventValue = resolveEcsField(payload, cond.field);
+  const eventValue = getNestedValue(payload, condition.field);
   if (eventValue === undefined || eventValue === null) {
-    return cond.negated; // Missing field: match is false, but negated flips it
+    return condition.negated; // Missing field: match is false, but negated flips it
   }
 
   const eventStr = String(eventValue).toLowerCase();
   let matched = false;
 
-  switch (cond.operator) {
+  switch (condition.operator) {
     case "==":
-      matched = eventStr === String(cond.value).toLowerCase();
+      matched = eventStr === String(condition.value).toLowerCase();
       break;
     case "!=":
-      matched = eventStr !== String(cond.value).toLowerCase();
+      matched = eventStr !== String(condition.value).toLowerCase();
       break;
     case ":": {
-      // Wildcard match (case-insensitive)
-      const pattern = String(cond.value).toLowerCase();
+      // Wildcard match (case-insensitive). Convert * to regex .*, anchor with ^...$
+      const pattern = String(condition.value).toLowerCase();
       const regex = new RegExp(
         "^" + pattern.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\\\*/g, ".*") + "$",
       );
@@ -275,9 +295,9 @@ function matchCondition(
       break;
     }
     case "~": {
-      // Regex match
+      // Regex match using new RegExp(value, "i")
       try {
-        const re = new RegExp(String(cond.value), "i");
+        const re = new RegExp(String(condition.value), "i");
         matched = re.test(eventStr);
       } catch {
         matched = false;
@@ -285,46 +305,150 @@ function matchCondition(
       break;
     }
     case "in": {
-      const values = Array.isArray(cond.value) ? cond.value : [String(cond.value)];
+      // Check if eventValue is in the value array (case-insensitive)
+      const values = Array.isArray(condition.value) ? condition.value : [String(condition.value)];
       matched = values.some((v) => v.toLowerCase() === eventStr);
       break;
     }
     case ">=":
-      matched = parseFloat(eventStr) >= parseFloat(String(cond.value));
+      matched = parseFloat(eventStr) >= parseFloat(String(condition.value));
       break;
     case "<=":
-      matched = parseFloat(eventStr) <= parseFloat(String(cond.value));
+      matched = parseFloat(eventStr) <= parseFloat(String(condition.value));
       break;
     case ">":
-      matched = parseFloat(eventStr) > parseFloat(String(cond.value));
+      matched = parseFloat(eventStr) > parseFloat(String(condition.value));
       break;
     case "<":
-      matched = parseFloat(eventStr) < parseFloat(String(cond.value));
+      matched = parseFloat(eventStr) < parseFloat(String(condition.value));
       break;
   }
 
-  return cond.negated ? !matched : matched;
+  return condition.negated ? !matched : matched;
 }
 
 /**
- * Check if all/any conditions in a step match an event (AND/OR logic).
+ * Match a single-event EQL query against an event payload.
+ *
+ * Checks event category (if present in payload), then evaluates all conditions
+ * with AND/OR logic. Returns whether the query matched and which fields
+ * matched vs did not.
  */
-function matchStep(
+function matchSingleQuery(
+  query: EqlSingleQuery,
   payload: Record<string, unknown>,
-  conditions: EqlCondition[],
-  logicOp: "and" | "or",
-): boolean {
-  if (conditions.length === 0) return false;
-  if (logicOp === "and") {
-    return conditions.every((c) => matchCondition(payload, c));
+): { matched: boolean; matchedFields: string[]; unmatchedFields: string[] } {
+  // Check event category if payload has one
+  if (query.eventCategory !== "any") {
+    const payloadCategory = getNestedValue(payload, "event.category");
+    if (payloadCategory !== undefined && payloadCategory !== null) {
+      const categoryStr = String(payloadCategory).toLowerCase();
+      if (categoryStr !== query.eventCategory) {
+        // Category mismatch -- all fields are unmatched
+        return {
+          matched: false,
+          matchedFields: [],
+          unmatchedFields: query.conditions.map((c) => c.field),
+        };
+      }
+    }
   }
-  return conditions.some((c) => matchCondition(payload, c));
+
+  // Evaluate all conditions
+  const matchedFields: string[] = [];
+  const unmatchedFields: string[] = [];
+
+  for (const cond of query.conditions) {
+    if (evaluateEqlCondition(cond, payload)) {
+      matchedFields.push(cond.field);
+    } else {
+      unmatchedFields.push(cond.field);
+    }
+  }
+
+  // Determine overall match based on logic operator
+  let matched: boolean;
+  if (query.conditions.length === 0) {
+    matched = false;
+  } else if (query.logicOperator === "and") {
+    matched = unmatchedFields.length === 0;
+  } else {
+    // "or" logic: at least one condition must pass
+    matched = matchedFields.length > 0;
+  }
+
+  return { matched, matchedFields, unmatchedFields };
 }
 
 /**
- * Find source line hints for matched fields.
+ * Match a sequence EQL query against a set of events.
+ *
+ * For each step in the sequence, finds events whose payload matches the step's
+ * conditions. Client-side approximation: each step is matched independently
+ * against all events (no temporal ordering enforcement). A sequence "matches"
+ * if every step found at least one matching event.
  */
-function findSourceLineHints(source: string, fields: string[]): number[] {
+function matchSequenceQuery(
+  query: EqlSequenceQuery,
+  events: Array<{ item: EvidenceItem; index: number }>,
+): {
+  perStepResults: Array<{
+    stepIndex: number;
+    matchedEventIndices: number[];
+    matchedFields: string[][];
+  }>;
+  overallMatched: boolean;
+} {
+  const perStepResults: Array<{
+    stepIndex: number;
+    matchedEventIndices: number[];
+    matchedFields: string[][];
+  }> = [];
+
+  for (let stepIndex = 0; stepIndex < query.steps.length; stepIndex++) {
+    const step = query.steps[stepIndex];
+    const matchedEventIndices: number[] = [];
+    const matchedFieldsPerEvent: string[][] = [];
+
+    for (const { item, index } of events) {
+      if (item.kind !== "structured_event" && item.kind !== "ocsf_event") continue;
+      const payload = item.payload;
+
+      // Check event category for this step
+      const stepQuery: EqlSingleQuery = {
+        type: "single",
+        eventCategory: step.eventCategory,
+        conditions: step.conditions,
+        logicOperator: step.logicOperator,
+      };
+
+      const result = matchSingleQuery(stepQuery, payload);
+      if (result.matched) {
+        matchedEventIndices.push(index);
+        matchedFieldsPerEvent.push(result.matchedFields);
+      }
+    }
+
+    perStepResults.push({
+      stepIndex,
+      matchedEventIndices,
+      matchedFields: matchedFieldsPerEvent,
+    });
+  }
+
+  // A sequence "matches" if every step found at least one matching event
+  const overallMatched = perStepResults.every((r) => r.matchedEventIndices.length > 0);
+
+  return { perStepResults, overallMatched };
+}
+
+/**
+ * Find source line hints for matched fields in EQL source text.
+ *
+ * Searches source lines for occurrences of the field names and returns
+ * matching 1-indexed line numbers.
+ */
+function findEqlSourceLineHints(source: string, fields: string[]): number[] {
   const lines = source.split(/\r?\n/);
   const hints = new Set<number>();
 
@@ -484,6 +608,7 @@ const eqlAdapter: DetectionWorkflowAdapter = {
     const source = (request.adapterRunConfig?.["eqlSource"] as string | undefined) ?? "";
     const startedAt = new Date().toISOString();
 
+    // Early return: no EQL source
     if (!source) {
       const completedAt = new Date().toISOString();
       const run: LabRun = {
@@ -506,6 +631,7 @@ const eqlAdapter: DetectionWorkflowAdapter = {
       };
     }
 
+    // Parse EQL source
     const parseResult = parseEql(source);
 
     if (!parseResult.ast) {
@@ -535,9 +661,8 @@ const eqlAdapter: DetectionWorkflowAdapter = {
     }
 
     const ast = parseResult.ast;
-    const astFields = extractEqlFields(ast);
 
-    // Collect all evidence items
+    // Collect all structured_event evidence items across datasets
     const allItems: Array<{ item: EvidenceItem; dataset: EvidenceDatasetKind }> = [];
     for (const [datasetKind, items] of Object.entries(evidencePack.datasets)) {
       for (const item of items) {
@@ -549,74 +674,150 @@ const eqlAdapter: DetectionWorkflowAdapter = {
       ({ item }) => item.kind === "structured_event" || item.kind === "ocsf_event",
     );
 
-    const results: import("./shared-types").LabCaseResult[] = [];
+    const results: LabCaseResult[] = [];
     const traces: ExplainabilityTrace[] = [];
 
-    for (const { item, dataset } of eventItems) {
-      const caseId = item.id;
-      const expectedMatch =
-        item.kind === "structured_event" ? item.expected === "match" : item.expected === "valid";
+    if (ast.type === "single") {
+      // ---- Single-event query: evaluate each evidence item ----
+      for (const { item, dataset } of eventItems) {
+        const caseId = item.id;
+        const expectedMatch =
+          item.kind === "structured_event" ? item.expected === "match" : item.expected === "valid";
 
-      let didMatch = false;
-      const matchedFieldEntries: Array<{ path: string; value: string }> = [];
-
-      if (item.kind === "structured_event" || item.kind === "ocsf_event") {
         const payload = item.payload;
+        const queryResult = matchSingleQuery(ast, payload);
+        const didMatch = queryResult.matched;
 
-        if (ast.type === "single") {
-          didMatch = matchStep(payload, ast.conditions, ast.logicOperator);
-        } else {
-          // Approximate sequence matching: check each step independently
-          // (Real sequence correlation requires event ordering -- that's Plan 03)
-          didMatch = ast.steps.some((step) =>
-            matchStep(payload, step.conditions, step.logicOperator),
-          );
+        // Collect matched field values for trace data
+        const matchedFieldEntries: Array<{ path: string; value: string }> = [];
+        for (const field of queryResult.matchedFields) {
+          const val = getNestedValue(payload, field);
+          if (val !== undefined && val !== null) {
+            matchedFieldEntries.push({ path: field, value: String(val) });
+          }
         }
 
-        // Collect matched fields for traces
-        if (didMatch) {
-          for (const field of astFields) {
-            const val = resolveEcsField(payload, field);
-            if (val !== undefined && val !== null) {
-              matchedFieldEntries.push({ path: field, value: String(val) });
+        const passed = expectedMatch === didMatch;
+        const traceId = crypto.randomUUID();
+
+        results.push({
+          caseId,
+          dataset,
+          status: passed ? "pass" : "fail",
+          expected: expectedMatch ? "match" : "no_match",
+          actual: didMatch ? "match" : "no_match",
+          explanationRefIds: [traceId],
+        });
+
+        // Emit plugin_trace with eql_match traceType
+        traces.push({
+          id: traceId,
+          kind: "plugin_trace",
+          caseId,
+          traceType: "eql_match",
+          data: {
+            matched: didMatch,
+            queryType: "single",
+            eventCategory: ast.eventCategory,
+            matchedFields: matchedFieldEntries,
+            unmatchedFields: queryResult.unmatchedFields,
+          },
+          sourceLineHints: findEqlSourceLineHints(
+            source,
+            queryResult.matchedFields,
+          ),
+        });
+      }
+    } else {
+      // ---- Sequence query: per-step matching across all events ----
+      const indexedEvents = eventItems.map(({ item }, index) => ({ item, index }));
+      const seqResult = matchSequenceQuery(ast, indexedEvents);
+
+      // For each evidence item, determine which sequence step(s) it matched
+      for (let eventIdx = 0; eventIdx < eventItems.length; eventIdx++) {
+        const { item, dataset } = eventItems[eventIdx];
+        const caseId = item.id;
+        const expectedMatch =
+          item.kind === "structured_event" ? item.expected === "match" : item.expected === "valid";
+
+        // Check if this event matched any step
+        const matchedSteps: Array<{
+          stepIndex: number;
+          matchedFields: string[];
+        }> = [];
+
+        for (const stepResult of seqResult.perStepResults) {
+          const posInStep = stepResult.matchedEventIndices.indexOf(eventIdx);
+          if (posInStep !== -1) {
+            matchedSteps.push({
+              stepIndex: stepResult.stepIndex,
+              matchedFields: stepResult.matchedFields[posInStep] ?? [],
+            });
+          }
+        }
+
+        const didMatch = matchedSteps.length > 0;
+        const passed = expectedMatch === didMatch;
+        const traceId = crypto.randomUUID();
+
+        results.push({
+          caseId,
+          dataset,
+          status: passed ? "pass" : "fail",
+          expected: expectedMatch ? "match" : "no_match",
+          actual: didMatch ? "match" : "no_match",
+          explanationRefIds: [traceId],
+        });
+
+        // Build per-step trace data
+        const payload = item.payload;
+        const allMatchedFields = matchedSteps.flatMap((s) => s.matchedFields);
+        const matchedFieldEntries: Array<{ path: string; value: string }> = [];
+        for (const field of allMatchedFields) {
+          const val = getNestedValue(payload, field);
+          if (val !== undefined && val !== null) {
+            matchedFieldEntries.push({ path: field, value: String(val) });
+          }
+        }
+
+        const unmatchedFields: string[] = [];
+        if (matchedSteps.length > 0) {
+          const stepIdx = matchedSteps[0].stepIndex;
+          const step = ast.steps[stepIdx];
+          for (const cond of step.conditions) {
+            if (!allMatchedFields.includes(cond.field)) {
+              unmatchedFields.push(cond.field);
             }
           }
         }
+
+        // Emit plugin_trace with eql_sequence_match traceType
+        traces.push({
+          id: traceId,
+          kind: "plugin_trace",
+          caseId,
+          traceType: "eql_sequence_match",
+          data: {
+            stepIndex: matchedSteps.length > 0 ? matchedSteps[0].stepIndex : -1,
+            totalSteps: ast.steps.length,
+            stepCategory: matchedSteps.length > 0
+              ? ast.steps[matchedSteps[0].stepIndex].eventCategory
+              : null,
+            matchedFields: matchedFieldEntries,
+            unmatchedFields,
+            sequenceComplete: seqResult.overallMatched,
+            queryType: "sequence",
+          },
+          sourceLineHints: findEqlSourceLineHints(
+            source,
+            allMatchedFields,
+          ),
+        });
       }
-
-      const passed = expectedMatch === didMatch;
-      const traceId = crypto.randomUUID();
-
-      results.push({
-        caseId,
-        dataset,
-        status: passed ? "pass" : "fail",
-        expected: expectedMatch ? "match" : "no_match",
-        actual: didMatch ? "match" : "no_match",
-        explanationRefIds: [traceId],
-      });
-
-      traces.push({
-        id: traceId,
-        kind: "plugin_trace",
-        caseId,
-        traceType: "eql_match",
-        data: {
-          matched: didMatch,
-          queryType: ast.type,
-          matchedFields: matchedFieldEntries,
-          eventCategory:
-            ast.type === "single"
-              ? ast.eventCategory
-              : ast.steps.map((s: EqlSequenceStep) => s.eventCategory),
-        },
-        sourceLineHints: findSourceLineHints(
-          source,
-          matchedFieldEntries.map((f) => f.path),
-        ),
-      });
     }
 
+    // Compute summary
+    const totalCases = results.length;
     const passed = results.filter((r) => r.status === "pass").length;
     const failed = results.filter((r) => r.status === "fail").length;
     const matched = results.filter((r) => r.actual === "match").length;
@@ -634,7 +835,7 @@ const eqlAdapter: DetectionWorkflowAdapter = {
       startedAt,
       completedAt,
       summary: {
-        totalCases: results.length,
+        totalCases,
         passed,
         failed,
         matched,
@@ -646,11 +847,12 @@ const eqlAdapter: DetectionWorkflowAdapter = {
       explainability: traces,
     };
 
+    // Build ReportArtifact summary with engine: "client"
     const reportArtifacts: ReportArtifact[] = [
       {
         id: crypto.randomUUID(),
         kind: "summary",
-        title: `EQL lab: ${passed}/${results.length} passed (engine: client)`,
+        title: `EQL lab: ${passed}/${totalCases} passed (engine: client)`,
       },
     ];
 

@@ -30,7 +30,11 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. The field mapping registry contains 50+ entries mapping common Sigma field names (CommandLine, SourceIp, TargetFilename, etc.) to their Splunk CIM, Sentinel, ECS, and UDM equivalents, and a plugin can extend the table with `registerFieldMappings()`
   4. Existing built-in visual panels (Sigma, YARA, OCSF) render identically after being migrated to the standardized `DetectionVisualPanelProps` contract and registered through the visual panel registry
   5. A plugin can provide a single `DetectionAdapterContribution` object that bundles file type, adapter, visual panel, and translations, and all four registrations happen atomically
-**Plans**: TBD
+**Plans:** 3 plans
+Plans:
+- [ ] 01-01-PLAN.md -- Registries, types, and DetectionAdapterContribution contracts
+- [ ] 01-02-PLAN.md -- Field mapping table (50+ entries) and DetectionVisualPanelKit
+- [ ] 01-03-PLAN.md -- Panel migration, editor wiring, and plugin loader routing
 
 ### Phase 2: SPL Adapter Plugin
 **Goal**: Security teams using Splunk can draft, test, and translate SPL detection rules natively in the workbench, and Sigma rules can be translated to/from SPL
@@ -84,7 +88,7 @@ Note: Phases 2-5 each depend only on Phase 1, so adapter plugins can be develope
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Core Detection Plugin Infrastructure | 0/? | Not started | - |
+| 1. Core Detection Plugin Infrastructure | 0/3 | In progress | - |
 | 2. SPL Adapter Plugin | 0/? | Not started | - |
 | 3. KQL Adapter Plugin | 0/? | Not started | - |
 | 4. EQL Adapter Plugin | 0/? | Not started | - |

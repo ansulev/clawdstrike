@@ -77,6 +77,33 @@ export interface PluginActivationContext {
   pluginId: string;
   /** Subscriptions array -- push disposables here for automatic cleanup. */
   subscriptions: Disposable[];
+  /** Views API for registering plugin-contributed views in workbench UI slots. */
+  views: {
+    registerEditorTab(contribution: {
+      id: string;
+      label: string;
+      icon?: string;
+      component: ComponentType<any> | (() => Promise<{ default: ComponentType<any> }>);
+    }): Disposable;
+    registerBottomPanelTab(contribution: {
+      id: string;
+      label: string;
+      icon?: string;
+      component: ComponentType<any> | (() => Promise<{ default: ComponentType<any> }>);
+    }): Disposable;
+    registerRightSidebarPanel(contribution: {
+      id: string;
+      label: string;
+      icon?: string;
+      component: ComponentType<any> | (() => Promise<{ default: ComponentType<any> }>);
+    }): Disposable;
+    registerStatusBarWidget(contribution: {
+      id: string;
+      side: "left" | "right";
+      priority: number;
+      component: ComponentType<any> | (() => Promise<{ default: ComponentType<any> }>);
+    }): Disposable;
+  };
 }
 
 /**
@@ -263,6 +290,7 @@ export class PluginLoader {
       const context: PluginActivationContext = {
         pluginId,
         subscriptions: [],
+        views: this.buildViewsApi(pluginId, disposables),
       };
 
       const activateResult = pluginModule.activate(context);
@@ -520,6 +548,86 @@ export class PluginLoader {
       const message = err instanceof Error ? err.message : String(err);
       this.registry.setState(pluginId, "error", message);
     }
+  }
+
+  /**
+   * Build a concrete ViewsApi for a plugin's activation context.
+   *
+   * Each method namespaces the view ID as "{pluginId}.{viewId}", calls
+   * registerView (or statusBarRegistry.register), and pushes the dispose
+   * function to the disposables array for automatic cleanup.
+   */
+  private buildViewsApi(
+    pluginId: string,
+    disposables: Disposable[],
+  ): PluginActivationContext["views"] {
+    const resolveComponent = (
+      comp: ComponentType<any> | (() => Promise<{ default: ComponentType<any> }>),
+    ): ComponentType<any> => {
+      if (typeof comp === "function" && comp.length === 0) {
+        // Heuristic: zero-arg function that is NOT a React component constructor
+        // is a lazy factory. Wrap in React.lazy for deferred loading.
+        try {
+          return lazy(comp as () => Promise<{ default: ComponentType<any> }>);
+        } catch {
+          return comp as ComponentType<any>;
+        }
+      }
+      return comp as ComponentType<any>;
+    };
+
+    return {
+      registerEditorTab(contribution) {
+        const viewId = `${pluginId}.${contribution.id}`;
+        const dispose = registerView({
+          id: viewId,
+          slot: "editorTab",
+          label: contribution.label,
+          icon: contribution.icon,
+          component: resolveComponent(contribution.component),
+        });
+        disposables.push(dispose);
+        return dispose;
+      },
+      registerBottomPanelTab(contribution) {
+        const viewId = `${pluginId}.${contribution.id}`;
+        const dispose = registerView({
+          id: viewId,
+          slot: "bottomPanelTab",
+          label: contribution.label,
+          icon: contribution.icon,
+          component: resolveComponent(contribution.component),
+        });
+        disposables.push(dispose);
+        return dispose;
+      },
+      registerRightSidebarPanel(contribution) {
+        const viewId = `${pluginId}.${contribution.id}`;
+        const dispose = registerView({
+          id: viewId,
+          slot: "rightSidebarPanel",
+          label: contribution.label,
+          icon: contribution.icon,
+          component: resolveComponent(contribution.component),
+        });
+        disposables.push(dispose);
+        return dispose;
+      },
+      registerStatusBarWidget(contribution) {
+        const viewId = `${pluginId}.${contribution.id}`;
+        const dispose = statusBarRegistry.register({
+          id: viewId,
+          side: contribution.side,
+          priority: contribution.priority,
+          render: () => {
+            const Comp = resolveComponent(contribution.component);
+            return createElement(Comp, { viewId });
+          },
+        });
+        disposables.push(dispose);
+        return dispose;
+      },
+    };
   }
 
   /**

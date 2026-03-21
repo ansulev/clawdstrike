@@ -70,7 +70,7 @@ Enable SIEM-native detection formats (SPL, KQL, EQL, YARA-L) as first-class work
 | CORE-04 | Phase 1 | Complete |
 | CORE-05 | Phase 1 | Complete |
 | CORE-06 | Phase 1 | Complete |
-| CORE-07 | Phase 1 | Pending |
+| CORE-07 | Phase 1 | Complete |
 | CORE-08 | Phase 1 | Complete |
 | CORE-09 | Phase 1 | Complete |
 | SPL-01 | Phase 2 | Pending |

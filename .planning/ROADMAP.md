@@ -12,7 +12,7 @@ Make SIEM-native detection formats first-class citizens in the ClawdStrike workb
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Core Detection Plugin Infrastructure** - Dynamic registries for visual panels, translations, and field mappings that all detection adapter plugins depend on
+- [x] **Phase 1: Core Detection Plugin Infrastructure** - Dynamic registries for visual panels, translations, and field mappings that all detection adapter plugins depend on
 - [ ] **Phase 2: SPL Adapter Plugin** - Splunk SPL as a first-class detection format with visual pipe-chain builder and bidirectional Sigma translation
 - [ ] **Phase 3: KQL Adapter Plugin** - Microsoft Sentinel KQL as a first-class detection format with tabular expression editor and bidirectional Sigma translation
 - [ ] **Phase 4: EQL Adapter Plugin** - Elastic EQL as a first-class detection format with multi-event sequence builder and bidirectional Sigma translation
@@ -32,9 +32,9 @@ Decimal phases appear between their surrounding integers in numeric order.
   5. A plugin can provide a single `DetectionAdapterContribution` object that bundles file type, adapter, visual panel, and translations, and all four registrations happen atomically
 **Plans:** 3 plans
 Plans:
-- [ ] 01-01-PLAN.md -- Registries, types, and DetectionAdapterContribution contracts
-- [ ] 01-02-PLAN.md -- Field mapping table (50+ entries) and DetectionVisualPanelKit
-- [ ] 01-03-PLAN.md -- Panel migration, editor wiring, and plugin loader routing
+- [x] 01-01-PLAN.md -- Registries, types, and DetectionAdapterContribution contracts
+- [x] 01-02-PLAN.md -- Field mapping table (50+ entries) and DetectionVisualPanelKit
+- [x] 01-03-PLAN.md -- Panel migration, editor wiring, and plugin loader routing
 
 ### Phase 2: SPL Adapter Plugin
 **Goal**: Security teams using Splunk can draft, test, and translate SPL detection rules natively in the workbench, and Sigma rules can be translated to/from SPL
@@ -88,7 +88,7 @@ Note: Phases 2-5 each depend only on Phase 1, so adapter plugins can be develope
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Core Detection Plugin Infrastructure | 2/3 | In progress | - |
+| 1. Core Detection Plugin Infrastructure | 3/3 | Complete | 2026-03-21 |
 | 2. SPL Adapter Plugin | 0/? | Not started | - |
 | 3. KQL Adapter Plugin | 0/? | Not started | - |
 | 4. EQL Adapter Plugin | 0/? | Not started | - |

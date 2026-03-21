@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.5
 milestone_name: milestone
-status: executing
-stopped_at: Completed 04-03-PLAN.md
-last_updated: "2026-03-21T13:10:40Z"
-last_activity: 2026-03-21 -- Completed 04-03 (Policy Lab Interactive Components)
+status: completed
+stopped_at: Completed 04-04-PLAN.md (final plan)
+last_updated: "2026-03-21T13:20:10.827Z"
+last_activity: 2026-03-21 -- Completed 04-04 (Policy Lab Lessons)
 progress:
   total_phases: 4
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 15
-  completed_plans: 14
-  percent: 93
+  completed_plans: 15
+  percent: 100
 ---
 
 # Project State
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-20)
 
 **Core value:** A new engineer understands why ClawdStrike exists and how it works by interacting with the real engine in their browser
-**Current focus:** Phase 4: Policy Lab and Polish
+**Current focus:** All phases complete
 
 ## Current Position
 
 Phase: 4 of 4 (Policy Lab and Polish)
-Plan: 4 of 4 in current phase
-Status: In Progress
-Last activity: 2026-03-21 -- Completed 04-03 (Policy Lab Interactive Components)
+Plan: 4 of 4 in current phase (COMPLETE)
+Status: Complete
+Last activity: 2026-03-21 -- Completed 04-04 (Policy Lab Lessons)
 
-Progress: [█████████░] 93%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
@@ -61,6 +61,7 @@ Progress: [█████████░] 93%
 | Phase 04 P01 | 7min | 2 tasks | 8 files |
 | Phase 04 P02 | 6min | 2 tasks | 9 files |
 | Phase 04 P03 | 4min | 2 tasks | 6 files |
+| Phase 04 P04 | 4min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -107,6 +108,9 @@ Recent decisions affecting current work:
 - [Phase 04-01]: validatePolicyYaml exported as testable function separate from CodeMirror linter wrapper
 - [Phase 04-01]: Ruleset JSON files gitignored as build artifacts (same pattern as extracted-sources)
 - [Phase 04-03]: Overrides field tracks all child guard keys (additions + overrides) for richer tree UI display
+- [Phase 04-04]: Lesson 4 guided exercise uses coding assistant scenario per CONTEXT.md specifics
+- [Phase 04-04]: Lesson 2 documents strict as root ruleset (not extending default) with rationale for independent thresholds
+- [Phase 04-04]: Lesson 5 observe-synth-tighten uses two PolicyEditor embeds showing v1 and v2 progression
 
 ### Pending Todos
 
@@ -119,6 +123,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-21T13:10:40Z
-Stopped at: Completed 04-03-PLAN.md
+Last session: 2026-03-21T13:20:10.824Z
+Stopped at: Completed 04-04-PLAN.md (final plan)
 Resume file: None

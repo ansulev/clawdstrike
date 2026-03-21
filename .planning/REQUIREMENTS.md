@@ -47,8 +47,8 @@
 - [x] **POLI-02**: Editor shows validation errors inline with guard-level specificity (not just "invalid YAML")
 - [x] **POLI-03**: Lesson demonstrates policy inheritance via `extends` with visual tree showing parent-child relationships
 - [x] **POLI-04**: Side-by-side comparison view showing differences between all 10 built-in rulesets
-- [ ] **POLI-05**: Guided exercise: user creates a custom policy for a specific scenario and tests it in the playground
-- [ ] **POLI-06**: Lesson covers the observe-synth-tighten workflow for iterative policy development
+- [x] **POLI-05**: Guided exercise: user creates a custom policy for a specific scenario and tests it in the playground
+- [x] **POLI-06**: Lesson covers the observe-synth-tighten workflow for iterative policy development
 
 ### Interactive Features
 
@@ -123,8 +123,8 @@
 | POLI-02 | Phase 4 | Complete |
 | POLI-03 | Phase 4 | Complete |
 | POLI-04 | Phase 4 | Complete |
-| POLI-05 | Phase 4 | Pending |
-| POLI-06 | Phase 4 | Pending |
+| POLI-05 | Phase 4 | Complete |
+| POLI-06 | Phase 4 | Complete |
 | INTX-01 | Phase 2 | Complete |
 | INTX-02 | Phase 2 | Complete |
 | INTX-03 | Phase 2 | Complete |

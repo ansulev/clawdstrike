@@ -13,7 +13,7 @@ Make SIEM-native detection formats first-class citizens in the ClawdStrike workb
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Core Detection Plugin Infrastructure** - Dynamic registries for visual panels, translations, and field mappings that all detection adapter plugins depend on
-- [ ] **Phase 2: SPL Adapter Plugin** - Splunk SPL as a first-class detection format with visual pipe-chain builder and bidirectional Sigma translation
+- [x] **Phase 2: SPL Adapter Plugin** - Splunk SPL as a first-class detection format with visual pipe-chain builder and bidirectional Sigma translation (completed 2026-03-21)
 - [x] **Phase 3: KQL Adapter Plugin** - Microsoft Sentinel KQL as a first-class detection format with tabular expression editor and bidirectional Sigma translation (completed 2026-03-21)
 - [ ] **Phase 4: EQL Adapter Plugin** - Elastic EQL as a first-class detection format with multi-event sequence builder and bidirectional Sigma translation
 - [ ] **Phase 5: YARA-L Adapter Plugin** - Google Chronicle YARA-L as a first-class detection format with multi-event correlation panel and bidirectional Sigma translation
@@ -47,8 +47,8 @@ Plans:
   4. The SPL visual panel displays the pipe chain as a vertical sequence of command cards, and editing a field value in a card updates the SPL source text in real time
 **Plans:** 2 plans
 Plans:
-- [ ] 02-01-PLAN.md -- SPL parser utilities and detection workflow adapter (file type, draft, lab, publication)
-- [ ] 02-02-PLAN.md -- SPL visual panel (pipe-chain builder) and bidirectional Sigma translation provider
+- [x] 02-01-PLAN.md -- SPL parser utilities and detection workflow adapter (file type, draft, lab, publication)
+- [x] 02-02-PLAN.md -- SPL visual panel (pipe-chain builder) and bidirectional Sigma translation provider
 
 ### Phase 3: KQL Adapter Plugin
 **Goal**: Security teams using Microsoft Sentinel can draft, test, and translate KQL detection rules natively in the workbench, and Sigma rules can be translated to/from KQL
@@ -103,7 +103,7 @@ Note: Phases 2-5 each depend only on Phase 1, so adapter plugins can be develope
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Core Detection Plugin Infrastructure | 3/3 | Complete | 2026-03-21 |
-| 2. SPL Adapter Plugin | 0/2 | Not started | - |
+| 2. SPL Adapter Plugin | 2/2 | Complete | 2026-03-21 |
 | 3. KQL Adapter Plugin | 2/2 | Complete   | 2026-03-21 |
 | 4. EQL Adapter Plugin | 1/3 | In progress | - |
 | 5. YARA-L Adapter Plugin | 3/3 | Complete | 2026-03-21 |

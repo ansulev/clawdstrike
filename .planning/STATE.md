@@ -9,8 +9,8 @@ progress:
   total_phases: 5
   completed_phases: 1
   total_plans: 13
-  completed_plans: 11
-  percent: 85
+  completed_plans: 12
+  percent: 92
 ---
 
 # Project State
@@ -28,7 +28,7 @@ Phase: 5 of 5 (YARA-L Adapter Plugin)
 Plan: 3 of 3
 Status: In progress
 
-Progress: [████████░░] 85%
+Progress: [█████████░] 92%
 
 ## Previous Milestones
 
@@ -92,6 +92,10 @@ Progress: [████████░░] 85%
 - [05-03] Reverse UDM mapping built dynamically from getAllFieldMappings() for YARA-L->Sigma field lookup
 - [05-03] Regex-with-nocase maps to Sigma |contains; anchored regexes map to |startswith/|endswith
 - [Phase 02]: [02-01] Regex-based SPL parsing; AND condition matching; CIM field mapping via translateField; plugin_trace with spl_match traceType; case-insensitive field lookup
+- [02-02] SPL visual panel uses pipe-chain command cards with editable field-value pairs for search/where commands
+- [02-02] Only search/where commands get editable fields; other commands (stats, table) shown as read-only monospace
+- [02-02] Reverse CIM mapping uses case-insensitive fallback for field name variance across deployments
+- [02-02] Untranslatable SPL features (stats, eval, lookup, subsearch) detected and reported in translation diagnostics
 
 ### Pending Todos
 None.
@@ -101,6 +105,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-21T14:45:00.000Z
-Stopped at: Completed 04-03-PLAN.md (EQL translation + lab execution)
+Last session: 2026-03-21T13:59:00Z
+Stopped at: Completed 02-02-PLAN.md (SPL visual panel + translation provider)
 Resume file: None

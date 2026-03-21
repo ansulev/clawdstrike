@@ -102,7 +102,7 @@ Plans:
   4. Dead PolicyEditor code removed; duplicate commands cleaned up
 **Plans**: 2 plans
 Plans:
-- [ ] 11-01-PLAN.md — Wire gutter play button in FileEditorShell (onRunGuardTest + test runner dispatch)
+- [x] 11-01-PLAN.md — Wire gutter play button in FileEditorShell (onRunGuardTest + test runner dispatch) (complete)
 - [ ] 11-02-PLAN.md — Replace navigate("/editor") calls, fix edit.newTab, delete dead PolicyEditor, consolidate commands
 
 ### Phase 12: Editor-to-Swarm Bridge
@@ -135,6 +135,6 @@ Plans:
 | B. Swarm Board | B2: Real-Time Viz | Not started |
 | C. Threat Intel | C1: Signal Clustering | Complete (2 plans) |
 | C. Threat Intel | C2: Promote-to-Detection | Complete (1 plan: C2-01) |
-| Gap Closure | Phase 11: Integration Wiring | Planned (2 plans) |
+| Gap Closure | Phase 11: Integration Wiring | In progress (1/2 plans complete) |
 | Gap Closure | Phase 12: Swarm Bridge | Not started |
 | Gap Closure | Phase 13: Swarm Viz | Not started |

@@ -40,8 +40,8 @@
 
 ### Integration Wiring Fixes
 
-- [ ] **DET-01**: Gutter play button runs test scenarios in FileEditorShell (not just legacy PolicyEditor)
-- [ ] **DET-03**: Guard test results appear in TestRunnerPanel when triggered from FileEditorShell gutter
+- [x] **DET-01**: Gutter play button runs test scenarios in FileEditorShell (not just legacy PolicyEditor)
+- [x] **DET-03**: Guard test results appear in TestRunnerPanel when triggered from FileEditorShell gutter
 - [ ] **FLAT-07**: edit.newTab (Cmd+T) creates a pane tab via pane-store (not legacy multi-policy-store)
 - [ ] **FLAT-08**: All navigate("/editor") call sites replaced with pane-store openFile/openApp
 
@@ -78,8 +78,8 @@
 | CTX-02 | Phase 4 | Pending |
 | CTX-03 | Phase 4 | Pending |
 | CTX-04 | Phase 4 | Pending |
-| DET-01 | Phase 11 | Pending |
-| DET-03 | Phase 11 | Pending |
+| DET-01 | Phase 11 | Complete |
+| DET-03 | Phase 11 | Complete |
 | FLAT-07 | Phase 11 | Pending |
 | FLAT-08 | Phase 11 | Pending |
 | SWARM-01 | Phase 12 | Pending |

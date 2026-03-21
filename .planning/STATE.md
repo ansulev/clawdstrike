@@ -4,7 +4,7 @@ milestone: v4.0
 milestone_name: milestone
 status: executing
 stopped_at: Completed 03-01-PLAN.md
-last_updated: "2026-03-21T13:54:00.579Z"
+last_updated: "2026-03-21T13:54:06.213Z"
 progress:
   total_phases: 5
   completed_phases: 1
@@ -75,6 +75,7 @@ Progress: [████░░░░░░] 46%
 - [03-01] KQL->Sigma reverse mapping built dynamically from getAllFieldMappings() sentinel entries
 - [03-01] Untranslatable KQL features (summarize, join, union, extend, ago, etc.) detected and reported
 - [03-01] Sentinel Analytics Rule JSON uses standard queryFrequency/queryPeriod PT5H defaults
+- [Phase 02]: [02-01] Regex-based SPL parsing; AND condition matching; CIM field mapping via translateField; plugin_trace with spl_match traceType; case-insensitive field lookup
 
 ### Pending Todos
 None.

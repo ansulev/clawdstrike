@@ -91,6 +91,8 @@ export { policyAdapter } from "./policy-adapter";
 export { sigmaAdapter } from "./sigma-adapter";
 export { yaraAdapter } from "./yara-adapter";
 export { ocsfAdapter } from "./ocsf-adapter";
+export { eqlAdapter } from "./eql-adapter";
+export { yaralAdapter } from "./yaral-adapter";
 
 // ---- Stores ----
 
@@ -248,3 +250,4 @@ import "./policy-adapter";
 import "./sigma-adapter";
 import "./yara-adapter";
 import "./ocsf-adapter";
+import "./eql-adapter";

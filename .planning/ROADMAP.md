@@ -75,7 +75,11 @@ Plans:
   2. An operator can report a confirmed-malicious IP to AbuseIPDB directly from the finding detail view, and the report is submitted via the AbuseIPDB `/report` endpoint
   3. A threat intel plugin can register a custom React renderer for its enrichment data, and the enrichment sidebar uses that renderer instead of the generic key-value fallback
   4. The enrichment aggregation dashboard shows which indicators appear across multiple findings and the current health/quota status of each configured source
-**Plans**: TBD
+**Plans:** 3 plans
+Plans:
+- [ ] 04-01-PLAN.md -- EnrichmentTypeRegistry, pivot enrichment, and custom renderer wiring
+- [ ] 04-02-PLAN.md -- Bidirectional reporting to AbuseIPDB and MISP
+- [ ] 04-03-PLAN.md -- Enrichment aggregation dashboard
 
 ## Progress
 
@@ -87,4 +91,4 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 | 1. Enrichment Infrastructure | 0/3 | Planning complete | - |
 | 2. First Plugins | 0/2 | Planning complete | - |
 | 3. Operational Readiness | 0/4 | Planning complete | - |
-| 4. Intelligence Participation | 0/? | Not started | - |
+| 4. Intelligence Participation | 0/3 | Planning complete | - |

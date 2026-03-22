@@ -70,7 +70,7 @@ Enable threat intelligence enrichment of security findings through a plugin-base
 | OPS-05 | Phase 3 | Complete |
 | OPS-06 | Phase 3 | Complete |
 | OPS-07 | Phase 3 | Complete |
-| ADV-01 | Phase 4 | Pending |
+| ADV-01 | Phase 4 | Complete |
 | ADV-02 | Phase 4 | Complete |
-| ADV-03 | Phase 4 | Pending |
+| ADV-03 | Phase 4 | Complete |
 | ADV-04 | Phase 4 | Pending |

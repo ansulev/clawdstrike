@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v5.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 04-02-PLAN.md
-last_updated: "2026-03-22T23:49:55.052Z"
+stopped_at: Completed 04-01-PLAN.md
+last_updated: "2026-03-22T23:52:16.161Z"
 progress:
   total_phases: 4
   completed_phases: 3
   total_plans: 12
-  completed_plans: 10
+  completed_plans: 11
   percent: 83
 ---
 
@@ -93,6 +93,10 @@ Progress: [████████░░] 83%
 - [Phase 04]: AbuseIPDB target filters indicators to IP-type only; MISP shows all types
 - [Phase 04]: FindingDetailActions standalone component (not modifying finding-detail.tsx inline)
 - [Phase 04]: Default AbuseIPDB category [21] (Exploited Host) when none selected
+- (04-01) EnrichmentTypeRegistry follows identical Map + snapshot + listeners pattern as ViewRegistry
+- (04-01) Custom renderers override built-in switch-case (plugin renderer checked first)
+- (04-01) Related indicators deduplicated by type:value tuple, first occurrence wins
+- (04-01) EnrichmentRendererContribution added to both SDK and workbench-internal types
 
 ### Pending Todos
 None.
@@ -102,6 +106,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-22T23:49:55.050Z
-Stopped at: Completed 04-02-PLAN.md
+Last session: 2026-03-22T23:52:16.159Z
+Stopped at: Completed 04-01-PLAN.md
 Resume file: None

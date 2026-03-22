@@ -15,6 +15,7 @@ export type CommandCategory =
   | "Test"
   | "Sentinel"
   | "Receipt"
+  | "Swarm"
   | "View"
   | "Sidebar"
   | "Help";

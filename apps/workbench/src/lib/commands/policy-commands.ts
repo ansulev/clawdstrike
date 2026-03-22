@@ -47,7 +47,7 @@ export function registerPolicyCommands(deps: PolicyCommandDeps): void {
           void triggerNativeValidation(tab.fileType, source, dispatch);
         }
 
-        usePaneStore.getState().openApp("/editor", "Editor");
+        // Validation runs in-place — no navigation needed (user is already viewing the file)
       },
     },
     {

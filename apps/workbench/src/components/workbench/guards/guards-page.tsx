@@ -614,11 +614,19 @@ export function GuardsPage({ onNavigateToEditor: onNavigateToEditorProp }: Guard
     [activeGuardIds, dispatch, toast],
   );
 
-  const handleNavigateToEditor = useCallback(() => {
+  const handleNavigateToEditor = useCallback(async () => {
     if (onNavigateToEditorProp) {
       onNavigateToEditorProp();
     } else {
-      usePaneStore.getState().openApp("/editor", "Editor");
+      // Open the active file tab (draft detection creates a new tab)
+      const { usePolicyTabsStore } = await import("@/features/policy/stores/policy-tabs-store");
+      const activeTab = usePolicyTabsStore.getState().getActiveTab();
+      if (activeTab) {
+        const route = activeTab.filePath
+          ? `/file/${activeTab.filePath}`
+          : `/file/__new__/${activeTab.id}`;
+        usePaneStore.getState().openApp(route, activeTab.name || "Detection");
+      }
     }
   }, [onNavigateToEditorProp]);
 

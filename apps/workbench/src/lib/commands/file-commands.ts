@@ -95,7 +95,14 @@ export function registerFileCommands(deps: FileCommandDeps): void {
       keybinding: "Meta+N",
       execute: () => {
         newPolicy();
-        usePaneStore.getState().openApp("/editor", "Editor");
+        // Open the newly created tab in the pane system
+        const newTab = usePolicyTabsStore.getState().getActiveTab();
+        if (newTab) {
+          const route = newTab.filePath
+            ? `/file/${newTab.filePath}`
+            : `/file/__new__/${newTab.id}`;
+          usePaneStore.getState().openApp(route, newTab.name || "Untitled");
+        }
       },
     },
     {
@@ -105,7 +112,14 @@ export function registerFileCommands(deps: FileCommandDeps): void {
       keybinding: "Meta+O",
       execute: async () => {
         await openFile();
-        usePaneStore.getState().openApp("/editor", "Editor");
+        // Open the file that was just loaded via the dialog
+        const activeTab = usePolicyTabsStore.getState().getActiveTab();
+        if (activeTab) {
+          const route = activeTab.filePath
+            ? `/file/${activeTab.filePath}`
+            : `/file/__new__/${activeTab.id}`;
+          usePaneStore.getState().openApp(route, activeTab.name || "File");
+        }
       },
     },
     {

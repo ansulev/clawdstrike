@@ -541,8 +541,16 @@ export function FindingDetailPage() {
   const allSignals = useSignalStore.use.signals();
   const { draftFromFinding } = useDraftDetection({
     dispatch: multiDispatch,
-    onNavigateToEditor: () => {
-      usePaneStore.getState().openApp("/editor", "Editor");
+    onNavigateToEditor: async () => {
+      // Open the newly created detection file tab
+      const { usePolicyTabsStore } = await import("@/features/policy/stores/policy-tabs-store");
+      const activeTab = usePolicyTabsStore.getState().getActiveTab();
+      if (activeTab) {
+        const route = activeTab.filePath
+          ? `/file/${activeTab.filePath}`
+          : `/file/__new__/${activeTab.id}`;
+        usePaneStore.getState().openApp(route, activeTab.name || "Detection");
+      }
     },
   });
 

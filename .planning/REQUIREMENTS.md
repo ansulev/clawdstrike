@@ -63,12 +63,12 @@ Enable threat intelligence enrichment of security findings through a plugin-base
 | PLUG-02 | Phase 2 | Complete |
 | PLUG-03 | Phase 2 | Complete |
 | PLUG-04 | Phase 2 | Complete |
-| OPS-01 | Phase 3 | Pending |
+| OPS-01 | Phase 3 | Complete |
 | OPS-02 | Phase 3 | Complete |
 | OPS-03 | Phase 3 | Complete |
 | OPS-04 | Phase 3 | Complete |
 | OPS-05 | Phase 3 | Complete |
-| OPS-06 | Phase 3 | Pending |
+| OPS-06 | Phase 3 | Complete |
 | OPS-07 | Phase 3 | Pending |
 | ADV-01 | Phase 4 | Pending |
 | ADV-02 | Phase 4 | Pending |

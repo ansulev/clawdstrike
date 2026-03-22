@@ -32,8 +32,8 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Plans:** 3 plans
 Plans:
 - [x] 01-01-PLAN.md -- Types, ThreatIntelSourceRegistry, and SecretsApi
-- [ ] 01-02-PLAN.md -- EnrichmentOrchestrator and indicator extraction
-- [ ] 01-03-PLAN.md -- Plugin loader routing for threatIntelSources
+- [x] 01-02-PLAN.md -- EnrichmentOrchestrator and indicator extraction
+- [x] 01-03-PLAN.md -- Plugin loader routing for threatIntelSources
 
 ### Phase 2: First Plugins
 **Goal**: Operators can enrich findings with VirusTotal file hash reputation and GreyNoise IP classification, proving the enrichment pipeline works end-to-end from button click to rendered results
@@ -88,7 +88,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Enrichment Infrastructure | 1/3 | In Progress | - |
+| 1. Enrichment Infrastructure | 3/3 | Complete | 2026-03-22 |
 | 2. First Plugins | 0/2 | Planning complete | - |
 | 3. Operational Readiness | 0/4 | Planning complete | - |
 | 4. Intelligence Participation | 0/3 | Planning complete | - |

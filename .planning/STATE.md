@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v5.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 01-01-PLAN.md
-last_updated: "2026-03-22T03:29:51.000Z"
+stopped_at: Completed 01-03-PLAN.md
+last_updated: "2026-03-22T03:48:00.000Z"
 progress:
   total_phases: 4
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 12
-  completed_plans: 1
-  percent: 8
+  completed_plans: 3
+  percent: 25
 ---
 
 # Project State
@@ -20,15 +20,15 @@ progress:
 See: .planning/PROJECT.md
 
 **Core value:** Plugin-based threat intelligence enrichment for security findings
-**Current focus:** v5.0 Threat Intel Source Plugins — Phase 1 Enrichment Infrastructure
+**Current focus:** v5.0 Threat Intel Source Plugins — Phase 2 First Plugins
 
 ## Current Position
 
-Phase: 1 of 4 (Enrichment Infrastructure)
+Phase: 2 of 4 (First Plugins)
 Plan: 1 of 3
 Status: Executing
 
-Progress: [█░░░░░░░░░] 8%
+Progress: [███░░░░░░░] 25%
 
 ## Previous Milestones
 
@@ -50,6 +50,12 @@ Progress: [█░░░░░░░░░] 8%
 - (01-01) SecretsApi defined in both SDK context.ts and factory module to maintain SDK-is-types-only separation
 - (01-01) ThreatIntelSourceRegistry includes _resetForTesting() for test isolation
 - (01-01) Registry imports from @clawdstrike/plugin-sdk workspace package
+- (01-02) TokenBucket uses simple 60s window refill matching maxPerMinute contract
+- (01-02) Cache keyed by sourceId:indicatorType:indicatorValue with TTL from EnrichmentResult.cacheTtlMs
+- (01-02) Domain extraction limited to typed evidence keys to reduce false positives
+- (01-02) Hash algorithm detection by hex string length (32=MD5, 40=SHA-1, 64=SHA-256)
+- (01-03) Added EntrypointResolver option for testable contribution module loading (parallels resolveModule pattern)
+- (01-03) Source IDs namespaced as {pluginId}.{sourceId} for inter-plugin isolation
 
 ### Pending Todos
 None.
@@ -59,6 +65,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-22T03:29:51Z
-Stopped at: Completed 01-01-PLAN.md
+Last session: 2026-03-22T03:48:00Z
+Stopped at: Completed 01-03-PLAN.md (Phase 1 complete)
 Resume file: None

@@ -39,9 +39,12 @@ import {
 import { registerGuard } from "../workbench/guard-registry";
 import { registerFileType } from "../workbench/file-type-registry";
 import { statusBarRegistry } from "../workbench/status-bar-registry";
+import { registerThreatIntelSource } from "../workbench/threat-intel-registry";
 import { registerView } from "./view-registry";
 import { registerGutterExtension } from "./gutter-extension-registry";
 import { registerContextMenuItem } from "./context-menu-registry";
+import { createSecretsApi } from "./secrets-api";
+import type { SecretsApi } from "./secrets-api";
 import type { GutterConfig } from "./types";
 import { PluginBridgeHost } from "./bridge";
 import { buildPluginSrcdoc } from "./sandbox";
@@ -77,6 +80,8 @@ export interface PluginActivationContext {
   pluginId: string;
   /** Subscriptions array -- push disposables here for automatic cleanup. */
   subscriptions: Disposable[];
+  /** Plugin-scoped secrets API for credential storage (keys auto-prefixed with plugin ID). */
+  secrets: SecretsApi;
   /** Views API for registering plugin-contributed views in workbench UI slots. */
   views: {
     registerEditorTab(contribution: {
@@ -119,6 +124,13 @@ export type ModuleResolver = (manifest: PluginManifest) => Promise<PluginModule>
 export type PluginCodeResolver = (manifest: PluginManifest) => Promise<string>;
 
 /**
+ * A function that resolves a contribution entrypoint path to its module.
+ * Used for threat intel sources, gutter extensions, and other async entrypoints.
+ * Default implementation uses dynamic import().
+ */
+export type EntrypointResolver = (entrypoint: string) => Promise<Record<string, unknown>>;
+
+/**
  * Options for constructing a PluginLoader.
  */
 export interface PluginLoaderOptions {
@@ -134,6 +146,8 @@ export interface PluginLoaderOptions {
   resolvePluginCode?: PluginCodeResolver;
   /** Revocation store for checking/storing revocations. Defaults to singleton. */
   revocationStore?: PluginRevocationStore;
+  /** Entrypoint resolver for contribution modules (defaults to dynamic import). */
+  resolveEntrypoint?: EntrypointResolver;
 }
 
 // ---- Internal state for a loaded plugin ----
@@ -158,6 +172,7 @@ interface LoadedPlugin {
 export class PluginLoader {
   private registry: PluginRegistry;
   private resolveModule: ModuleResolver;
+  private resolveEntrypoint: EntrypointResolver;
   private trustOptions: TrustVerificationOptions;
   private iframeContainer?: HTMLElement;
   private resolvePluginCode?: PluginCodeResolver;
@@ -179,6 +194,10 @@ export class PluginLoader {
         }
         return import(/* @vite-ignore */ m.main) as Promise<PluginModule>;
       });
+    this.resolveEntrypoint =
+      options?.resolveEntrypoint ??
+      (async (entrypoint: string) =>
+        import(/* @vite-ignore */ entrypoint) as Promise<Record<string, unknown>>);
     this.trustOptions = options?.trustOptions ?? {};
     this.iframeContainer = options?.iframeContainer;
     this.resolvePluginCode = options?.resolvePluginCode;
@@ -290,6 +309,7 @@ export class PluginLoader {
       const context: PluginActivationContext = {
         pluginId,
         subscriptions: [],
+        secrets: createSecretsApi(pluginId),
         views: this.buildViewsApi(pluginId, disposables),
       };
 
@@ -759,6 +779,32 @@ export class PluginLoader {
         console.debug(
           `[PluginLoader] Detection adapter declared for "${(adapter as { fileType: string }).fileType}" by plugin "${manifest.id}"`,
         );
+      }
+    }
+
+    // Route threat intel source contributions to ThreatIntelSourceRegistry
+    if (contributions.threatIntelSources) {
+      for (const source of contributions.threatIntelSources) {
+        const sourceId = `${manifest.id}.${source.id}`;
+        void (async () => {
+          try {
+            const mod = await this.resolveEntrypoint(source.entrypoint);
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const sourceImpl = (mod.default ?? mod) as Record<string, any>;
+            if (sourceImpl && typeof sourceImpl.enrich === "function") {
+              // Ensure the source ID is namespaced to the plugin
+              const registeredSource = { ...sourceImpl, id: sourceId };
+              const dispose = registerThreatIntelSource(registeredSource as any);
+              disposables.push(dispose);
+            } else {
+              console.warn(
+                `[PluginLoader] Threat intel source "${sourceId}" entrypoint does not export a valid ThreatIntelSource (missing enrich method)`,
+              );
+            }
+          } catch (err) {
+            console.warn(`[PluginLoader] Failed to load threat intel source "${sourceId}":`, err);
+          }
+        })();
       }
     }
 

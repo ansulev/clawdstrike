@@ -927,13 +927,14 @@ describe("PluginLoader", () => {
 
     // Test 29: manifest with threatIntelSources triggers module resolution for each source entrypoint
     it("manifest with threatIntelSources triggers async module resolution for each source entrypoint", async () => {
-      const mockEnrich = vi.fn(async () => ({
-        sourceId: "ti-plugin.vt",
-        sourceName: "VirusTotal",
-        verdict: { classification: "benign" as const, confidence: 0.9, summary: "Clean" },
-        rawData: {},
-        fetchedAt: Date.now(),
-        cacheTtlMs: 60_000,
+      const resolveEntrypoint = vi.fn(async () => ({
+        default: {
+          id: "placeholder",
+          name: "VirusTotal",
+          supportedIndicatorTypes: ["hash", "ip"],
+          rateLimit: { maxPerMinute: 4 },
+          enrich: vi.fn(),
+        },
       }));
 
       const manifest = createTestManifest({
@@ -952,24 +953,18 @@ describe("PluginLoader", () => {
       const mockModule = createMockModule();
       loader = new PluginLoader({
         registry,
-        resolveModule: async (m) => {
-          // Intercept the import() call for the source entrypoint
-          // by providing the source module via the main module's resolution
-          return mockModule;
-        },
+        resolveModule: async () => mockModule,
+        resolveEntrypoint,
       });
 
-      // We need to mock the dynamic import for the entrypoint
-      // The routeContributions method uses import() directly, so we mock it at the global level
-      const originalImport = globalThis.__vi_import__;
-
       await loader.loadPlugin("ti-plugin");
-
       // Allow the async IIFE inside routeContributions to complete
       await new Promise((resolve) => setTimeout(resolve, 50));
 
+      // resolveEntrypoint should have been called with the source entrypoint
+      expect(resolveEntrypoint).toHaveBeenCalledWith("./sources/vt.ts");
+
       // The source should be registered in the threat intel registry
-      // with the namespaced ID: "ti-plugin.vt"
       const source = getThreatIntelSource("ti-plugin.vt");
       expect(source).toBeDefined();
 
@@ -1002,15 +997,11 @@ describe("PluginLoader", () => {
       });
       registry.register(manifest);
 
-      // Mock dynamic import for entrypoint resolution
-      vi.stubGlobal("__mock_import_map__", {
-        "./sources/vt.ts": mockSourceModule,
-      });
-
       const mockModule = createMockModule();
       loader = new PluginLoader({
         registry,
         resolveModule: async () => mockModule,
+        resolveEntrypoint: async () => mockSourceModule,
       });
 
       await loader.loadPlugin("ti-register-test");
@@ -1055,6 +1046,7 @@ describe("PluginLoader", () => {
       loader = new PluginLoader({
         registry,
         resolveModule: async () => mockModule,
+        resolveEntrypoint: async () => mockSourceModule,
       });
 
       await loader.loadPlugin("ti-dispose-test");
@@ -1091,6 +1083,7 @@ describe("PluginLoader", () => {
       loader = new PluginLoader({
         registry,
         resolveModule: async () => mockModule,
+        resolveEntrypoint: async () => { throw new Error("Module not found"); },
       });
 
       await loader.loadPlugin("ti-fail-test");
@@ -1138,6 +1131,7 @@ describe("PluginLoader", () => {
       loader = new PluginLoader({
         registry,
         resolveModule: async () => mockModule,
+        resolveEntrypoint: async () => mockSourceModule,
       });
 
       await loader.loadPlugin("ti-noenrich-test");

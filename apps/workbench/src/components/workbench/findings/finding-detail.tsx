@@ -19,6 +19,8 @@ import {
 } from "@tabler/icons-react";
 import { cn } from "@/lib/utils";
 import { EnrichmentSidebar } from "./enrichment-sidebar";
+import { useEnrichmentBridge } from "@/lib/plugins/threat-intel/enrichment-bridge";
+import { enrichmentOrchestrator } from "@/lib/workbench/enrichment-orchestrator";
 import type {
   Finding,
   TimelineEntry,
@@ -102,6 +104,9 @@ export function FindingDetail({
 }: FindingDetailProps) {
   const [annotationText, setAnnotationText] = useState("");
   const [expandedEntryId, setExpandedEntryId] = useState<string | null>(null);
+
+  // Wire enrichment bridge to orchestrator
+  const enrichmentBridge = useEnrichmentBridge(enrichmentOrchestrator);
 
   const sevColor = SEVERITY_COLORS[finding.severity] ?? "#6f7f9a";
   const statusConfig = STATUS_CONFIG[finding.status] ?? STATUS_CONFIG.emerging;
@@ -471,11 +476,13 @@ export function FindingDetail({
       <div className="w-80 shrink-0 border-l border-[#2d3240]/60 overflow-y-auto bg-[#0b0d13]">
         <EnrichmentSidebar
           enrichments={finding.enrichments}
-          onRunEnrichment={
-            onRunEnrichment
-              ? () => onRunEnrichment(finding.id)
-              : undefined
-          }
+          onRunEnrichment={() => {
+            enrichmentBridge.runEnrichment(finding);
+            onRunEnrichment?.(finding.id);
+          }}
+          sourceStatuses={enrichmentBridge.sourceStatuses}
+          isEnriching={enrichmentBridge.isEnriching}
+          onCancel={enrichmentBridge.cancel}
         />
       </div>
     </div>

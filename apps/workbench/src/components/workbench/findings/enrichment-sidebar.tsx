@@ -19,10 +19,14 @@ import {
 } from "@tabler/icons-react";
 import type { Enrichment } from "@/lib/workbench/finding-engine";
 import type { EnrichmentSourceStatus } from "@/lib/plugins/threat-intel/enrichment-bridge";
+import { useEnrichmentRenderer } from "@/lib/plugins/enrichment-type-registry";
+import { extractRelatedIndicators } from "@/lib/workbench/pivot-enrichment";
+import { RelatedIndicatorsSection } from "./related-indicators-section";
 
 interface EnrichmentSidebarProps {
   enrichments: Enrichment[];
   onRunEnrichment?: () => void;
+  onPivotEnrich?: (type: string, value: string) => void;
   // New streaming props:
   sourceStatuses?: EnrichmentSourceStatus[];
   isEnriching?: boolean;
@@ -86,12 +90,14 @@ const KILL_CHAIN_DEPTH_LABELS: Record<number, { label: string; color: string }> 
 export function EnrichmentSidebar({
   enrichments,
   onRunEnrichment,
+  onPivotEnrich,
   sourceStatuses,
   isEnriching,
   onCancel,
 }: EnrichmentSidebarProps) {
   const grouped = groupByType(enrichments);
   const hasStreamingStatuses = sourceStatuses && sourceStatuses.length > 0;
+  const relatedIndicators = extractRelatedIndicators(enrichments);
 
   return (
     <div className="flex flex-col h-full">
@@ -173,6 +179,12 @@ export function EnrichmentSidebar({
             {Object.entries(grouped).map(([type, items]) => (
               <EnrichmentSection key={type} type={type} enrichments={items} />
             ))}
+            {relatedIndicators.length > 0 && (
+              <RelatedIndicatorsSection
+                indicators={relatedIndicators}
+                onEnrich={(ind) => onPivotEnrich?.(ind.type, ind.value)}
+              />
+            )}
           </div>
         )}
       </div>
@@ -400,6 +412,14 @@ function EnrichmentSection({
 }
 
 function EnrichmentContent({ enrichment }: { enrichment: Enrichment }) {
+  const CustomRenderer = useEnrichmentRenderer(enrichment.type);
+
+  // If a plugin registered a custom renderer for this type, use it
+  if (CustomRenderer) {
+    return <CustomRenderer enrichment={enrichment} data={enrichment.data} />;
+  }
+
+  // Built-in renderers
   switch (enrichment.type) {
     case "mitre_attack":
       return <MitreAttackContent data={enrichment.data} />;

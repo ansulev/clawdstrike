@@ -43,6 +43,7 @@ import { registerThreatIntelSource } from "../workbench/threat-intel-registry";
 import { registerView } from "./view-registry";
 import { registerGutterExtension } from "./gutter-extension-registry";
 import { registerContextMenuItem } from "./context-menu-registry";
+import { registerEnrichmentRenderer } from "./enrichment-type-registry";
 import { createSecretsApi } from "./secrets-api";
 import type { SecretsApi } from "./secrets-api";
 import type { GutterConfig } from "./types";
@@ -820,6 +821,15 @@ export class PluginLoader {
           when: item.when,
           menu: item.menu,
         });
+        disposables.push(dispose);
+      }
+    }
+
+    // Route enrichment renderer contributions to EnrichmentTypeRegistry
+    if (contributions.enrichmentRenderers) {
+      for (const renderer of contributions.enrichmentRenderers) {
+        const LazyComponent = lazy(() => this.resolveViewEntrypoint(renderer.entrypoint));
+        const dispose = registerEnrichmentRenderer(renderer.type, LazyComponent);
         disposables.push(dispose);
       }
     }

@@ -323,6 +323,19 @@ export interface GutterConfig {
   decorationId: string;
 }
 
+// ---- Enrichment Renderer Contribution ----
+
+/**
+ * Enrichment renderer contribution declares a custom React renderer
+ * for a specific enrichment type in the enrichment sidebar.
+ */
+export interface EnrichmentRendererContribution {
+  /** The enrichment type this renderer handles (e.g. "virustotal", "shodan"). */
+  type: string;
+  /** Path to the renderer component module within the plugin package. */
+  entrypoint: string;
+}
+
 // ---- Contributions Container ----
 
 /**
@@ -358,6 +371,8 @@ export interface PluginContributions {
   gutterDecorations?: GutterDecorationContribution[];
   /** Context menu items added to right-click menus. */
   contextMenuItems?: ContextMenuContribution[];
+  /** Custom enrichment type renderers for the enrichment sidebar. */
+  enrichmentRenderers?: EnrichmentRendererContribution[];
 }
 
 // ---- Contribution Point Keys ----
@@ -378,6 +393,7 @@ export const CONTRIBUTION_POINT_KEYS = [
   "complianceFrameworks",
   "gutterDecorations",
   "contextMenuItems",
+  "enrichmentRenderers",
 ] as const;
 
 /** Union type of all contribution point key strings. */

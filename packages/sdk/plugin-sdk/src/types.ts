@@ -308,6 +308,19 @@ export interface ContextMenuContribution {
   menu: "editor" | "sidebar" | "tab" | "finding" | "sentinel";
 }
 
+// ---- Enrichment Renderer Contribution ----
+
+/**
+ * Enrichment renderer contribution declares a custom React renderer
+ * for a specific enrichment type in the enrichment sidebar.
+ */
+export interface EnrichmentRendererContribution {
+  /** The enrichment type this renderer handles (e.g. "virustotal", "shodan"). */
+  type: string;
+  /** Path to the renderer component module within the plugin package. */
+  entrypoint: string;
+}
+
 // ---- Gutter Decoration Contribution ----
 
 /** Gutter decoration contribution -- provides a CodeMirror Extension factory. */
@@ -363,6 +376,8 @@ export interface PluginContributions {
   gutterDecorations?: GutterDecorationContribution[];
   /** Context menu items added to right-click menus. */
   contextMenuItems?: ContextMenuContribution[];
+  /** Custom enrichment type renderers for the enrichment sidebar. */
+  enrichmentRenderers?: EnrichmentRendererContribution[];
 }
 
 // ---- Installation Metadata ----

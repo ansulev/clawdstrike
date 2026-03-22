@@ -9,6 +9,7 @@
 
 import type {
   Disposable,
+  ComponentType,
   CommandContribution,
   GuardContribution,
   FileTypeContribution,
@@ -90,6 +91,17 @@ export interface ViewsApi {
   registerStatusBarWidget(contribution: StatusBarWidgetViewContribution): Disposable;
 }
 
+// ---- Enrichment Renderers API ----
+
+/**
+ * API for registering custom enrichment type renderers.
+ * Allows plugins to override the generic enrichment display for specific types.
+ */
+export interface EnrichmentRenderersApi {
+  /** Register a custom renderer for an enrichment type. Returns a disposable to unregister. */
+  register(type: string, component: ComponentType): Disposable;
+}
+
 // ---- Secrets API ----
 
 /**
@@ -138,4 +150,6 @@ export interface PluginContext {
   views: ViewsApi;
   /** Plugin-scoped secret/credential storage API. */
   secrets: SecretsApi;
+  /** Enrichment renderer registration API for custom enrichment type display. */
+  enrichmentRenderers: EnrichmentRenderersApi;
 }

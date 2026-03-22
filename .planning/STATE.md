@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v5.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 03-04-PLAN.md
-last_updated: "2026-03-22T23:43:03.633Z"
+stopped_at: Completed 04-02-PLAN.md
+last_updated: "2026-03-22T23:49:55.052Z"
 progress:
   total_phases: 4
   completed_phases: 3
   total_plans: 12
-  completed_plans: 9
-  percent: 75
+  completed_plans: 10
+  percent: 83
 ---
 
 # Project State
@@ -24,11 +24,11 @@ See: .planning/PROJECT.md
 
 ## Current Position
 
-Phase: 3 of 4 (Operational Readiness)
-Plan: 4 of 4
+Phase: 4 of 4 (Intelligence Participation)
+Plan: 2 of 3
 Status: Executing
 
-Progress: [████████░░] 75%
+Progress: [████████░░] 83%
 
 ## Previous Milestones
 
@@ -87,6 +87,12 @@ Progress: [████████░░] 75%
 - (03-04) extractIndicators called with empty signals for auto-enrichment since store lacks signal context
 - [Phase 03]: EnrichmentOrchestratorLike duck-typed interface for auto-enrichment avoids hard coupling
 - [Phase 03]: Per-indicator fanout matches orchestrator.enrich API
+- [Phase 04]: AbuseIPDB Key header auth matches v2 API spec (not Authorization)
+- [Phase 04]: MISP severity mapping: critical/high=1, medium=2, low=3 (threat_level_id)
+- [Phase 04]: getApiKey callback prop defers credential sourcing to caller (SecretsApi wiring)
+- [Phase 04]: AbuseIPDB target filters indicators to IP-type only; MISP shows all types
+- [Phase 04]: FindingDetailActions standalone component (not modifying finding-detail.tsx inline)
+- [Phase 04]: Default AbuseIPDB category [21] (Exploited Host) when none selected
 
 ### Pending Todos
 None.
@@ -96,6 +102,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-22T23:42:58.466Z
-Stopped at: Completed 03-04-PLAN.md
+Last session: 2026-03-22T23:49:55.050Z
+Stopped at: Completed 04-02-PLAN.md
 Resume file: None

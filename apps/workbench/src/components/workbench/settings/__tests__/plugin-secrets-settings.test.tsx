@@ -3,6 +3,7 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { PluginSecretsSettings } from "../plugin-secrets-settings";
+import type { RegisteredPlugin } from "@/lib/plugins/types";
 
 // ---- Mocks ----
 
@@ -20,7 +21,7 @@ vi.mock("@/lib/workbench/secure-store", () => ({
 }));
 
 const mockPluginRegistry = vi.hoisted(() => ({
-  getAll: vi.fn(() => []),
+  getAll: vi.fn((): RegisteredPlugin[] => []),
 }));
 
 vi.mock("@/lib/plugins/plugin-registry", () => ({

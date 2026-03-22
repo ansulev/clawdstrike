@@ -73,4 +73,4 @@ Enable threat intelligence enrichment of security findings through a plugin-base
 | ADV-01 | Phase 4 | Complete |
 | ADV-02 | Phase 4 | Complete |
 | ADV-03 | Phase 4 | Complete |
-| ADV-04 | Phase 4 | Pending |
+| ADV-04 | Phase 4 | Complete |

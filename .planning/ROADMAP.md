@@ -1,8 +1,8 @@
-# Roadmap: Detection Adapter Plugins (v4.0)
+# Roadmap: v5.0 Threat Intel Source Plugins
 
 ## Overview
 
-Make SIEM-native detection formats first-class citizens in the ClawdStrike workbench. The journey starts by building the core detection plugin infrastructure (registries for visual panels, translation providers, and field mappings), then delivers four adapter plugins in demand order (SPL, KQL, EQL, YARA-L). Each adapter registers a file type, detection workflow adapter, visual panel, and bidirectional Sigma translation -- enabling hub-and-spoke cross-format translation as an emergent property of the adapter ecosystem.
+Transform ClawdStrike findings from isolated guard violations into threat-contextualized intelligence by building a plugin-based enrichment pipeline. The journey starts with the registry and orchestrator infrastructure all plugins need, proves the pipeline end-to-end with VirusTotal and GreyNoise (covering hash and IP indicator types), scales to operational readiness with API key management and four more source plugins, and finishes with differentiation features like pivot enrichment and bidirectional reporting that turn ClawdStrike from a consumer of threat intel into a participant in the ecosystem.
 
 ## Phases
 
@@ -12,113 +12,67 @@ Make SIEM-native detection formats first-class citizens in the ClawdStrike workb
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [x] **Phase 1: Core Detection Plugin Infrastructure** - Dynamic registries for visual panels, translations, and field mappings that all detection adapter plugins depend on
-- [x] **Phase 2: SPL Adapter Plugin** - Splunk SPL as a first-class detection format with visual pipe-chain builder and bidirectional Sigma translation (completed 2026-03-21)
-- [x] **Phase 3: KQL Adapter Plugin** - Microsoft Sentinel KQL as a first-class detection format with tabular expression editor and bidirectional Sigma translation (completed 2026-03-21)
-- [x] **Phase 4: EQL Adapter Plugin** - Elastic EQL as a first-class detection format with multi-event sequence builder and bidirectional Sigma translation (completed 2026-03-21)
-- [x] **Phase 5: YARA-L Adapter Plugin** - Google Chronicle YARA-L as a first-class detection format with multi-event correlation panel and bidirectional Sigma translation (completed 2026-03-21)
-- [x] **Phase 6: Translation UI & Hub-and-Spoke Routing** - Wire translation providers to a user-facing "Translate to..." command and build multi-hop cross-format routing through Sigma (completed 2026-03-22)
+- [ ] **Phase 1: Enrichment Infrastructure** - ThreatIntelSource registry, EnrichmentOrchestrator with rate limiting/caching, SecretsApi, loader routing, indicator extraction
+- [ ] **Phase 2: First Plugins** - VirusTotal and GreyNoise plugins proving the pipeline end-to-end with streaming enrichment UI
+- [ ] **Phase 3: Operational Readiness** - API key settings UI, four remaining plugins (Shodan, AbuseIPDB, OTX, MISP), enrichment badges, auto-enrichment
+- [ ] **Phase 4: Intelligence Participation** - Pivot enrichment, bidirectional reporting, custom renderers, aggregation dashboard
 
 ## Phase Details
 
-### Phase 1: Core Detection Plugin Infrastructure
-**Goal**: Any plugin can register a detection adapter with visual panel, translation capabilities, and field mappings through dynamic registries -- without modifying core workbench code
-**Depends on**: Nothing (first phase; assumes v1.0 plugin SDK and file type seams already exist)
-**Requirements**: CORE-01, CORE-02, CORE-03, CORE-04, CORE-05, CORE-06, CORE-07, CORE-08, CORE-09
+### Phase 1: Enrichment Infrastructure
+**Goal**: The workbench has a complete enrichment pipeline -- from indicator extraction through source registration to orchestrated async enrichment with rate limiting and caching -- ready for plugins to plug into
+**Depends on**: Nothing (first phase; assumes plugin SDK and loader from v1.0 are available)
+**Requirements**: FOUND-01, FOUND-02, FOUND-03, FOUND-04, FOUND-05, FOUND-06, FOUND-07, FOUND-08
 **Success Criteria** (what must be TRUE):
-  1. A test can call `registerVisualPanel("test_format", TestPanel)` and the editor dynamically renders `TestPanel` when a file of that type is opened, without any hardcoded switch case for `"test_format"`
-  2. A test can call `registerTranslationProvider(provider)` where the provider declares `canTranslate("sigma_rule", "test_format")`, and `getTranslationPath("sigma_rule", "test_format")` returns that provider
-  3. The field mapping registry contains 50+ entries mapping common Sigma field names (CommandLine, SourceIp, TargetFilename, etc.) to their Splunk CIM, Sentinel, ECS, and UDM equivalents, and a plugin can extend the table with `registerFieldMappings()`
-  4. Existing built-in visual panels (Sigma, YARA, OCSF) render identically after being migrated to the standardized `DetectionVisualPanelProps` contract and registered through the visual panel registry
-  5. A plugin can provide a single `DetectionAdapterContribution` object that bundles file type, adapter, visual panel, and translations, and all four registrations happen atomically
-**Plans:** 3 plans
-Plans:
-- [x] 01-01-PLAN.md -- Registries, types, and DetectionAdapterContribution contracts
-- [x] 01-02-PLAN.md -- Field mapping table (50+ entries) and DetectionVisualPanelKit
-- [x] 01-03-PLAN.md -- Panel migration, editor wiring, and plugin loader routing
+  1. A test plugin implementing `ThreatIntelSource` can register with `ThreatIntelSourceRegistry`, and `getForIndicator("ip")` returns it when it declares IP support
+  2. The `EnrichmentOrchestrator` queues enrichment requests and respects per-source rate limits -- a source declaring 4 req/min does not receive a 5th request within 60 seconds
+  3. A plugin can call `context.secrets.get("api_key")` to retrieve a stored API key, and the key is stored via the existing secure store with proper `plugin:{id}:` namespacing
+  4. `extractIndicators()` given a finding with egress guard violations returns `Indicator` objects with type "ip" and the violating IP addresses as values
+  5. `PluginLoader.routeContributions()` routes a manifest with `threatIntelSources` entries to the `ThreatIntelSourceRegistry`
+**Plans**: TBD
 
-### Phase 2: SPL Adapter Plugin
-**Goal**: Security teams using Splunk can draft, test, and translate SPL detection rules natively in the workbench, and Sigma rules can be translated to/from SPL
+### Phase 2: First Plugins
+**Goal**: Operators can enrich findings with VirusTotal file hash reputation and GreyNoise IP classification, proving the enrichment pipeline works end-to-end from button click to rendered results
 **Depends on**: Phase 1
-**Requirements**: SPL-01, SPL-02, SPL-03, SPL-04, SPL-05, SPL-06
+**Requirements**: PLUG-01, PLUG-02, PLUG-03, PLUG-04
 **Success Criteria** (what must be TRUE):
-  1. User can create a new SPL file from the command palette, and the editor opens with a valid SPL starter template, syntax-appropriate icon color, and the SPL visual panel in the sidebar
-  2. User can open the Lab with an SPL rule and evidence items, click Run, and see per-field match results in the explainability trace showing which SPL conditions matched which evidence fields
-  3. User can translate a Sigma rule to SPL and get syntactically valid SPL output with correct CIM field name mappings, and user can translate an SPL rule back to Sigma and get a valid Sigma YAML with detection blocks derived from the SPL field conditions
-  4. The SPL visual panel displays the pipe chain as a vertical sequence of command cards, and editing a field value in a card updates the SPL source text in real time
-**Plans:** 2 plans
-Plans:
-- [x] 02-01-PLAN.md -- SPL parser utilities and detection workflow adapter (file type, draft, lab, publication)
-- [x] 02-02-PLAN.md -- SPL visual panel (pipe-chain builder) and bidirectional Sigma translation provider
+  1. With a VirusTotal API key configured, clicking "Run Enrichment" on a finding with a SHA-256 hash indicator returns detection ratio, AV engine results, and a malicious/benign/unknown verdict displayed in the enrichment sidebar
+  2. With a GreyNoise API key configured, clicking "Run Enrichment" on a finding with an IP indicator returns the GreyNoise classification and RIOT status displayed in the enrichment sidebar
+  3. Enrichment results stream into the sidebar as each source responds -- the GreyNoise result appears immediately even if VirusTotal is still loading
+  4. A failed API call to one source shows an error badge for that source without blocking results from the other source
+**Plans**: TBD
 
-### Phase 3: KQL Adapter Plugin
-**Goal**: Security teams using Microsoft Sentinel can draft, test, and translate KQL detection rules natively in the workbench, and Sigma rules can be translated to/from KQL
-**Depends on**: Phase 1
-**Requirements**: KQL-01, KQL-02, KQL-03, KQL-04, KQL-05, KQL-06
+### Phase 3: Operational Readiness
+**Goal**: Operators can configure API keys through the settings UI, all six planned threat intel sources are available, and the workbench surfaces enrichment status at the finding list level with optional auto-enrichment
+**Depends on**: Phase 2
+**Requirements**: OPS-01, OPS-02, OPS-03, OPS-04, OPS-05, OPS-06, OPS-07
 **Success Criteria** (what must be TRUE):
-  1. User can create a new KQL file from the command palette, and the editor opens with a valid KQL starter template, Microsoft blue icon color, and the KQL visual panel in the sidebar
-  2. User can open the Lab with a KQL rule and evidence items, click Run, and see per-condition match results in the explainability trace showing which KQL where-clauses matched which evidence fields
-  3. User can translate a Sigma rule to KQL and get syntactically valid KQL output with correct Sentinel table and field names, and user can translate a KQL rule back to Sigma and get a valid Sigma YAML
-  4. User can translate an SPL rule to KQL (hub-and-spoke via SPL -> Sigma -> KQL) and the output contains correct Sentinel field names, demonstrating cross-format translation working end-to-end
-**Plans:** 2/2 plans complete
-Plans:
-- [x] 03-01-PLAN.md -- KQL adapter core (file type, adapter, translation provider)
-- [x] 03-02-PLAN.md -- KQL visual panel and plugin manifest example
+  1. Each threat intel plugin's settings page shows an API key input field derived from its manifest `requiredSecrets`, and entering a key persists it to the secure store
+  2. The MISP plugin accepts a configurable base URL (since MISP is self-hosted) and enriches indicators by searching the instance's attribute database
+  3. Finding list rows display source badges (e.g., [VT] [GN] [SH]) indicating which sources have enriched each finding, using source brand colors
+  4. Auto-enrichment can be enabled so that new findings above a confidence threshold are automatically queued for enrichment without manual button clicks
+  5. All six plugins (VirusTotal, GreyNoise, Shodan, AbuseIPDB, OTX, MISP) return normalized `ThreatVerdict` with classification and confidence, despite their different API response formats
+**Plans**: TBD
 
-### Phase 4: EQL Adapter Plugin
-**Goal**: Security teams using Elastic can draft, test, and translate EQL detection rules -- including multi-event sequence rules -- natively in the workbench
-**Depends on**: Phase 1
-**Requirements**: EQL-01, EQL-02, EQL-03, EQL-04, EQL-05, EQL-06
+### Phase 4: Intelligence Participation
+**Goal**: ClawdStrike moves from passive consumption to active participation in the threat intel ecosystem -- discovering related threats via pivot enrichment, reporting confirmed threats back to community databases, and providing operators with an aggregate intelligence view
+**Depends on**: Phase 3
+**Requirements**: ADV-01, ADV-02, ADV-03, ADV-04
 **Success Criteria** (what must be TRUE):
-  1. User can create a new EQL file from the command palette, and the editor opens with a valid EQL starter template with event category prefix, Elastic pink icon, and the EQL visual panel
-  2. User can build a multi-event sequence rule using the visual sequence builder (adding/removing/reordering event steps, setting maxspan), and the generated EQL text is syntactically valid with `sequence by` syntax
-  3. User can open the Lab with an EQL sequence rule and multi-event evidence, click Run, and see per-step matching in the explainability trace showing which events matched which sequence steps
-  4. Translating a multi-event EQL rule to Sigma produces a valid Sigma rule with the first event's conditions, plus an `untranslatableFeatures` list clearly stating "sequence correlation with N events not preserved"
-**Plans:** 3 plans
-Plans:
-- [x] 04-01-PLAN.md -- EQL parser/generator and adapter with file type registration and publication
-- [x] 04-02-PLAN.md -- EQL visual panel with sequence builder and condition editor
-- [x] 04-03-PLAN.md -- Bidirectional Sigma-EQL translation provider and full lab execution
-
-### Phase 5: YARA-L Adapter Plugin
-**Goal**: Security teams using Google Chronicle/SecOps can draft, test, and translate YARA-L detection rules natively in the workbench, completing the adapter ecosystem
-**Depends on**: Phase 1
-**Requirements**: YARAL-01, YARAL-02, YARAL-03, YARAL-04, YARAL-05, YARAL-06
-**Success Criteria** (what must be TRUE):
-  1. User can create a new YARA-L file from the command palette, and the editor opens with a valid YARA-L starter template with `rule {}` structure, Google blue icon, and the YARA-L visual panel
-  2. User can build a multi-event YARA-L rule using the visual panel with event variable cards (`$e1`, `$e2`), each showing UDM field predicates, and the generated YARA-L text is syntactically valid
-  3. User can open the Lab with a YARA-L rule and evidence items, click Run, and see per-event-variable matching in the explainability trace
-  4. All four adapter plugins are installed and operational: user can translate between any pair of {Sigma, SPL, KQL, EQL, YARA-L} via hub-and-spoke routing, with translation diagnostics showing field mapping details and any untranslatable features
-**Plans:** 3 plans
-Plans:
-- [x] 05-01-PLAN.md -- YARA-L adapter with file type registration, drafting, lab execution, and publication
-- [x] 05-02-PLAN.md -- YARA-L visual panel with meta editor, event variable cards, and condition editor
-- [x] 05-03-PLAN.md -- Bidirectional Sigma<->YARA-L translation provider
-
-### Phase 6: Translation UI & Hub-and-Spoke Routing
-**Goal**: Users can translate detection rules between any supported format pair via a "Translate to..." command, with multi-hop routing through Sigma as hub
-**Depends on**: Phase 1 (translations registry), Phases 2-5 (translation providers)
-**Gap Closure**: Closes TRANSLATION_UI, HUB_AND_SPOKE_ROUTING integration gaps and Flows C, E from v4.0 audit
-**Success Criteria** (what must be TRUE):
-  1. User can open a Sigma rule, invoke "Translate to..." from command palette or context menu, select "SPL" / "KQL" / "EQL" / "YARA-L", and see the translated output with field mapping diagnostics
-  2. User can open an SPL rule and translate to KQL — the system automatically routes through Sigma (SPL→Sigma→KQL) and produces valid KQL output
-  3. Translation results display field mapping table, diagnostics, and untranslatable features in a results panel
-  4. `chainTranslation(from, to)` function resolves multi-hop paths through the translation registry and chains provider calls
-**Plans:** 1 plan
-Plans:
-- [x] 06-01-PLAN.md -- useTranslation hook, chainTranslation orchestrator, "Translate to..." command, results UI
+  1. When a source returns related indicators (e.g., VirusTotal returns domains associated with a malicious hash), those indicators appear in a "Related Indicators" section with one-click enrichment
+  2. An operator can report a confirmed-malicious IP to AbuseIPDB directly from the finding detail view, and the report is submitted via the AbuseIPDB `/report` endpoint
+  3. A threat intel plugin can register a custom React renderer for its enrichment data, and the enrichment sidebar uses that renderer instead of the generic key-value fallback
+  4. The enrichment aggregation dashboard shows which indicators appear across multiple findings and the current health/quota status of each configured source
+**Plans**: TBD
 
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
-Note: Phases 2-5 each depend only on Phase 1, so adapter plugins can be developed in parallel after Phase 1 completes. Phase 6 depends on all prior phases.
+Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Core Detection Plugin Infrastructure | 3/3 | Complete | 2026-03-21 |
-| 2. SPL Adapter Plugin | 2/2 | Complete | 2026-03-21 |
-| 3. KQL Adapter Plugin | 2/2 | Complete | 2026-03-21 |
-| 4. EQL Adapter Plugin | 3/3 | Complete | 2026-03-21 |
-| 5. YARA-L Adapter Plugin | 3/3 | Complete | 2026-03-21 |
-| 6. Translation UI & Hub-and-Spoke | 1/1 | Complete | 2026-03-22 |
+| 1. Enrichment Infrastructure | 0/? | Not started | - |
+| 2. First Plugins | 0/? | Not started | - |
+| 3. Operational Readiness | 0/? | Not started | - |
+| 4. Intelligence Participation | 0/? | Not started | - |

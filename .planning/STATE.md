@@ -1,16 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v4.0
+milestone: v5.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 06-01-PLAN.md (Translation UI + Hub-and-Spoke Routing)
-last_updated: "2026-03-22T02:42:03Z"
+stopped_at: Milestone activated
+last_updated: "2026-03-22T03:00:00.000Z"
 progress:
-  total_phases: 6
-  completed_phases: 6
-  total_plans: 14
-  completed_plans: 14
-  percent: 100
+  total_phases: 4
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -19,16 +19,16 @@ progress:
 
 See: .planning/PROJECT.md
 
-**Core value:** Third-party detection format adapters (SPL, KQL, EQL, YARA-L) as plugins with cross-format translation
-**Current focus:** Phase 6 gap closure complete -- v4.0 translation integration gaps closed
+**Core value:** Plugin-based threat intelligence enrichment for security findings
+**Current focus:** v5.0 Threat Intel Source Plugins — Phase 1 Enrichment Infrastructure
 
 ## Current Position
 
-Phase: 6 of 6 (all complete)
-Plan: 14 of 14
-Status: Complete
+Phase: 1 of 4 (Enrichment Infrastructure)
+Plan: 0 of 0
+Status: Not started
 
-Progress: [██████████] 100%
+Progress: [░░░░░░░░░░] 0%
 
 ## Previous Milestones
 
@@ -41,68 +41,13 @@ Progress: [██████████] 100%
 ### v3.0 — Plugin-Contributed Views (Complete 2026-03-21)
 5 phases: ViewRegistry, editor tabs, bottom/right panels, activity bar/gutters/menus, gap closure
 
+### v4.0 — Detection Adapter Plugins (Complete 2026-03-22)
+6 phases: Core registries, SPL adapter, KQL adapter, EQL adapter, YARA-L adapter, translation UI
+
 ## Accumulated Context
 
 ### Decisions
-- Hub-and-spoke translation through Sigma (avoid universal IR)
-- Visual panel registry needed for format-specific builders
-- Existing sigma-conversion.ts already outputs SPL/KQL/ES|QL — plugins add the inverse (parsing)
-- Multi-event correlation (EQL sequences) is major impedance mismatch
-- Field mapping table should be extensible
-- [01-01] PublishTarget changed from union to extensible string with BUILTIN_PUBLISH_TARGETS const
-- [01-01] Translation providers use array storage since one provider may handle multiple pairs
-- [01-01] Visual panel registry throws on duplicate registration (fail-fast, matches registerFileType)
-- [01-01] registerAdapter returns dispose function (backward compatible)
-- [01-02] Merge-on-register for field mappings: plugins fill undefined platform fields without overwriting
-- [01-02] Category-based grouping for field mappings (process/file/network/dns/registry/authentication)
-- [01-02] FieldMappingTable uses confidence indicators (exact/approximate/unmapped) with colored dots
-- [01-03] Subcomponents use DEFAULT_ACCENT; main panel uses accentColor prop with fallback
-- [01-03] Side-effect imports in split-editor guarantee panel registration before getVisualPanel()
-- [01-03] Plugin file types get json_export baseline + translatable targets from translation registry
-- [01-03] detectionAdapters routing is declarative only; actual registration happens in plugin activate()
-
-- [04-01] EQL parser uses separate AST node types (EqlSingleQuery vs EqlSequenceQuery) matching Elastic grammar
-- [04-01] Client-side ECS field resolution supports both flat dotted keys and nested objects
-- [04-01] Sequence draft triggers on multiple categories, defaults to sequence by host.id with 5m maxspan
-- [04-03] EQL translation uses same bidirectional pattern as kql-translation.ts for consistency
-- [04-03] Sequence EQL->Sigma degrades to first step only, untranslatableFeatures lists all lost semantics
-- [04-03] Lab execution split: eql_match traces for single queries, eql_sequence_match for sequences
-- [04-03] matchSequenceQuery evaluates steps independently (no temporal ordering) as client-side approximation
-
-- [05-01] YARA-L parser uses regex-based best-effort parsing, sufficient for client-side simulation
-- [05-01] Multi-variable YARA-L conditions use OR semantics between variable groups, AND within each group
-- [05-01] UDM field resolution: dot-path traversal first, inverse Sigma mapping fallback second
-- [05-01] Full implementation in single file pass (both tasks target same file)
-
-- [03-01] Client-side KQL execution via where-clause parsing and clientSideKqlMatch (no native backend needed)
-- [03-01] KQL parser handles 14 operators including negated forms, regex, and in-list
-- [03-01] KQL->Sigma reverse mapping built dynamically from getAllFieldMappings() sentinel entries
-- [03-01] Untranslatable KQL features (summarize, join, union, extend, ago, etc.) detected and reported
-- [03-01] Sentinel Analytics Rule JSON uses standard queryFrequency/queryPeriod PT5H defaults
-- [03-02] Round-trip reconstruction for KQL visual panel: parse -> edit -> reconstruct -> onSourceChange
-- [03-02] Custom table names shown with '(custom)' suffix when not in predefined Sentinel table list
-- [03-02] Extend expressions rendered read-only in visual panel (complex computed columns, editing deferred)
-- [04-02] Two-mode EQL visual panel: SingleQueryEditor for simple queries, SequenceBuilder for sequences, branching on ast.type
-- [04-02] ConditionRow shared between SingleQueryEditor and SequenceBuilder via StepConditions wrapper
-- [04-02] Until clause uses collapsible UI with muted border color to differentiate from sequence steps
-- [05-02] YARA-L visual panel uses internal regex parser with regenerator for round-trip editing
-- [05-02] Event variables rendered as individual cards with inline-editable UDM field predicates
-- [05-02] Optional match/outcome sections rendered as raw TextArea (less commonly used)
-- [05-03] Duplicated parseYaralRule in yaral-translation.ts (not exported from yaral-adapter); extended with hasMatchSection/hasOutcomeSection
-- [05-03] Reverse UDM mapping built dynamically from getAllFieldMappings() for YARA-L->Sigma field lookup
-- [05-03] Regex-with-nocase maps to Sigma |contains; anchored regexes map to |startswith/|endswith
-- [Phase 02]: [02-01] Regex-based SPL parsing; AND condition matching; CIM field mapping via translateField; plugin_trace with spl_match traceType; case-insensitive field lookup
-- [02-02] SPL visual panel uses pipe-chain command cards with editable field-value pairs for search/where commands
-- [02-02] Only search/where commands get editable fields; other commands (stats, table) shown as read-only monospace
-- [02-02] Reverse CIM mapping uses case-insensitive fallback for field name variance across deployments
-- [02-02] Untranslatable SPL features (stats, eval, lookup, subsearch) detected and reported in translation diagnostics
-
-- [06-01] Translation wired in policy-editor.tsx (not split-editor.tsx) because CommandPalette lives there
-- [06-01] TranslationResultsPanel renders below SplitEditor in both test-runner and default layouts
-- [06-01] Translate category added to CATEGORY_ORDER after Format for natural command palette grouping
-- [06-01] parseYaralRule canonical location is yaral-adapter.ts; yaral-translation.ts imports from it
-- [06-01] chainTranslation tries direct provider first, then two-hop through sigma_rule
-- [06-01] Dynamic command generation: getTranslatableTargets() populates palette entries based on active file type
+None yet.
 
 ### Pending Todos
 None.
@@ -112,6 +57,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-22T02:42:03Z
-Stopped at: Completed 06-01-PLAN.md (Translation UI + Hub-and-Spoke Routing)
+Last session: 2026-03-22T03:00:00Z
+Stopped at: v5.0 activated
 Resume file: None

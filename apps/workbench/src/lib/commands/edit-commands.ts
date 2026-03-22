@@ -54,7 +54,6 @@ export function registerEditCommands(deps: EditCommandDeps): void {
       id: "edit.closeTab",
       title: "Close Tab",
       category: "Edit",
-      keybinding: "Meta+W",
       context: "editor",
       execute: () => {
         const tab = getActiveTab();

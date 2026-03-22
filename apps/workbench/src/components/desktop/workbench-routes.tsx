@@ -41,6 +41,12 @@ const ReceiptInspector = lazy(() =>
   })),
 );
 
+const ReceiptDetailPage = lazy(() =>
+  import("@/components/workbench/swarm-board/receipt-detail-page").then((m) => ({
+    default: m.ReceiptDetailPage,
+  })),
+);
+
 const LibraryGallery = lazy(() =>
   import("@/components/workbench/library/library-gallery").then((m) => ({
     default: m.LibraryGallery,
@@ -300,6 +306,7 @@ export function getWorkbenchRouteLabel(route: string): string {
   if (url.pathname === "/swarms") return "Swarms";
   if (url.pathname === "/missions") return "Mission Control";
   if (url.pathname === "/compliance") return "Compliance";
+  if (url.pathname.startsWith("/receipt/")) return "Receipt " + (url.pathname.split("/").pop()?.slice(0, 8) ?? "");
   if (url.pathname === "/receipts") return "Receipts";
   if (url.pathname === "/library") return "Library";
   if (url.pathname === "/settings") return "Settings";
@@ -325,6 +332,7 @@ export const WORKBENCH_ROUTE_OBJECTS: RouteObject[] = [
   { path: "home", element: <HomePage /> },
   { path: "editor", element: <Navigate to="/home" replace /> },
   { path: "compliance", element: <ComplianceDashboard /> },
+  { path: "receipt/:id", element: <ReceiptDetailPage /> },
   { path: "receipts", element: <ReceiptInspector /> },
   { path: "library", element: <LibraryGallery /> },
   { path: "settings", element: <SettingsPage /> },

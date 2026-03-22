@@ -22,6 +22,7 @@ import {
   MiniMap,
   useReactFlow,
   type Node,
+  type Edge,
   type OnConnect,
   type OnNodesChange,
   type OnEdgesChange,
@@ -40,6 +41,7 @@ import {
 } from "@tabler/icons-react";
 
 import { SwarmBoardProvider, useSwarmBoard, useSwarmBoardStore } from "@/features/swarm/stores/swarm-board-store";
+import { usePaneStore } from "@/features/panes/pane-store";
 import { swarmBoardNodeTypes } from "./nodes";
 import { swarmBoardEdgeTypes } from "./edges";
 import { SwarmBoardToolbar } from "./swarm-board-toolbar";
@@ -248,6 +250,21 @@ function SwarmBoardCanvas() {
     setContextMenu(null);
     setHoveredNodeId(null);
   }, [selectNode]);
+
+  // Click on edge -> open receipt detail for receipt-type edges
+  const onEdgeClick = useCallback(
+    (_event: React.MouseEvent, edge: Edge) => {
+      // Only handle receipt-type edges
+      const edgeType = (edge.data?.edgeType as string) ?? findEdgeType(edge.id, edgesRef.current);
+      if (edgeType !== "receipt") return;
+      // Find the receipt node (target of the receipt edge)
+      const receiptNode = nodesRef.current.find((n) => n.id === edge.target);
+      if (!receiptNode) return;
+      const shortId = receiptNode.id.slice(0, 8);
+      usePaneStore.getState().openApp(`/receipt/${receiptNode.id}`, `Receipt ${shortId}`);
+    },
+    [],
+  );
 
   // Track hovered node for edge hover-reveal behavior
   const onNodeMouseEnter: NodeMouseHandler = useCallback(
@@ -575,6 +592,7 @@ function SwarmBoardCanvas() {
               onNodeClick={onNodeClick}
               onNodeDoubleClick={onNodeDoubleClick}
               onNodeContextMenu={onNodeContextMenu}
+              onEdgeClick={onEdgeClick}
               onNodeMouseEnter={onNodeMouseEnter}
               onNodeMouseLeave={onNodeMouseLeave}
               onPaneClick={onPaneClick}

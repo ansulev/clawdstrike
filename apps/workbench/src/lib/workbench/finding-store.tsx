@@ -25,6 +25,10 @@ import {
   setVerdict as engineSetVerdict,
   archiveExpiredFindings as engineArchiveExpired,
 } from "./finding-engine";
+import { AutoEnrichmentManager } from "./auto-enrichment";
+import { enrichmentOrchestrator } from "./enrichment-orchestrator";
+import { extractIndicators } from "./indicator-extractor";
+import type { Finding as SentinelFinding } from "./sentinel-types";
 
 export interface FindingState {
   findings: Finding[];
@@ -274,6 +278,22 @@ export function useFindings(): FindingContextValue {
   return ctx;
 }
 
+/**
+ * Singleton AutoEnrichmentManager.
+ *
+ * Wraps extractIndicators to work without Signal[] (passes empty array
+ * since auto-enrichment triggers before signals are correlated into the store).
+ * Exported so settings UI can call getConfig()/updateConfig().
+ */
+export const autoEnrichmentManager = new AutoEnrichmentManager({
+  orchestrator: enrichmentOrchestrator,
+  // Cast needed: finding-engine.Finding and sentinel-types.Finding are structurally
+  // identical but TypeScript treats them as distinct nominal types (different
+  // Enrichment.data shapes: Record<string, unknown> vs EnrichmentData union).
+  extractIndicators: (finding) =>
+    extractIndicators(finding as unknown as SentinelFinding, []),
+});
+
 export function FindingProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(findingReducer, undefined, getInitialState);
   const stateRef = useRef(state);
@@ -304,6 +324,23 @@ export function FindingProvider({ children }: { children: ReactNode }) {
       window.removeEventListener("beforeunload", handleBeforeUnload);
     };
   }, []);
+
+  // Auto-enrichment: watch for newly added findings and trigger enrichment
+  const prevFindingIdsRef = useRef<Set<string>>(
+    new Set(state.findings.map((f) => f.id)),
+  );
+  useEffect(() => {
+    const prevIds = prevFindingIdsRef.current;
+    const currentIds = new Set(state.findings.map((f) => f.id));
+
+    for (const finding of state.findings) {
+      if (!prevIds.has(finding.id)) {
+        autoEnrichmentManager.processNewFinding(finding);
+      }
+    }
+
+    prevFindingIdsRef.current = currentIds;
+  }, [state.findings]);
 
   const activeFinding = state.findings.find((f) => f.id === state.activeFindingId);
 

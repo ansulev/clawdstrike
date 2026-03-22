@@ -59,8 +59,8 @@ Enable threat intelligence enrichment of security findings through a plugin-base
 | FOUND-06 | Phase 1 | Complete |
 | FOUND-07 | Phase 1 | Complete |
 | FOUND-08 | Phase 1 | Complete |
-| PLUG-01 | Phase 2 | Pending |
-| PLUG-02 | Phase 2 | Pending |
+| PLUG-01 | Phase 2 | Complete |
+| PLUG-02 | Phase 2 | Complete |
 | PLUG-03 | Phase 2 | Pending |
 | PLUG-04 | Phase 2 | Pending |
 | OPS-01 | Phase 3 | Pending |

@@ -46,7 +46,7 @@ Plans:
   4. A failed API call to one source shows an error badge for that source without blocking results from the other source
 **Plans:** 2 plans
 Plans:
-- [ ] 02-01-PLAN.md -- VirusTotal and GreyNoise ThreatIntelSource plugin implementations
+- [x] 02-01-PLAN.md -- VirusTotal and GreyNoise ThreatIntelSource plugin implementations
 - [ ] 02-02-PLAN.md -- Enrichment bridge hook and streaming sidebar UI wiring
 
 ### Phase 3: Operational Readiness
@@ -89,6 +89,6 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Enrichment Infrastructure | 3/3 | Complete | 2026-03-22 |
-| 2. First Plugins | 0/2 | Planning complete | - |
+| 2. First Plugins | 1/2 | In progress | - |
 | 3. Operational Readiness | 0/4 | Planning complete | - |
 | 4. Intelligence Participation | 0/3 | Planning complete | - |

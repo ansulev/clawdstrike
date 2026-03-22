@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v5.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 01-03-PLAN.md
-last_updated: "2026-03-22T03:48:00.000Z"
+stopped_at: Completed 02-01-PLAN.md
+last_updated: "2026-03-22T03:56:00.000Z"
 progress:
   total_phases: 4
   completed_phases: 1
   total_plans: 12
-  completed_plans: 3
-  percent: 25
+  completed_plans: 4
+  percent: 33
 ---
 
 # Project State
@@ -25,10 +25,10 @@ See: .planning/PROJECT.md
 ## Current Position
 
 Phase: 2 of 4 (First Plugins)
-Plan: 1 of 3
+Plan: 2 of 3
 Status: Executing
 
-Progress: [███░░░░░░░] 25%
+Progress: [████░░░░░░] 33%
 
 ## Previous Milestones
 
@@ -56,6 +56,11 @@ Progress: [███░░░░░░░] 25%
 - (01-02) Hash algorithm detection by hex string length (32=MD5, 40=SHA-1, 64=SHA-256)
 - (01-03) Added EntrypointResolver option for testable contribution module loading (parallels resolveModule pattern)
 - (01-03) Source IDs namespaced as {pluginId}.{sourceId} for inter-plugin isolation
+- (02-01) Used maxPerMinute (not requestsPerMinute) to match SDK ThreatIntelSource interface
+- (02-01) healthCheck returns {healthy, message?} matching SDK contract (not bare boolean)
+- (02-01) VT confidence = malicious/total for malicious, 0.3+(malicious/total)*0.4 for suspicious
+- (02-01) GN RIOT status bumps benign confidence from 0.9 to 0.95
+- (02-01) base64url encoding for VT URL indicator lookup (no padding, URL-safe chars)
 
 ### Pending Todos
 None.
@@ -65,6 +70,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-22T03:48:00Z
-Stopped at: Completed 01-03-PLAN.md (Phase 1 complete)
+Last session: 2026-03-22T03:56:00Z
+Stopped at: Completed 02-01-PLAN.md
 Resume file: None

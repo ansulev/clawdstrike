@@ -31,7 +31,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   5. `PluginLoader.routeContributions()` routes a manifest with `threatIntelSources` entries to the `ThreatIntelSourceRegistry`
 **Plans:** 3 plans
 Plans:
-- [ ] 01-01-PLAN.md -- Types, ThreatIntelSourceRegistry, and SecretsApi
+- [x] 01-01-PLAN.md -- Types, ThreatIntelSourceRegistry, and SecretsApi
 - [ ] 01-02-PLAN.md -- EnrichmentOrchestrator and indicator extraction
 - [ ] 01-03-PLAN.md -- Plugin loader routing for threatIntelSources
 
@@ -88,7 +88,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Enrichment Infrastructure | 0/3 | Planning complete | - |
+| 1. Enrichment Infrastructure | 1/3 | In Progress | - |
 | 2. First Plugins | 0/2 | Planning complete | - |
 | 3. Operational Readiness | 0/4 | Planning complete | - |
 | 4. Intelligence Participation | 0/3 | Planning complete | - |

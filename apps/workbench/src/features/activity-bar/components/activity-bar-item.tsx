@@ -13,6 +13,7 @@ interface ActivityBarItemProps {
   tooltip: string;
   active: boolean;
   onClick: () => void;
+  badge?: number;
 }
 
 export function ActivityBarItem({
@@ -21,6 +22,7 @@ export function ActivityBarItem({
   tooltip,
   active,
   onClick,
+  badge,
 }: ActivityBarItemProps) {
   return (
     <button
@@ -61,6 +63,18 @@ export function ActivityBarItem({
             : undefined
         }
       />
+      {typeof badge === "number" && badge > 0 && (
+        <span
+          className="absolute -top-0.5 -right-0.5 min-w-[14px] h-[14px] flex items-center justify-center rounded-full text-[8px] font-bold leading-none px-1"
+          style={{
+            backgroundColor: "#c45c5c",
+            color: "#ece7dc",
+            boxShadow: "0 0 6px rgba(196,92,92,0.4)",
+          }}
+        >
+          {badge > 99 ? "99+" : badge}
+        </span>
+      )}
     </button>
   );
 }

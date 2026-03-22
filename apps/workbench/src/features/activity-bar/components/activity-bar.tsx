@@ -95,6 +95,7 @@ export function ActivityBar() {
             tooltip={item.tooltip}
             active={item.id === activeItem}
             onClick={() => actions.toggleItem(item.id)}
+            badge={item.id === "findings" ? emergingFindingsCount : undefined}
           />
         ))}
       </div>

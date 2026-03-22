@@ -20,6 +20,7 @@ const STATUS_CONFIG: Record<SessionStatus, { color: string; label: string }> = {
   blocked: { color: "#c49a3c", label: "WAIT" },
   completed: { color: "#5580cc", label: "DONE" },
   failed: { color: "#b85450", label: "FAIL" },
+  evaluating: { color: "#d4a84b", label: "EVAL" },
 };
 
 // ---------------------------------------------------------------------------

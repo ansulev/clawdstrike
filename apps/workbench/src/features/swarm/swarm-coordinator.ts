@@ -449,6 +449,23 @@ export type IntelHandler = (swarmId: string, intel: Intel) => void;
 export type SignalHandler = (swarmId: string, signal: Signal) => void;
 export type DetectionHandler = (swarmId: string, detection: DetectionMessage) => void;
 
+/**
+ * Event emitted when a policy evaluation occurs on an agent within a swarm.
+ * Used to drive the "evaluating" glow state on agent session board nodes.
+ */
+export interface PolicyEvaluatedEvent {
+  /** The agent session ID that evaluated the policy. */
+  agentId: string;
+  /** Hash of the policy that was evaluated. */
+  policyHash: string;
+  /** Verdict of the evaluation, if available. */
+  verdict?: "allow" | "deny" | "warn";
+  /** Timestamp when the evaluation occurred (Unix ms). */
+  timestamp: number;
+}
+
+export type PolicyEvaluatedHandler = (swarmId: string, event: PolicyEvaluatedEvent) => void;
+
 
 /**
  * Core networking layer for swarm intel distribution.
@@ -479,6 +496,7 @@ export class SwarmCoordinator {
   private readonly intelHandlers = new Set<IntelHandler>();
   private readonly signalHandlers = new Set<SignalHandler>();
   private readonly detectionHandlers = new Set<DetectionHandler>();
+  private readonly policyEvaluatedHandlers = new Set<PolicyEvaluatedHandler>();
 
   /** Bound message router (stored so it can be unregistered on destroy). */
   private readonly boundRouter: (topic: string, envelope: SwarmEnvelope) => void;
@@ -653,6 +671,30 @@ export class SwarmCoordinator {
     this.detectionHandlers.delete(handler);
   }
 
+  /** Register a handler for policy evaluation events. */
+  onPolicyEvaluated(handler: PolicyEvaluatedHandler): void {
+    this.policyEvaluatedHandlers.add(handler);
+  }
+
+  /** Unregister a policy evaluation handler. */
+  offPolicyEvaluated(handler: PolicyEvaluatedHandler): void {
+    this.policyEvaluatedHandlers.delete(handler);
+  }
+
+  /**
+   * Emit a policy evaluation event directly (for in-process swarms that
+   * bypass transport). Dispatches to all registered handlers.
+   */
+  emitPolicyEvaluated(swarmId: string, event: PolicyEvaluatedEvent): void {
+    for (const handler of this.policyEvaluatedHandlers) {
+      try {
+        handler(swarmId, event);
+      } catch {
+        // Handler errors should not break the emitter
+      }
+    }
+  }
+
 
   /**
    * Attempt to flush the outbox. Call this when the transport reconnects.
@@ -723,6 +765,7 @@ export class SwarmCoordinator {
     this.intelHandlers.clear();
     this.signalHandlers.clear();
     this.detectionHandlers.clear();
+    this.policyEvaluatedHandlers.clear();
     this.activeSwarms.clear();
     this.signalSubscriptions.clear();
     this.outbox.clear();
@@ -794,11 +837,25 @@ export class SwarmCoordinator {
         }
         break;
 
-      case "coordination":
-        // Coordination messages are not yet routed to typed handlers.
-        // They will be dispatched to the SwarmProvider's reducer directly
-        // when the React integration layer is built.
+      case "coordination": {
+        // Route policy_evaluated coordination messages to registered handlers
+        const payload = envelope.payload as Record<string, unknown> | null;
+        if (
+          payload &&
+          typeof payload === "object" &&
+          payload.action === "policy_evaluated"
+        ) {
+          const event = payload as unknown as PolicyEvaluatedEvent;
+          for (const handler of this.policyEvaluatedHandlers) {
+            try {
+              handler(parsed.swarmId, event);
+            } catch {
+              // Handler errors should not break the router
+            }
+          }
+        }
         break;
+      }
     }
   }
 

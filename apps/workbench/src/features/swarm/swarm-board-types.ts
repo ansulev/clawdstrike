@@ -17,7 +17,7 @@ export type SwarmNodeType =
   | "note"
   | "receipt";
 
-export type SessionStatus = "idle" | "running" | "blocked" | "completed" | "failed";
+export type SessionStatus = "idle" | "running" | "blocked" | "completed" | "failed" | "evaluating";
 export type RiskLevel = "low" | "medium" | "high";
 
 // ---------------------------------------------------------------------------

@@ -17,6 +17,7 @@ function AgentSessionNode({ data }: { data: SwarmBoardNodeData }) {
     blocked: "#d4a84b",
     completed: "#5b8def",
     failed: "#ef4444",
+    evaluating: "#d4a84b",
   };
 
   const riskColorMap: Record<RiskLevel, string> = {

@@ -12,6 +12,7 @@
 import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { useCoordinatorBoardBridge } from "@/features/swarm/hooks/use-coordinator-board-bridge";
+import { usePolicyEvalBoardBridge } from "@/features/swarm/hooks/use-policy-eval-board-bridge";
 import { useReceiptFlowBridge } from "@/features/swarm/hooks/use-receipt-flow-bridge";
 import { getCoordinator } from "@/features/swarm/coordinator-instance";
 import {
@@ -115,6 +116,7 @@ function SwarmBoardCanvas() {
   // Bridge SwarmCoordinator messages to board store (live intel/detection nodes)
   const coordinator = useMemo(() => getCoordinator(), []);
   useCoordinatorBoardBridge(coordinator);
+  usePolicyEvalBoardBridge(coordinator);
 
   // Bridge feed store findings to receipt nodes on the board
   useReceiptFlowBridge();
@@ -534,6 +536,10 @@ function SwarmBoardCanvas() {
               @keyframes heartbeat {
                 0%, 100% { opacity: 0.3; transform: scale(1); }
                 50% { opacity: 1; transform: scale(1.015); }
+              }
+              @keyframes eval-glow {
+                0%, 100% { box-shadow: 0 0 8px 0 rgba(212,168,75,0.08); }
+                50% { box-shadow: 0 0 28px 6px rgba(212,168,75,0.2); }
               }
             `}</style>
 

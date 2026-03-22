@@ -419,6 +419,26 @@ export interface PluginManifest {
   contributions?: PluginContributions;
   /** Distribution and installation metadata. */
   installation?: InstallationMetadata;
+  /**
+   * Secrets required by this plugin (e.g., API keys).
+   * The workbench renders a generic secret entry form for each declared secret.
+   */
+  requiredSecrets?: PluginSecretDeclaration[];
+}
+
+// ---- Secret Declaration ----
+
+/**
+ * Declares a secret that a plugin requires to function.
+ * The workbench uses this to render an API key entry form in plugin settings.
+ */
+export interface PluginSecretDeclaration {
+  /** Secret key identifier (e.g., "api_key"). */
+  key: string;
+  /** Human-readable label (e.g., "Shodan API Key"). */
+  label: string;
+  /** Description of how to obtain the secret. */
+  description: string;
 }
 
 // ---- View Prop Interfaces (for plugin component authors) ----

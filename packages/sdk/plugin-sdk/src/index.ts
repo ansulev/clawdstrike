@@ -52,6 +52,7 @@ export type {
   // Installation & Manifest
   InstallationMetadata,
   PluginManifest,
+  PluginSecretDeclaration,
   // View Prop Interfaces (for plugin component authors)
   ViewProps,
   EditorTabProps,

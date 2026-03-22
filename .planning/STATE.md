@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v4.0
 milestone_name: milestone
 status: executing
-stopped_at: Phase 6 gap closure created
-last_updated: "2026-03-21T15:00:00.000Z"
+stopped_at: Completed 06-01-PLAN.md (Translation UI + Hub-and-Spoke Routing)
+last_updated: "2026-03-22T02:42:03Z"
 progress:
-  total_phases: 5
-  completed_phases: 5
-  total_plans: 13
-  completed_plans: 13
+  total_phases: 6
+  completed_phases: 6
+  total_plans: 14
+  completed_plans: 14
   percent: 100
 ---
 
@@ -20,12 +20,12 @@ progress:
 See: .planning/PROJECT.md
 
 **Core value:** Third-party detection format adapters (SPL, KQL, EQL, YARA-L) as plugins with cross-format translation
-**Current focus:** All phases complete -- ready for milestone audit
+**Current focus:** Phase 6 gap closure complete -- v4.0 translation integration gaps closed
 
 ## Current Position
 
-Phase: 5 of 5 (all complete)
-Plan: 13 of 13
+Phase: 6 of 6 (all complete)
+Plan: 14 of 14
 Status: Complete
 
 Progress: [██████████] 100%
@@ -97,6 +97,13 @@ Progress: [██████████] 100%
 - [02-02] Reverse CIM mapping uses case-insensitive fallback for field name variance across deployments
 - [02-02] Untranslatable SPL features (stats, eval, lookup, subsearch) detected and reported in translation diagnostics
 
+- [06-01] Translation wired in policy-editor.tsx (not split-editor.tsx) because CommandPalette lives there
+- [06-01] TranslationResultsPanel renders below SplitEditor in both test-runner and default layouts
+- [06-01] Translate category added to CATEGORY_ORDER after Format for natural command palette grouping
+- [06-01] parseYaralRule canonical location is yaral-adapter.ts; yaral-translation.ts imports from it
+- [06-01] chainTranslation tries direct provider first, then two-hop through sigma_rule
+- [06-01] Dynamic command generation: getTranslatableTargets() populates palette entries based on active file type
+
 ### Pending Todos
 None.
 
@@ -105,6 +112,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-21T13:59:00Z
-Stopped at: Completed 02-02-PLAN.md (SPL visual panel + translation provider)
+Last session: 2026-03-22T02:42:03Z
+Stopped at: Completed 06-01-PLAN.md (Translation UI + Hub-and-Spoke Routing)
 Resume file: None

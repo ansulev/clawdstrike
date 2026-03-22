@@ -17,7 +17,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 3: KQL Adapter Plugin** - Microsoft Sentinel KQL as a first-class detection format with tabular expression editor and bidirectional Sigma translation (completed 2026-03-21)
 - [x] **Phase 4: EQL Adapter Plugin** - Elastic EQL as a first-class detection format with multi-event sequence builder and bidirectional Sigma translation (completed 2026-03-21)
 - [x] **Phase 5: YARA-L Adapter Plugin** - Google Chronicle YARA-L as a first-class detection format with multi-event correlation panel and bidirectional Sigma translation (completed 2026-03-21)
-- [ ] **Phase 6: Translation UI & Hub-and-Spoke Routing** - Wire translation providers to a user-facing "Translate to..." command and build multi-hop cross-format routing through Sigma
+- [x] **Phase 6: Translation UI & Hub-and-Spoke Routing** - Wire translation providers to a user-facing "Translate to..." command and build multi-hop cross-format routing through Sigma (completed 2026-03-22)
 
 ## Phase Details
 
@@ -106,7 +106,7 @@ Plans:
   4. `chainTranslation(from, to)` function resolves multi-hop paths through the translation registry and chains provider calls
 **Plans:** 1 plan
 Plans:
-- [ ] 06-01-PLAN.md -- useTranslation hook, chainTranslation orchestrator, "Translate to..." command, results UI
+- [x] 06-01-PLAN.md -- useTranslation hook, chainTranslation orchestrator, "Translate to..." command, results UI
 
 ## Progress
 
@@ -121,4 +121,4 @@ Note: Phases 2-5 each depend only on Phase 1, so adapter plugins can be develope
 | 3. KQL Adapter Plugin | 2/2 | Complete | 2026-03-21 |
 | 4. EQL Adapter Plugin | 3/3 | Complete | 2026-03-21 |
 | 5. YARA-L Adapter Plugin | 3/3 | Complete | 2026-03-21 |
-| 6. Translation UI & Hub-and-Spoke | 0/1 | Not started | - |
+| 6. Translation UI & Hub-and-Spoke | 1/1 | Complete | 2026-03-22 |

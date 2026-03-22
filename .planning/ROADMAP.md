@@ -136,7 +136,7 @@ Plans:
 - [ ] 13-02-PLAN.md — Live trust graph bridge (join/leave), receipt edge click opens inspector pane tab
 
 ### Phase 14: Intel Pipeline Wiring & Completion
-**Goal**: Wire live signal feed from Fleet SSE to findings pipeline, mount auto-correlator, add Draft Policy Guard button, and implement bidirectional finding↔detection links
+**Goal**: Wire live signal feed from Fleet SSE to findings pipeline, mount auto-correlator, add Draft Policy Guard button, and implement bidirectional finding-detection links
 **Gap Closure**: Closes INTEL gaps from v1.3 re-audit
 **Requirements**: INTEL-01, INTEL-02, INTEL-03, INTEL-04, INTEL-06, INTEL-08
 **Success Criteria**:
@@ -144,7 +144,10 @@ Plans:
   2. useSignalCorrelator hook is mounted in workbench root — signals auto-cluster into findings with severity scores
   3. "Draft Policy Guard" button on a finding generates a guard config block from the finding's pattern
   4. After drafting a detection from a finding, the finding is annotated with a link to the generated detection (bidirectional reference)
-**Plans**: TBD
+**Plans**: 2 plans
+Plans:
+- [ ] 14-01-PLAN.md — Fleet SSE check event bridge to signal-store, mount useSignalCorrelator, findings badge count
+- [ ] 14-02-PLAN.md — Draft Guard button on findings, bidirectional finding-detection link via annotation
 
 ## Progress
 
@@ -159,4 +162,4 @@ Plans:
 | Gap Closure | Phase 11: Integration Wiring | Complete (2 plans) |
 | Gap Closure | Phase 12: Swarm Bridge | Complete (1 plan) |
 | Gap Closure | Phase 13: Swarm Viz | Complete (2 plans) |
-| Gap Closure | Phase 14: Intel Pipeline | Not started |
+| Gap Closure | Phase 14: Intel Pipeline | Planned (2 plans) |

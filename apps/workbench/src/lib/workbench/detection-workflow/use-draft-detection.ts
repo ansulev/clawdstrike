@@ -28,6 +28,7 @@ import {
   mapFindingToDraftSeed,
 } from "./draft-mappers";
 import { generateDraft } from "./draft-generator";
+import { useFindingStore } from "@/features/findings/stores/finding-store";
 
 export function buildSeedFromEvents(
   events: AgentEvent[],
@@ -289,6 +290,14 @@ export function useDraftDetection({
         setStatusMessage(
           `Drafted "${draft.name}" as ${FILE_TYPE_REGISTRY[draft.fileType].shortLabel} with starter evidence`,
         );
+
+        // Bidirectional link: annotate source finding with draft reference (INTEL-08)
+        useFindingStore.getState().actions.addAnnotation(finding.id, {
+          id: `ann_draft_${Date.now()}`,
+          text: `Linked to detection draft: ${draft.name} (${draft.fileType})`,
+          createdBy: "detection_workflow",
+          createdAt: new Date().toISOString(),
+        });
       } catch (err) {
         const msg = err instanceof Error ? err.message : "Unknown error";
         setStatusMessage(`Draft failed: ${msg}`);

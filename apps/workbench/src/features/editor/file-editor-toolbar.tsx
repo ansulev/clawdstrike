@@ -17,12 +17,15 @@ import {
   IconHistory,
   IconPackage,
   IconBulb,
+  IconTopologyRing,
 } from "@tabler/icons-react";
 import { cn } from "@/lib/utils";
 import { isPolicyFileType } from "@/lib/workbench/file-type-registry";
 import { simulatePolicy } from "@/lib/workbench/simulation-engine";
 import { useWorkbench } from "@/features/policy/stores/multi-policy-store";
 import { useToast } from "@/components/ui/toast";
+import { usePaneStore } from "@/features/panes/pane-store";
+import { useSentinelStore } from "@/features/sentinels/stores/sentinel-store";
 import { useRightSidebarStore } from "@/features/right-sidebar/stores/right-sidebar-store";
 import type { RightSidebarPanel } from "@/features/right-sidebar/types";
 import type { TestScenario } from "@/lib/workbench/types";
@@ -261,6 +264,56 @@ export function FileEditorToolbar({
     }
   }, [state.activePolicy, toast]);
 
+  const handleLaunchSwarm = useCallback(async () => {
+    const { isDesktop, createSwarmBundleFromPolicy } = await import("@/lib/tauri-bridge");
+    if (!isDesktop()) {
+      toast({ type: "warning", title: "Desktop Only", description: "Swarm launch requires the desktop app" });
+      return;
+    }
+
+    if (!tabMeta.filePath) {
+      toast({ type: "warning", title: "No File Path", description: "Save the file first to launch a swarm" });
+      return;
+    }
+
+    const { useProjectStore } = await import("@/features/project/stores/project-store");
+    const roots = useProjectStore.getState().projectRoots;
+    if (roots.length === 0) {
+      toast({ type: "error", title: "No Project", description: "Open a project folder first" });
+      return;
+    }
+    const parentDir = roots[0];
+
+    const sentinels = useSentinelStore.getState().sentinels
+      .filter((s) => s.status === "active")
+      .map((s) => ({ id: s.id, name: s.name, mode: s.mode }));
+
+    const policyFileName = tabMeta.name || tabMeta.filePath.split("/").pop() || "policy";
+    const bundlePath = await createSwarmBundleFromPolicy({
+      parentDir,
+      policyFileName,
+      policyFilePath: tabMeta.filePath,
+      sentinels,
+    });
+
+    if (!bundlePath) {
+      toast({ type: "error", title: "Failed", description: "Could not create swarm bundle" });
+      return;
+    }
+
+    // Refresh explorer
+    await useProjectStore.getState().actions.loadRoot(parentDir);
+
+    // Open swarm board as pane tab (SWARM-02)
+    const label = policyFileName.replace(/\.(ya?ml|json)$/i, "") + " Swarm";
+    usePaneStore.getState().openApp(
+      `/swarm-board/${encodeURIComponent(bundlePath)}`,
+      label,
+    );
+
+    toast({ type: "success", title: "Swarm Launched", description: `Created ${policyFileName} swarm with ${sentinels.length} sentinel(s)` });
+  }, [tabMeta, toast]);
+
   return (
     <div className="flex h-[36px] shrink-0 items-center gap-1 border-b border-[#202531] bg-[#0b0d13] px-3">
       {/* File type badge */}
@@ -283,6 +336,11 @@ export function FileEditorToolbar({
             onClick={onToggleSplit}
           />
           <RunButtonGroup />
+          <ToolbarButton
+            icon={IconTopologyRing}
+            label="Launch Swarm"
+            onClick={handleLaunchSwarm}
+          />
           <ToolbarDivider />
           <ToolbarButton
             icon={IconTestPipe}

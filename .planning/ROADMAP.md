@@ -29,7 +29,11 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. A plugin can call `context.secrets.get("api_key")` to retrieve a stored API key, and the key is stored via the existing secure store with proper `plugin:{id}:` namespacing
   4. `extractIndicators()` given a finding with egress guard violations returns `Indicator` objects with type "ip" and the violating IP addresses as values
   5. `PluginLoader.routeContributions()` routes a manifest with `threatIntelSources` entries to the `ThreatIntelSourceRegistry`
-**Plans**: TBD
+**Plans:** 3 plans
+Plans:
+- [ ] 01-01-PLAN.md -- Types, ThreatIntelSourceRegistry, and SecretsApi
+- [ ] 01-02-PLAN.md -- EnrichmentOrchestrator and indicator extraction
+- [ ] 01-03-PLAN.md -- Plugin loader routing for threatIntelSources
 
 ### Phase 2: First Plugins
 **Goal**: Operators can enrich findings with VirusTotal file hash reputation and GreyNoise IP classification, proving the enrichment pipeline works end-to-end from button click to rendered results
@@ -75,7 +79,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Enrichment Infrastructure | 0/? | Not started | - |
+| 1. Enrichment Infrastructure | 0/3 | Planning complete | - |
 | 2. First Plugins | 0/2 | Planning complete | - |
 | 3. Operational Readiness | 0/? | Not started | - |
 | 4. Intelligence Participation | 0/? | Not started | - |

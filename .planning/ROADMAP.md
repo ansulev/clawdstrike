@@ -59,7 +59,12 @@ Plans:
   3. Finding list rows display source badges (e.g., [VT] [GN] [SH]) indicating which sources have enriched each finding, using source brand colors
   4. Auto-enrichment can be enabled so that new findings above a confidence threshold are automatically queued for enrichment without manual button clicks
   5. All six plugins (VirusTotal, GreyNoise, Shodan, AbuseIPDB, OTX, MISP) return normalized `ThreatVerdict` with classification and confidence, despite their different API response formats
-**Plans**: TBD
+**Plans:** 4 plans
+Plans:
+- [ ] 03-01-PLAN.md -- Shodan and AbuseIPDB threat intel source plugins
+- [ ] 03-02-PLAN.md -- AlienVault OTX and MISP threat intel source plugins
+- [ ] 03-03-PLAN.md -- Plugin secrets settings UI and enrichment badges
+- [ ] 03-04-PLAN.md -- Auto-enrichment manager and finding store wiring
 
 ### Phase 4: Intelligence Participation
 **Goal**: ClawdStrike moves from passive consumption to active participation in the threat intel ecosystem -- discovering related threats via pivot enrichment, reporting confirmed threats back to community databases, and providing operators with an aggregate intelligence view
@@ -81,5 +86,5 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 |-------|----------------|--------|-----------|
 | 1. Enrichment Infrastructure | 0/3 | Planning complete | - |
 | 2. First Plugins | 0/2 | Planning complete | - |
-| 3. Operational Readiness | 0/? | Not started | - |
+| 3. Operational Readiness | 0/4 | Planning complete | - |
 | 4. Intelligence Participation | 0/? | Not started | - |

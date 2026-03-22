@@ -12,7 +12,7 @@ Transform ClawdStrike findings from isolated guard violations into threat-contex
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Enrichment Infrastructure** - ThreatIntelSource registry, EnrichmentOrchestrator with rate limiting/caching, SecretsApi, loader routing, indicator extraction
+- [x] **Phase 1: Enrichment Infrastructure** - ThreatIntelSource registry, EnrichmentOrchestrator with rate limiting/caching, SecretsApi, loader routing, indicator extraction
 - [ ] **Phase 2: First Plugins** - VirusTotal and GreyNoise plugins proving the pipeline end-to-end with streaming enrichment UI
 - [ ] **Phase 3: Operational Readiness** - API key settings UI, four remaining plugins (Shodan, AbuseIPDB, OTX, MISP), enrichment badges, auto-enrichment
 - [ ] **Phase 4: Intelligence Participation** - Pivot enrichment, bidirectional reporting, custom renderers, aggregation dashboard

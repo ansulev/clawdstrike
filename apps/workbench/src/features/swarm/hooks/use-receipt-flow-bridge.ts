@@ -28,6 +28,17 @@ import type { SwarmBoardNodeData } from "@/features/swarm/swarm-board-types";
 import type { Node } from "@xyflow/react";
 
 // ---------------------------------------------------------------------------
+// Receipt edge timestamps — module-level singleton for activity pulse
+// ---------------------------------------------------------------------------
+
+/**
+ * Tracks the creation timestamp of receipt edges (edgeId -> Date.now()).
+ * Exported so that swarm-board-page.tsx can enrich edge data with lastActivityAt
+ * for edges created within the activity recency window.
+ */
+export const receiptEdgeTimestamps = new Map<string, number>();
+
+// ---------------------------------------------------------------------------
 // Severity-to-verdict mapping
 // ---------------------------------------------------------------------------
 
@@ -125,13 +136,17 @@ function processFindings(
     });
 
     // Create receipt edge from session to receipt
+    const receiptEdgeId = `edge-receipt-${receiptNode.id}-${sessionNode.id}`;
     actions.addEdge({
-      id: `edge-receipt-${receiptNode.id}-${sessionNode.id}`,
+      id: receiptEdgeId,
       source: sessionNode.id,
       target: receiptNode.id,
       type: "receipt",
       label: verdict,
     });
+
+    // Stamp creation time for activity pulse (3s bright glow on new edges)
+    receiptEdgeTimestamps.set(receiptEdgeId, Date.now());
 
     // Increment the session's receiptCount
     actions.updateNode(sessionNode.id, {

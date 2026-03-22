@@ -13,7 +13,7 @@ import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from "r
 import { useLocation } from "react-router-dom";
 import { useCoordinatorBoardBridge } from "@/features/swarm/hooks/use-coordinator-board-bridge";
 import { usePolicyEvalBoardBridge } from "@/features/swarm/hooks/use-policy-eval-board-bridge";
-import { useReceiptFlowBridge } from "@/features/swarm/hooks/use-receipt-flow-bridge";
+import { useReceiptFlowBridge, receiptEdgeTimestamps } from "@/features/swarm/hooks/use-receipt-flow-bridge";
 import { getCoordinator } from "@/features/swarm/coordinator-instance";
 import {
   ReactFlow,
@@ -477,17 +477,29 @@ function SwarmBoardCanvas() {
   const nodeTypes = useMemo(() => swarmBoardNodeTypes, []);
   const edgeTypes = useMemo(() => swarmBoardEdgeTypes, []);
 
-  // Enrich edges with hoveredNodeId for hover-reveal behavior
+  // Enrich edges with hoveredNodeId for hover-reveal behavior + receipt activity timestamps
   const enrichedEdges = useMemo(() => {
     const selectedId = state.selectedNodeId;
-    return rfEdges.map((e) => ({
-      ...e,
-      data: {
-        ...e.data,
-        hoveredNodeId: hoveredNodeId,
-        selectedNodeId: selectedId,
-      },
-    }));
+    const now = Date.now();
+    const RECEIPT_ACTIVITY_MS = 3000;
+
+    return rfEdges.map((e) => {
+      // Check for receipt edge activity timestamp (bright pulse for 3s after creation)
+      const receiptTs = receiptEdgeTimestamps.get(e.id);
+      const receiptActivityAt = receiptTs != null && (now - receiptTs) < RECEIPT_ACTIVITY_MS
+        ? receiptTs
+        : undefined;
+
+      return {
+        ...e,
+        data: {
+          ...e.data,
+          hoveredNodeId: hoveredNodeId,
+          selectedNodeId: selectedId,
+          ...(receiptActivityAt != null ? { lastActivityAt: receiptActivityAt } : {}),
+        },
+      };
+    });
   }, [rfEdges, hoveredNodeId, state.selectedNodeId]);
 
   // Stats

@@ -33,6 +33,10 @@ function ensureKeyframes() {
       0%, 100% { stroke-opacity: 0.4; stroke-width: 1; }
       50% { stroke-opacity: 1; stroke-width: 2.5; }
     }
+    @keyframes receiptEdgeFlow {
+      0% { stroke-dashoffset: 28; }
+      100% { stroke-dashoffset: 0; }
+    }
   `;
   document.head.appendChild(style);
 }
@@ -76,11 +80,11 @@ const EDGE_STYLES: Record<SwarmEdgeType, EdgeStyleConfig> = {
     dotSize: 5,
   },
   receipt: {
-    color: "#5c6a80",
-    strokeWidth: 0.5,
-    strokeDasharray: "2 5",
-    animated: false,
-    dotSize: 4,
+    color: "#8b5cf6",
+    strokeWidth: 1,
+    strokeDasharray: "8 6",
+    animated: true,
+    dotSize: 5,
   },
 };
 
@@ -139,20 +143,26 @@ export function SwarmEdge({
     borderRadius: 12,
   });
 
-  // Subtle pulse animation for spawned edges, or activity pulse for recently-active edges
+  // Subtle pulse animation for spawned edges, receipt flow, or activity pulse for recently-active edges
+  const isReceipt = edgeType === "receipt";
   const animatedStyle = isActive
     ? {
         animation: "edgeActivityPulse 1.5s ease-in-out infinite",
       }
-    : config.animated
+    : isReceipt
       ? {
-          strokeDashoffset: 0,
-          animation: "swarmEdgePulse 3s ease-in-out infinite",
+          animation: "receiptEdgeFlow 1.5s linear infinite",
         }
-      : {};
+      : config.animated
+        ? {
+            strokeDashoffset: 0,
+            animation: "swarmEdgePulse 3s ease-in-out infinite",
+          }
+        : {};
 
-  // Determine opacity: very dim by default, bright when connected to hovered/selected node
-  const edgeOpacity = isHighlighted ? 0.7 : 0.15;
+  // Determine opacity: receipt edges are more visible at rest; others dim by default
+  const baseOpacity = isReceipt ? 0.25 : 0.15;
+  const edgeOpacity = isHighlighted ? 0.7 : baseOpacity;
 
   return (
     <>

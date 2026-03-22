@@ -40,7 +40,10 @@ Decimal phases appear between their surrounding integers in numeric order.
   2. With a GreyNoise API key configured, clicking "Run Enrichment" on a finding with an IP indicator returns the GreyNoise classification and RIOT status displayed in the enrichment sidebar
   3. Enrichment results stream into the sidebar as each source responds -- the GreyNoise result appears immediately even if VirusTotal is still loading
   4. A failed API call to one source shows an error badge for that source without blocking results from the other source
-**Plans**: TBD
+**Plans:** 2 plans
+Plans:
+- [ ] 02-01-PLAN.md -- VirusTotal and GreyNoise ThreatIntelSource plugin implementations
+- [ ] 02-02-PLAN.md -- Enrichment bridge hook and streaming sidebar UI wiring
 
 ### Phase 3: Operational Readiness
 **Goal**: Operators can configure API keys through the settings UI, all six planned threat intel sources are available, and the workbench surfaces enrichment status at the finding list level with optional auto-enrichment
@@ -73,6 +76,6 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Enrichment Infrastructure | 0/? | Not started | - |
-| 2. First Plugins | 0/? | Not started | - |
+| 2. First Plugins | 0/2 | Planning complete | - |
 | 3. Operational Readiness | 0/? | Not started | - |
 | 4. Intelligence Participation | 0/? | Not started | - |

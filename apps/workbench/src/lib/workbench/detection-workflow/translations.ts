@@ -11,7 +11,7 @@
  */
 
 import type { FileType } from "../file-type-registry";
-import type { TranslationProvider } from "./shared-types";
+import type { TranslationProvider, TranslationRequest, TranslationResult } from "./shared-types";
 import { getRegisteredFileTypes } from "./adapters";
 
 // ---- Registry ----
@@ -76,4 +76,90 @@ export function getTranslatableTargets(
     }
   }
   return targets;
+}
+
+/**
+ * Chain translation through Sigma as hub for multi-hop routing.
+ * If a direct provider exists for (from, to), uses it directly.
+ * Otherwise, tries two-hop: from -> sigma_rule -> to.
+ * Returns the combined TranslationResult with merged diagnostics,
+ * fieldMappings, and untranslatableFeatures from both hops.
+ */
+export async function chainTranslation(
+  request: TranslationRequest,
+): Promise<TranslationResult> {
+  const { source, sourceFileType, targetFileType } = request;
+
+  // Try direct path first
+  const direct = getTranslationPath(sourceFileType, targetFileType);
+  if (direct) {
+    return direct.translate(request);
+  }
+
+  // Try two-hop through Sigma: source -> sigma_rule -> target
+  const SIGMA: FileType = "sigma_rule";
+  if (sourceFileType === SIGMA || targetFileType === SIGMA) {
+    // One side is already Sigma but no direct provider found
+    return {
+      success: false,
+      output: null,
+      diagnostics: [{ severity: "error", message: `No translation provider for ${sourceFileType} -> ${targetFileType}` }],
+      fieldMappings: [],
+      untranslatableFeatures: [],
+    };
+  }
+
+  const hop1Provider = getTranslationPath(sourceFileType, SIGMA);
+  const hop2Provider = getTranslationPath(SIGMA, targetFileType);
+
+  if (!hop1Provider || !hop2Provider) {
+    const missing = !hop1Provider ? `${sourceFileType} -> sigma_rule` : `sigma_rule -> ${targetFileType}`;
+    return {
+      success: false,
+      output: null,
+      diagnostics: [{ severity: "error", message: `No translation path: missing provider for ${missing}` }],
+      fieldMappings: [],
+      untranslatableFeatures: [],
+    };
+  }
+
+  // Hop 1: source -> Sigma
+  const hop1Result = await hop1Provider.translate({
+    source,
+    sourceFileType,
+    targetFileType: SIGMA,
+  });
+
+  if (!hop1Result.success || !hop1Result.output) {
+    return {
+      success: false,
+      output: null,
+      diagnostics: [
+        { severity: "info", message: `Multi-hop: ${sourceFileType} -> sigma_rule -> ${targetFileType}` },
+        ...hop1Result.diagnostics,
+      ],
+      fieldMappings: hop1Result.fieldMappings,
+      untranslatableFeatures: hop1Result.untranslatableFeatures,
+    };
+  }
+
+  // Hop 2: Sigma -> target
+  const hop2Result = await hop2Provider.translate({
+    source: hop1Result.output,
+    sourceFileType: SIGMA,
+    targetFileType,
+  });
+
+  // Merge results from both hops
+  return {
+    success: hop2Result.success,
+    output: hop2Result.output,
+    diagnostics: [
+      { severity: "info", message: `Routed via Sigma: ${sourceFileType} -> sigma_rule -> ${targetFileType}` },
+      ...hop1Result.diagnostics.map(d => ({ ...d, message: `[hop 1] ${d.message}` })),
+      ...hop2Result.diagnostics.map(d => ({ ...d, message: `[hop 2] ${d.message}` })),
+    ],
+    fieldMappings: [...hop1Result.fieldMappings, ...hop2Result.fieldMappings],
+    untranslatableFeatures: [...hop1Result.untranslatableFeatures, ...hop2Result.untranslatableFeatures],
+  };
 }

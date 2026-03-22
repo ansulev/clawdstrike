@@ -137,7 +137,7 @@ function inferSeverity(confidence: number): string {
 
 // ---- YARA-L Parser Helpers ----
 
-interface YaralEventPredicate {
+export interface YaralEventPredicate {
   variable: string;
   fieldPath: string;
   operator: "=" | "!=" | ">" | "<" | ">=" | "<=";
@@ -146,11 +146,13 @@ interface YaralEventPredicate {
   nocase: boolean;
 }
 
-interface ParsedYaralRule {
+export interface ParsedYaralRule {
   ruleName: string;
   meta: Record<string, string>;
   events: YaralEventPredicate[];
   condition: string;
+  hasMatchSection: boolean;
+  hasOutcomeSection: boolean;
 }
 
 /**
@@ -158,7 +160,7 @@ interface ParsedYaralRule {
  * Extracts rule name, meta section, event predicates, and condition.
  * Not a full grammar -- sufficient for client-side simulation.
  */
-function parseYaralRule(source: string): ParsedYaralRule | null {
+export function parseYaralRule(source: string): ParsedYaralRule | null {
   // Extract rule name
   const ruleNameMatch = source.match(/rule\s+(\w+)\s*\{/);
   if (!ruleNameMatch) return null;
@@ -171,6 +173,8 @@ function parseYaralRule(source: string): ParsedYaralRule | null {
   const metaLines: string[] = [];
   const eventLines: string[] = [];
   const conditionLines: string[] = [];
+  let hasMatchSection = false;
+  let hasOutcomeSection = false;
 
   for (const line of lines) {
     const trimmed = line.trim();
@@ -182,8 +186,8 @@ function parseYaralRule(source: string): ParsedYaralRule | null {
     if (trimmed === "meta:") { currentSection = "meta"; continue; }
     if (trimmed === "events:") { currentSection = "events"; continue; }
     if (trimmed === "condition:") { currentSection = "condition"; continue; }
-    if (trimmed === "match:") { currentSection = "match"; continue; }
-    if (trimmed === "outcome:") { currentSection = "outcome"; continue; }
+    if (trimmed === "match:") { currentSection = "match"; hasMatchSection = true; continue; }
+    if (trimmed === "outcome:") { currentSection = "outcome"; hasOutcomeSection = true; continue; }
 
     switch (currentSection) {
       case "meta": metaLines.push(trimmed); break;
@@ -247,7 +251,7 @@ function parseYaralRule(source: string): ParsedYaralRule | null {
 
   const condition = conditionLines.join(" ").trim();
 
-  return { ruleName, meta, events, condition };
+  return { ruleName, meta, events, condition, hasMatchSection, hasOutcomeSection };
 }
 
 // ---- Evidence Matching ----

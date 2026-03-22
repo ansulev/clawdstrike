@@ -18,13 +18,14 @@ import {
   IconX,
   IconChevronDown,
   IconChevronRight,
+  IconFilter,
 } from "@tabler/icons-react";
 import {
   Section,
   FieldLabel,
   TextInput,
   SelectInput,
-} from "./shared-form-fields";
+} from "./detection-panel-kit";
 import type { DetectionVisualPanelProps } from "@/lib/workbench/detection-workflow/shared-types";
 import { registerVisualPanel } from "@/lib/workbench/detection-workflow/visual-panels";
 import {
@@ -788,7 +789,7 @@ export function EqlVisualPanel(props: DetectionVisualPanelProps) {
 
         {/* Main editor content */}
         {ast ? (
-          <Section title="Query Builder" accentColor={ACCENT}>
+          <Section title="Query Builder" icon={IconFilter} accentColor={ACCENT}>
             {ast.type === "single" ? (
               <SingleQueryEditor
                 query={ast}

@@ -74,6 +74,7 @@ export {
   getTranslationPath,
   getAllTranslationProviders,
   getTranslatableTargets,
+  chainTranslation,
 } from "./translations";
 
 // Field mapping registry
@@ -97,6 +98,13 @@ export { kqlAdapter } from "./kql-adapter";
 export { kqlTranslationProvider } from "./kql-translation";
 export { eqlTranslationProvider } from "./eql-translation";
 export { yaralTranslationProvider } from "./yaral-translation";
+
+// YARA-L parser types
+export type { YaralEventPredicate, ParsedYaralRule } from "./yaral-adapter";
+
+// YARA-L parser functions
+export { parseYaralRule } from "./yaral-adapter";
+
 export { splAdapter } from "./spl-adapter";
 export { splTranslationProvider } from "./spl-translation-provider";
 
@@ -205,6 +213,9 @@ export {
   buildSeedFromPattern,
   buildDraftFromSeed,
 } from "./use-draft-detection";
+
+export type { UseTranslationReturn } from "./use-translation";
+export { useTranslation } from "./use-translation";
 
 export type { ImportFailure, ImportResult } from "./use-evidence-packs";
 export { useEvidencePacks } from "./use-evidence-packs";

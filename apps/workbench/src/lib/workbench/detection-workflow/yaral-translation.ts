@@ -25,6 +25,8 @@ import { registerTranslationProvider } from "./translations";
 import { parseSigmaYaml } from "../sigma-types";
 import type { SigmaLogsource, SigmaLevel } from "../sigma-types";
 import { translateField, getAllFieldMappings } from "./field-mappings";
+import { parseYaralRule } from "./yaral-adapter";
+import type { YaralEventPredicate, ParsedYaralRule } from "./yaral-adapter";
 
 // ---- Sigma Level -> Chronicle Severity ----
 
@@ -151,111 +153,6 @@ function normalizeDetectionValues(value: unknown): string[] {
   if (value == null) return [];
   if (Array.isArray(value)) return value.map(String);
   return [String(value)];
-}
-
-// ---- YARA-L Parser (duplicated from yaral-adapter since parseYaralRule is not exported) ----
-
-interface YaralEventPredicate {
-  variable: string;
-  fieldPath: string;
-  operator: "=" | "!=" | ">" | "<" | ">=" | "<=";
-  value: string;
-  isRegex: boolean;
-  nocase: boolean;
-}
-
-interface ParsedYaralRule {
-  ruleName: string;
-  meta: Record<string, string>;
-  events: YaralEventPredicate[];
-  condition: string;
-  hasMatchSection: boolean;
-  hasOutcomeSection: boolean;
-}
-
-function parseYaralRule(source: string): ParsedYaralRule | null {
-  const ruleNameMatch = source.match(/rule\s+(\w+)\s*\{/);
-  if (!ruleNameMatch) return null;
-  const ruleName = ruleNameMatch[1];
-
-  const lines = source.split(/\r?\n/);
-
-  let currentSection: "none" | "meta" | "events" | "condition" | "match" | "outcome" = "none";
-  const metaLines: string[] = [];
-  const eventLines: string[] = [];
-  const conditionLines: string[] = [];
-  let hasMatchSection = false;
-  let hasOutcomeSection = false;
-
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (trimmed === "" || trimmed === "}") continue;
-    if (/^rule\s+\w+\s*\{/.test(trimmed)) continue;
-
-    if (trimmed === "meta:") { currentSection = "meta"; continue; }
-    if (trimmed === "events:") { currentSection = "events"; continue; }
-    if (trimmed === "condition:") { currentSection = "condition"; continue; }
-    if (trimmed === "match:") { currentSection = "match"; hasMatchSection = true; continue; }
-    if (trimmed === "outcome:") { currentSection = "outcome"; hasOutcomeSection = true; continue; }
-
-    switch (currentSection) {
-      case "meta": metaLines.push(trimmed); break;
-      case "events": eventLines.push(trimmed); break;
-      case "condition": conditionLines.push(trimmed); break;
-    }
-  }
-
-  // Parse meta: key = "value" or key = value
-  const meta: Record<string, string> = {};
-  for (const line of metaLines) {
-    const metaMatch = line.match(/^(\w+)\s*=\s*"?([^"]*)"?$/);
-    if (metaMatch) {
-      meta[metaMatch[1]] = metaMatch[2];
-    }
-  }
-
-  // Parse events: $varName.field.path <op> "value" or /regex/ [nocase]
-  const events: YaralEventPredicate[] = [];
-  for (const line of eventLines) {
-    const eventMatch = line.match(
-      /^(\$\w+)\.(\S+)\s*(!=|>=|<=|>|<|=)\s*(.+)$/,
-    );
-    if (eventMatch) {
-      const variable = eventMatch[1];
-      const fieldPath = eventMatch[2];
-      const operator = eventMatch[3] as YaralEventPredicate["operator"];
-      let valueStr = eventMatch[4].trim();
-
-      let isRegex = false;
-      let nocase = false;
-
-      if (valueStr.endsWith(" nocase")) {
-        nocase = true;
-        valueStr = valueStr.slice(0, -7).trim();
-      }
-
-      if (valueStr.startsWith("/") && valueStr.endsWith("/")) {
-        isRegex = true;
-        valueStr = valueStr.slice(1, -1);
-      } else if (valueStr.startsWith("/")) {
-        const regexEnd = valueStr.lastIndexOf("/");
-        if (regexEnd > 0) {
-          isRegex = true;
-          valueStr = valueStr.slice(1, regexEnd);
-        }
-      }
-
-      if (valueStr.startsWith('"') && valueStr.endsWith('"')) {
-        valueStr = valueStr.slice(1, -1);
-      }
-
-      events.push({ variable, fieldPath, operator, value: valueStr, isRegex, nocase });
-    }
-  }
-
-  const condition = conditionLines.join(" ").trim();
-
-  return { ruleName, meta, events, condition, hasMatchSection, hasOutcomeSection };
 }
 
 // ---- Direction 1: Sigma -> YARA-L ----

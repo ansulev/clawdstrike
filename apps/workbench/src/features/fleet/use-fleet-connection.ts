@@ -27,6 +27,9 @@ import {
 import { secureStore } from "@/features/settings/secure-store";
 import { FleetEventStream, type FleetSSEState } from "@/features/fleet/fleet-event-stream";
 import { reduceFleetEvent } from "@/features/fleet/fleet-event-reducer";
+import type { CheckEventData } from "@/features/fleet/fleet-event-reducer";
+import { useSignalStore } from "@/features/findings/stores/signal-store";
+import type { Signal } from "@/lib/workbench/signal-pipeline";
 
 // ---- Types ----
 
@@ -125,6 +128,44 @@ function readFleetConnectionSnapshot(): string {
   } catch {
     return "";
   }
+}
+
+// ---------------------------------------------------------------------------
+// Fleet check event -> Signal bridge (INTEL-01)
+// ---------------------------------------------------------------------------
+
+function checkEventToSignal(check: CheckEventData): Signal {
+  const verdict = check.verdict?.toLowerCase();
+  const severity = verdict === "deny" ? "high" : verdict === "warn" ? "medium" : "low";
+  return {
+    id: crypto.randomUUID(),
+    type: "policy_violation",
+    source: {
+      sentinelId: null,
+      guardId: check.guard ?? null,
+      externalFeed: null,
+      provenance: "guard_evaluation",
+    },
+    timestamp: Date.now(),
+    severity,
+    confidence: 0.8,
+    data: {
+      kind: "fleet_check",
+      summary: `${check.action_type} on ${check.target}: ${check.verdict}`,
+      actionType: check.action_type as any,
+      verdict: verdict === "deny" ? "deny" : verdict === "warn" ? "warn" : undefined,
+      target: check.target,
+    },
+    context: {
+      agentId: check.agent_id ?? "unknown",
+      agentName: check.agent_id ?? "unknown",
+      sessionId: check.session_id ?? "unknown",
+      flags: check.guard ? [{ type: "guard", reason: check.guard }] : [],
+    },
+    relatedSignals: [],
+    ttl: null,
+    findingId: null,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -329,6 +370,11 @@ const useFleetConnectionStoreBase = create<FleetStoreState>()(
             state.agents = result.agents as any;
             state.connection.agentCount = result.agents.length;
           });
+          // Bridge check events to signal pipeline (INTEL-01)
+          if (event.type === "check" && event.data) {
+            const signal = checkEventToSignal(event.data as CheckEventData);
+            useSignalStore.getState().actions.ingestSignal(signal);
+          }
           if (result.refreshPolicy) {
             fetchRemoteInfo();
           }

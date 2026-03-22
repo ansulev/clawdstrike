@@ -71,6 +71,11 @@ Progress: [██████░░░░] 58%
 - (03-02) MISP confidence capped at 0.9 due to variable data quality across instances
 - (03-02) Plugins placed in threat-intel/ (not examples/) for consistency with VT/GN
 - (03-02) Used intersection type (PluginManifest & { requiredSecrets }) to extend manifest cleanly
+- (03-01) Shodan auth via query parameter (key={apiKey}), not header per Shodan API docs
+- (03-01) Added PluginSecretDeclaration type to SDK PluginManifest for requiredSecrets field
+- (03-01) Shodan confidence scaling: 0 vulns=0.3, 1-5 vulns=0.5, 6+ vulns=0.7
+- (03-01) AbuseIPDB classification: 0-25=benign, 26-75=suspicious, 76-100=malicious, 0+0reports=unknown
+- (03-01) Domain-to-IP resolution: DNS resolve first, then enrich resolved IP with relatedIndicators
 
 ### Pending Todos
 None.
@@ -80,6 +85,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-22T23:30:19Z
-Stopped at: Completed 03-02-PLAN.md
+Last session: 2026-03-22T23:31:00Z
+Stopped at: Completed 03-01-PLAN.md and 03-02-PLAN.md
 Resume file: None

@@ -47,7 +47,7 @@ Plans:
 **Plans:** 2 plans
 Plans:
 - [x] 02-01-PLAN.md -- VirusTotal and GreyNoise ThreatIntelSource plugin implementations
-- [ ] 02-02-PLAN.md -- Enrichment bridge hook and streaming sidebar UI wiring
+- [x] 02-02-PLAN.md -- Enrichment bridge hook and streaming sidebar UI wiring
 
 ### Phase 3: Operational Readiness
 **Goal**: Operators can configure API keys through the settings UI, all six planned threat intel sources are available, and the workbench surfaces enrichment status at the finding list level with optional auto-enrichment
@@ -61,8 +61,8 @@ Plans:
   5. All six plugins (VirusTotal, GreyNoise, Shodan, AbuseIPDB, OTX, MISP) return normalized `ThreatVerdict` with classification and confidence, despite their different API response formats
 **Plans:** 4 plans
 Plans:
-- [ ] 03-01-PLAN.md -- Shodan and AbuseIPDB threat intel source plugins
-- [ ] 03-02-PLAN.md -- AlienVault OTX and MISP threat intel source plugins
+- [x] 03-01-PLAN.md -- Shodan and AbuseIPDB threat intel source plugins
+- [x] 03-02-PLAN.md -- AlienVault OTX and MISP threat intel source plugins
 - [ ] 03-03-PLAN.md -- Plugin secrets settings UI and enrichment badges
 - [ ] 03-04-PLAN.md -- Auto-enrichment manager and finding store wiring
 
@@ -89,6 +89,6 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Enrichment Infrastructure | 3/3 | Complete | 2026-03-22 |
-| 2. First Plugins | 1/2 | In progress | - |
-| 3. Operational Readiness | 0/4 | Planning complete | - |
+| 2. First Plugins | 2/2 | Complete | 2026-03-22 |
+| 3. Operational Readiness | 2/4 | In progress | - |
 | 4. Intelligence Participation | 0/3 | Planning complete | - |

@@ -45,12 +45,9 @@ function RenameInput({
 function TerminalSessionView({ session }: { session: TerminalSession }) {
   if (session.ptySessionId) {
     return (
-      <TerminalRenderer
-        sessionId={session.ptySessionId}
-        active
-        width={800}
-        height={240}
-      />
+      <div className="h-full w-full">
+        <TerminalRenderer sessionId={session.ptySessionId} active />
+      </div>
     );
   }
   return (

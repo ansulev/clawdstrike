@@ -13,16 +13,16 @@
 
 ### Search & Input
 
-- [ ] **SRCH-06**: Search store uses AbortController to cancel in-flight searches when query changes
-- [ ] **SRCH-07**: Stale search results are discarded (query-at-dispatch compared to query-at-resolve)
+- [x] **SRCH-06**: Search store uses AbortController to cancel in-flight searches when query changes
+- [x] **SRCH-07**: Stale search results are discarded (query-at-dispatch compared to query-at-resolve)
 
 ### Terminal
 
-- [ ] **TERM-03**: Terminal dimensions derived from container size via ResizeObserver (not hardcoded 800x240)
+- [x] **TERM-03**: Terminal dimensions derived from container size via ResizeObserver (not hardcoded 800x240)
 
 ### Keybindings
 
-- [ ] **KEY-01**: Meta+W conflict resolved — single unambiguous close behavior across editor and pane contexts
+- [x] **KEY-01**: Meta+W conflict resolved — single unambiguous close behavior across editor and pane contexts
 
 ### Command Modernization
 
@@ -53,10 +53,10 @@
 | TEST-01 | Phase 15 | Pending |
 | TEST-02 | Phase 15 | Pending |
 | TEST-03 | Phase 15 | Pending |
-| SRCH-06 | Phase 16 | Pending |
-| SRCH-07 | Phase 16 | Pending |
-| TERM-03 | Phase 16 | Pending |
-| KEY-01 | Phase 16 | Pending |
+| SRCH-06 | Phase 16 | Complete |
+| SRCH-07 | Phase 16 | Complete |
+| TERM-03 | Phase 16 | Complete |
+| KEY-01 | Phase 16 | Complete |
 | CMD-01 | Phase 17 | Pending |
 | CMD-02 | Phase 17 | Pending |
 | STORE-01 | Phase 17 | Pending |

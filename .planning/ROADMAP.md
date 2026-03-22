@@ -13,7 +13,7 @@ Eliminate tech debt accumulated during v1.0-v1.3 rapid development. Fix broken t
 ## Phases
 
 - [ ] **Phase 15: Test Fixes** - Fix 3 broken test suites (App, desktop-layout, shortcut-provider)
-- [ ] **Phase 16: Search, Terminal & Keybinding Fixes** - AbortController for search, dynamic terminal sizing, Meta+W conflict resolution
+- [x] **Phase 16: Search, Terminal & Keybinding Fixes** - AbortController for search, dynamic terminal sizing, Meta+W conflict resolution (completed 2026-03-22)
 - [ ] **Phase 17: Command Modernization & Store Migration** - Modernize file.new, migrate ~20 components off bridge hooks, delete multi-policy-store
 
 ## Phase Details
@@ -39,9 +39,9 @@ Plans:
   2. Terminal panel resizes to fill its container when the bottom panel is dragged taller or the window is resized (no hardcoded dimensions)
   3. Pressing Meta+W closes the active editor tab (or active pane if no tabs) with a single, predictable behavior -- no conflict dialog or double-close
   4. Cancelling a search mid-flight (by clearing the query or typing a new one) does not leave a pending spinner
-**Plans:** 1 plan
+**Plans:** 1/1 plans complete
 Plans:
-- [ ] 16-01-PLAN.md — Search AbortController + staleness guard, terminal dynamic sizing, Meta+W conflict resolution
+- [x] 16-01-PLAN.md — Search AbortController + staleness guard, terminal dynamic sizing, Meta+W conflict resolution
 
 ### Phase 17: Command Modernization & Store Migration
 **Goal**: All components use direct Zustand store calls and the multi-policy-store bridge layer is deleted
@@ -64,5 +64,5 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 15. Test Fixes | 0/1 | Planned | - |
-| 16. Search, Terminal & Keybinding Fixes | 0/1 | Planned | - |
+| 16. Search, Terminal & Keybinding Fixes | 1/1 | Complete   | 2026-03-22 |
 | 17. Command Modernization & Store Migration | 0/3 | Planned | - |

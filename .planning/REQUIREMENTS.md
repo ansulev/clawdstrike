@@ -52,8 +52,8 @@
 - [x] **SWARM-03**: Swarm session pre-configured with active policy and connected sentinels
 - [x] **SWARM-04**: Agent nodes pulse/glow when evaluating a policy (real-time)
 - [x] **SWARM-05**: Receipts appear as animated edges flowing between nodes
-- [ ] **SWARM-06**: Trust graph updates live as agents join/leave
-- [ ] **SWARM-07**: Click receipt edge to open receipt inspector in pane tab
+- [x] **SWARM-06**: Trust graph updates live as agents join/leave
+- [x] **SWARM-07**: Click receipt edge to open receipt inspector in pane tab
 
 ## Traceability
 
@@ -87,8 +87,8 @@
 | SWARM-03 | Phase 12 | Complete |
 | SWARM-04 | Phase 13 | Complete |
 | SWARM-05 | Phase 13 | Complete |
-| SWARM-06 | Phase 13 | Pending |
-| SWARM-07 | Phase 13 | Pending |
+| SWARM-06 | Phase 13 | Complete |
+| SWARM-07 | Phase 13 | Complete |
 
 **Coverage:**
 - v1.2 requirements: 19 total (4 complete, 15 pending)

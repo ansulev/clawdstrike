@@ -47,9 +47,9 @@
 
 ### Swarm Board Evolution
 
-- [ ] **SWARM-01**: "Launch Swarm" button in editor toolbar spawns new swarm session with active policy
-- [ ] **SWARM-02**: Swarm Board opens as a pane tab alongside editor (split view)
-- [ ] **SWARM-03**: Swarm session pre-configured with active policy and connected sentinels
+- [x] **SWARM-01**: "Launch Swarm" button in editor toolbar spawns new swarm session with active policy
+- [x] **SWARM-02**: Swarm Board opens as a pane tab alongside editor (split view)
+- [x] **SWARM-03**: Swarm session pre-configured with active policy and connected sentinels
 - [ ] **SWARM-04**: Agent nodes pulse/glow when evaluating a policy (real-time)
 - [ ] **SWARM-05**: Receipts appear as animated edges flowing between nodes
 - [ ] **SWARM-06**: Trust graph updates live as agents join/leave
@@ -82,9 +82,9 @@
 | DET-03 | Phase 11 | Complete |
 | FLAT-07 | Phase 11 | Complete |
 | FLAT-08 | Phase 11 | Complete |
-| SWARM-01 | Phase 12 | Pending |
-| SWARM-02 | Phase 12 | Pending |
-| SWARM-03 | Phase 12 | Pending |
+| SWARM-01 | Phase 12 | Complete |
+| SWARM-02 | Phase 12 | Complete |
+| SWARM-03 | Phase 12 | Complete |
 | SWARM-04 | Phase 13 | Pending |
 | SWARM-05 | Phase 13 | Pending |
 | SWARM-06 | Phase 13 | Pending |

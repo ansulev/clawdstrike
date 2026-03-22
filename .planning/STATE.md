@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: Audit)
 status: completed
-stopped_at: Completed 11-02-PLAN.md (Phase 11 complete)
-last_updated: "2026-03-21T12:57:15.522Z"
-last_activity: 2026-03-21 -- Phase 11 Plan 02 completed
+stopped_at: Completed 12-01-PLAN.md (Phase 12 complete)
+last_updated: "2026-03-22T02:52:34.855Z"
+last_activity: 2026-03-22 -- Phase 12 Plan 01 completed
 progress:
   total_phases: 3
-  completed_phases: 1
-  total_plans: 2
-  completed_plans: 2
-  percent: 33
+  completed_phases: 2
+  total_plans: 5
+  completed_plans: 3
+  percent: 75
 ---
 
 # Project State
@@ -24,12 +24,12 @@ See: .planning/PROJECT.md
 
 ## Current Position
 
-Phase: 11 (Integration Wiring Fixes) -- COMPLETE
-Plan: 2 of 2 -- COMPLETE
+Phase: 12 (Editor-to-Swarm Bridge)
+Plan: 1 of 1 -- COMPLETE
 Status: Phase Complete
-Last activity: 2026-03-21 -- Phase 11 Plan 02 completed
+Last activity: 2026-03-22 -- Phase 12 Plan 01 completed
 
-Progress: [███░░░░░░░] 33%
+Progress: [████████░░] 75%
 
 ## Previous Milestones
 
@@ -67,8 +67,12 @@ Progress: [███░░░░░░░] 33%
 - Navigate-to-editor: all command/UI navigation uses usePaneStore.getState().openApp() instead of navigate()
 - New tab creation: commands use usePolicyTabsStore.getState().newTab() then open via pane-store
 - Dead code: PolicyEditor (1071 lines) deleted, 6 duplicate app.* commands removed from palette
+- Editor-to-swarm: createSwarmBundleFromPolicy in tauri-bridge creates .swarm bundle with policyRef manifest + sentinel agentSession nodes
+- Editor-to-swarm: Launch Swarm button placed after RunButtonGroup, gated on isPolicyFileType
+- Editor-to-swarm: Bundle naming {policyFileName}-{date}.swarm with sanitized stems
+- [Phase 12]: createSwarmBundleFromPolicy bridge creates .swarm bundle with policyRef manifest + sentinel agentSession nodes
 
 ## Session Continuity
 
-Last session: 2026-03-21T12:57:15.520Z
-Stopped at: Completed 11-02-PLAN.md (Phase 11 complete)
+Last session: 2026-03-22T02:52:30.652Z
+Stopped at: Completed 12-01-PLAN.md (Phase 12 complete)

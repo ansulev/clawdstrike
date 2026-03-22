@@ -397,6 +397,101 @@ export async function writeSwarmBoardJson(
   }
 }
 
+// ---------------------------------------------------------------------------
+// Policy-aware .swarm bundle creation
+// ---------------------------------------------------------------------------
+
+export interface CreateSwarmFromPolicyOptions {
+  parentDir: string;
+  policyFileName: string;
+  policyFilePath: string;
+  sentinels: Array<{ id: string; name: string; mode: string }>;
+}
+
+/**
+ * Create a .swarm bundle pre-configured for a specific policy file.
+ *
+ * The manifest includes a `policyRef` pointing to the active policy, and
+ * the board is pre-seeded with `agentSession` nodes for each active sentinel.
+ * Bundle naming: {policyFileName}-{date}.swarm
+ *
+ * @returns The absolute bundle path on success, or null on failure.
+ */
+export async function createSwarmBundleFromPolicy(
+  opts: CreateSwarmFromPolicyOptions,
+): Promise<string | null> {
+  if (!isDesktop()) return null;
+  try {
+    const { mkdir, writeTextFile } = await import("@tauri-apps/plugin-fs");
+
+    // Bundle naming: {policyFileName}-{timestamp}.swarm per user decision
+    const timestamp = new Date().toISOString().slice(0, 10);
+    const stem = opts.policyFileName.replace(/\.(ya?ml|json)$/i, "");
+    const safeName = `${stem}-${timestamp}`.replace(/[<>:"/\\|?*]/g, "_");
+    const bundlePath = `${opts.parentDir}/${safeName}.swarm`;
+    await mkdir(bundlePath, { recursive: true });
+
+    // Manifest with policyRef (SWARM-03)
+    const now = new Date().toISOString();
+    const manifest: Record<string, unknown> = {
+      version: "1.0.0",
+      name: safeName,
+      created: now,
+      modified: now,
+      policyRef: opts.policyFilePath,
+      agents: opts.sentinels.map((s) => s.name),
+      status: "draft",
+    };
+    await writeTextFile(
+      `${bundlePath}/manifest.json`,
+      JSON.stringify(manifest, null, 2),
+    );
+
+    // Board with pre-seeded sentinel agent nodes (SWARM-03)
+    // Grid layout: 3 columns, 420px horizontal spacing, 320px vertical spacing
+    const COL_COUNT = 3;
+    const X_START = 80;
+    const Y_START = 60;
+    const X_GAP = 420;
+    const Y_GAP = 320;
+    const nodes = opts.sentinels.map((s, i) => ({
+      id: `sentinel-${s.id}`,
+      type: "agentSession",
+      position: {
+        x: X_START + (i % COL_COUNT) * X_GAP,
+        y: Y_START + Math.floor(i / COL_COUNT) * Y_GAP,
+      },
+      data: {
+        title: s.name,
+        status: "idle",
+        nodeType: "agentSession",
+        createdAt: Date.now(),
+        agentModel: s.mode,
+        policyMode: "enforce",
+      },
+      width: 380,
+      height: 280,
+    }));
+
+    const board = {
+      boardId: `board-${Date.now().toString(36)}`,
+      repoRoot: opts.parentDir,
+      nodes,
+      edges: [],
+      viewport: { x: 0, y: 0, zoom: 1 },
+    };
+    await writeTextFile(
+      `${bundlePath}/board.json`,
+      JSON.stringify(board, null, 2),
+    );
+
+    return bundlePath;
+  } catch (err) {
+    console.error("[tauri-bridge] createSwarmBundleFromPolicy failed:", err);
+    return null;
+  }
+}
+
 /**
  * Create a new .swarm bundle directory with manifest.json and empty board.json.
  * Returns the absolute bundle path on success, or null on failure.

@@ -248,6 +248,57 @@ export function registerNavigateCommands(): void {
         );
       },
     },
+    // ---- Editor-to-Swarm bridge (12-01) ----
+    {
+      id: "swarm.launchFromEditor",
+      title: "Launch Swarm from Active Policy",
+      category: "Swarm",
+      execute: async () => {
+        const { isDesktop, createSwarmBundleFromPolicy } = await import("@/lib/tauri-bridge");
+        if (!isDesktop()) return;
+
+        // Get active tab metadata
+        const { usePolicyTabsStore } = await import("@/features/policy/stores/policy-tabs-store");
+        const tabsState = usePolicyTabsStore.getState();
+        const activeTab = tabsState.tabs.find((t) => t.id === tabsState.activeTabId);
+        if (!activeTab?.filePath) return;
+
+        // Only launch for policy files
+        const { isPolicyFileType } = await import("@/lib/workbench/file-type-registry");
+        if (!isPolicyFileType(activeTab.fileType)) return;
+
+        // Get project root
+        const { useProjectStore } = await import("@/features/project/stores/project-store");
+        const roots = useProjectStore.getState().projectRoots;
+        if (roots.length === 0) return;
+        const parentDir = roots[0];
+
+        // Get active sentinels
+        const { useSentinelStore } = await import("@/features/sentinels/stores/sentinel-store");
+        const sentinels = useSentinelStore.getState().sentinels
+          .filter((s) => s.status === "active")
+          .map((s) => ({ id: s.id, name: s.name, mode: s.mode }));
+
+        const policyFileName = activeTab.name || activeTab.filePath.split("/").pop() || "policy";
+        const bundlePath = await createSwarmBundleFromPolicy({
+          parentDir,
+          policyFileName,
+          policyFilePath: activeTab.filePath,
+          sentinels,
+        });
+        if (!bundlePath) return;
+
+        // Refresh explorer tree
+        await useProjectStore.getState().actions.loadRoot(parentDir);
+
+        // Open in pane tab (SWARM-02)
+        const label = policyFileName.replace(/\.(ya?ml|json)$/i, "") + " Swarm";
+        usePaneStore.getState().openApp(
+          `/swarm-board/${encodeURIComponent(bundlePath)}`,
+          label,
+        );
+      },
+    },
     {
       id: "app.hunt",
       title: "Open Threat Hunt",

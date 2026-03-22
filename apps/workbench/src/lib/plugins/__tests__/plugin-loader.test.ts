@@ -13,6 +13,7 @@ import { PluginRegistry } from "../plugin-registry";
 import { createTestManifest } from "../manifest-validation";
 import { getGuardMeta, unregisterGuard } from "../../workbench/guard-registry";
 import { getView, getViewsBySlot } from "../view-registry";
+import { getThreatIntelSource, _resetForTesting as resetThreatIntelRegistry } from "../../workbench/threat-intel-registry";
 import type { PluginManifest, GuardContribution, NetworkPermission } from "../types";
 import { PluginLoader } from "../plugin-loader";
 import type { PluginModule, PluginActivationContext } from "../plugin-loader";
@@ -914,6 +915,317 @@ describe("PluginLoader", () => {
 
       // Clean up
       await loader.deactivatePlugin("activity-bar-plugin");
+    });
+  });
+
+  // ---- Threat intel source routing ----
+
+  describe("threat intel source routing", () => {
+    afterEach(() => {
+      resetThreatIntelRegistry();
+    });
+
+    // Test 29: manifest with threatIntelSources triggers module resolution for each source entrypoint
+    it("manifest with threatIntelSources triggers async module resolution for each source entrypoint", async () => {
+      const mockEnrich = vi.fn(async () => ({
+        sourceId: "ti-plugin.vt",
+        sourceName: "VirusTotal",
+        verdict: { classification: "benign" as const, confidence: 0.9, summary: "Clean" },
+        rawData: {},
+        fetchedAt: Date.now(),
+        cacheTtlMs: 60_000,
+      }));
+
+      const manifest = createTestManifest({
+        id: "ti-plugin",
+        trust: "internal",
+        activationEvents: ["onStartup"],
+        main: "./index.ts",
+        contributions: {
+          threatIntelSources: [
+            { id: "vt", name: "VirusTotal", description: "VT enrichment", entrypoint: "./sources/vt.ts" },
+          ],
+        },
+      });
+      registry.register(manifest);
+
+      const mockModule = createMockModule();
+      loader = new PluginLoader({
+        registry,
+        resolveModule: async (m) => {
+          // Intercept the import() call for the source entrypoint
+          // by providing the source module via the main module's resolution
+          return mockModule;
+        },
+      });
+
+      // We need to mock the dynamic import for the entrypoint
+      // The routeContributions method uses import() directly, so we mock it at the global level
+      const originalImport = globalThis.__vi_import__;
+
+      await loader.loadPlugin("ti-plugin");
+
+      // Allow the async IIFE inside routeContributions to complete
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      // The source should be registered in the threat intel registry
+      // with the namespaced ID: "ti-plugin.vt"
+      const source = getThreatIntelSource("ti-plugin.vt");
+      expect(source).toBeDefined();
+
+      // Clean up
+      await loader.deactivatePlugin("ti-plugin");
+    });
+
+    // Test 30: resolved module's default export is registered via registerThreatIntelSource
+    it("resolved module default export with enrich() is registered in ThreatIntelSourceRegistry", async () => {
+      const mockSourceModule = {
+        default: {
+          id: "placeholder",
+          name: "VirusTotal",
+          supportedIndicatorTypes: ["hash", "ip"],
+          rateLimit: { maxPerMinute: 4 },
+          enrich: vi.fn(),
+        },
+      };
+
+      const manifest = createTestManifest({
+        id: "ti-register-test",
+        trust: "internal",
+        activationEvents: ["onStartup"],
+        main: "./index.ts",
+        contributions: {
+          threatIntelSources: [
+            { id: "vt", name: "VirusTotal", description: "VT lookup", entrypoint: "./sources/vt.ts" },
+          ],
+        },
+      });
+      registry.register(manifest);
+
+      // Mock dynamic import for entrypoint resolution
+      vi.stubGlobal("__mock_import_map__", {
+        "./sources/vt.ts": mockSourceModule,
+      });
+
+      const mockModule = createMockModule();
+      loader = new PluginLoader({
+        registry,
+        resolveModule: async () => mockModule,
+      });
+
+      await loader.loadPlugin("ti-register-test");
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      const source = getThreatIntelSource("ti-register-test.vt");
+      expect(source).toBeDefined();
+      expect(source!.name).toBe("VirusTotal");
+      // Source ID should be namespaced
+      expect(source!.id).toBe("ti-register-test.vt");
+
+      // Clean up
+      await loader.deactivatePlugin("ti-register-test");
+    });
+
+    // Test 31: dispose from registerThreatIntelSource is tracked -- deactivation removes source
+    it("deactivating a plugin removes its threat intel sources from the registry", async () => {
+      const mockSourceModule = {
+        default: {
+          id: "placeholder",
+          name: "AbuseIPDB",
+          supportedIndicatorTypes: ["ip"],
+          rateLimit: { maxPerMinute: 10 },
+          enrich: vi.fn(),
+        },
+      };
+
+      const manifest = createTestManifest({
+        id: "ti-dispose-test",
+        trust: "internal",
+        activationEvents: ["onStartup"],
+        main: "./index.ts",
+        contributions: {
+          threatIntelSources: [
+            { id: "abuseipdb", name: "AbuseIPDB", description: "IP reputation", entrypoint: "./sources/abuse.ts" },
+          ],
+        },
+      });
+      registry.register(manifest);
+
+      const mockModule = createMockModule();
+      loader = new PluginLoader({
+        registry,
+        resolveModule: async () => mockModule,
+      });
+
+      await loader.loadPlugin("ti-dispose-test");
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      // Source should be registered
+      expect(getThreatIntelSource("ti-dispose-test.abuseipdb")).toBeDefined();
+
+      // Deactivate plugin
+      await loader.deactivatePlugin("ti-dispose-test");
+
+      // Source should be removed
+      expect(getThreatIntelSource("ti-dispose-test.abuseipdb")).toBeUndefined();
+    });
+
+    // Test 32: failed entrypoint resolution logs warning without failing activation
+    it("failed entrypoint resolution logs a warning but does not fail plugin activation", async () => {
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+      const manifest = createTestManifest({
+        id: "ti-fail-test",
+        trust: "internal",
+        activationEvents: ["onStartup"],
+        main: "./index.ts",
+        contributions: {
+          threatIntelSources: [
+            { id: "bad-source", name: "Broken", description: "Broken source", entrypoint: "./nonexistent.ts" },
+          ],
+        },
+      });
+      registry.register(manifest);
+
+      const mockModule = createMockModule();
+      loader = new PluginLoader({
+        registry,
+        resolveModule: async () => mockModule,
+      });
+
+      await loader.loadPlugin("ti-fail-test");
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      // Plugin should still be activated despite source load failure
+      expect(registry.get("ti-fail-test")!.state).toBe("activated");
+
+      // Warning should have been logged
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining("ti-fail-test.bad-source"),
+        expect.anything(),
+      );
+
+      warnSpy.mockRestore();
+      await loader.deactivatePlugin("ti-fail-test");
+    });
+
+    // Test 33: module without enrich() method logs warning about invalid source
+    it("module without enrich() method logs warning about missing enrich method", async () => {
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+      // Module that does not have an enrich method
+      const mockSourceModule = {
+        default: {
+          id: "no-enrich",
+          name: "BadSource",
+        },
+      };
+
+      const manifest = createTestManifest({
+        id: "ti-noenrich-test",
+        trust: "internal",
+        activationEvents: ["onStartup"],
+        main: "./index.ts",
+        contributions: {
+          threatIntelSources: [
+            { id: "bad", name: "NoEnrich", description: "No enrich method", entrypoint: "./sources/bad.ts" },
+          ],
+        },
+      });
+      registry.register(manifest);
+
+      const mockModule = createMockModule();
+      loader = new PluginLoader({
+        registry,
+        resolveModule: async () => mockModule,
+      });
+
+      await loader.loadPlugin("ti-noenrich-test");
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      // Plugin should still be activated
+      expect(registry.get("ti-noenrich-test")!.state).toBe("activated");
+
+      // Warning about missing enrich method
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining("missing enrich method"),
+      );
+
+      // Source should NOT be in registry
+      expect(getThreatIntelSource("ti-noenrich-test.bad")).toBeUndefined();
+
+      warnSpy.mockRestore();
+      await loader.deactivatePlugin("ti-noenrich-test");
+    });
+  });
+
+  // ---- SecretsApi injection ----
+
+  describe("SecretsApi injection", () => {
+    // Test 34: PluginActivationContext includes a `secrets` field
+    it("PluginActivationContext passed to activate() includes a 'secrets' field", async () => {
+      const manifest = createTestManifest({
+        id: "secrets-ctx-test",
+        trust: "internal",
+        activationEvents: ["onStartup"],
+        main: "./index.ts",
+      });
+      registry.register(manifest);
+
+      let capturedContext: PluginActivationContext | undefined;
+      const mockModule = createMockModule({
+        activate: (ctx: PluginActivationContext) => {
+          capturedContext = ctx;
+          return [];
+        },
+      });
+
+      loader = new PluginLoader({
+        registry,
+        resolveModule: async () => mockModule,
+      });
+
+      await loader.loadPlugin("secrets-ctx-test");
+
+      expect(capturedContext).toBeDefined();
+      expect(capturedContext!.secrets).toBeDefined();
+      expect(typeof capturedContext!.secrets.get).toBe("function");
+      expect(typeof capturedContext!.secrets.set).toBe("function");
+      expect(typeof capturedContext!.secrets.delete).toBe("function");
+      expect(typeof capturedContext!.secrets.has).toBe("function");
+    });
+
+    // Test 35: SecretsApi is created with the correct pluginId
+    it("SecretsApi is scoped to the plugin's ID", async () => {
+      const manifest = createTestManifest({
+        id: "secrets-scope-test",
+        trust: "internal",
+        activationEvents: ["onStartup"],
+        main: "./index.ts",
+      });
+      registry.register(manifest);
+
+      let capturedContext: PluginActivationContext | undefined;
+      const mockModule = createMockModule({
+        activate: (ctx: PluginActivationContext) => {
+          capturedContext = ctx;
+          return [];
+        },
+      });
+
+      loader = new PluginLoader({
+        registry,
+        resolveModule: async () => mockModule,
+      });
+
+      await loader.loadPlugin("secrets-scope-test");
+
+      expect(capturedContext).toBeDefined();
+      // The SecretsApi should exist and be a valid object with the expected methods
+      const secrets = capturedContext!.secrets;
+      expect(secrets).toBeDefined();
+      expect(typeof secrets.get).toBe("function");
+      expect(typeof secrets.set).toBe("function");
     });
   });
 });

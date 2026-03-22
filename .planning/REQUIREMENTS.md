@@ -55,6 +55,15 @@
 - [x] **SWARM-06**: Trust graph updates live as agents join/leave
 - [x] **SWARM-07**: Click receipt edge to open receipt inspector in pane tab
 
+### Intel Pipeline Wiring
+
+- [ ] **INTEL-01**: Fleet SSE check events bridged to signal-store — findings panel shows live incoming signals
+- [ ] **INTEL-02**: Signals auto-clustered by similarity via mounted useSignalCorrelator hook
+- [ ] **INTEL-03**: Each cluster shows severity score with color coding (driven by live signal flow)
+- [ ] **INTEL-04**: New signals trigger badge count update on Findings activity bar icon
+- [ ] **INTEL-06**: "Draft Policy Guard" button generates a guard config block from finding's pattern
+- [ ] **INTEL-08**: Finding annotated with link to generated detection after drafting (bidirectional reference)
+
 ## Traceability
 
 | Requirement | Phase | Status |
@@ -89,10 +98,17 @@
 | SWARM-05 | Phase 13 | Complete |
 | SWARM-06 | Phase 13 | Complete |
 | SWARM-07 | Phase 13 | Complete |
+| INTEL-01 | Phase 14 | Pending |
+| INTEL-02 | Phase 14 | Pending |
+| INTEL-03 | Phase 14 | Pending |
+| INTEL-04 | Phase 14 | Pending |
+| INTEL-06 | Phase 14 | Pending |
+| INTEL-08 | Phase 14 | Pending |
 
 **Coverage:**
 - v1.2 requirements: 19 total (4 complete, 15 pending)
-- v1.3 gap closure requirements: 11 total (0 complete, 11 pending)
-- Total: 30 requirements
-- Mapped to phases: 30
+- v1.3 gap closure requirements: 17 total (11 complete, 6 pending)
+- Total: 36 requirements
+- Mapped to phases: 36
+- Unmapped: 0
 - Unmapped: 0

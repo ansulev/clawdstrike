@@ -135,16 +135,28 @@ Plans:
 - [ ] 13-01-PLAN.md — Policy evaluation glow on agent nodes, animated receipt edge flow with dash-offset
 - [ ] 13-02-PLAN.md — Live trust graph bridge (join/leave), receipt edge click opens inspector pane tab
 
+### Phase 14: Intel Pipeline Wiring & Completion
+**Goal**: Wire live signal feed from Fleet SSE to findings pipeline, mount auto-correlator, add Draft Policy Guard button, and implement bidirectional finding↔detection links
+**Gap Closure**: Closes INTEL gaps from v1.3 re-audit
+**Requirements**: INTEL-01, INTEL-02, INTEL-03, INTEL-04, INTEL-06, INTEL-08
+**Success Criteria**:
+  1. Fleet SSE check events are bridged to signal-store via ingestSignal — findings panel shows live incoming signals
+  2. useSignalCorrelator hook is mounted in workbench root — signals auto-cluster into findings with severity scores
+  3. "Draft Policy Guard" button on a finding generates a guard config block from the finding's pattern
+  4. After drafting a detection from a finding, the finding is annotated with a link to the generated detection (bidirectional reference)
+**Plans**: TBD
+
 ## Progress
 
 | Track | Phase | Status |
 |-------|-------|--------|
 | A. Fleet Dashboard | A1: Data Layer | Complete (1 plan) |
 | A. Fleet Dashboard | A2: Viz & Actions | Complete (1 plan) |
-| B. Swarm Board | B1: Editor Bridge | Planned (1 plan) |
-| B. Swarm Board | B2: Real-Time Viz | Planned (2 plans) |
+| B. Swarm Board | B1: Editor Bridge | Complete (1 plan) |
+| B. Swarm Board | B2: Real-Time Viz | Complete (2 plans) |
 | C. Threat Intel | C1: Signal Clustering | Complete (2 plans) |
 | C. Threat Intel | C2: Promote-to-Detection | Complete (1 plan: C2-01) |
-| Gap Closure | Phase 11: Integration Wiring | In progress (1/2 plans complete) |
-| Gap Closure | Phase 12: Swarm Bridge | Planned (1 plan) |
-| Gap Closure | Phase 13: Swarm Viz | Planned (2 plans) |
+| Gap Closure | Phase 11: Integration Wiring | Complete (2 plans) |
+| Gap Closure | Phase 12: Swarm Bridge | Complete (1 plan) |
+| Gap Closure | Phase 13: Swarm Viz | Complete (2 plans) |
+| Gap Closure | Phase 14: Intel Pipeline | Not started |

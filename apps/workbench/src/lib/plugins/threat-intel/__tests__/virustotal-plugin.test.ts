@@ -12,6 +12,7 @@ const mockFetch = vi.fn<
 >();
 
 beforeEach(() => {
+  mockFetch.mockReset();
   vi.stubGlobal("fetch", mockFetch);
 });
 
@@ -183,7 +184,8 @@ describe("enrich() response normalization", () => {
   });
 
   it("normalizes high malicious detections to classification:malicious with confidence > 0.7", async () => {
-    const stats = makeVtAnalysisStats({ malicious: 40, harmless: 20, undetected: 10 });
+    // 50 malicious out of 60 total = 0.833 confidence
+    const stats = makeVtAnalysisStats({ malicious: 50, harmless: 5, undetected: 5, suspicious: 0, timeout: 0 });
     mockFetch.mockResolvedValue(okResponse(makeVtResponse(stats)));
 
     const result = await source.enrich({ type: "hash", value: "a".repeat(64) });

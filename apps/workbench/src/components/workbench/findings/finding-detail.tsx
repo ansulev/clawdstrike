@@ -17,6 +17,7 @@ import {
   IconMessage,
   IconChartBar,
   IconFileCode,
+  IconShield,
 } from "@tabler/icons-react";
 import { cn } from "@/lib/utils";
 import { EnrichmentSidebar } from "./enrichment-sidebar";
@@ -42,6 +43,7 @@ interface FindingDetailProps {
   onAddAnnotation: (findingId: string, text: string) => void;
   onRunEnrichment?: (findingId: string) => void;
   onDraftDetection?: (findingId: string) => void;
+  onDraftGuard?: (findingId: string) => void;
   onBack?: () => void;
 }
 
@@ -103,6 +105,7 @@ export function FindingDetail({
   onAddAnnotation,
   onRunEnrichment,
   onDraftDetection,
+  onDraftGuard,
   onBack,
 }: FindingDetailProps) {
   const [annotationText, setAnnotationText] = useState("");
@@ -245,6 +248,14 @@ export function FindingDetail({
                       icon={<IconFileCode size={12} stroke={1.5} />}
                       color="#6ea8d9"
                       onClick={() => onDraftDetection(finding.id)}
+                    />
+                  )}
+                  {onDraftGuard && (
+                    <ActionButton
+                      label="Draft Guard"
+                      icon={<IconShield size={12} stroke={1.5} />}
+                      color="#d4a84b"
+                      onClick={() => onDraftGuard(finding.id)}
                     />
                   )}
                   <ActionButton

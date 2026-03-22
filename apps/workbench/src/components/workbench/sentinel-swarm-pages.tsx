@@ -579,6 +579,20 @@ export function FindingDetailPage() {
     [findings, allSignals, draftFromFinding],
   );
 
+  const handleDraftGuard = useCallback(
+    (findingId: string) => {
+      const targetFinding = findings.find((entry) => entry.id === findingId);
+      if (!targetFinding) return;
+      // Force policy format by passing a gap hint that prefers clawdstrike_policy
+      void draftFromFinding(targetFinding, allSignals, {
+        techniqueHints: [],
+        dataSourceHints: [],
+        suggestedFormats: ["clawdstrike_policy"],
+      } as any);
+    },
+    [findings, allSignals, draftFromFinding],
+  );
+
   if (!finding) {
     return (
       <div className="flex h-full items-center justify-center text-[#6f7f9a] text-sm font-mono">
@@ -605,6 +619,7 @@ export function FindingDetailPage() {
         })
       }
       onDraftDetection={handleDraftDetection}
+      onDraftGuard={handleDraftGuard}
       onBack={() => navigate("/findings")}
     />
   );

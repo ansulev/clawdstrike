@@ -294,7 +294,10 @@ describe("AutoEnrichmentManager", () => {
   // Test 9: processNewFinding debounces rapid successive calls for same finding ID
   it("processNewFinding() debounces rapid successive calls for the same finding ID (100ms window)", () => {
     const orch = mockOrchestrator();
-    const extract = mockExtractIndicators();
+    // Use single-indicator extractor so call counts are 1:1 with processNewFinding
+    const extract = vi.fn().mockReturnValue([
+      { type: "ip" as const, value: "1.2.3.4" },
+    ]);
     const manager = new AutoEnrichmentManager({
       orchestrator: orch,
       extractIndicators: extract,
@@ -313,7 +316,7 @@ describe("AutoEnrichmentManager", () => {
     manager.processNewFinding(finding);
     manager.processNewFinding(finding);
 
-    // Only first call should trigger enrichment
+    // Only first call should trigger enrichment (1 indicator = 1 enrich call)
     expect(orch.enrich).toHaveBeenCalledTimes(1);
 
     // After 100ms, a new call should work

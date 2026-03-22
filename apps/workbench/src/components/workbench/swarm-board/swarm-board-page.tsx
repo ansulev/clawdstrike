@@ -13,6 +13,7 @@ import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from "r
 import { useLocation } from "react-router-dom";
 import { useCoordinatorBoardBridge } from "@/features/swarm/hooks/use-coordinator-board-bridge";
 import { usePolicyEvalBoardBridge } from "@/features/swarm/hooks/use-policy-eval-board-bridge";
+import { useTrustGraphBridge } from "@/features/swarm/hooks/use-trust-graph-bridge";
 import { useReceiptFlowBridge, receiptEdgeTimestamps } from "@/features/swarm/hooks/use-receipt-flow-bridge";
 import { getCoordinator } from "@/features/swarm/coordinator-instance";
 import {
@@ -117,6 +118,7 @@ function SwarmBoardCanvas() {
   const coordinator = useMemo(() => getCoordinator(), []);
   useCoordinatorBoardBridge(coordinator);
   usePolicyEvalBoardBridge(coordinator);
+  useTrustGraphBridge(coordinator);
 
   // Bridge feed store findings to receipt nodes on the board
   useReceiptFlowBridge();
@@ -552,6 +554,13 @@ function SwarmBoardCanvas() {
               @keyframes eval-glow {
                 0%, 100% { box-shadow: 0 0 8px 0 rgba(212,168,75,0.08); }
                 50% { box-shadow: 0 0 28px 6px rgba(212,168,75,0.2); }
+              }
+              @keyframes nodeEnter {
+                from { opacity: 0; transform: scale(0.85); }
+                to { opacity: 1; transform: scale(1); }
+              }
+              .react-flow__node {
+                animation: nodeEnter 0.3s ease-out;
               }
             `}</style>
 

@@ -466,6 +466,37 @@ export interface PolicyEvaluatedEvent {
 
 export type PolicyEvaluatedHandler = (swarmId: string, event: PolicyEvaluatedEvent) => void;
 
+/**
+ * Event emitted when a new member joins a swarm.
+ * Used to drive live trust graph updates (add agent node to board).
+ */
+export interface MemberJoinedEvent {
+  /** Unique member identifier (fingerprint or session ID). */
+  memberId: string;
+  /** Agent model name (e.g., "claude-3", "gpt-4"). */
+  agentModel?: string;
+  /** Policy mode the agent is running under. */
+  policyMode?: string;
+  /** Timestamp when the member joined (Unix ms). */
+  timestamp: number;
+}
+
+/**
+ * Event emitted when a member leaves a swarm.
+ * Used to drive live trust graph updates (fade + remove agent node from board).
+ */
+export interface MemberLeftEvent {
+  /** Unique member identifier (fingerprint or session ID). */
+  memberId: string;
+  /** Reason for leaving. */
+  reason?: "disconnect" | "retire" | "timeout";
+  /** Timestamp when the member left (Unix ms). */
+  timestamp: number;
+}
+
+export type MemberJoinedHandler = (swarmId: string, event: MemberJoinedEvent) => void;
+export type MemberLeftHandler = (swarmId: string, event: MemberLeftEvent) => void;
+
 
 /**
  * Core networking layer for swarm intel distribution.
@@ -497,6 +528,8 @@ export class SwarmCoordinator {
   private readonly signalHandlers = new Set<SignalHandler>();
   private readonly detectionHandlers = new Set<DetectionHandler>();
   private readonly policyEvaluatedHandlers = new Set<PolicyEvaluatedHandler>();
+  private readonly memberJoinedHandlers = new Set<MemberJoinedHandler>();
+  private readonly memberLeftHandlers = new Set<MemberLeftHandler>();
 
   /** Bound message router (stored so it can be unregistered on destroy). */
   private readonly boundRouter: (topic: string, envelope: SwarmEnvelope) => void;
@@ -695,6 +728,54 @@ export class SwarmCoordinator {
     }
   }
 
+  /** Register a handler for member joined events. */
+  onMemberJoined(handler: MemberJoinedHandler): void {
+    this.memberJoinedHandlers.add(handler);
+  }
+
+  /** Unregister a member joined handler. */
+  offMemberJoined(handler: MemberJoinedHandler): void {
+    this.memberJoinedHandlers.delete(handler);
+  }
+
+  /** Register a handler for member left events. */
+  onMemberLeft(handler: MemberLeftHandler): void {
+    this.memberLeftHandlers.add(handler);
+  }
+
+  /** Unregister a member left handler. */
+  offMemberLeft(handler: MemberLeftHandler): void {
+    this.memberLeftHandlers.delete(handler);
+  }
+
+  /**
+   * Emit a member joined event directly (for in-process swarms that
+   * bypass transport). Dispatches to all registered handlers.
+   */
+  emitMemberJoined(swarmId: string, event: MemberJoinedEvent): void {
+    for (const handler of this.memberJoinedHandlers) {
+      try {
+        handler(swarmId, event);
+      } catch {
+        // Handler errors should not break the emitter
+      }
+    }
+  }
+
+  /**
+   * Emit a member left event directly (for in-process swarms that
+   * bypass transport). Dispatches to all registered handlers.
+   */
+  emitMemberLeft(swarmId: string, event: MemberLeftEvent): void {
+    for (const handler of this.memberLeftHandlers) {
+      try {
+        handler(swarmId, event);
+      } catch {
+        // Handler errors should not break the emitter
+      }
+    }
+  }
+
 
   /**
    * Attempt to flush the outbox. Call this when the transport reconnects.
@@ -766,6 +847,8 @@ export class SwarmCoordinator {
     this.signalHandlers.clear();
     this.detectionHandlers.clear();
     this.policyEvaluatedHandlers.clear();
+    this.memberJoinedHandlers.clear();
+    this.memberLeftHandlers.clear();
     this.activeSwarms.clear();
     this.signalSubscriptions.clear();
     this.outbox.clear();
@@ -838,15 +921,31 @@ export class SwarmCoordinator {
         break;
 
       case "coordination": {
-        // Route policy_evaluated coordination messages to registered handlers
+        // Route coordination messages to registered handlers by action type
         const payload = envelope.payload as Record<string, unknown> | null;
-        if (
-          payload &&
-          typeof payload === "object" &&
-          payload.action === "policy_evaluated"
-        ) {
+        if (!payload || typeof payload !== "object") break;
+
+        if (payload.action === "policy_evaluated") {
           const event = payload as unknown as PolicyEvaluatedEvent;
           for (const handler of this.policyEvaluatedHandlers) {
+            try {
+              handler(parsed.swarmId, event);
+            } catch {
+              // Handler errors should not break the router
+            }
+          }
+        } else if (payload.action === "member_joined") {
+          const event = payload as unknown as MemberJoinedEvent;
+          for (const handler of this.memberJoinedHandlers) {
+            try {
+              handler(parsed.swarmId, event);
+            } catch {
+              // Handler errors should not break the router
+            }
+          }
+        } else if (payload.action === "member_left") {
+          const event = payload as unknown as MemberLeftEvent;
+          for (const handler of this.memberLeftHandlers) {
             try {
               handler(parsed.swarmId, event);
             } catch {

@@ -26,7 +26,9 @@ Eliminate tech debt accumulated during v1.0-v1.3 rapid development. Fix broken t
   1. `npm test` (or equivalent test runner) passes with zero failures across App.test, desktop-layout.test, and shortcut-provider.test
   2. App.test.tsx renders without "ActivityBar is not defined" or similar mock errors
   3. desktop-layout.test.tsx assertions match the current component tree (ActivityBar + SidebarPanel, not stale DesktopSidebar)
-**Plans**: TBD
+**Plans:** 1 plan
+Plans:
+- [ ] 15-01-PLAN.md — Fix test mocks for App, desktop-layout, and shortcut-provider test suites
 
 ### Phase 16: Search, Terminal & Keybinding Fixes
 **Goal**: Search, terminal, and keyboard shortcuts behave correctly under real usage conditions
@@ -37,7 +39,9 @@ Eliminate tech debt accumulated during v1.0-v1.3 rapid development. Fix broken t
   2. Terminal panel resizes to fill its container when the bottom panel is dragged taller or the window is resized (no hardcoded dimensions)
   3. Pressing Meta+W closes the active editor tab (or active pane if no tabs) with a single, predictable behavior -- no conflict dialog or double-close
   4. Cancelling a search mid-flight (by clearing the query or typing a new one) does not leave a pending spinner
-**Plans**: TBD
+**Plans:** 1 plan
+Plans:
+- [ ] 16-01-PLAN.md — Search AbortController + staleness guard, terminal dynamic sizing, Meta+W conflict resolution
 
 ### Phase 17: Command Modernization & Store Migration
 **Goal**: All components use direct Zustand store calls and the multi-policy-store bridge layer is deleted
@@ -55,6 +59,6 @@ Eliminate tech debt accumulated during v1.0-v1.3 rapid development. Fix broken t
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 15. Test Fixes | 0/TBD | Not started | - |
-| 16. Search, Terminal & Keybinding Fixes | 0/TBD | Not started | - |
+| 15. Test Fixes | 0/1 | Planned | - |
+| 16. Search, Terminal & Keybinding Fixes | 0/1 | Planned | - |
 | 17. Command Modernization & Store Migration | 0/TBD | Not started | - |

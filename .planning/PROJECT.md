@@ -41,11 +41,28 @@ Security operators can work across multiple views simultaneously — policy edit
 - ✓ Findings badge count on activity bar — v1.3
 - ✓ Bidirectional finding↔detection links — v1.3
 
+- ✓ File & folder icons (shield for policy, SIG/YAR badges, folder open/close) — v1.2
+- ✓ Tree visual refinement (indent guides, active file highlight, collapsible roots) — v1.2
+- ✓ Context menu completeness (root/file/folder menus, viewport clamping) — v1.2
+
 ### Active
 
-- [ ] File & folder icons (shield for policy, SIG/YAR badges, folder open/close)
-- [ ] Tree visual refinement (indent guides, active file highlight, collapsible roots)
-- [ ] Context menu completeness (root/file/folder menus, viewport clamping)
+- [ ] Fix failing tests (stale mocks in desktop-layout, unmocked ActivityBar in App.test)
+- [ ] Search race condition (no AbortController/staleness guard)
+- [ ] Terminal dynamic sizing (replace hardcoded 800x240)
+- [ ] Meta+W keybinding conflict resolution
+- [ ] Modernize file.new to use direct store calls (remove legacy newPolicy injection)
+- [ ] Migrate ~20 components from useMultiPolicy() bridge to direct store calls
+- [ ] Delete multi-policy-store.tsx bridge layer (975 lines)
+
+## Current Milestone: v1.4 Cleanup & Store Migration
+
+**Goal:** Eliminate tech debt accumulated during v1.0-v1.3 rapid development and complete the multi-policy-store decomposition by migrating all consumers to direct Zustand store calls.
+
+**Target features:**
+- Fix 5 known bugs (tests, search race, terminal sizing, keybinding conflict, file.new)
+- Migrate ~20 legacy components off useMultiPolicy()/useWorkbench() bridge hooks
+- Delete the 975-line multi-policy-store bridge layer
 
 ### Out of Scope
 

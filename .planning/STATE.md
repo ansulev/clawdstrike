@@ -1,94 +1,65 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.3
-milestone_name: Audit)
-status: completed
-stopped_at: Completed 14-01-PLAN.md (Task 3 badge commit; Tasks 1-2 were prior commits)
-last_updated: "2026-03-22T23:23:13.616Z"
-last_activity: 2026-03-22 -- Phase 14 Plan 02 completed (phase complete, all v1.3 plans done)
+milestone: v1.4
+milestone_name: Cleanup & Store Migration
+status: ready_to_plan
+stopped_at: null
+last_updated: "2026-03-22"
+last_activity: 2026-03-22 -- Roadmap created for v1.4 (3 phases, 14 requirements)
 progress:
-  total_phases: 4
-  completed_phases: 4
-  total_plans: 7
-  completed_plans: 7
-  percent: 100
+  total_phases: 3
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md
-**Core value:** The Explorer panel looks and feels like a professional IDE file tree
-**Current focus:** Phase 3 Tree Visual Refinement
+See: .planning/PROJECT.md (updated 2026-03-22)
+**Core value:** Security operators work across multiple views simultaneously with IDE-grade workflows
+**Current focus:** v1.4 Cleanup & Store Migration -- Phase 15 ready to plan
 
 ## Current Position
 
-Phase: 14 (Intel Pipeline Wiring)
-Plan: 2 of 2 -- COMPLETE
-Status: Phase Complete (Milestone v1.3 complete)
-Last activity: 2026-03-22 -- Phase 14 Plan 02 completed (phase complete, all v1.3 plans done)
+Phase: 15 (Test Fixes) -- first of 3 phases
+Plan: --
+Status: Ready to plan
+Last activity: 2026-03-22 -- Roadmap created
 
-Progress: [██████████] 100%
+Progress: [░░░░░░░░░░] 0%
 
 ## Previous Milestones
 
-**v1.0 — IDE Pivot** (2026-03-18): 4 phases, 9 plans, 45 reqs
-**v1.1 — IDE Completeness** (2026-03-18/19): 13 phases, ~28 plans, 50+ reqs
+**v1.0 -- IDE Pivot** (2026-03-18): 4 phases, 9 plans, 45 reqs
+**v1.1 -- IDE Completeness** (2026-03-18/19): 13 phases, ~28 plans, 50+ reqs
+**v1.2 -- Explorer Polish** (partial, filter bar done): 1 phase, 1 plan
+**v1.3 -- Live Features** (2026-03-22): 15 phases (incl. gap closure), 29+ plans, 23 reqs
 
 ## Accumulated Context
 
-### Key Files for Explorer Work
-- `apps/workbench/src/components/workbench/explorer/explorer-panel.tsx` — main panel
-- `apps/workbench/src/components/workbench/explorer/explorer-tree-item.tsx` — tree item rendering
-- `apps/workbench/src/components/workbench/explorer/explorer-context-menu.tsx` — context menu
-- `apps/workbench/src/features/activity-bar/components/sidebar-panel.tsx` — Explorer connected wrapper
-- `apps/workbench/src/features/project/stores/project-store.tsx` — project/file tree state
-- `apps/workbench/src/lib/workbench/file-type-registry.ts` — file type detection
+### Key Files for Cleanup Work
+- `apps/workbench/src/features/policy/stores/multi-policy-store.tsx` -- 975-line bridge layer to delete
+- `apps/workbench/src/features/policy/stores/policy-tabs-store.ts` -- canonical tab store (target)
+- `apps/workbench/src/features/policy/stores/policy-edit-store.ts` -- canonical edit store (target)
+- `apps/workbench/src/__tests__/App.test.tsx` -- failing (unmocked ActivityBar)
+- `apps/workbench/src/components/desktop/__tests__/desktop-layout.test.tsx` -- stale mock
+- `apps/workbench/src/features/search/stores/search-store.ts` -- needs AbortController
+- `apps/workbench/src/features/bottom-pane/terminal-panel.tsx` -- hardcoded 800x240
+- `apps/workbench/src/lib/commands/file-commands.ts` -- legacy newPolicy injection
 
 ### Decisions
-- File type icons should be distinctive at 16px (the tree item icon size)
-- Use @tabler/icons-react for standard icons (folder, chevron), custom badges for detection types
-- Filter bar labels more important than saving horizontal space
-- Context menus should use viewport clamping (known issue from reviews)
-- Used inline style for dynamic filter pill color (iconColor varies per type)
-- Pill shows shortLabel not full label to conserve horizontal space in narrow sidebar
-- Footer count switches between filtered and total based on formatFilter state
-- Fleet SSE: import consumeSseMessages from live-agent-tab (no circular dep risk)
-- Fleet SSE: FleetEventStream is a class (not hook) managed as module singleton
-- Fleet drift: expectedPolicyVersion from remotePolicyInfo.policyHash or .version
-- Finding-to-detection: callback prop pattern (onDraftDetection) for cross-domain actions, wired in parent page
-- Finding mapper: technique hints from signal text (not flags) since SignalContext.flags lack label field
-- Fleet topology: plain SVG grid layout (no @xyflow/react), 6 cols, 120px spacing
-- Fleet deploy: type-to-confirm CONFIRM_TEXT="deploy" matching deploy-panel.tsx
-- Fleet agent detail: useParams + store lookup for /fleet/:id pages
-- Fleet bulk select: Set<string> with indeterminate header checkbox
-- Gutter play button: GuardTestYamlEditor wrapper pattern for TestRunnerContext access (FileEditorShell creates Provider, so hook must be in child component)
-- Navigate-to-editor: all command/UI navigation uses usePaneStore.getState().openApp() instead of navigate()
-- New tab creation: commands use usePolicyTabsStore.getState().newTab() then open via pane-store
-- Dead code: PolicyEditor (1071 lines) deleted, 6 duplicate app.* commands removed from palette
-- Editor-to-swarm: createSwarmBundleFromPolicy in tauri-bridge creates .swarm bundle with policyRef manifest + sentinel agentSession nodes
-- Editor-to-swarm: Launch Swarm button placed after RunButtonGroup, gated on isPolicyFileType
-- Editor-to-swarm: Bundle naming {policyFileName}-{date}.swarm with sanitized stems
-- [Phase 12]: createSwarmBundleFromPolicy bridge creates .swarm bundle with policyRef manifest + sentinel agentSession nodes
-- [Phase 13]: evaluating status gold #d4a84b with 2s breathe cycle (faster than 3s running)
-- [Phase 13]: Receipt edges purple #8b5cf6 with receiptEdgeFlow 1.5s linear infinite dash-offset
-- [Phase 13]: Module-level receiptEdgeTimestamps Map for ephemeral cross-component activity tracking
-- [Phase 13]: PolicyEvaluated events via both transport routing and direct in-process emit
-- [Phase 13]: MemberJoined/MemberLeft events use coordination channel routing + direct emit
-- [Phase 13]: Left-member nodes fade to completed (0.7 opacity) then remove after 3s delay
-- [Phase 13]: Receipt edge click uses usePaneStore.openApp for tab-based navigation
-- [Phase 13]: nodeEnter CSS animation 0.3s ease-out applied to .react-flow__node
+- multi-policy-store.tsx is a bridge: useMultiPolicy()/useWorkbench() compose 3 underlying Zustand stores
+- ~20 components still use bridge hooks; all new features/ code uses direct stores
+- MultiPolicyProvider is already an empty fragment (<>{children}</>)
+- Phase 15+16 are independent; Phase 17 depends on Phase 15 (tests catch regressions)
 
-- [Phase 14-01]: SignalSource uses full object shape (sentinelId, guardId, externalFeed, provenance) not simple string
-- [Phase 14-01]: checkEventToSignal placed as module-level helper in use-fleet-connection.ts, not in reducer
-- [Phase 14-01]: Badge styled with #c45c5c red background and 0.4 box-shadow glow, caps at 99+
-- [Phase 14-02]: Gold (#d4a84b) Draft Guard button differentiates from blue (#6ea8d9) Draft Detection
-- [Phase 14-02]: Force clawdstrike_policy format via suggestedFormats hint with as-any cast
-- [Phase 14-02]: Post-draft annotation via useFindingStore.getState().actions.addAnnotation (Zustand out-of-React)
-- [Phase 14-02]: Annotation actor "detection_workflow" for traceability in finding timeline
+### Blockers/Concerns
+None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-22T23:16:20Z
-Stopped at: Completed 14-01-PLAN.md (Task 3 badge commit; Tasks 1-2 were prior commits)
+Last session: 2026-03-22
+Stopped at: Roadmap created, ready to plan Phase 15

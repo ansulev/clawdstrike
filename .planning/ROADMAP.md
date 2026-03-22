@@ -1,165 +1,60 @@
-# Roadmap: ClawdStrike Workbench v1.3 — Live Features
+# Roadmap: ClawdStrike Workbench v1.4 — Cleanup & Store Migration
 
 ## Overview
 
-Three parallel feature tracks that bring the workbench to life with real-time data, agent coordination, and threat intelligence. These transform the workbench from "editor with tools" to "live security operations center."
+Eliminate tech debt accumulated during v1.0-v1.3 rapid development. Fix broken tests, resolve input/terminal bugs, modernize legacy command wiring, and complete the multi-policy-store decomposition by migrating all consumers to direct Zustand store calls and deleting the 975-line bridge layer.
 
 **Prior milestones:**
 - v1.0: IDE shell (activity bar, panes, sidebar panels, commands)
 - v1.1: IDE completeness (search, nav, file tree, editor, session restore, detection integration)
 - v1.2: Explorer polish (icons, filters, indent guides, context menus)
+- v1.3: Live features (fleet SSE, swarm board, intel pipeline, gap closure)
 
-## Feature Tracks
+## Phases
 
-- [ ] **Track A: Live Fleet Dashboard** — Real-time agent monitoring, posture visualization, drift detection, one-click policy push
-- [ ] **Track B: Swarm Board Evolution** — Launch swarms from editor, real-time agent coordination graph, receipt flow visualization
-- [ ] **Track C: Threat Intel Feed** — Signal clustering, severity scoring, promote-to-detection workflow
+- [ ] **Phase 15: Test Fixes** - Fix 3 broken test suites (App, desktop-layout, shortcut-provider)
+- [ ] **Phase 16: Search, Terminal & Keybinding Fixes** - AbortController for search, dynamic terminal sizing, Meta+W conflict resolution
+- [ ] **Phase 17: Command Modernization & Store Migration** - Modernize file.new, migrate ~20 components off bridge hooks, delete multi-policy-store
 
-## Track A: Live Fleet Dashboard
+## Phase Details
 
-### Phase A1: Fleet Data Layer
-**Goal**: Real-time agent heartbeats and posture data flowing from hushd into the workbench via SSE streaming, with accurate drift detection
-**Requirements**: FLEET-01, FLEET-02, FLEET-03, FLEET-04
-**Success Criteria**:
-  1. Fleet dashboard shows connected agents with live heartbeat status (online/offline/degraded)
-  2. Each agent shows: posture score, active policy version, last heartbeat timestamp, guard count
-  3. Agents that drift from the fleet-wide policy are flagged with a drift indicator
-  4. Dashboard auto-refreshes on a configurable interval (default 10s) or via SSE when connected to hushd
-**Plans**: 1 plan
-Plans:
-- [x] track-a-fleet-01-PLAN.md — SSE event stream, heartbeat reducer, drift detection fix, store integration (complete)
-
-### Phase A2: Fleet Visualization & Actions
-**Goal**: Topology map of agents, one-click policy push, bulk operations
-**Depends on**: Phase A1
-**Requirements**: FLEET-05, FLEET-06, FLEET-07, FLEET-08
-**Success Criteria**:
-  1. Topology view shows agents as nodes with edges representing trust relationships
-  2. Agent detail panel (right sidebar or drawer) shows full config, recent receipts, policy diff
-  3. "Push Policy" button deploys the active policy to selected agent(s) with confirmation
-  4. Bulk select agents for batch policy push, restart, or retire operations
-**Plans**: 1 plan
-Plans:
-- [x] track-a-fleet-02-PLAN.md — Agent detail page, SVG topology, bulk select, quick deploy, dashboard enhancements (complete)
-
-## Track B: Swarm Board Evolution
-
-### Phase B1: Editor-to-Swarm Bridge
-**Goal**: Launch a swarm session directly from the policy editor or command palette
-**Requirements**: SWARM-01, SWARM-02, SWARM-03
-**Success Criteria**:
-  1. "Launch Swarm" button in the editor toolbar spawns a new swarm session with the active policy
-  2. Swarm Board opens as a pane tab alongside the editor (split view)
-  3. Swarm session is pre-configured with the active policy and connected sentinels
-**Plans**: 1 plan
-Plans:
-- [ ] 12-01-PLAN.md — createSwarmBundleFromPolicy bridge, Launch Swarm toolbar button, swarm.launchFromEditor command
-
-### Phase B2: Real-Time Swarm Visualization
-**Goal**: Live agent coordination visible on the graph — receipts flowing, decisions animating
-**Depends on**: Phase B1
-**Requirements**: SWARM-04, SWARM-05, SWARM-06, SWARM-07
-**Success Criteria**:
-  1. Agent nodes pulse/glow when they evaluate a policy (real-time via SSE or polling)
-  2. Receipts appear as animated edges flowing between nodes
-  3. Trust graph updates live as agents join/leave or trust relationships change
-  4. Click a receipt edge to open the receipt inspector in a pane tab
-**Plans**: 2 plans
-Plans:
-- [ ] 13-01-PLAN.md — Policy evaluation glow on agent nodes, animated receipt edge flow with dash-offset
-- [ ] 13-02-PLAN.md — Live trust graph bridge (join/leave), receipt edge click opens inspector pane tab
-
-## Track C: Threat Intel Feed
-
-### Phase C1: Signal Ingestion & Clustering
-**Goal**: Incoming signals from sentinels are automatically clustered and scored
-**Requirements**: INTEL-01, INTEL-02, INTEL-03, INTEL-04
-**Success Criteria**:
-  1. Findings sidebar panel shows a live feed of incoming signals (not just static list)
-  2. Signals are automatically clustered by similarity (same source, same technique, same timeframe)
-  3. Each cluster shows a severity score (critical/high/medium/low) with color coding
-  4. New signals trigger a badge count update on the Findings activity bar icon
+### Phase 15: Test Fixes
+**Goal**: All existing test suites pass without manual intervention
+**Depends on**: Nothing (independent cleanup)
+**Requirements**: TEST-01, TEST-02, TEST-03
+**Success Criteria** (what must be TRUE):
+  1. `npm test` (or equivalent test runner) passes with zero failures across App.test, desktop-layout.test, and shortcut-provider.test
+  2. App.test.tsx renders without "ActivityBar is not defined" or similar mock errors
+  3. desktop-layout.test.tsx assertions match the current component tree (ActivityBar + SidebarPanel, not stale DesktopSidebar)
 **Plans**: TBD
 
-### Phase C2: Promote-to-Detection Workflow
-**Goal**: Turn a finding or signal cluster into a detection rule with one click
-**Depends on**: Phase C1
-**Requirements**: INTEL-05, INTEL-06, INTEL-07, INTEL-08
-**Success Criteria**:
-  1. "Draft Detection" button on a finding generates a Sigma rule from the finding's indicators
-  2. "Draft Policy Guard" button generates a guard config block from the finding's pattern
-  3. Generated content opens in a new file tab in the editor for review/editing
-  4. The finding is linked to the generated detection (bidirectional reference)
-**Plans**: 1 plan
-Plans:
-- [x] C2-01-PLAN.md -- Finding mapper, draftFromFinding hook, Draft Detection button (complete)
+### Phase 16: Search, Terminal & Keybinding Fixes
+**Goal**: Search, terminal, and keyboard shortcuts behave correctly under real usage conditions
+**Depends on**: Nothing (independent of Phase 15)
+**Requirements**: SRCH-06, SRCH-07, TERM-03, KEY-01
+**Success Criteria** (what must be TRUE):
+  1. Typing rapidly in global search shows only the results for the final query (no stale results flash or persist)
+  2. Terminal panel resizes to fill its container when the bottom panel is dragged taller or the window is resized (no hardcoded dimensions)
+  3. Pressing Meta+W closes the active editor tab (or active pane if no tabs) with a single, predictable behavior -- no conflict dialog or double-close
+  4. Cancelling a search mid-flight (by clearing the query or typing a new one) does not leave a pending spinner
+**Plans**: TBD
 
-## Gap Closure (from v1.3 Audit)
-
-### Phase 11: Integration Wiring Fixes
-**Goal**: Fix broken cross-phase wiring from file-first editor cutover — dead gutter buttons, stale navigate("/editor") calls, legacy store dispatch, dead code cleanup
-**Gap Closure**: Closes integration gaps from v1.3 audit
-**Requirements**: DET-01, DET-03, FLAT-07, FLAT-08
-**Success Criteria**:
-  1. Clicking gutter play button in FileEditorShell generates and runs test scenarios (not a no-op)
-  2. file.new (Cmd+N), file.open (Cmd+O), edit.newTab (Cmd+T) all open files in the pane system
-  3. All navigate("/editor") call sites replaced with pane-store openFile/openApp calls
-  4. Dead PolicyEditor code removed; duplicate commands cleaned up
-**Plans**: 2 plans
-Plans:
-- [x] 11-01-PLAN.md — Wire gutter play button in FileEditorShell (onRunGuardTest + test runner dispatch) (complete)
-- [ ] 11-02-PLAN.md — Replace navigate("/editor") calls, fix edit.newTab, delete dead PolicyEditor, consolidate commands
-
-### Phase 12: Editor-to-Swarm Bridge
-**Goal**: Launch a swarm session directly from the policy editor or command palette, opening as a pane tab
-**Requirements**: SWARM-01, SWARM-02, SWARM-03
-**Success Criteria**:
-  1. "Launch Swarm" button in the editor toolbar spawns a new swarm session with the active policy
-  2. Swarm Board opens as a pane tab alongside the editor (split view)
-  3. Swarm session is pre-configured with the active policy and connected sentinels
-**Plans**: 1 plan
-Plans:
-- [ ] 12-01-PLAN.md — createSwarmBundleFromPolicy bridge, Launch Swarm toolbar button, swarm.launchFromEditor command
-
-### Phase 13: Real-Time Swarm Visualization
-**Goal**: Live agent coordination visible on the graph — receipts flowing, decisions animating
-**Depends on**: Phase 12
-**Requirements**: SWARM-04, SWARM-05, SWARM-06, SWARM-07
-**Success Criteria**:
-  1. Agent nodes pulse/glow when they evaluate a policy (real-time via SSE or polling)
-  2. Receipts appear as animated edges flowing between nodes
-  3. Trust graph updates live as agents join/leave or trust relationships change
-  4. Click a receipt edge to open the receipt inspector in a pane tab
-**Plans**: 2 plans
-Plans:
-- [ ] 13-01-PLAN.md — Policy evaluation glow on agent nodes, animated receipt edge flow with dash-offset
-- [ ] 13-02-PLAN.md — Live trust graph bridge (join/leave), receipt edge click opens inspector pane tab
-
-### Phase 14: Intel Pipeline Wiring & Completion
-**Goal**: Wire live signal feed from Fleet SSE to findings pipeline, mount auto-correlator, add Draft Policy Guard button, and implement bidirectional finding-detection links
-**Gap Closure**: Closes INTEL gaps from v1.3 re-audit
-**Requirements**: INTEL-01, INTEL-02, INTEL-03, INTEL-04, INTEL-06, INTEL-08
-**Success Criteria**:
-  1. Fleet SSE check events are bridged to signal-store via ingestSignal — findings panel shows live incoming signals
-  2. useSignalCorrelator hook is mounted in workbench root — signals auto-cluster into findings with severity scores
-  3. "Draft Policy Guard" button on a finding generates a guard config block from the finding's pattern
-  4. After drafting a detection from a finding, the finding is annotated with a link to the generated detection (bidirectional reference)
-**Plans**: 2 plans
-Plans:
-- [x] 14-01-PLAN.md — Fleet SSE check event bridge to signal-store, mount useSignalCorrelator, findings badge count (complete)
-- [x] 14-02-PLAN.md — Draft Guard button on findings, bidirectional finding-detection link via annotation (complete)
+### Phase 17: Command Modernization & Store Migration
+**Goal**: All components use direct Zustand store calls and the multi-policy-store bridge layer is deleted
+**Depends on**: Phase 15 (tests must pass before large refactor to catch regressions)
+**Requirements**: CMD-01, CMD-02, STORE-01, STORE-02, STORE-03, STORE-04, STORE-05
+**Success Criteria** (what must be TRUE):
+  1. Cmd+N (file.new) creates a new tab via usePolicyTabsStore.newTab() -- no newPolicy callback in the command registration
+  2. FileCommandDeps interface has no newPolicy field
+  3. split-editor.tsx and editor-home-tab.tsx import from policy-tabs-store/policy-edit-store directly (no useMultiPolicy)
+  4. Searching the codebase for "useMultiPolicy" and "useWorkbench" returns zero consumer call sites (only the deleted file itself)
+  5. multi-policy-store.tsx and MultiPolicyProvider are deleted from the source tree
+**Plans**: TBD
 
 ## Progress
 
-| Track | Phase | Status |
-|-------|-------|--------|
-| A. Fleet Dashboard | A1: Data Layer | Complete (1 plan) |
-| A. Fleet Dashboard | A2: Viz & Actions | Complete (1 plan) |
-| B. Swarm Board | B1: Editor Bridge | Complete (1 plan) |
-| B. Swarm Board | B2: Real-Time Viz | Complete (2 plans) |
-| C. Threat Intel | C1: Signal Clustering | Complete (2 plans) |
-| C. Threat Intel | C2: Promote-to-Detection | Complete (1 plan: C2-01) |
-| Gap Closure | Phase 11: Integration Wiring | Complete (2 plans) |
-| Gap Closure | Phase 12: Swarm Bridge | Complete (1 plan) |
-| Gap Closure | Phase 13: Swarm Viz | Complete (2 plans) |
-| Gap Closure | Phase 14: Intel Pipeline | Complete (2 plans) |
+| Phase | Plans Complete | Status | Completed |
+|-------|----------------|--------|-----------|
+| 15. Test Fixes | 0/TBD | Not started | - |
+| 16. Search, Terminal & Keybinding Fixes | 0/TBD | Not started | - |
+| 17. Command Modernization & Store Migration | 0/TBD | Not started | - |

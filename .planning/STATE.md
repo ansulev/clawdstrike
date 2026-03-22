@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: Audit)
 status: completed
-stopped_at: Completed 13-02-PLAN.md
-last_updated: "2026-03-22T03:14:40.933Z"
-last_activity: 2026-03-22 -- Phase 13 Plan 02 completed (phase complete)
+stopped_at: Completed 14-01-PLAN.md (Task 3 badge commit; Tasks 1-2 were prior commits)
+last_updated: "2026-03-22T23:23:13.616Z"
+last_activity: 2026-03-22 -- Phase 14 Plan 02 completed (phase complete, all v1.3 plans done)
 progress:
-  total_phases: 3
-  completed_phases: 3
-  total_plans: 5
-  completed_plans: 5
+  total_phases: 4
+  completed_phases: 4
+  total_plans: 7
+  completed_plans: 7
   percent: 100
 ---
 
@@ -24,10 +24,10 @@ See: .planning/PROJECT.md
 
 ## Current Position
 
-Phase: 13 (Realtime Swarm Visualization)
+Phase: 14 (Intel Pipeline Wiring)
 Plan: 2 of 2 -- COMPLETE
-Status: Phase Complete
-Last activity: 2026-03-22 -- Phase 13 Plan 02 completed (phase complete)
+Status: Phase Complete (Milestone v1.3 complete)
+Last activity: 2026-03-22 -- Phase 14 Plan 02 completed (phase complete, all v1.3 plans done)
 
 Progress: [██████████] 100%
 
@@ -80,7 +80,15 @@ Progress: [██████████] 100%
 - [Phase 13]: Receipt edge click uses usePaneStore.openApp for tab-based navigation
 - [Phase 13]: nodeEnter CSS animation 0.3s ease-out applied to .react-flow__node
 
+- [Phase 14-01]: SignalSource uses full object shape (sentinelId, guardId, externalFeed, provenance) not simple string
+- [Phase 14-01]: checkEventToSignal placed as module-level helper in use-fleet-connection.ts, not in reducer
+- [Phase 14-01]: Badge styled with #c45c5c red background and 0.4 box-shadow glow, caps at 99+
+- [Phase 14-02]: Gold (#d4a84b) Draft Guard button differentiates from blue (#6ea8d9) Draft Detection
+- [Phase 14-02]: Force clawdstrike_policy format via suggestedFormats hint with as-any cast
+- [Phase 14-02]: Post-draft annotation via useFindingStore.getState().actions.addAnnotation (Zustand out-of-React)
+- [Phase 14-02]: Annotation actor "detection_workflow" for traceability in finding timeline
+
 ## Session Continuity
 
-Last session: 2026-03-22T03:14:20.226Z
-Stopped at: Completed 13-02-PLAN.md
+Last session: 2026-03-22T23:16:20Z
+Stopped at: Completed 14-01-PLAN.md (Task 3 badge commit; Tasks 1-2 were prior commits)

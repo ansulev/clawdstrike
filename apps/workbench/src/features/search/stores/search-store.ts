@@ -90,6 +90,9 @@ const DEFAULT_OPTIONS: SearchOptions = {
   useRegex: false,
 };
 
+/** Tracks the in-flight search so a newer invocation can cancel a stale one. */
+let activeSearchController: AbortController | null = null;
+
 const useSearchStoreBase = create<SearchState>((set, get) => ({
   query: "",
   options: { ...DEFAULT_OPTIONS },
@@ -115,9 +118,18 @@ const useSearchStoreBase = create<SearchState>((set, get) => ({
     performSearch: async (rootPath: string) => {
       const { query, options } = get();
 
+      // Cancel any in-flight search before starting a new one
+      if (activeSearchController) {
+        activeSearchController.abort();
+      }
+      const controller = new AbortController();
+      activeSearchController = controller;
+      const queryAtDispatch = query;
+
       set({ loading: true, error: null });
 
       if (!query.trim()) {
+        activeSearchController = null;
         set({
           results: [],
           resultGroups: [],
@@ -137,6 +149,11 @@ const useSearchStoreBase = create<SearchState>((set, get) => ({
           options.wholeWord,
           options.useRegex,
         );
+
+        // Discard results if this search was aborted by a newer invocation
+        if (controller.signal.aborted) return;
+        // Staleness guard: query changed while we were waiting
+        if (queryAtDispatch !== get().query) return;
 
         if (result) {
           const matches = result.matches.map(mapTauriMatch);
@@ -160,7 +177,11 @@ const useSearchStoreBase = create<SearchState>((set, get) => ({
             loading: false,
           });
         }
+        activeSearchController = null;
       } catch (err) {
+        // If aborted by a newer search, exit silently
+        if (controller.signal.aborted) return;
+
         set({
           results: [],
           resultGroups: [],
@@ -170,6 +191,7 @@ const useSearchStoreBase = create<SearchState>((set, get) => ({
           error: err instanceof Error ? err.message : "Search failed",
           loading: false,
         });
+        activeSearchController = null;
       }
     },
 

@@ -53,7 +53,11 @@ Plans:
   3. split-editor.tsx and editor-home-tab.tsx import from policy-tabs-store/policy-edit-store directly (no useMultiPolicy)
   4. Searching the codebase for "useMultiPolicy" and "useWorkbench" returns zero consumer call sites (only the deleted file itself)
   5. multi-policy-store.tsx and MultiPolicyProvider are deleted from the source tree
-**Plans**: TBD
+**Plans:** 3 plans
+Plans:
+- [ ] 17-01-PLAN.md — Command modernization + helper hooks + heavy consumer migration (split-editor, editor-home-tab, init-commands, edit-commands)
+- [ ] 17-02-PLAN.md — Bulk consumer migration (~35 remaining files off bridge hooks)
+- [ ] 17-03-PLAN.md — Bridge deletion + bootstrap extraction + test file updates
 
 ## Progress
 
@@ -61,4 +65,4 @@ Plans:
 |-------|----------------|--------|-----------|
 | 15. Test Fixes | 0/1 | Planned | - |
 | 16. Search, Terminal & Keybinding Fixes | 0/1 | Planned | - |
-| 17. Command Modernization & Store Migration | 0/TBD | Not started | - |
+| 17. Command Modernization & Store Migration | 0/3 | Planned | - |

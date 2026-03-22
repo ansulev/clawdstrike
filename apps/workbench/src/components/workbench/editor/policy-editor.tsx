@@ -68,6 +68,8 @@ import { useCoverageGaps } from "@/lib/workbench/detection-workflow/use-coverage
 import { buildOpenDocumentCoverage } from "@/lib/workbench/detection-workflow/coverage-projection";
 import { usePublishedCoverage } from "@/lib/workbench/detection-workflow/use-published-coverage";
 import { usePublication } from "@/lib/workbench/detection-workflow/use-publication";
+import { useTranslation } from "@/lib/workbench/detection-workflow/use-translation";
+import { TranslationResultsPanel } from "@/components/workbench/editor/translation-results-panel";
 import type { CoverageGapCandidate } from "@/lib/workbench/detection-workflow/shared-types";
 import type { TestActionType, Verdict } from "@/lib/workbench/types";
 import type { AgentEvent } from "@/lib/workbench/hunt-types";
@@ -402,6 +404,16 @@ export function PolicyEditor() {
     publicationManifest: latestManifest,
     onNavigate: (path) => navigate(path),
   });
+
+  // Translation hook for format-to-format conversion via command palette
+  const { translate, result: translationResult, clearResult: clearTranslation } = useTranslation();
+  const [translationTargetFileType, setTranslationTargetFileType] = useState<string>("");
+
+  const handleTranslate = useCallback(async (targetFileType: string) => {
+    if (!activeTab) return;
+    setTranslationTargetFileType(targetFileType);
+    await translate(activeTab.yaml, activeTab.fileType, targetFileType);
+  }, [activeTab, translate]);
 
   const coverageObservedEvents = useMemo<AgentEvent[]>(() => {
     if (!activeTab) return [];
@@ -1090,6 +1102,16 @@ export function PolicyEditor() {
                     <div className="flex-1 min-h-0">
                       <SplitEditor />
                     </div>
+                    {translationResult && (
+                      <div className="border-t border-[#2d3240] max-h-[40vh] overflow-y-auto shrink-0">
+                        <TranslationResultsPanel
+                          result={translationResult}
+                          sourceFileType={activeTab?.fileType ?? ""}
+                          targetFileType={translationTargetFileType}
+                          onClose={clearTranslation}
+                        />
+                      </div>
+                    )}
                   </div>
                 </ResizablePanel>
                 <ResizableHandle
@@ -1110,6 +1132,16 @@ export function PolicyEditor() {
                 <div className="flex-1 min-h-0">
                   <SplitEditor />
                 </div>
+                {translationResult && (
+                  <div className="border-t border-[#2d3240] max-h-[40vh] overflow-y-auto shrink-0">
+                    <TranslationResultsPanel
+                      result={translationResult}
+                      sourceFileType={activeTab?.fileType ?? ""}
+                      targetFileType={translationTargetFileType}
+                      onClose={clearTranslation}
+                    />
+                  </div>
+                )}
                 {showProblems && (
                   <div className="h-[180px] shrink-0">
                     <ProblemsPanel diagnostics={problems} className="h-full" />
@@ -1144,6 +1176,8 @@ export function PolicyEditor() {
           }}
           onValidate={handleValidateCurrentFile}
           onToggleCoverage={() => setShowCoverage((prev) => !prev)}
+          onTranslate={handleTranslate}
+          currentFileType={activeTab?.fileType}
         />
 
         <VersionDiffDialog

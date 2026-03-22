@@ -90,6 +90,24 @@ export interface ViewsApi {
   registerStatusBarWidget(contribution: StatusBarWidgetViewContribution): Disposable;
 }
 
+// ---- Secrets API ----
+
+/**
+ * API for plugin-scoped secret/credential storage.
+ * Keys are automatically prefixed with `plugin:{pluginId}:` by the workbench.
+ * Backed by the secure store (Stronghold on desktop, in-memory fallback on web).
+ */
+export interface SecretsApi {
+  /** Retrieve a secret by key. Returns null if not set. */
+  get(key: string): Promise<string | null>;
+  /** Store a secret by key. */
+  set(key: string, value: string): Promise<void>;
+  /** Delete a secret by key. */
+  delete(key: string): Promise<void>;
+  /** Check if a secret exists for key. */
+  has(key: string): Promise<boolean>;
+}
+
 // ---- PluginContext ----
 
 /**
@@ -118,4 +136,6 @@ export interface PluginContext {
   storage: StorageApi;
   /** View registration API for contributing to UI slots. */
   views: ViewsApi;
+  /** Plugin-scoped secret/credential storage API. */
+  secrets: SecretsApi;
 }

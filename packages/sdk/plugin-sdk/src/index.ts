@@ -75,8 +75,18 @@ export type {
   SidebarApi,
   StorageApi,
   ViewsApi,
+  SecretsApi,
   PluginContext,
 } from "./context";
+
+// ---- Threat Intelligence ----
+export type {
+  IndicatorType,
+  Indicator,
+  ThreatVerdict,
+  EnrichmentResult,
+  ThreatIntelSource,
+} from "./threat-intel-types";
 
 // ---- Factory ----
 export { createPlugin } from "./create-plugin";

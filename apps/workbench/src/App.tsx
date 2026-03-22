@@ -12,6 +12,7 @@ import { secureStore, migrateCredentialsToStronghold } from "@/features/settings
 import { useProjectStore } from "@/features/project/stores/project-store";
 import { useToast } from "@/components/ui/toast";
 import { usePaneStore } from "@/features/panes/pane-store";
+import { useSignalCorrelator } from "@/features/findings/hooks/use-signal-correlator";
 
 function LoadingFallback() {
   return (
@@ -154,6 +155,7 @@ function WorkbenchBootstraps() {
   useFleetConnection();
   useHintSettingsSafe();
   useMultiPolicyBootstrap();
+  useSignalCorrelator();
   useWorkspaceBootstrap(toastRef);
   return null;
 }

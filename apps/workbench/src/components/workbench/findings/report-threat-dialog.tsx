@@ -1,10 +1,3 @@
-/**
- * Report Threat Dialog
- *
- * Allows operators to report confirmed-malicious indicators
- * to AbuseIPDB or MISP directly from the finding detail view.
- */
-
 import { useState, useMemo, useCallback } from "react";
 import {
   IconAlertTriangle,
@@ -21,8 +14,6 @@ import {
 import type { ReportResult } from "@/lib/workbench/threat-reporting";
 import { IOC_TYPE_COLORS } from "@/lib/workbench/ioc-constants";
 
-// ---- Types ----
-
 type ReportTarget = "abuseipdb" | "misp";
 
 interface ReportThreatDialogProps {
@@ -34,8 +25,6 @@ interface ReportThreatDialogProps {
   mispBaseUrl?: string;
 }
 
-// ---- AbuseIPDB Category Definitions ----
-
 const ABUSEIPDB_CATEGORIES = [
   { id: 14, label: "Port Scan" },
   { id: 15, label: "Brute Force" },
@@ -43,8 +32,6 @@ const ABUSEIPDB_CATEGORIES = [
   { id: 21, label: "Exploited Host" },
   { id: 22, label: "SSH Brute Force" },
 ] as const;
-
-// ---- Component ----
 
 export function ReportThreatDialog({
   open,
@@ -157,21 +144,18 @@ export function ReportThreatDialog({
       className="fixed inset-0 z-50 flex items-center justify-center"
       onKeyDown={(e) => e.key === "Escape" && onClose()}
     >
-      {/* Overlay */}
       <div
         aria-hidden="true"
         className="absolute inset-0 bg-black/60"
         onClick={onClose}
       />
 
-      {/* Dialog */}
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby="report-dialog-title"
         className="relative z-10 w-full max-w-md rounded-lg border border-[#2d3240] bg-[#0b0d13] shadow-xl"
       >
-        {/* Header */}
         <div className="flex items-center justify-between border-b border-[#2d3240]/60 px-5 py-3.5">
           <div className="flex items-center gap-2">
             <IconAlertTriangle size={15} className="text-[#d4a84b]" stroke={1.5} />
@@ -185,9 +169,7 @@ export function ReportThreatDialog({
           </button>
         </div>
 
-        {/* Body */}
         <div className="px-5 py-4 flex flex-col gap-4 max-h-[70vh] overflow-y-auto">
-          {/* Target Selector */}
           <div>
             <label className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[#6f7f9a]/50 mb-2 block">
               Report to
@@ -208,7 +190,6 @@ export function ReportThreatDialog({
             </div>
           </div>
 
-          {/* Indicator Selector */}
           <div>
             <label className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[#6f7f9a]/50 mb-2 block">
               Indicator
@@ -252,7 +233,6 @@ export function ReportThreatDialog({
             )}
           </div>
 
-          {/* AbuseIPDB: Category checkboxes */}
           {selectedTarget === "abuseipdb" && (
             <div>
               <label className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[#6f7f9a]/50 mb-2 block">
@@ -281,7 +261,6 @@ export function ReportThreatDialog({
             </div>
           )}
 
-          {/* MISP: Event info text field */}
           {selectedTarget === "misp" && (
             <div>
               <label className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[#6f7f9a]/50 mb-2 block">
@@ -297,7 +276,6 @@ export function ReportThreatDialog({
             </div>
           )}
 
-          {/* Comment textarea */}
           <div>
             <label className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[#6f7f9a]/50 mb-2 block">
               Comment
@@ -311,7 +289,6 @@ export function ReportThreatDialog({
             />
           </div>
 
-          {/* Result message */}
           {result && (
             <div
               className="rounded-md border px-3 py-2.5"
@@ -338,7 +315,6 @@ export function ReportThreatDialog({
           )}
         </div>
 
-        {/* Footer */}
         <div className="flex items-center justify-end gap-2 border-t border-[#2d3240]/60 px-5 py-3">
           <button
             onClick={onClose}
@@ -375,8 +351,6 @@ export function ReportThreatDialog({
   );
 }
 
-// ---- Sub-components ----
-
 function TargetButton({
   label,
   active,
@@ -402,8 +376,6 @@ function TargetButton({
     </button>
   );
 }
-
-// ---- Helpers ----
 
 function mapFindingSeverity(
   severity: string,

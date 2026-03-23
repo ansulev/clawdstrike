@@ -28,7 +28,6 @@ interface EnrichmentSidebarProps {
   enrichments: Enrichment[];
   onRunEnrichment?: () => void;
   onPivotEnrich?: (type: string, value: string) => void;
-  // New streaming props:
   sourceStatuses?: EnrichmentSourceStatus[];
   isEnriching?: boolean;
   onCancel?: () => void;
@@ -131,7 +130,6 @@ export const EnrichmentSidebar = memo(function EnrichmentSidebar({
       </div>
 
       <div className="flex-1 overflow-y-auto">
-        {/* Streaming threat intel sources section at top */}
         {hasStreamingStatuses && (
           <div className="border-b border-[#2d3240]/40">
             <div className="flex items-center gap-2 px-4 py-2.5">
@@ -163,7 +161,6 @@ export const EnrichmentSidebar = memo(function EnrichmentSidebar({
           </div>
         )}
 
-        {/* Existing enrichment groups */}
         {enrichments.length === 0 && !hasStreamingStatuses ? (
           <div className="flex flex-col items-center justify-center h-48 px-4">
             <IconFlask size={24} className="text-[#6f7f9a]/15 mb-2" stroke={1.5} />
@@ -190,8 +187,6 @@ export const EnrichmentSidebar = memo(function EnrichmentSidebar({
   );
 });
 
-// ---- Source Status Card (streaming) ----
-
 function SourceStatusCard({
   sourceStatus,
 }: {
@@ -213,7 +208,6 @@ function SourceStatusCard({
           </span>
           <span className="text-[9px] text-[#6f7f9a]/30 ml-auto">loading...</span>
         </div>
-        {/* Skeleton loader bars with pulse animation */}
         <div className="flex flex-col gap-1.5">
           <div className="h-3 rounded bg-[#2d3240]/40 animate-pulse" />
           <div className="h-3 rounded bg-[#2d3240]/40 animate-pulse w-3/4" />
@@ -268,8 +262,6 @@ function SourceStatusCard({
   return null;
 }
 
-// ---- ThreatIntelContent renderer ----
-
 function ThreatIntelContent({
   result,
 }: {
@@ -289,7 +281,6 @@ function ThreatIntelContent({
 
   return (
     <div>
-      {/* Verdict badge */}
       <div className="flex items-center gap-2 mb-2">
         <span
           className="rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase border"
@@ -303,7 +294,6 @@ function ThreatIntelContent({
         </span>
       </div>
 
-      {/* Confidence bar */}
       <div className="flex items-center gap-2 mb-2">
         <span className="text-[9px] text-[#6f7f9a]/40 shrink-0">Confidence</span>
         <div className="flex-1 h-1.5 rounded-full bg-[#2d3240]/30 overflow-hidden">
@@ -320,12 +310,10 @@ function ThreatIntelContent({
         </span>
       </div>
 
-      {/* Summary -- safe: React escapes string children by default (no dangerouslySetInnerHTML) */}
       <p className="text-[10px] text-[#ece7dc]/60 leading-relaxed mb-1.5">
         {result.verdict.summary}
       </p>
 
-      {/* Footer: permalink + source */}
       <div className="flex items-center gap-2 pt-1.5 border-t border-[#2d3240]/30">
         {result.permalink && (
           <a
@@ -345,8 +333,6 @@ function ThreatIntelContent({
     </div>
   );
 }
-
-// ---- Existing code (unchanged) ----
 
 function groupByType(enrichments: Enrichment[]): Record<string, Enrichment[]> {
   const groups: Record<string, Enrichment[]> = {};
@@ -743,7 +729,7 @@ function formatValue(value: unknown): string {
   if (value === null || value === undefined) return "-";
   if (typeof value === "string") return value;
   if (typeof value === "number") return value.toLocaleString();
-  if (typeof value === "boolean") return value ? "true" : "false";
+  if (typeof value === "boolean") return String(value);
   if (Array.isArray(value)) return `[${value.length} items]`;
   if (typeof value === "object") return JSON.stringify(value);
   return String(value);

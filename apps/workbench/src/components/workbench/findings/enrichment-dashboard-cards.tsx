@@ -1,12 +1,3 @@
-/**
- * Enrichment Dashboard Cards -- subcomponents for the intelligence dashboard.
- *
- * Three card types:
- * - CrossFindingIndicatorsCard: IOCs shared across multiple findings
- * - VerdictsBySourceCard: per-source verdict breakdown with stacked bars
- * - SourceHealthCard: source health status with quota bars
- */
-
 import type { IndicatorAggregation, VerdictSummary, SourceHealthStatus } from "@/lib/workbench/enrichment-aggregator";
 import { IOC_TYPE_COLORS } from "@/lib/workbench/ioc-constants";
 
@@ -23,10 +14,6 @@ const HEALTH_COLORS: Record<string, string> = {
   unhealthy: "#c45c5c",
 };
 
-// ---------------------------------------------------------------------------
-// CrossFindingIndicatorsCard
-// ---------------------------------------------------------------------------
-
 interface CrossFindingIndicatorsCardProps {
   aggregations: IndicatorAggregation[];
 }
@@ -34,7 +21,6 @@ interface CrossFindingIndicatorsCardProps {
 export function CrossFindingIndicatorsCard({ aggregations }: CrossFindingIndicatorsCardProps) {
   return (
     <div className="rounded-lg border border-[#2d3240]/40 bg-[#131721] p-4">
-      {/* Header */}
       <div className="flex items-center gap-2 mb-3">
         <h3 className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[#6f7f9a]/50">
           Cross-Finding Indicators
@@ -46,7 +32,6 @@ export function CrossFindingIndicatorsCard({ aggregations }: CrossFindingIndicat
         )}
       </div>
 
-      {/* Content */}
       {aggregations.length === 0 ? (
         <p className="text-[10px] text-[#6f7f9a]/30 text-center py-4">
           No indicators shared across findings
@@ -64,7 +49,6 @@ export function CrossFindingIndicatorsCard({ aggregations }: CrossFindingIndicat
                   borderColor: isHighlighted ? "#d4a84b30" : "#2d324030",
                 }}
               >
-                {/* IOC type badge */}
                 <span
                   className="shrink-0 rounded px-1.5 py-0.5 text-[8px] font-semibold uppercase border"
                   style={{
@@ -76,12 +60,10 @@ export function CrossFindingIndicatorsCard({ aggregations }: CrossFindingIndicat
                   {agg.iocType}
                 </span>
 
-                {/* Indicator value */}
                 <span className="font-mono text-[10px] text-[#ece7dc]/60 truncate flex-1 min-w-0">
                   {agg.indicator}
                 </span>
 
-                {/* Count badge */}
                 <span
                   className="shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-semibold border"
                   style={{
@@ -101,10 +83,6 @@ export function CrossFindingIndicatorsCard({ aggregations }: CrossFindingIndicat
   );
 }
 
-// ---------------------------------------------------------------------------
-// VerdictsBySourceCard
-// ---------------------------------------------------------------------------
-
 interface VerdictsBySourceCardProps {
   summaries: VerdictSummary[];
 }
@@ -112,14 +90,12 @@ interface VerdictsBySourceCardProps {
 export function VerdictsBySourceCard({ summaries }: VerdictsBySourceCardProps) {
   return (
     <div className="rounded-lg border border-[#2d3240]/40 bg-[#131721] p-4">
-      {/* Header */}
       <div className="flex items-center gap-2 mb-3">
         <h3 className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[#6f7f9a]/50">
           Verdicts by Source
         </h3>
       </div>
 
-      {/* Content */}
       {summaries.length === 0 ? (
         <p className="text-[10px] text-[#6f7f9a]/30 text-center py-4">
           No enrichment data available
@@ -148,7 +124,6 @@ function VerdictSourceRow({ summary }: { summary: VerdictSummary }) {
 
   return (
     <div>
-      {/* Source name + total */}
       <div className="flex items-center justify-between mb-1.5">
         <span className="text-[10px] font-medium text-[#ece7dc]/60">
           {summary.sourceName}
@@ -158,7 +133,6 @@ function VerdictSourceRow({ summary }: { summary: VerdictSummary }) {
         </span>
       </div>
 
-      {/* Stacked bar */}
       <div className="flex h-2 rounded-full overflow-hidden bg-[#2d3240]/30">
         {segments.map((seg) => (
           <div
@@ -173,7 +147,6 @@ function VerdictSourceRow({ summary }: { summary: VerdictSummary }) {
         ))}
       </div>
 
-      {/* Verdict counts */}
       <div className="flex gap-3 mt-1.5">
         {segments.map((seg) => (
           <span
@@ -189,10 +162,6 @@ function VerdictSourceRow({ summary }: { summary: VerdictSummary }) {
   );
 }
 
-// ---------------------------------------------------------------------------
-// SourceHealthCard
-// ---------------------------------------------------------------------------
-
 interface SourceHealthCardProps {
   statuses: SourceHealthStatus[];
 }
@@ -200,14 +169,12 @@ interface SourceHealthCardProps {
 export function SourceHealthCard({ statuses }: SourceHealthCardProps) {
   return (
     <div className="rounded-lg border border-[#2d3240]/40 bg-[#131721] p-4">
-      {/* Header */}
       <div className="flex items-center gap-2 mb-3">
         <h3 className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[#6f7f9a]/50">
           Source Health
         </h3>
       </div>
 
-      {/* Content */}
       {statuses.length === 0 ? (
         <p className="text-[10px] text-[#6f7f9a]/30 text-center py-4">
           No sources configured
@@ -228,9 +195,7 @@ function SourceHealthRow({ status }: { status: SourceHealthStatus }) {
 
   return (
     <div className="rounded border border-[#2d3240]/30 bg-[#05060a] px-2.5 py-2">
-      {/* Name + health dot */}
       <div className="flex items-center gap-2 mb-1.5">
-        {/* Health indicator dot */}
         <span
           className="shrink-0 w-2 h-2 rounded-full"
           style={{ backgroundColor: healthColor }}
@@ -246,7 +211,6 @@ function SourceHealthRow({ status }: { status: SourceHealthStatus }) {
         </span>
       </div>
 
-      {/* Quota bar */}
       <div className="flex items-center gap-2 mb-1">
         <span className="text-[9px] text-[#6f7f9a]/40 shrink-0 w-[40px]">Quota</span>
         <div className="flex-1 h-1.5 rounded-full bg-[#2d3240]/30 overflow-hidden">
@@ -263,7 +227,6 @@ function SourceHealthRow({ status }: { status: SourceHealthStatus }) {
         </span>
       </div>
 
-      {/* Details row */}
       <div className="flex items-center gap-3 text-[8px] text-[#6f7f9a]/30">
         <span>
           {status.quotaUsed}/{status.quotaTotal} used

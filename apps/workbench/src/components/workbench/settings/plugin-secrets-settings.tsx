@@ -15,8 +15,6 @@ import { pluginRegistry } from "@/lib/plugins/plugin-registry";
 import type { RegisteredPlugin } from "@/lib/plugins/types";
 import type { PluginSecretDeclaration } from "@/lib/plugins/types";
 
-// ---- Helpers ----
-
 function getIntelPlugins(): RegisteredPlugin[] {
   return pluginRegistry.getAll().filter((p) =>
     p.manifest.categories.includes("intel"),
@@ -26,8 +24,6 @@ function getIntelPlugins(): RegisteredPlugin[] {
 function secretStoreKey(pluginId: string, secretKey: string): string {
   return `plugin:${pluginId}:${secretKey}`;
 }
-
-// ---- Per-Secret Field ----
 
 interface SecretFieldProps {
   pluginId: string;
@@ -178,8 +174,6 @@ function SecretField({ pluginId, secret }: SecretFieldProps) {
   );
 }
 
-// ---- Per-Plugin Card ----
-
 interface PluginCardProps {
   plugin: RegisteredPlugin;
 }
@@ -232,8 +226,6 @@ function PluginCard({ plugin }: PluginCardProps) {
     </div>
   );
 }
-
-// ---- Main Component ----
 
 export function PluginSecretsSettings() {
   const intelPlugins = getIntelPlugins();

@@ -1,16 +1,6 @@
-/**
- * Plugin Audit Viewer
- *
- * Displays plugin action receipts in a filterable table with visual
- * distinction for denied/error receipts. Supports filtering by
- * plugin ID, action type, and result.
- */
-
 import { useState, useMemo } from "react";
 import { usePluginReceipts } from "@/lib/plugins/bridge/receipt-store";
 import type { PluginActionReceipt } from "@/lib/plugins/bridge/receipt-types";
-
-// ---- Styling Constants ----
 
 const RESULT_CLASSES: Record<string, string> = {
   allowed: "text-green-500",
@@ -20,8 +10,6 @@ const RESULT_CLASSES: Record<string, string> = {
 
 const TH =
   "px-3 py-2.5 text-left text-[9px] uppercase tracking-[0.08em] font-semibold text-[#6f7f9a]/80";
-
-// ---- Helpers ----
 
 function formatTime(iso: string): string {
   try {
@@ -36,19 +24,15 @@ function formatTime(iso: string): string {
   }
 }
 
-// ---- Component ----
-
 export function PluginAuditViewer() {
   const { receipts, clearReceipts } = usePluginReceipts();
 
-  // Filter state
   const [pluginFilter, setPluginFilter] = useState("");
   const [actionFilter, setActionFilter] = useState("");
   const [resultFilter, setResultFilter] = useState<
     "" | "allowed" | "denied" | "error"
   >("");
 
-  // Apply filters
   const filteredReceipts = useMemo(() => {
     let result: PluginActionReceipt[] = receipts;
 
@@ -77,7 +61,6 @@ export function PluginAuditViewer() {
 
   return (
     <div className="flex h-full w-full flex-col overflow-hidden bg-[#05060a]">
-      {/* Filter bar */}
       <div className="shrink-0 border-b border-[#2d3240]/60 px-4 py-2 flex items-center gap-3">
         <input
           type="text"
@@ -115,7 +98,6 @@ export function PluginAuditViewer() {
         </button>
       </div>
 
-      {/* Table or empty state */}
       <div className="flex-1 overflow-auto">
         {filteredReceipts.length === 0 ? (
           <div className="flex h-full items-center justify-center">
@@ -149,8 +131,6 @@ export function PluginAuditViewer() {
     </div>
   );
 }
-
-// ---- Row Component ----
 
 function ReceiptRow({ receipt }: { receipt: PluginActionReceipt }) {
   const { content } = receipt;

@@ -1,13 +1,8 @@
 import type { Enrichment } from "@/lib/workbench/finding-engine";
 
-// ---- Source Badge Configuration ----
-
 interface SourceBadgeConfig {
-  /** Abbreviated display text. */
   abbr: string;
-  /** Brand text/border color. */
   color: string;
-  /** Badge background color (color at ~8% opacity). */
   bg: string;
 }
 
@@ -34,8 +29,6 @@ function getSourceConfig(source: string): SourceBadgeConfig {
   };
 }
 
-// ---- Component ----
-
 export interface EnrichmentBadgesProps {
   enrichments: Enrichment[];
 }
@@ -43,7 +36,6 @@ export interface EnrichmentBadgesProps {
 export function EnrichmentBadges({ enrichments }: EnrichmentBadgesProps) {
   if (enrichments.length === 0) return null;
 
-  // Extract unique sources
   const seenSources = new Set<string>();
   const uniqueSources: string[] = [];
   for (const enrichment of enrichments) {

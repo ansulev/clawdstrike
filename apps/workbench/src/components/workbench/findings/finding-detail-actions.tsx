@@ -1,12 +1,4 @@
-/**
- * Finding Detail Actions Bar
- *
- * Renders action buttons for a finding's detail view, including
- * lifecycle transitions and threat reporting. The "Report to..."
- * button only appears for confirmed findings.
- */
-
-import { useState, useCallback, useMemo } from "react";
+import { useState, useMemo } from "react";
 import {
   IconCheck,
   IconBan,
@@ -17,8 +9,6 @@ import {
 import type { Finding, ExtractedIoc } from "@/lib/workbench/finding-engine";
 import { ReportThreatDialog } from "./report-threat-dialog";
 
-// ---- Types ----
-
 interface FindingDetailActionsProps {
   finding: Finding;
   onConfirm: (findingId: string) => void;
@@ -28,8 +18,6 @@ interface FindingDetailActionsProps {
   getApiKey: (service: string) => Promise<string | null>;
   mispBaseUrl?: string;
 }
-
-// ---- Component ----
 
 export function FindingDetailActions({
   finding,
@@ -42,7 +30,6 @@ export function FindingDetailActions({
 }: FindingDetailActionsProps) {
   const [showReportDialog, setShowReportDialog] = useState(false);
 
-  // Extract IOC indicators from finding enrichments
   const indicators = useMemo<ExtractedIoc[]>(() => {
     const iocEnrichments = finding.enrichments.filter(
       (e) => e.type === "ioc_extraction",
@@ -55,13 +42,8 @@ export function FindingDetailActions({
     return allIndicators;
   }, [finding.enrichments]);
 
-  const handleOpenReport = useCallback(() => {
-    setShowReportDialog(true);
-  }, []);
-
-  const handleCloseReport = useCallback(() => {
-    setShowReportDialog(false);
-  }, []);
+  const handleOpenReport = () => setShowReportDialog(true);
+  const handleCloseReport = () => setShowReportDialog(false);
 
   return (
     <>
@@ -117,8 +99,6 @@ export function FindingDetailActions({
     </>
   );
 }
-
-// ---- Sub-components ----
 
 function ActionButton({
   label,

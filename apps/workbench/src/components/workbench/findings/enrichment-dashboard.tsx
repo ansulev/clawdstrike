@@ -1,14 +1,3 @@
-/**
- * Enrichment Dashboard -- cross-finding intelligence overview.
- *
- * Displays three aggregation views:
- * 1. Cross-finding indicators (IOCs shared across findings)
- * 2. Verdict breakdown by source (stacked bars)
- * 3. Source health status (quota bars and health dots)
- *
- * All data is computed from the provided findings via pure aggregation functions.
- */
-
 import { useMemo } from "react";
 import type { Finding } from "@/lib/workbench/finding-engine";
 import {
@@ -23,18 +12,10 @@ import {
   SourceHealthCard,
 } from "./enrichment-dashboard-cards";
 
-// ---------------------------------------------------------------------------
-// Props
-// ---------------------------------------------------------------------------
-
 interface EnrichmentDashboardProps {
   findings: Finding[];
   sourceHealthInputs?: SourceHealthInput[];
 }
-
-// ---------------------------------------------------------------------------
-// Component
-// ---------------------------------------------------------------------------
 
 export function EnrichmentDashboard({
   findings,
@@ -57,7 +38,6 @@ export function EnrichmentDashboard({
 
   return (
     <div className="flex flex-col h-full overflow-y-auto">
-      {/* Header */}
       <div className="shrink-0 px-4 py-3 border-b border-[#2d3240]/60">
         <h2 className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[#6f7f9a]/50">
           Intelligence Dashboard
@@ -67,7 +47,6 @@ export function EnrichmentDashboard({
         </span>
       </div>
 
-      {/* Cards grid */}
       <div className="flex-1 p-4">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           <CrossFindingIndicatorsCard aggregations={indicatorAggregations} />

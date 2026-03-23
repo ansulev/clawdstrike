@@ -117,6 +117,13 @@ None - no external service configuration required.
 - Phase 19 (Client Connection & Store) can build the Zustand store that connects to this endpoint
 - Wire protocol (ServerMessage/ClientMessage) is fully specified with JSON type discriminators
 
+## Self-Check: PASSED
+
+- FOUND: crates/services/hushd/src/api/presence.rs
+- FOUND: .planning/phases/18-server-foundation/18-01-SUMMARY.md
+- FOUND: commit 8c468185e (Task 1)
+- FOUND: commit 339dbbf14 (Task 2)
+
 ---
 *Phase: 18-server-foundation*
 *Completed: 2026-03-23*

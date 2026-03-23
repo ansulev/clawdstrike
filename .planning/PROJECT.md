@@ -2,7 +2,7 @@
 
 ## What This Is
 
-ClawdStrike Workbench is a Tauri 2 + React 19 desktop security operations IDE — policy authoring, threat simulation, compliance scoring, fleet management, swarm orchestration, and receipt verification. VS Code/Cursor-like layout with activity bar, splittable panes, file tree, and panel system. Live features include real-time fleet monitoring via SSE, swarm board with animated graph visualization, and automated threat intelligence pipeline.
+ClawdStrike Workbench is a Tauri 2 + React 19 desktop security operations IDE — policy authoring, threat simulation, compliance scoring, fleet management, swarm orchestration, receipt verification, and real-time analyst collaboration. VS Code/Cursor-like layout with activity bar, splittable panes, file tree, and panel system. Live features include real-time fleet monitoring via SSE, swarm board with animated graph visualization, automated threat intelligence pipeline, and multiplayer presence with colored cursors in shared policy editors.
 
 ## Core Value
 
@@ -49,25 +49,20 @@ Security operators can work across multiple views simultaneously — policy edit
 - ✓ Terminal dynamic sizing — v1.4
 - ✓ Meta+W keybinding conflict resolved — v1.4
 - ✓ Multi-policy-store bridge deleted, all consumers migrated — v1.4
+- ✓ hushd PresenceHub with WebSocket endpoint, room management, heartbeat timeout — v2.0
+- ✓ PresenceSocket client with jittered backoff reconnect, presence-store Zustand — v2.0
+- ✓ Status bar connection indicator, pane tab dots, activity bar pills, analyst roster panel — v2.0
+- ✓ Speakeasy presence context ("N analysts viewing this file") — v2.0
+- ✓ CodeMirror remote cursors (colored carets), selection highlights, hover name labels — v2.0
+- ✓ File room membership wiring (view_file/leave_file + path normalization) — v2.0
 
 ### Active
 
-- [ ] WebSocket connection manager for hushd presence channel
-- [ ] Analyst presence protocol (join/leave/heartbeat/viewing)
-- [ ] Presence indicators in activity bar and sidebar
-- [ ] Cursor/selection awareness in CodeMirror editors
-- [ ] Presence-aware Speakeasy chat integration
+(None — planning next milestone)
 
-## Current Milestone: v2.0 Presence & Awareness
+## Current State
 
-**Goal:** Add real-time analyst presence and awareness to the workbench — WebSocket connection to hushd, presence protocol, colored cursors in CodeMirror, and presence indicators across the UI. Foundation for collaborative threat hunting (Tracks B-D).
-
-**Target features:**
-- WebSocket connection manager with reconnection, auth reuse from fleet SSE
-- Analyst presence protocol (who's online, what file they're viewing, cursor position)
-- Colored cursor/selection awareness in CodeMirror editors
-- Presence indicators in activity bar, sidebar panels, and pane tabs
-- Presence integration with existing Speakeasy chat
+v2.0 Presence & Awareness shipped. The workbench now supports real-time analyst collaboration with WebSocket-based presence, colored cursors in shared policy editors, and presence indicators across the UI. Foundation laid for Tracks B-D (shared investigations, co-editing, orchestration).
 
 ### Out of Scope
 
@@ -79,6 +74,9 @@ Security operators can work across multiple views simultaneously — policy edit
 - Custom themes — dark-only for now
 
 ## Context
+
+### v2.0 Milestone Complete (2026-03-23)
+5 phases (18-22), 8 plans. hushd PresenceHub with axum WebSocket, PresenceSocket client with jittered backoff, presence-store Zustand, status bar/tab dots/activity pills/roster panel/Speakeasy presence, CodeMirror remote cursors with Facet+StateEffect, file room membership wiring. Zero new dependencies — all built on existing axum WS + CM6 ViewPlugin + Zustand.
 
 ### v1.4 Milestone Complete (2026-03-23)
 3 phases, 5 plans. Fixed broken tests, search race condition, terminal sizing, Meta+W conflict. Migrated all components off multi-policy-store bridge. Deleted 975-line bridge layer. Code review + production polish pass.
@@ -127,6 +125,12 @@ Filter bar phase completed. Remaining 15 requirements deferred — explorer poli
 | Fleet SSE → signal-store bridge | Live signals feed automated finding pipeline | ✓ Good |
 | Post-draft annotation for finding links | Bidirectional link without schema changes | ✓ Good |
 | multi-policy-store bridge decomposition | 3 focused stores > 1 monolith; migration helper hooks | ✓ Good |
+| Awareness-only (no CRDT/OT) | Ed25519 signed receipts require single-author provenance | ✓ Good |
+| Native browser WebSocket (not tauri-plugin) | Avoids IPC overhead for same-origin connections | ✓ Good |
+| Facet+StateEffect for CM6 cursors | Prevents extension rebuild storm on cursor updates | ✓ Good |
+| Imperative PresenceSocket (not React hook) | Matches FleetEventStream pattern; survives component remounts | ✓ Good |
+| Server-assigned colors, 8-color palette | Deterministic per session; no collision logic needed | ✓ Good |
+| toPresencePath client normalization | Mirrors server normalize_path for consistent room keys | ✓ Good |
 
 ---
-*Last updated: 2026-03-23 after v1.4 milestone complete, v2.0 started*
+*Last updated: 2026-03-23 after v2.0 milestone complete*

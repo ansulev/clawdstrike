@@ -9,11 +9,16 @@ import { useState, useCallback, useEffect, useRef, useMemo, useSyncExternalStore
 import { motion } from "motion/react";
 import { IconSearch, IconFile, IconClock } from "@tabler/icons-react";
 import { cn } from "@/lib/utils";
-import { useProjectStore, type ProjectFile } from "@/features/project/stores/project-store";
+import {
+  useProjectStore,
+  type DetectionProject,
+  type ProjectFile,
+} from "@/features/project/stores/project-store";
 import { getRecentFiles } from "@/features/policy/stores/policy-store";
 import { usePolicyTabsStore, pushRecentFile } from "@/features/policy/stores/policy-tabs-store";
 import { readDetectionFileByPath } from "@/lib/tauri-bridge";
 import { usePaneStore } from "@/features/panes/pane-store";
+import { joinWorkspacePath, normalizeWorkspacePath } from "@/lib/workbench/path-utils";
 
 // ---- Visibility state (module-level, no separate store file) ----
 
@@ -61,8 +66,33 @@ export function flattenProjectFiles(files: ProjectFile[]): ProjectFile[] {
   return result;
 }
 
+interface QuickOpenFile {
+  path: string;
+  displayPath: string;
+  name: string;
+  fileType: ProjectFile["fileType"];
+}
+
+function flattenWorkspaceFiles(projects: DetectionProject[]): QuickOpenFile[] {
+  const multiRoot = projects.length > 1;
+  const result: QuickOpenFile[] = [];
+
+  for (const project of projects) {
+    for (const file of flattenProjectFiles(project.files)) {
+      result.push({
+        path: joinWorkspacePath(project.rootPath, file.path),
+        displayPath: multiRoot ? `${project.name}/${file.path}` : file.path,
+        name: file.name,
+        fileType: file.fileType,
+      });
+    }
+  }
+
+  return result;
+}
+
 interface FuzzyResult {
-  file: ProjectFile;
+  file: QuickOpenFile;
   score: number;
 }
 
@@ -108,7 +138,7 @@ function fuzzyMatch(query: string, fileName: string): number | null {
   return score;
 }
 
-function fuzzySearch(files: ProjectFile[], query: string): FuzzyResult[] {
+function fuzzySearch(files: QuickOpenFile[], query: string): FuzzyResult[] {
   const results: FuzzyResult[] = [];
   for (const file of files) {
     const score = fuzzyMatch(query, file.name);
@@ -129,13 +159,19 @@ export function QuickOpenDialog() {
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
-  const project = useProjectStore((s) => s.project);
+  const projectRoots = useProjectStore.use.projectRoots();
+  const projectsMap = useProjectStore.use.projects();
+
+  const projects = useMemo(() => {
+    return projectRoots
+      .map((rootPath) => projectsMap.get(rootPath))
+      .filter((project): project is DetectionProject => project != null);
+  }, [projectRoots, projectsMap]);
 
   // Flatten the project file tree
   const flatFiles = useMemo(() => {
-    if (!project) return [];
-    return flattenProjectFiles(project.files);
-  }, [project]);
+    return flattenWorkspaceFiles(projects);
+  }, [projects]);
 
   // Build result list
   const results = useMemo(() => {
@@ -146,11 +182,12 @@ export function QuickOpenDialog() {
         isRecent: true,
         items: recentPaths.map((path) => {
           const name = path.split("/").pop() ?? path;
-          // Try to find the matching project file for fileType
-          const match = flatFiles.find((f) => f.path === path || path.endsWith(f.path));
+          const normalizedPath = normalizeWorkspacePath(path);
+          const match = flatFiles.find((file) => normalizeWorkspacePath(file.path) === normalizedPath);
           return {
-            path,
+            path: match?.path ?? normalizedPath,
             name: match?.name ?? name,
+            displayPath: match?.displayPath ?? path,
             fileType: match?.fileType ?? ("clawdstrike_policy" as const),
           };
         }),
@@ -162,6 +199,7 @@ export function QuickOpenDialog() {
       items: fuzzyResults.map((r) => ({
         path: r.file.path,
         name: r.file.name,
+        displayPath: r.file.displayPath,
         fileType: r.file.fileType,
       })),
     };
@@ -319,7 +357,7 @@ export function QuickOpenDialog() {
                   <div className="flex flex-col min-w-0">
                     <span className="text-[12px] truncate">{item.name}</span>
                     <span className="text-[10px] text-[#6f7f9a]/40 truncate">
-                      {item.path}
+                      {item.displayPath}
                     </span>
                   </div>
                 </button>

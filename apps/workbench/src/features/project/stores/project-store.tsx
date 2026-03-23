@@ -1,7 +1,9 @@
 import { create } from "zustand";
 import { createSelectors } from "@/lib/create-selectors";
+import { usePolicyTabsStore } from "@/features/policy/stores/policy-tabs-store";
 import type { FileType } from "@/lib/workbench/file-type-registry";
 import { getFileTypeByExtension } from "@/lib/workbench/file-type-registry";
+import { getDocumentIdentityStore } from "@/lib/workbench/detection-workflow/document-identity-store";
 import {
   isAbsoluteWorkspacePath,
   joinWorkspacePath,
@@ -563,6 +565,15 @@ const useProjectStoreBase = create<ProjectStoreState>()((set, get) => ({
       const { renameDetectionFile } = await import("@/lib/tauri-bridge");
       const ok = await renameDetectionFile(oldAbsPath, newAbsPath);
       if (!ok) return false;
+
+      const tabsStore = usePolicyTabsStore.getState();
+      const renamedTabIds = tabsStore.tabs
+        .filter((tab) => tab.filePath === oldAbsPath)
+        .map((tab) => tab.id);
+      for (const tabId of renamedTabIds) {
+        tabsStore.setFilePath(tabId, newAbsPath);
+      }
+      getDocumentIdentityStore().move(oldAbsPath, newAbsPath);
 
       const oldRelPath = relativePathWithinRoot(rootPath, oldAbsPath);
       const newRelPath = relativePathWithinRoot(rootPath, newAbsPath);

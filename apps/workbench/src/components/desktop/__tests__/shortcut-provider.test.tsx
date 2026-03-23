@@ -18,14 +18,16 @@ vi.mock("@/lib/tauri-bridge", () => ({
   closeWindow: vi.fn(),
 }));
 
-function PolicyValidateShortcutHarness() {
+function PolicyValidateShortcutHarness({
+  initialRoute = "/editor/visual",
+}: {
+  initialRoute?: string;
+}) {
   const { dispatch, state } = useWorkbenchState();
 
   useEffect(() => {
-    // Use a sub-route of /editor that doesn't get redirected by normalizeWorkbenchRoute
-    // (which maps bare "/editor" to "/home"). This keeps the "editor" shortcut context active.
-    usePaneStore.getState().syncRoute("/editor/visual");
-  }, []);
+    usePaneStore.getState().syncRoute(initialRoute);
+  }, [initialRoute]);
 
   return (
     <>
@@ -111,5 +113,16 @@ describe("ShortcutProvider", () => {
     fireEvent.keyDown(window, { key: "|", metaKey: true, shiftKey: true });
 
     expect(usePaneStore.getState().paneCount()).toBe(2);
+  });
+
+  it("treats /file panes as editor shortcut context", async () => {
+    renderWithProviders(<PolicyValidateShortcutHarness initialRoute="/file/tmp/policy.yaml" />);
+
+    fireEvent.click(screen.getByRole("button", { name: "rename-policy" }));
+    fireEvent.keyDown(window, { key: "v", metaKey: true, shiftKey: true });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("yaml").textContent).toContain('name: "Shortcut Rename"');
+    });
   });
 });

@@ -123,7 +123,7 @@ function resolveActiveShortcutContexts(target: EventTarget | null): Set<CommandC
   const route = normalizeWorkbenchRoute(
     getActivePaneRoute(usePaneStore.getState().root, usePaneStore.getState().activePaneId),
   );
-  if (route.startsWith("/editor")) {
+  if (route.startsWith("/editor") || route.startsWith("/file/")) {
     contexts.add("editor");
   }
 

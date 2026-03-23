@@ -316,6 +316,32 @@ function subscribeToDirtySync() {
   usePolicyTabsStore.subscribe((state, prevState) => {
     if (state.tabs === prevState.tabs) return;
     const tabs = state.tabs;
+    const tabsByRoute = new Map<string, (typeof tabs)[number]>();
+    const movedTabsByPreviousRoute = new Map<
+      string,
+      { nextRoute: string; nextLabel: string; tab: (typeof tabs)[number] }
+    >();
+
+    for (const tab of tabs) {
+      const nextRoute = tab.filePath ? `/file/${tab.filePath}` : `/file/__new__/${tab.id}`;
+      tabsByRoute.set(nextRoute, tab);
+
+      const previousTab = prevState.tabs.find((candidate) => candidate.id === tab.id);
+      if (!previousTab) {
+        continue;
+      }
+
+      if (previousTab.filePath !== tab.filePath) {
+        const previousRoute = previousTab.filePath
+          ? `/file/${previousTab.filePath}`
+          : `/file/__new__/${tab.id}`;
+        movedTabsByPreviousRoute.set(previousRoute, {
+          nextRoute,
+          nextLabel: tab.filePath?.split("/").pop() ?? tab.name,
+          tab,
+        });
+      }
+    }
 
     const paneState = usePaneStore.getState();
     const allGroups = getAllPaneGroups(paneState.root);
@@ -325,11 +351,18 @@ function subscribeToDirtySync() {
     for (const group of allGroups) {
       for (const view of group.views) {
         if (!view.route.startsWith("/file/")) continue;
-        const filePath = view.route.slice("/file/".length);
-        const tab = tabs.find((t) => t.filePath === filePath);
+        const movedTab = movedTabsByPreviousRoute.get(view.route);
+        const nextRoute = movedTab?.nextRoute ?? view.route;
+        const nextLabel = movedTab?.nextLabel ?? view.label;
+        const tab = movedTab?.tab ?? tabsByRoute.get(nextRoute);
         const newDirty = tab?.dirty ?? false;
         const newFileType = tab?.fileType;
-        if (view.dirty !== newDirty || view.fileType !== newFileType) {
+        if (
+          view.route !== nextRoute ||
+          view.label !== nextLabel ||
+          view.dirty !== newDirty ||
+          view.fileType !== newFileType
+        ) {
           changed = true;
           nextRoot = replaceNode(nextRoot, group.id, (node) =>
             node.type === "group"
@@ -337,7 +370,13 @@ function subscribeToDirtySync() {
                   ...node,
                   views: node.views.map((v) =>
                     v.id === view.id
-                      ? { ...v, dirty: newDirty, fileType: newFileType }
+                      ? {
+                          ...v,
+                          route: nextRoute,
+                          label: nextLabel,
+                          dirty: newDirty,
+                          fileType: newFileType,
+                        }
                       : v,
                   ),
                 }

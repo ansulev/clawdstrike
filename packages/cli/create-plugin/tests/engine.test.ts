@@ -65,5 +65,12 @@ describe("writeProjectFile", () => {
       }
       expect(traversalError).toBe(false);
     });
+
+    it("overwrites an existing file without error", async () => {
+      await writeProjectFile(tempDir, "src/index.ts", "first content");
+      await writeProjectFile(tempDir, "src/index.ts", "second content");
+      const filePath = join(tempDir, "src/index.ts");
+      expect(readFileSync(filePath, "utf-8")).toBe("second content");
+    });
   });
 });

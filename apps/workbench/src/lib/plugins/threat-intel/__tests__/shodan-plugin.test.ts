@@ -471,7 +471,7 @@ describe("SSRF prevention: isPrivateOrReservedIP", () => {
       );
       // Empty string fails the parts.length !== 4 check so isPrivateOrReservedIP returns false.
       // The IP will be sent to Shodan API as-is (Shodan will reject it).
-      const result = await source.enrich({ type: "ip", value: "" });
+      await source.enrich({ type: "ip", value: "" });
       // fetch is called because the function does not detect it as private
       expect(mockFetch).toHaveBeenCalled();
     });
@@ -480,7 +480,7 @@ describe("SSRF prevention: isPrivateOrReservedIP", () => {
       mockFetch.mockResolvedValue(
         okResponse(makeShodanHostResponse()),
       );
-      const result = await source.enrich({ type: "ip", value: "not-an-ip" });
+      await source.enrich({ type: "ip", value: "not-an-ip" });
       expect(mockFetch).toHaveBeenCalled();
     });
 
@@ -488,10 +488,7 @@ describe("SSRF prevention: isPrivateOrReservedIP", () => {
       mockFetch.mockResolvedValue(
         okResponse(makeShodanHostResponse()),
       );
-      const result = await source.enrich({
-        type: "ip",
-        value: "999.999.999.999",
-      });
+      await source.enrich({ type: "ip", value: "999.999.999.999" });
       // Octets > 255 fail the validator, returning false, so fetch IS called
       expect(mockFetch).toHaveBeenCalled();
     });

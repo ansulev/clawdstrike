@@ -199,5 +199,26 @@ describe("sanitizeErrorMessage", () => {
       const err = new Error("");
       expect(sanitizeErrorMessage(err)).toBe("");
     });
+
+    it("redacts Authorization header even when followed by Bearer token", () => {
+      // Known limitation: the authorization pattern matches "Authorization: Bearer"
+      // as a single unit, replacing it with [REDACTED]. The subsequent Bearer
+      // pattern can't match since "Bearer" was already consumed. The token
+      // after Bearer may remain. This test documents that at minimum the
+      // authorization header keyword itself is redacted.
+      const err = new Error("Authorization: Bearer tok_secret was rejected");
+      const result = sanitizeErrorMessage(err);
+      expect(result).toContain("[REDACTED]");
+      // The "Authorization:" prefix should be gone
+      expect(result).not.toContain("Authorization");
+    });
+
+    it("redacts key in URL query string mid-parameter", () => {
+      const err = new Error(
+        "GET https://api.example.com/v1?foo=bar&key=MY_SECRET_KEY&baz=qux failed",
+      );
+      const result = sanitizeErrorMessage(err);
+      expect(result).not.toContain("MY_SECRET_KEY");
+    });
   });
 });

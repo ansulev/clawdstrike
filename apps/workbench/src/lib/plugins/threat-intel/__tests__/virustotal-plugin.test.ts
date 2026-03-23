@@ -416,24 +416,14 @@ describe("enrich() timeout behavior", () => {
     expect(result.verdict.summary).toMatch(/timeout/i);
   });
 
-  it("simulates slow fetch that never resolves (AbortError)", async () => {
-    // Simulate a fetch that never resolves -- the AbortController fires first
-    mockFetch.mockImplementation(
-      () => new Promise(() => {
-        // never resolves
-      }),
-    );
-
-    // Since we can't actually wait for the 30s timeout in a test,
-    // verify the AbortError path works by directly rejecting
+  it("handles non-AbortError DOMException gracefully", async () => {
     mockFetch.mockRejectedValue(
-      new DOMException("The operation was aborted", "AbortError"),
+      new DOMException("Network error", "NetworkError"),
     );
 
     const result = await source.enrich({ type: "hash", value: "a".repeat(64) });
 
     expect(result.verdict.classification).toBe("unknown");
     expect(result.verdict.confidence).toBe(0);
-    expect(result.verdict.summary).toMatch(/timeout/i);
   });
 });

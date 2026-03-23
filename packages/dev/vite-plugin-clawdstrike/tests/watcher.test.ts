@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { setupPluginWatcher } from '../src/watcher';
 import { FilePluginMap } from '../src/file-plugin-map';
 import type { ClawdstrikePluginOptions } from '../src/types';
@@ -143,6 +143,10 @@ describe('setupPluginWatcher', () => {
 
     beforeEach(() => {
       consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    });
+
+    afterEach(() => {
+      consoleErrorSpy.mockRestore();
     });
 
     it('catches and logs the error when fileMap.resolve throws', () => {

@@ -123,6 +123,40 @@ describe("interceptConsole", () => {
     });
   });
 
+  describe("warn and error interception", () => {
+    it("intercepts console.warn and attributes to top-of-stack plugin", () => {
+      const dispose = interceptConsole("plugin-warn");
+
+      console.warn("warning message");
+
+      expect(devConsoleStore.push).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "console:warn",
+          pluginId: "plugin-warn",
+          message: "warning message",
+        }),
+      );
+
+      dispose();
+    });
+
+    it("intercepts console.error and attributes to top-of-stack plugin", () => {
+      const dispose = interceptConsole("plugin-err");
+
+      console.error("error message");
+
+      expect(devConsoleStore.push).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "console:error",
+          pluginId: "plugin-err",
+          message: "error message",
+        }),
+      );
+
+      dispose();
+    });
+  });
+
   describe("stopIntercepting", () => {
     it("resets entire stack and restores original console", () => {
       interceptConsole("plugin-a");

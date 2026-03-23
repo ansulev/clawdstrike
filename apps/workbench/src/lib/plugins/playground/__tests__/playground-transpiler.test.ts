@@ -115,4 +115,21 @@ describe("transpilePlugin - SDK import rewriting", () => {
       expect(code).not.toContain("export default");
     });
   });
+
+  describe("error handling", () => {
+    it("returns error for unterminated string literal", () => {
+      const source = `const x = "unterminated;`;
+      const { code, error } = transpilePlugin(source);
+
+      // Should return an error rather than throwing
+      expect(error).not.toBeNull();
+    });
+
+    it("returns error for invalid TypeScript syntax", () => {
+      const source = `const = ;`;
+      const { code, error } = transpilePlugin(source);
+
+      expect(error).not.toBeNull();
+    });
+  });
 });

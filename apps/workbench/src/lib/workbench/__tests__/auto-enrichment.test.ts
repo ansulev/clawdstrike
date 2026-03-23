@@ -455,11 +455,8 @@ describe("AutoEnrichmentManager", () => {
       enrich: vi.fn()
         // First call rejects
         .mockRejectedValueOnce(new Error("API unavailable"))
-        // Second call succeeds
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([]),
+        // Second call succeeds (one per indicator extracted)
+        .mockResolvedValue([]),
     };
 
     // Extract single indicator to keep call counts predictable

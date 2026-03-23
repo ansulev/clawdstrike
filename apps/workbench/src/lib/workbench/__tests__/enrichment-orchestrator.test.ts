@@ -424,8 +424,27 @@ describe("EnrichmentOrchestrator", () => {
       const orch = new EnrichmentOrchestrator();
       orch.destroy();
 
-      expect(clearIntervalSpy).toHaveBeenCalled();
+      expect(clearIntervalSpy).toHaveBeenCalledTimes(1);
       clearIntervalSpy.mockRestore();
+    });
+
+    it("clears the cache on destroy", async () => {
+      const enrichFn = vi.fn(async () => makeResult("destroy-cache-test"));
+      registerThreatIntelSource(
+        makeMockSource({ id: "destroy-cache-test", enrich: enrichFn }),
+      );
+
+      const orch = new EnrichmentOrchestrator();
+      await orch.enrich(ipIndicator, { sourceIds: ["destroy-cache-test"] });
+      expect(enrichFn).toHaveBeenCalledTimes(1);
+
+      orch.destroy();
+
+      // After destroy, a new orchestrator instance should not share cache state
+      const orch2 = new EnrichmentOrchestrator();
+      await orch2.enrich(ipIndicator, { sourceIds: ["destroy-cache-test"] });
+      expect(enrichFn).toHaveBeenCalledTimes(2);
+      orch2.destroy();
     });
   });
 

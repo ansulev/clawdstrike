@@ -47,13 +47,10 @@ function makeRes(): MockRes {
 // ---------------------------------------------------------------------------
 
 describe("pluginEvalMiddleware", () => {
-  // Clear internal state between tests by posting then fetching unique runIds
-  const usedRunIds = new Set<number>();
+  // Generate unique run IDs to avoid cross-test state collisions
   let nextRunId = 9000;
   function uniqueRunId(): number {
-    const id = nextRunId++;
-    usedRunIds.add(id);
-    return id;
+    return nextRunId++;
   }
 
   describe("EVICTION_MS constant", () => {

@@ -24,7 +24,7 @@ vi.mock("three", async () => {
   return {
     ...actual,
     FogExp2: class FogExp2 {
-      density = 0.0008;
+      density: number;
       constructor(_color: unknown, _density: number) {
         this.density = _density;
       }

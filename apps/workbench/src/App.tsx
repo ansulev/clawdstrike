@@ -2,13 +2,13 @@ import { Component, Suspense, useEffect, useRef } from "react";
 import type { ErrorInfo, ReactNode } from "react";
 import { HashRouter, useRoutes } from "react-router-dom";
 import { ToastProvider } from "@/components/ui/toast";
+import { HintSettingsProvider, useHintSettingsSafe } from "@/features/settings/use-hint-settings";
 import { DesktopLayout } from "@/components/desktop/desktop-layout";
 import { IdentityPrompt } from "@/components/workbench/identity/identity-prompt";
 import { useOperator } from "@/features/operator/stores/operator-store";
 import { useFleetConnection } from "@/features/fleet/use-fleet-connection";
 import { usePresenceConnection } from "@/features/presence/use-presence-connection";
 import { usePresenceFileTracking } from "@/features/presence/use-presence-file-tracking";
-import { HintSettingsProvider, useHintSettingsSafe } from "@/features/settings/use-hint-settings";
 import { usePolicyBootstrap } from "@/features/policy/hooks/use-policy-bootstrap";
 import { secureStore, migrateCredentialsToStronghold } from "@/features/settings/secure-store";
 import { bootstrapThreatIntelPlugins } from "@/lib/plugins/threat-intel/bootstrap";
@@ -270,9 +270,9 @@ class ErrorBoundary extends Component<{ children: ReactNode }, ErrorBoundaryStat
 
 function AppProviders({ children }: { children: ReactNode }) {
   return (
-    <ToastProvider>
-      <HintSettingsProvider>{children}</HintSettingsProvider>
-    </ToastProvider>
+    <HintSettingsProvider>
+      <ToastProvider>{children}</ToastProvider>
+    </HintSettingsProvider>
   );
 }
 

@@ -43,7 +43,11 @@ Plans:
   2. Interactive mode presents prompts for name, display name, publisher, type, and contribution points, then generates a project matching those selections
   3. Each of the 6 template types (guard, detection, ui, intel, compliance, full) generates a project that compiles under TypeScript strict mode and whose tests pass
   4. The generated `src/index.ts` uses `createPlugin()` from the SDK with a properly typed manifest and contribution stubs for the selected plugin type
-**Plans**: TBD
+**Plans:** 3 plans
+Plans:
+- [ ] 02-01-PLAN.md — Package structure, CLI entry with @clack/prompts, flag parsing, template engine, config file generators
+- [ ] 02-02-PLAN.md — Six plugin type templates (guard, detection, ui, intel, compliance, full) and test template with createSpyContext
+- [ ] 02-03-PLAN.md — Unit tests for flag parsing and templates, integration test scaffolding all 6 types
 
 ### Phase 3: Dev Server
 **Goal**: Plugin authors get instant feedback when editing plugin source files -- changes appear in the running workbench within 200ms without losing plugin state or workbench layout
@@ -97,7 +101,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Testing Harness | 0/2 | Planning complete | - |
-| 2. CLI Scaffolding | 0/TBD | Not started | - |
+| 2. CLI Scaffolding | 0/3 | Planning complete | - |
 | 3. Dev Server | 0/3 | Planning complete | - |
 | 4. Documentation | 0/2 | Planned | - |
 | 5. Plugin Playground | 0/2 | Planning complete | - |

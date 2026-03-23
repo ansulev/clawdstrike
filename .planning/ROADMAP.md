@@ -55,7 +55,7 @@ Plans:
   5. multi-policy-store.tsx and MultiPolicyProvider are deleted from the source tree
 **Plans:** 3 plans
 Plans:
-- [ ] 17-01-PLAN.md — Command modernization + helper hooks + heavy consumer migration (split-editor, editor-home-tab, init-commands, edit-commands)
+- [x] 17-01-PLAN.md — Command modernization + helper hooks + heavy consumer migration (split-editor, editor-home-tab, init-commands, edit-commands)
 - [ ] 17-02-PLAN.md — Bulk consumer migration (~35 remaining files off bridge hooks)
 - [ ] 17-03-PLAN.md — Bridge deletion + bootstrap extraction + test file updates
 
@@ -65,4 +65,4 @@ Plans:
 |-------|----------------|--------|-----------|
 | 15. Test Fixes | 1/1 | Complete | 2026-03-23 |
 | 16. Search, Terminal & Keybinding Fixes | 1/1 | Complete   | 2026-03-22 |
-| 17. Command Modernization & Store Migration | 0/3 | Planned | - |
+| 17. Command Modernization & Store Migration | 1/3 | In Progress | - |

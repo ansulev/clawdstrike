@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.4
 milestone_name: Cleanup & Store Migration
 status: executing
-stopped_at: Completed 15-01-PLAN.md
-last_updated: "2026-03-23T00:07:11Z"
-last_activity: 2026-03-23 -- Executed 15-01 (test fixes: App, desktop-layout, shortcut-provider)
+stopped_at: Completed 17-01-PLAN.md
+last_updated: "2026-03-23T00:24:19Z"
+last_activity: 2026-03-23 -- Executed 17-01 (migration hooks + 6 files migrated off bridge hooks)
 progress:
   total_phases: 3
   completed_phases: 2
   total_plans: 5
-  completed_plans: 2
-  percent: 40
+  completed_plans: 3
+  percent: 60
 ---
 
 # Project State
@@ -24,12 +24,12 @@ See: .planning/PROJECT.md (updated 2026-03-22)
 
 ## Current Position
 
-Phase: 15 (Test Fixes) -- COMPLETE
-Plan: 01/01 -- done
-Status: Phase 15 complete, Phase 17 ready
-Last activity: 2026-03-23 -- Executed 15-01 (test fixes: App, desktop-layout, shortcut-provider)
+Phase: 17 (Command Modernization & Store Migration)
+Plan: 01/03 -- done
+Status: Phase 17 in progress, Plan 02 ready
+Last activity: 2026-03-23 -- Executed 17-01 (migration hooks + 6 files migrated off bridge hooks)
 
-Progress: [████░░░░░░] 40%
+Progress: [██████░░░░] 60%
 
 ## Previous Milestones
 
@@ -48,7 +48,11 @@ Progress: [████░░░░░░] 40%
 - `apps/workbench/src/components/desktop/__tests__/desktop-layout.test.tsx` -- FIXED: stale desktop-sidebar mock replaced
 - `apps/workbench/src/features/search/stores/search-store.ts` -- FIXED: AbortController + staleness guard added
 - `apps/workbench/src/features/bottom-pane/terminal-panel.tsx` -- FIXED: hardcoded 800x240 removed
-- `apps/workbench/src/lib/commands/file-commands.ts` -- legacy newPolicy injection
+- `apps/workbench/src/lib/commands/file-commands.ts` -- MIGRATED: newPolicy removed, direct store call
+- `apps/workbench/src/features/policy/hooks/use-active-tab.ts` -- NEW: 3 migration hooks (useActiveTabState/useActiveTab/useActiveTabDispatch)
+- `apps/workbench/src/components/workbench/editor/split-editor.tsx` -- MIGRATED: 5 bridge calls replaced with direct stores
+- `apps/workbench/src/components/workbench/editor/editor-home-tab.tsx` -- MIGRATED: inline tauri-bridge + direct stores
+- `apps/workbench/src/lib/commands/init-commands.tsx` -- MIGRATED: all file ops inlined from useWorkbench
 
 ### Decisions
 - multi-policy-store.tsx is a bridge: useMultiPolicy()/useWorkbench() compose 3 underlying Zustand stores
@@ -61,11 +65,14 @@ Progress: [████░░░░░░] 40%
 - App.test.tsx: mock DesktopLayout entirely (route-aware shell) rather than per-component mocks to avoid cascading chains
 - Test route for editor context: use /editor/visual (bare /editor redirects to /home, breaking editor shortcut context)
 - ResizeObserver polyfill in test/setup.ts is a global no-op stub for all tests
+- Inlined file ops (saveFile/saveFileAs/openFile/exportYaml/copyYaml) from useWorkbench into init-commands.tsx as useCallback hooks
+- EditCommandDeps simplified: removed dispatch/multiDispatch, edit.closeTab uses direct store call
+- ~15 pre-existing partially-migrated files found in working directory (from previous session); reverted to HEAD for clean compile
 
 ### Blockers/Concerns
-None yet.
+- ~15 files have uncommitted partial migrations from a previous session; Plan 02 must handle these
 
 ## Session Continuity
 
-Last session: 2026-03-23T00:07:11Z
-Stopped at: Completed 15-01-PLAN.md
+Last session: 2026-03-23T00:24:19Z
+Stopped at: Completed 17-01-PLAN.md

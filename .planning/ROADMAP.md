@@ -75,8 +75,8 @@ Plans:
   4. CI fails if TypeDoc generation breaks (catches stale JSDoc or missing exports)
 **Plans:** 2 plans
 Plans:
-- [ ] 04-01-PLAN.md — mdBook plugin development guide pages (Getting Started, Manifest, Contribution Points, Testing, Dev Server, Playground, Publishing)
-- [ ] 04-02-PLAN.md — TypeDoc API reference generation, mise task, and CI integration
+- [x] 04-01-PLAN.md — mdBook plugin development guide pages (Getting Started, Manifest, Contribution Points, Testing, Dev Server, Playground, Publishing)
+- [x] 04-02-PLAN.md — TypeDoc API reference generation, mise task, and CI integration
 
 ### Phase 5: Plugin Playground
 **Goal**: A plugin author can write, run, and debug a plugin entirely within the workbench -- seeing contributions register in real time, errors with source-mapped line numbers, and a tree view of all registered contributions
@@ -103,5 +103,5 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 | 1. Testing Harness | 1/2 | Executing | - |
 | 2. CLI Scaffolding | 1/3 | Executing | - |
 | 3. Dev Server | 2/3 | Executing | - |
-| 4. Documentation | 0/2 | Planned | - |
+| 4. Documentation | 2/2 | Complete | 2026-03-23 |
 | 5. Plugin Playground | 0/2 | Planning complete | - |

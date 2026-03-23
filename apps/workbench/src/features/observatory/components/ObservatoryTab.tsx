@@ -686,13 +686,16 @@ export function ObservatoryTab() {
   }, [dockingState.stationId, dockingState.zone, handleEnterInterior, interiorState.active, mode]);
 
   const handleStartMission = useCallback(() => {
+    const plan = typeof createObservatoryMissionPlan === "function"
+      ? createObservatoryMissionPlan({
+          investigations: huntInvestigations,
+          patterns: huntPatterns,
+          sceneState: effectiveSceneState,
+        })
+      : undefined;
     observatoryActions.startMission("workbench", probeNowMs, {
       branchHint: deriveObservatoryMissionBranch(effectiveSceneState),
-      plan: createObservatoryMissionPlan({
-        investigations: huntInvestigations,
-        patterns: huntPatterns,
-        sceneState: effectiveSceneState,
-      }),
+      plan,
     });
     probeTelemetryBaselineRef.current = null;
     observatoryActions.resetProbe();

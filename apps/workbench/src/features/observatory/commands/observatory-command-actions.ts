@@ -49,13 +49,16 @@ export function startObservatoryMission(): void {
   const sceneState = buildCurrentSceneState("atlas");
   const nowMs = getObservatoryNowMs();
   const actions = useObservatoryStore.getState().actions;
+  const plan = typeof createObservatoryMissionPlan === "function"
+    ? createObservatoryMissionPlan({
+        investigations: useHuntStore.getState().investigations,
+        patterns: useHuntStore.getState().patterns,
+        sceneState,
+      })
+    : undefined;
   actions.startMission("workbench", nowMs, {
     branchHint: deriveObservatoryMissionBranch(sceneState),
-    plan: createObservatoryMissionPlan({
-      investigations: useHuntStore.getState().investigations,
-      patterns: useHuntStore.getState().patterns,
-      sceneState,
-    }),
+    plan,
   });
   actions.resetProbe();
   usePaneStore.getState().openApp("/observatory", "Observatory");

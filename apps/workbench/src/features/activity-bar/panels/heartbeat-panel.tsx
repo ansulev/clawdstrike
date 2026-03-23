@@ -92,7 +92,7 @@ function StatGrid({
 }: {
   sentinelCount: number;
   findingCount: number;
-  approvalCount: string;
+  approvalCount: number;
   fleetCount: number | string;
 }) {
   const cells = [
@@ -215,7 +215,7 @@ export function HeartbeatPanel() {
               <StatGrid
                 sentinelCount={sentinels.length}
                 findingCount={findings.length}
-                approvalCount="---"
+                approvalCount={0}
                 fleetCount={connection.connected ? connection.agentCount : 0}
               />
 

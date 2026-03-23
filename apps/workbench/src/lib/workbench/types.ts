@@ -413,7 +413,7 @@ export interface TestScenario {
   redteamStrategyId?: string;
 }
 
-export type SimulationEngine = "native" | "client" | "stubbed";
+export type SimulationEngine = "native" | "client" | "stubbed" | "desktop_only";
 
 export interface GuardSimResult {
   guardId: GuardId;

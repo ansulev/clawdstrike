@@ -65,6 +65,10 @@ const ENGINE_BADGE_STYLES: Record<SimulationEngine, { label: string; className: 
     label: "Stub",
     className: "bg-[#d4a84b]/10 text-[#d4a84b] border-[#d4a84b]/20",
   },
+  desktop_only: {
+    label: "Desktop Only",
+    className: "bg-[#6f7f9a]/10 text-[#6f7f9a] border-[#6f7f9a]/20",
+  },
 };
 
 function EngineBadge({ engine }: { engine?: SimulationEngine }) {

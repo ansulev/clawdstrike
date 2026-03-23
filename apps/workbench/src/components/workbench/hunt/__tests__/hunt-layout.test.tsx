@@ -54,8 +54,10 @@ vi.mock("@/features/fleet/use-fleet-connection", async () => {
   };
 });
 
+import { MemoryRouter } from "react-router-dom";
 import { HuntLayout } from "../hunt-layout";
 import { PolicyBootstrapProvider as MultiPolicyProvider } from "@/features/policy/hooks/use-policy-bootstrap";
+import { HuntTelemetryBridge } from "@/features/hunt/components/HuntTelemetryBridge";
 
 async function flushMicrotasks() {
   await Promise.resolve();
@@ -103,7 +105,7 @@ describe("HuntLayout", () => {
   });
 
   it("stops polling while the stream is paused and resumes on live", async () => {
-    render(<MultiPolicyProvider><HuntLayout /></MultiPolicyProvider>);
+    render(<MemoryRouter><MultiPolicyProvider><HuntTelemetryBridge /><HuntLayout /></MultiPolicyProvider></MemoryRouter>);
     await flushMicrotasks();
 
     expect(fleetClientMocks.fetchAuditEvents).toHaveBeenCalledTimes(1);
@@ -120,7 +122,7 @@ describe("HuntLayout", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "LIVE" }));
     await flushMicrotasks();
-    expect(screen.getByRole("button", { name: "PAUSED" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "PAUSED" })).toBeTruthy();
     expect(globalThis.clearInterval).toHaveBeenCalledWith(activeIntervalId);
     expect(intervalCallbacks.size).toBe(0);
 

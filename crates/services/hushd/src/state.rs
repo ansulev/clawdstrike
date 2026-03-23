@@ -11,6 +11,7 @@ use hush_certification::webhooks::SqliteWebhookStore;
 use hush_core::{Keypair, PublicKey};
 use hush_multi_agent::InMemoryRevocationStore;
 
+use crate::api::presence::PresenceHub;
 use crate::audit::forward::AuditForwarder;
 use crate::audit::{AuditEvent, AuditLedger};
 use crate::auth::AuthStore;
@@ -82,6 +83,7 @@ pub struct AppState {
     pub siem_exporters: Arc<RwLock<Vec<ExporterStatusHandle>>>,
     pub siem_manager: Arc<Mutex<Option<ExporterManager>>>,
     pub spine_publisher: Option<Arc<SpinePublisher>>,
+    pub presence_hub: Arc<PresenceHub>,
     pub shutdown: Arc<Notify>,
     pub broker_state: Arc<BrokerStateStore>,
     /// Without this, each call to `resolve_delegation_lineage` would create a
@@ -404,6 +406,21 @@ impl AppState {
                 (Vec::new(), None)
             };
 
+        let (presence_hub, _presence_rx) = PresenceHub::new();
+        let presence_hub = Arc::new(presence_hub);
+
+        let shutdown = Arc::new(Notify::new());
+
+        // Spawn the heartbeat reaper for presence tracking
+        {
+            let hub_for_reaper = presence_hub.clone();
+            let shutdown_for_reaper = shutdown.clone();
+            tokio::spawn(async move {
+                crate::api::presence::spawn_heartbeat_reaper(hub_for_reaper, shutdown_for_reaper)
+                    .await;
+            });
+        }
+
         let state = Self {
             engine: Arc::new(RwLock::new(engine)),
             ledger,
@@ -437,7 +454,8 @@ impl AppState {
             siem_exporters: Arc::new(RwLock::new(siem_exporters)),
             siem_manager: Arc::new(Mutex::new(siem_manager)),
             spine_publisher,
-            shutdown: Arc::new(Notify::new()),
+            presence_hub,
+            shutdown,
             broker_state: Arc::new(BrokerStateStore::new()),
             delegation_revocations: Arc::new(InMemoryRevocationStore::default()),
         };

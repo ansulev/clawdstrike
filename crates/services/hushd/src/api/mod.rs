@@ -12,6 +12,7 @@ pub mod me;
 pub mod metrics;
 pub mod policy;
 pub mod policy_scoping;
+pub mod presence;
 pub mod rbac;
 pub mod saml;
 pub mod session;

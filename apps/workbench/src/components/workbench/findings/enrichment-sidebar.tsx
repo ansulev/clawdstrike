@@ -109,6 +109,7 @@ export function EnrichmentSidebar({
           {isEnriching && onCancel ? (
             <button
               onClick={onCancel}
+              aria-label="Cancel enrichment"
               className="flex items-center gap-1 rounded-md px-2.5 py-1 text-[10px] font-medium text-[#c45c5c] bg-[#c45c5c]/10 border border-[#c45c5c]/20 hover:bg-[#c45c5c]/20 transition-colors"
               data-testid="cancel-enrichment"
             >
@@ -204,6 +205,8 @@ function SourceStatusCard({
   if (sourceStatus.status === "loading") {
     return (
       <div
+        role="status"
+        aria-live="polite"
         className="rounded-lg border border-[#2d3240]/40 bg-[#131721] p-3"
         data-testid={`skeleton-${sourceStatus.sourceId}`}
       >
@@ -226,6 +229,8 @@ function SourceStatusCard({
   if (sourceStatus.status === "error") {
     return (
       <div
+        role="status"
+        aria-live="polite"
         className="rounded-lg border border-[#c45c5c]/20 bg-[#c45c5c]/5 p-3"
         data-testid={`error-${sourceStatus.sourceId}`}
       >
@@ -247,6 +252,8 @@ function SourceStatusCard({
   if (sourceStatus.status === "done" && sourceStatus.result) {
     return (
       <div
+        role="status"
+        aria-live="polite"
         className="rounded-lg border border-[#2d3240]/40 bg-[#131721] p-3"
         data-testid={`result-${sourceStatus.sourceId}`}
       >
@@ -316,7 +323,7 @@ function ThreatIntelContent({
         </span>
       </div>
 
-      {/* Summary */}
+      {/* Summary -- safe: React escapes string children by default (no dangerouslySetInnerHTML) */}
       <p className="text-[10px] text-[#ece7dc]/60 leading-relaxed mb-1.5">
         {result.verdict.summary}
       </p>
@@ -368,6 +375,8 @@ function EnrichmentSection({
     <div className="border-b border-[#2d3240]/40">
       <button
         onClick={() => setCollapsed(!collapsed)}
+        aria-expanded={!collapsed}
+        aria-controls={`enrichment-section-${type}`}
         className="flex items-center gap-2 w-full px-4 py-2.5 text-left hover:bg-[#131721]/40 transition-colors"
       >
         {collapsed ? (
@@ -393,7 +402,7 @@ function EnrichmentSection({
       </button>
 
       {!collapsed && (
-        <div className="px-4 pb-3">
+        <div id={`enrichment-section-${type}`} className="px-4 pb-3">
           {enrichments.map((enrichment) => (
             <div key={enrichment.id} className="mb-2 last:mb-0">
               <EnrichmentContent enrichment={enrichment} />

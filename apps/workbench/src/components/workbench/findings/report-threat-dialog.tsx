@@ -165,20 +165,29 @@ export function ReportThreatDialog({
   const targetLabel = selectedTarget === "abuseipdb" ? "AbuseIPDB" : "MISP";
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center"
+      onKeyDown={(e) => e.key === "Escape" && onClose()}
+    >
       {/* Overlay */}
       <div
+        aria-hidden="true"
         className="absolute inset-0 bg-black/60"
         onClick={onClose}
       />
 
       {/* Dialog */}
-      <div className="relative z-10 w-full max-w-md rounded-lg border border-[#2d3240] bg-[#0b0d13] shadow-xl">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="report-dialog-title"
+        className="relative z-10 w-full max-w-md rounded-lg border border-[#2d3240] bg-[#0b0d13] shadow-xl"
+      >
         {/* Header */}
         <div className="flex items-center justify-between border-b border-[#2d3240]/60 px-5 py-3.5">
           <div className="flex items-center gap-2">
             <IconAlertTriangle size={15} className="text-[#d4a84b]" stroke={1.5} />
-            <h2 className="text-sm font-semibold text-[#ece7dc]">Report Threat</h2>
+            <h2 id="report-dialog-title" className="text-sm font-semibold text-[#ece7dc]">Report Threat</h2>
           </div>
           <button
             onClick={onClose}

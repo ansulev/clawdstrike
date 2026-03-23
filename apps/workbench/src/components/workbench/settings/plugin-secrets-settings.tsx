@@ -50,6 +50,8 @@ function SecretField({ pluginId, secret }: SecretFieldProps) {
       if (!cancelled) {
         setHasSaved(exists);
       }
+    }).catch(() => {
+      if (!cancelled) setHasSaved(false);
     });
     return () => {
       cancelled = true;

@@ -1,48 +1,10 @@
-/**
- * ObservatoryStatusStrip.tsx — Phase 29 HUD-10, HUD-11, HUD-12, VIS-02, VIS-04
- *
- * Persistent glassmorphism footer bar at the bottom of the observatory canvas.
- * Always mounted, always visible — the cockpit footer for constant situational awareness.
- *
- * Layout (flexbox row, space-between):
- *   LEFT   — speed readout (u/s), heading cardinal (N/NE/…), station count
- *   RIGHT  — four analyst preset pill buttons (THREAT, EVIDENCE, RECEIPTS, GHOST)
- *   FAR-RIGHT — minimap indicator dot (placeholder, future work)
- *
- * Performance contract (HUD-11):
- *   - Telemetry section (speed, heading, station count) updated via rAF + getState() + ref.textContent
- *     mutation — ZERO React re-renders in the frame loop.
- *   - Pre-allocated THREE.Quaternion and THREE.Euler at module level (no allocations per frame).
- *   - Analyst preset buttons use useObservatoryStore.use.* subscriptions — only re-render on
- *     preset/panel changes (rare, not per-frame).
- *
- * Glassmorphism styling (VIS-02):
- *   - background: rgba(8, 12, 24, 0.88) — above 0.85 minimum opacity threshold for readability
- *   - backdropFilter: blur(12px)
- *   - border-top: 1px solid rgba(255, 255, 255, 0.12) — STS-01: doubled from 0.06 for visibility
- *   - fontSize: 11 (STS-02: bumped from 10 for at-a-glance readability)
- *   - boxShadow: 0 8px 32px rgba(0, 0, 0, 0.4) (inverted, shows above canvas)
- *
- * Active indicator (VIS-04):
- *   - Active preset button: borderBottom: 2px solid var(--hud-accent)
- *   - Subtle glow: boxShadow with hud-accent at 40% opacity
- */
-
 import { useEffect, useRef } from "react";
 import * as THREE from "three";
 import { useObservatoryStore } from "../../stores/observatory-store";
 import { ANALYST_PRESETS } from "./hud-constants";
 
-// ---------------------------------------------------------------------------
-// Pre-allocated math objects — never recreated in the rAF loop
-// ---------------------------------------------------------------------------
-
 const _quaternion = new THREE.Quaternion();
 const _euler = new THREE.Euler();
-
-// ---------------------------------------------------------------------------
-// Cardinal direction lookup
-// ---------------------------------------------------------------------------
 
 const CARDINALS = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"] as const;
 
@@ -51,16 +13,15 @@ function yawDegToCardinal(yawDeg: number): string {
   return CARDINALS[index] ?? "N";
 }
 
-// ---------------------------------------------------------------------------
-// Component
-// ---------------------------------------------------------------------------
+const separatorStyle: React.CSSProperties = {
+  color: "var(--hud-text-muted, rgba(255, 255, 255, 0.45))",
+  fontSize: 9,
+};
 
 interface ObservatoryStatusStripProps {
   mode: "atlas" | "flow";
   onModeToggle: () => void;
-  /** Phase 43 INTR: whether station interior is currently active */
   interiorActive?: boolean;
-  /** Phase 43 INTR: callback to exit interior and return to exterior view */
   onExitInterior?: () => void;
 }
 
@@ -74,11 +35,9 @@ export function ObservatoryStatusStrip({
   const headingRef = useRef<HTMLSpanElement>(null);
   const stationCountRef = useRef<HTMLSpanElement>(null);
 
-  // React subscriptions for preset buttons (rare updates — not per-frame)
   const analystPresetId = useObservatoryStore.use.analystPresetId();
   const actions = useObservatoryStore.use.actions();
 
-  // rAF loop: read flightState + seamSummary, mutate DOM refs — no React setState
   useEffect(() => {
     let rafId: number;
 
@@ -86,20 +45,16 @@ export function ObservatoryStatusStrip({
       const { flightState, seamSummary } = useObservatoryStore.getState();
       const q = flightState.quaternion;
 
-      // Extract yaw from quaternion (pre-allocated objects, no `new` in loop)
       _quaternion.set(q[0], q[1], q[2], q[3]);
       _euler.setFromQuaternion(_quaternion, "YXZ");
-      const yawRad = _euler.y;
-      const yawDeg = ((-yawRad * 180) / Math.PI + 360) % 360;
+      const yawDeg = ((-_euler.y * 180) / Math.PI + 360) % 360;
 
       if (speedRef.current) {
         speedRef.current.textContent = String(Math.round(flightState.currentSpeed));
       }
-
       if (headingRef.current) {
         headingRef.current.textContent = yawDegToCardinal(yawDeg);
       }
-
       if (stationCountRef.current) {
         stationCountRef.current.textContent = String(seamSummary.stationCount);
       }
@@ -126,13 +81,11 @@ export function ObservatoryStatusStrip({
         justifyContent: "space-between",
         padding: "0 12px",
         gap: 8,
-        // Glassmorphism treatment — VIS-02: >= 0.85 opacity for readability
         background: "rgba(8, 12, 24, 0.88)",
         backdropFilter: "var(--hud-blur, blur(12px))",
         WebkitBackdropFilter: "var(--hud-blur, blur(12px))",
         borderTop: "1px solid rgba(255, 255, 255, 0.12)",
         boxShadow: "0 -4px 16px rgba(0, 0, 0, 0.3)",
-        // Allow pointer events so preset buttons are clickable
         pointerEvents: "auto",
         fontFamily: "'JetBrains Mono', 'Fira Mono', 'Consolas', monospace",
         fontSize: 11,
@@ -141,7 +94,6 @@ export function ObservatoryStatusStrip({
         color: "var(--hud-text, rgba(255, 255, 255, 0.85))",
       }}
     >
-      {/* LEFT SECTION — telemetry readouts (updated via rAF ref mutation) */}
       <div
         style={{
           display: "flex",
@@ -150,8 +102,7 @@ export function ObservatoryStatusStrip({
           flex: "0 0 auto",
         }}
       >
-        {/* Phase 43 INTR: Exit Interior button — shown when analyst is inside a station */}
-        {interiorActive && onExitInterior ? (
+        {interiorActive && onExitInterior && (
           <>
             <button
               type="button"
@@ -173,19 +124,15 @@ export function ObservatoryStatusStrip({
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
-                marginRight: 0,
                 transition: "background 0.15s ease",
               }}
             >
               EXIT INTERIOR
             </button>
-            <span style={{ color: "var(--hud-text-muted, rgba(255, 255, 255, 0.45))", fontSize: 9 }}>
-              ·
-            </span>
+            <span style={separatorStyle}>·</span>
           </>
-        ) : null}
+        )}
 
-        {/* Speed readout */}
         <div style={{ display: "flex", alignItems: "baseline", gap: 3 }}>
           <span
             ref={speedRef}
@@ -199,17 +146,11 @@ export function ObservatoryStatusStrip({
           >
             0
           </span>
-          <span style={{ color: "var(--hud-text-muted, rgba(255, 255, 255, 0.45))", fontSize: 9 }}>
-            u/s
-          </span>
+          <span style={separatorStyle}>u/s</span>
         </div>
 
-        {/* Separator */}
-        <span style={{ color: "var(--hud-text-muted, rgba(255, 255, 255, 0.45))", fontSize: 9 }}>
-          ·
-        </span>
+        <span style={separatorStyle}>·</span>
 
-        {/* Heading cardinal */}
         <div style={{ display: "flex", alignItems: "baseline", gap: 3 }}>
           <span
             ref={headingRef}
@@ -224,12 +165,8 @@ export function ObservatoryStatusStrip({
           </span>
         </div>
 
-        {/* Separator */}
-        <span style={{ color: "var(--hud-text-muted, rgba(255, 255, 255, 0.45))", fontSize: 9 }}>
-          ·
-        </span>
+        <span style={separatorStyle}>·</span>
 
-        {/* Station count */}
         <div style={{ display: "flex", alignItems: "baseline", gap: 3 }}>
           <span
             ref={stationCountRef}
@@ -243,13 +180,10 @@ export function ObservatoryStatusStrip({
           >
             0
           </span>
-          <span style={{ color: "var(--hud-text-muted, rgba(255, 255, 255, 0.45))", fontSize: 9 }}>
-            sta
-          </span>
+          <span style={separatorStyle}>sta</span>
         </div>
       </div>
 
-      {/* CENTER-RIGHT SECTION — mode toggle + analyst preset pill buttons */}
       <div
         style={{
           display: "flex",
@@ -258,7 +192,6 @@ export function ObservatoryStatusStrip({
           flex: "0 0 auto",
         }}
       >
-        {/* SCN-02: ATLAS/FLOW mode toggle — first item in center-right, before analyst presets */}
         <button
           type="button"
           data-testid="status-strip-mode-toggle"
@@ -298,7 +231,6 @@ export function ObservatoryStatusStrip({
           {mode === "flow" ? "FLOW" : "ATLAS"}
         </button>
 
-        {/* Thin separator between mode toggle and analyst presets */}
         <span
           style={{
             width: 1,
@@ -316,10 +248,7 @@ export function ObservatoryStatusStrip({
               key={preset.id}
               type="button"
               data-testid={`status-strip-preset-${preset.id}`}
-              onClick={() => {
-                // Radio-toggle: clicking active preset deactivates it; clicking another activates it
-                actions.setAnalystPreset(isActive ? null : preset.id);
-              }}
+              onClick={() => actions.setAnalystPreset(isActive ? null : preset.id)}
               style={{
                 padding: "1px 8px",
                 fontSize: 9,
@@ -356,7 +285,6 @@ export function ObservatoryStatusStrip({
         })}
       </div>
 
-      {/* RIGHT SECTION — minimap indicator dot (placeholder) */}
       <div
         data-testid="status-strip-minimap-dot"
         style={{

@@ -1,17 +1,14 @@
-// Per-station interior configuration data for station interior zones.
-// Defines geometry, accent colors, NPC placements, and hero prop layout for each of the 6 stations.
-
 import type { HuntStationId } from "./types";
 import type { ObservatoryHeroPropAssetId } from "./propAssets";
 
 export interface InteriorNpcPlacement {
-  position: [number, number, number]; // local offset from room center
-  poseLabel: string; // e.g. "typing", "examining", "patrolling" — cosmetic label
+  position: [number, number, number];
+  poseLabel: string;
 }
 
 export interface InteriorPropMesh {
   type: "box" | "cylinder" | "torus" | "cone";
-  args: number[]; // geometry constructor args
+  args: number[];
   position: [number, number, number];
   rotation?: [number, number, number];
   color: string;
@@ -22,18 +19,17 @@ export interface InteriorPropMesh {
 export interface StationInteriorConfig {
   stationId: HuntStationId;
   label: string;
-  accentColor: string; // hex color for wall accents + point light
-  roomSize: [number, number, number]; // width, height, depth
-  wallColor: string; // base wall material color
-  props: InteriorPropMesh[]; // 2-3 unique prop meshes per station
-  npcs: InteriorNpcPlacement[]; // 3 NPCs per station
+  accentColor: string;
+  roomSize: [number, number, number];
+  wallColor: string;
+  props: InteriorPropMesh[];
+  npcs: InteriorNpcPlacement[];
   heroPropAssetId: ObservatoryHeroPropAssetId;
-  heroPropPosition: [number, number, number]; // local position within room
-  lightIntensity: number; // per-station point light intensity
+  heroPropPosition: [number, number, number];
+  lightIntensity: number;
 }
 
 export const STATION_INTERIOR_CONFIGS: Record<HuntStationId, StationInteriorConfig> = {
-  // Radar Room — blue accent
   signal: {
     stationId: "signal",
     label: "Horizon",
@@ -76,7 +72,6 @@ export const STATION_INTERIOR_CONFIGS: Record<HuntStationId, StationInteriorConf
     lightIntensity: 1.5,
   },
 
-  // Lattice Grid Room — green accent
   targets: {
     stationId: "targets",
     label: "Subjects",
@@ -111,7 +106,6 @@ export const STATION_INTERIOR_CONFIGS: Record<HuntStationId, StationInteriorConf
     lightIntensity: 1.5,
   },
 
-  // Operations Console Room — amber accent
   run: {
     stationId: "run",
     label: "Operations",
@@ -154,7 +148,6 @@ export const STATION_INTERIOR_CONFIGS: Record<HuntStationId, StationInteriorConf
     lightIntensity: 1.5,
   },
 
-  // Vault Room — gold accent
   receipts: {
     stationId: "receipts",
     label: "Evidence",
@@ -190,7 +183,6 @@ export const STATION_INTERIOR_CONFIGS: Record<HuntStationId, StationInteriorConf
     lightIntensity: 1.5,
   },
 
-  // Judgment Chamber — purple accent
   "case-notes": {
     stationId: "case-notes",
     label: "Judgment",
@@ -225,7 +217,6 @@ export const STATION_INTERIOR_CONFIGS: Record<HuntStationId, StationInteriorConf
     lightIntensity: 1.5,
   },
 
-  // Sentinel Beacon Room — red accent
   watch: {
     stationId: "watch",
     label: "Watchfield",

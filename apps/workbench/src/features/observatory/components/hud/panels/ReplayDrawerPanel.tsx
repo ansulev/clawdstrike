@@ -1,23 +1,6 @@
-/**
- * ReplayDrawerPanel.tsx — Phase 31 PNL-03
- *
- * Renders the replay control panel in the left drawer:
- *   - Timeline scrubber (range input) with frame readout
- *   - Bookmark list (click to jump)
- *   - Jump-to-spike button
- *   - Compare toggle (now vs then)
- *
- * Reads from: replay (ObservatoryReplayState)
- * Actions: setReplayState (imperative via getState())
- */
-
 import { useMemo } from "react";
 import { useObservatoryStore } from "../../../stores/observatory-store";
 import type { ObservatoryAnnotationPin } from "../../../types";
-
-// ---------------------------------------------------------------------------
-// Section heading style (shared pattern)
-// ---------------------------------------------------------------------------
 
 const sectionHeadingStyle: React.CSSProperties = {
   fontSize: 10,
@@ -41,10 +24,6 @@ const buttonBaseStyle: React.CSSProperties = {
   cursor: "pointer",
   transition: "opacity 150ms ease",
 };
-
-// ---------------------------------------------------------------------------
-// Component
-// ---------------------------------------------------------------------------
 
 export function ReplayDrawerPanel() {
   const replay = useObservatoryStore.use.replay();
@@ -83,7 +62,6 @@ export function ReplayDrawerPanel() {
       .actions.setReplayState({ enabled: !replay.enabled });
   }
 
-  // ANNO-05: Jump replay timeline to pin's frame and dispatch camera focus event
   function handlePinClick(pin: ObservatoryAnnotationPin) {
     useObservatoryStore.getState().actions.setReplayState({ frameIndex: pin.frameIndex });
     window.dispatchEvent(
@@ -93,7 +71,6 @@ export function ReplayDrawerPanel() {
     );
   }
 
-  // ANNO-04: Delete a pin — stop propagation to avoid triggering jump
   function handlePinDelete(e: React.MouseEvent, pinId: string) {
     e.stopPropagation();
     useObservatoryStore.getState().actions.removeAnnotationPin(pinId);
@@ -112,7 +89,6 @@ export function ReplayDrawerPanel() {
         fontFamily: "inherit",
       }}
     >
-      {/* Timeline scrubber section */}
       <div>
         <div style={sectionHeadingStyle}>Timeline</div>
         <input
@@ -139,7 +115,6 @@ export function ReplayDrawerPanel() {
         </div>
       </div>
 
-      {/* Bookmark list section */}
       <div>
         <div style={sectionHeadingStyle}>Bookmarks</div>
         {bookmarks.length === 0 ? (
@@ -196,7 +171,6 @@ export function ReplayDrawerPanel() {
         )}
       </div>
 
-      {/* Annotations section — ANNO-04 */}
       <div>
         <div style={sectionHeadingStyle}>Annotations</div>
         {sortedPins.length === 0 ? (
@@ -228,7 +202,6 @@ export function ReplayDrawerPanel() {
                   gap: 8,
                 }}
               >
-                {/* Pin icon — small diamond SVG */}
                 <svg width="10" height="14" viewBox="0 0 10 14" style={{ flexShrink: 0 }}>
                   <path d="M5 0 L10 7 L5 14 L0 7 Z" fill="var(--hud-accent)" opacity="0.7" />
                 </svg>
@@ -276,10 +249,8 @@ export function ReplayDrawerPanel() {
         )}
       </div>
 
-      {/* Spacer */}
       <div style={{ flex: 1 }} />
 
-      {/* Jump-to-spike button */}
       {hasSpikeSelected ? (
         <button
           type="button"
@@ -308,7 +279,6 @@ export function ReplayDrawerPanel() {
         </button>
       )}
 
-      {/* Compare toggle */}
       <div
         style={{
           display: "flex",

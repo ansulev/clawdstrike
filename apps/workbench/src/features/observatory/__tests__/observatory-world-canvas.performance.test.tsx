@@ -308,6 +308,8 @@ const baseProps = {
 describe("ObservatoryWorldCanvas performance flags", () => {
   beforeEach(() => {
     vi.spyOn(console, "error").mockImplementation(() => {});
+    // Ensure consistent hardware profile across local (high-core) and CI (low-core) environments
+    Object.defineProperty(navigator, "hardwareConcurrency", { configurable: true, value: 8 });
     fiberMock.canvasProps.length = 0;
     fiberMock.regress.mockReset();
     dreiMock.performanceMonitorProps.length = 0;

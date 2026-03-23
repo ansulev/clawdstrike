@@ -68,12 +68,12 @@ Provide the developer tooling layer for the ClawdStrike plugin ecosystem. The ru
 | TEST-04 | Phase 1 | Complete |
 | TEST-05 | Phase 1 | Complete |
 | TEST-06 | Phase 1 | Complete |
-| SCAF-01 | Phase 2 | Pending |
-| SCAF-02 | Phase 2 | Pending |
-| SCAF-03 | Phase 2 | Pending |
+| SCAF-01 | Phase 2 | Complete |
+| SCAF-02 | Phase 2 | Complete |
+| SCAF-03 | Phase 2 | Complete |
 | SCAF-04 | Phase 2 | Pending |
 | SCAF-05 | Phase 2 | Pending |
-| SCAF-06 | Phase 2 | Pending |
+| SCAF-06 | Phase 2 | Complete |
 | SCAF-07 | Phase 2 | Pending |
 | DEVS-01 | Phase 3 | Complete |
 | DEVS-02 | Phase 3 | Complete |

@@ -84,7 +84,10 @@ Plans:
   3. When the playground plugin throws during activation, the error boundary displays the stack trace with line numbers that match the CodeMirror editor, and the workbench remains functional
   4. Console output from the playground plugin appears in the bottom panel plugin console with severity icons, and does not leak into the global browser console
   5. Plugin evaluation works in Tauri dev mode without CSP violations (code served from `/__plugin-eval/` route, not blob URLs)
-**Plans**: TBD
+**Plans:** 2 plans
+Plans:
+- [ ] 05-01-PLAN.md — Core playground infrastructure: store, transpiler, eval server, CodeMirror editor, toolbar, plugin registration
+- [ ] 05-02-PLAN.md — Contribution inspector, plugin console panel, error boundary with source-mapped traces
 
 ## Progress
 
@@ -97,4 +100,4 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 | 2. CLI Scaffolding | 0/TBD | Not started | - |
 | 3. Dev Server | 0/3 | Planning complete | - |
 | 4. Documentation | 0/2 | Planned | - |
-| 5. Plugin Playground | 0/TBD | Not started | - |
+| 5. Plugin Playground | 0/2 | Planning complete | - |

@@ -15,7 +15,7 @@
  *   • Click delete button → remove pin from store
  */
 
-import { useRef, useState, type JSX } from "react";
+import { useEffect, useRef, useState, type JSX } from "react";
 import { Html, Text } from "@react-three/drei";
 import * as THREE from "three";
 import type { ThreeEvent } from "@react-three/fiber";
@@ -115,10 +115,18 @@ export function ReplayAnnotationLayer({
 }: ReplayAnnotationLayerProps): JSX.Element | null {
   const [editingPinId, setEditingPinId] = useState<string | null>(null);
 
-  // Stable ref to avoid re-creating the ground material on each render
-  const groundMaterialRef = useRef(
-    new THREE.MeshBasicMaterial({ visible: false, side: THREE.DoubleSide }),
-  );
+  // Lazy-init ref — avoids creating a new material on every render
+  const groundMaterialRef = useRef<THREE.MeshBasicMaterial | null>(null);
+  if (!groundMaterialRef.current) {
+    groundMaterialRef.current = new THREE.MeshBasicMaterial({ visible: false, side: THREE.DoubleSide });
+  }
+
+  // Dispose the material on unmount to prevent GPU memory leak
+  useEffect(() => {
+    return () => {
+      groundMaterialRef.current?.dispose();
+    };
+  }, []);
 
   const pinColor = spiritAccentColor ?? DEFAULT_PIN_COLOR;
 

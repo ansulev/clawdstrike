@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: milestone
 status: completed
-stopped_at: Completed 21-01-PLAN.md
-last_updated: "2026-03-23T17:29:13.712Z"
-last_activity: 2026-03-23 — Completed 21-01 CodeMirror cursor extension
+stopped_at: Completed 22-01-PLAN.md
+last_updated: "2026-03-23T18:36:16Z"
+last_activity: 2026-03-23 — Completed 22-01 File room membership wiring
 progress:
-  total_phases: 4
-  completed_phases: 4
-  total_plans: 7
-  completed_plans: 7
+  total_phases: 5
+  completed_phases: 5
+  total_plans: 8
+  completed_plans: 8
   percent: 100
 ---
 
@@ -20,14 +20,14 @@ progress:
 
 See: .planning/PROJECT.md (updated 2026-03-23)
 **Core value:** Security operators work across multiple views simultaneously with IDE-grade workflows
-**Current focus:** v2.0 Presence & Awareness — Phase 21: CodeMirror Cursor Extension
+**Current focus:** v2.0 Presence & Awareness — Phase 22: File Room Membership Wiring
 
 ## Current Position
 
-Phase: 21 of 21 (CodeMirror Cursor Extension) — fourth of 4 phases in v2.0
+Phase: 22 of 22 (File Room Membership Wiring) — fifth of 5 phases in v2.0
 Plan: 1 of 1 in current phase
-Status: Plan 21-01 complete, Phase 21 complete, v2.0 milestone complete
-Last activity: 2026-03-23 — Completed 21-01 CodeMirror cursor extension
+Status: Plan 22-01 complete, Phase 22 complete
+Last activity: 2026-03-23 — Completed 22-01 File room membership wiring
 
 Progress: [██████████] 100%
 
@@ -49,6 +49,7 @@ Progress: [██████████] 100%
 | Phase 20 P02 | 2min | 2 tasks | 4 files |
 | Phase 20-ui-presence-indicators P01 | 3min | 2 tasks | 5 files |
 | Phase 21-codemirror-cursor-extension P01 | 4min | 2 tasks | 3 files |
+| Phase 22-file-room-membership-wiring P01 | 3min | 2 tasks | 6 files |
 
 ## Previous Milestones
 
@@ -82,6 +83,9 @@ Progress: [██████████] 100%
 - [Phase 21]: presenceFilePath Facet: file identity injected via Facet.define, read inside ViewPlugin for cursor filtering and outbound path
 - [Phase 21]: Prec.low wrapping for presence extension to avoid conflicts with guard-gutter and coverage-gutter
 - [Phase 21]: 50ms throttle with JSON dedup for outbound cursor sends; MAX_REMOTE_CURSORS=20 cap
+- [Phase 22]: toPresencePath mirrors hushd normalize_path exactly (strip backslashes, drive letters, leading slash)
+- [Phase 22]: File tracking hook uses Zustand external subscription (same pattern as pane-store dirty-sync)
+- [Phase 22]: Reconnect re-send uses epoch counter ref to distinguish initial connect from reconnect
 
 ### Blockers/Concerns
 
@@ -89,6 +93,6 @@ Progress: [██████████] 100%
 
 ## Session Continuity
 
-Last session: 2026-03-23T17:26:20.010Z
-Stopped at: Completed 21-01-PLAN.md
+Last session: 2026-03-23T18:36:16Z
+Stopped at: Completed 22-01-PLAN.md
 Resume file: None

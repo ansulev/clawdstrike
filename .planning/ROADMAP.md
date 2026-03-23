@@ -17,7 +17,7 @@ Add real-time analyst presence and awareness to the workbench. Four phases build
 - [x] **Phase 19: Client Connection & Store** - PresenceSocket class with reconnect/jitter, presence-store Zustand store, offline degradation (completed 2026-03-23)
 - [x] **Phase 20: UI Presence Indicators** - Status bar connection dot, online count, pane tab dots, activity bar pills, analyst roster, Speakeasy presence (completed 2026-03-23)
 - [x] **Phase 21: CodeMirror Cursor Extension** - Remote cursors, selections, hover labels, line:column coordinates, Facet+StateEffect delivery (completed 2026-03-23)
-- [ ] **Phase 22: File Room Membership Wiring** - Send view_file/leave_file from client, normalize paths, enable file-scoped presence (gap closure)
+- [x] **Phase 22: File Room Membership Wiring** - Send view_file/leave_file from client, normalize paths, enable file-scoped presence (gap closure) (completed 2026-03-23)
 
 ## Phase Details
 
@@ -93,10 +93,10 @@ Plans:
   3. After two analysts open the same file, each sees colored dots on their pane tab for that file (viewersByFile populated)
   4. The Speakeasy panel shows the correct file-viewer count when other analysts are viewing the same file
   5. Remote cursors and selections render correctly for files opened after the initial connection (not just welcome roster)
-**Plans:** 1 plan
+**Plans:** 1/1 plans complete
 
 Plans:
-- [ ] 22-01-PLAN.md — Path normalization utility, file tracking hook with view_file/leave_file sends, viewersByFile lookup alignment across tab dots, Speakeasy, and CM6 extension
+- [x] 22-01-PLAN.md — Path normalization utility, file tracking hook with view_file/leave_file sends, viewersByFile lookup alignment across tab dots, Speakeasy, and CM6 extension
 
 ## Progress
 
@@ -108,4 +108,4 @@ Plans:
 | 19. Client Connection & Store | 2/2 | Complete    | 2026-03-23 |
 | 20. UI Presence Indicators | 3/3 | Complete    | 2026-03-23 |
 | 21. CodeMirror Cursor Extension | 1/1 | Complete    | 2026-03-23 |
-| 22. File Room Membership Wiring | 0/1 | Not started | - |
+| 22. File Room Membership Wiring | 1/1 | Complete    | 2026-03-23 |

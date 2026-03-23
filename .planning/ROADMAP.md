@@ -31,7 +31,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   4. The `/testing` sub-path import does not pull in main SDK code (tree-shaking verified by bundle size check)
 **Plans:** 2 plans
 Plans:
-- [ ] 01-01-PLAN.md — Core testing module: MockStorageApi, createMockContext, createSpyContext, /testing sub-path export
+- [x] 01-01-PLAN.md — Core testing module: MockStorageApi, createMockContext, createSpyContext, /testing sub-path export
 - [ ] 01-02-PLAN.md — Assertion helpers: assertContributions, assertManifestValid, self-contained manifest validation
 
 ### Phase 2: CLI Scaffolding
@@ -100,7 +100,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Testing Harness | 0/2 | Planning complete | - |
+| 1. Testing Harness | 1/2 | Executing | - |
 | 2. CLI Scaffolding | 0/3 | Planning complete | - |
 | 3. Dev Server | 0/3 | Planning complete | - |
 | 4. Documentation | 0/2 | Planned | - |

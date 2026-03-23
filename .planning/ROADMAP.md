@@ -65,7 +65,10 @@ Plans:
   2. The "Getting Started" guide walks a reader from `npm create @clawdstrike/plugin` through building and loading the plugin in the workbench -- every command in the guide is copy-pasteable and works
   3. `mise run docs:plugin-api` generates TypeDoc output into `docs/book/api/` and the mdBook links to it
   4. CI fails if TypeDoc generation breaks (catches stale JSDoc or missing exports)
-**Plans**: TBD
+**Plans:** 2 plans
+Plans:
+- [ ] 04-01-PLAN.md — mdBook plugin development guide pages (Getting Started, Manifest, Contribution Points, Testing, Dev Server, Playground, Publishing)
+- [ ] 04-02-PLAN.md — TypeDoc API reference generation, mise task, and CI integration
 
 ### Phase 5: Plugin Playground
 **Goal**: A plugin author can write, run, and debug a plugin entirely within the workbench -- seeing contributions register in real time, errors with source-mapped line numbers, and a tree view of all registered contributions
@@ -89,5 +92,5 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 | 1. Testing Harness | 0/2 | Planning complete | - |
 | 2. CLI Scaffolding | 0/TBD | Not started | - |
 | 3. Dev Server | 0/TBD | Not started | - |
-| 4. Documentation | 0/TBD | Not started | - |
+| 4. Documentation | 0/2 | Planned | - |
 | 5. Plugin Playground | 0/TBD | Not started | - |

@@ -97,10 +97,100 @@ vi.mock("@/components/desktop/desktop-layout", async () => {
 // Mock WorkbenchBootstraps transitive deps
 vi.mock("@/features/operator/stores/operator-store", () => ({
   useOperator: () => ({ currentOperator: null, setOperator: vi.fn() }),
+  useOperatorStore: Object.assign(
+    () => ({
+      currentOperator: null,
+      actions: {
+        setCurrentOperator: vi.fn(),
+      },
+    }),
+    {
+      use: {
+        currentOperator: () => null,
+        actions: () => ({
+          setCurrentOperator: vi.fn(),
+        }),
+      },
+      getState: () => ({
+        currentOperator: null,
+      }),
+    },
+  ),
 }));
 
 vi.mock("@/features/fleet/use-fleet-connection", () => ({
   useFleetConnection: () => ({ connection: { connected: false }, connect: vi.fn(), disconnect: vi.fn() }),
+  useFleetConnectionStore: Object.assign(
+    () => ({
+      connection: { connected: false, hushdUrl: "", controlApiUrl: "", hushdHealth: null, agentCount: 0 },
+      agents: [],
+      error: null,
+      sseState: "idle" as const,
+      remotePolicyInfo: null,
+      actions: {
+        connect: vi.fn(),
+        disconnect: vi.fn(),
+        testConnection: vi.fn(),
+        refreshAgents: vi.fn(),
+        refreshRemotePolicy: vi.fn(),
+        getCredentials: vi.fn(() => ({ apiKey: "", controlApiToken: "" })),
+        getAuthenticatedConnection: vi.fn(() => ({
+          connected: false,
+          hushdUrl: "",
+          controlApiUrl: "",
+          apiKey: "",
+          controlApiToken: "",
+          hushdHealth: null,
+          agentCount: 0,
+        })),
+      },
+    }),
+    {
+      use: {
+        connection: () => ({
+          connected: false,
+          hushdUrl: "",
+          controlApiUrl: "",
+          hushdHealth: null,
+          agentCount: 0,
+        }),
+        agents: () => [],
+        error: () => null,
+        sseState: () => "idle" as const,
+        remotePolicyInfo: () => null,
+        actions: () => ({
+          connect: vi.fn(),
+          disconnect: vi.fn(),
+          testConnection: vi.fn(),
+          refreshAgents: vi.fn(),
+          refreshRemotePolicy: vi.fn(),
+          getCredentials: vi.fn(() => ({ apiKey: "", controlApiToken: "" })),
+          getAuthenticatedConnection: vi.fn(() => ({
+            connected: false,
+            hushdUrl: "",
+            controlApiUrl: "",
+            apiKey: "",
+            controlApiToken: "",
+            hushdHealth: null,
+            agentCount: 0,
+          })),
+        }),
+      },
+      getState: () => ({
+        connection: {
+          connected: false,
+          hushdUrl: "",
+          controlApiUrl: "",
+          hushdHealth: null,
+          agentCount: 0,
+        },
+        agents: [],
+        error: null,
+        sseState: "idle" as const,
+        remotePolicyInfo: null,
+      }),
+    },
+  ),
 }));
 
 vi.mock("@/features/settings/use-hint-settings", () => ({
@@ -114,6 +204,11 @@ vi.mock("@/features/settings/secure-store", () => ({
 
 vi.mock("@/features/findings/hooks/use-signal-correlator", () => ({
   useSignalCorrelator: () => {},
+}));
+
+vi.mock("@/features/presence/use-presence-connection", () => ({
+  usePresenceConnection: () => {},
+  getPresenceSocket: () => null,
 }));
 
 vi.mock("@/features/policy/hooks/use-policy-bootstrap", () => ({

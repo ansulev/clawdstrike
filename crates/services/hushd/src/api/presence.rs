@@ -138,7 +138,7 @@ pub enum ClientMessage {
 pub struct PresenceHub {
     /// Connected analysts: fingerprint -> AnalystInfo
     analysts: DashMap<String, AnalystInfo>,
-    /// Per-file rooms: normalized_path -> Set<fingerprint>
+    /// Per-file rooms: `normalized_path -> Set<fingerprint>`
     rooms: DashMap<String, HashSet<String>>,
     /// Last heartbeat timestamp: fingerprint -> Instant
     last_seen: DashMap<String, tokio::time::Instant>,

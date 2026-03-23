@@ -1,6 +1,6 @@
 import { useRef, useEffect, useMemo, useCallback } from "react";
 import { EditorView, keymap, lineNumbers, highlightActiveLine, highlightSpecialChars, drawSelection, rectangularSelection, highlightActiveLineGutter, type ViewUpdate } from "@codemirror/view";
-import { Compartment, EditorState, type Extension } from "@codemirror/state";
+import { EditorSelection, Compartment, EditorState, type Extension } from "@codemirror/state";
 import { yaml } from "@codemirror/lang-yaml";
 import { json } from "@codemirror/lang-json";
 import { syntaxHighlighting, HighlightStyle, foldGutter, bracketMatching, indentOnInput, foldKeymap } from "@codemirror/language";
@@ -24,6 +24,11 @@ import { parseGuardRanges, computeCoverageGaps } from "@/lib/workbench/codemirro
 import { presenceCursors, presenceFilePath } from "@/lib/workbench/codemirror/presence-cursors";
 import { toPresencePath } from "@/features/presence/presence-paths";
 import { useSpiritStore } from "@/features/spirit/stores/spirit-store";
+import {
+  consumePendingEditorReveal,
+  listenForEditorReveal,
+  type EditorRevealTarget,
+} from "@/lib/workbench/editor-reveal";
 
 // ---- Active editor tracking ----
 
@@ -57,7 +62,26 @@ export interface YamlEditorProps {
   /** Enable detection gutters (Run Test + coverage gaps). Only for clawdstrike_policy files. */
   showDetectionGutters?: boolean;
   /** Absolute file path for presence cursor scoping. */
-  filePath?: string;
+  filePath?: string | null;
+}
+
+function applyEditorReveal(view: EditorView, target: EditorRevealTarget): void {
+  const lineNumber = Math.min(Math.max(target.lineNumber, 1), view.state.doc.lines);
+  const line = view.state.doc.line(lineNumber);
+  const lineLength = line.to - line.from;
+  const startOffset = Math.min(Math.max((target.startColumn ?? 1) - 1, 0), lineLength);
+  const endOffset = Math.min(
+    Math.max((target.endColumn ?? target.startColumn ?? 1) - 1, startOffset),
+    lineLength,
+  );
+  const anchor = line.from + startOffset;
+  const head = line.from + endOffset;
+
+  view.dispatch({
+    selection: EditorSelection.range(anchor, head),
+    effects: EditorView.scrollIntoView(anchor, { y: "center" }),
+  });
+  view.focus();
 }
 
 // ---- ClawdStrike brand theme ----
@@ -529,7 +553,6 @@ export function YamlEditor({
       effects: gutterCompartmentRef.current.reconfigure(pluginGutterExtensions),
     });
   }, [pluginGutterExtensions]);
-  }, [pluginGutterExtensions]);
 
   useEffect(() => {
     const view = viewRef.current;
@@ -541,6 +564,30 @@ export function YamlEditor({
       ],
     });
   }, [accentColor, fontSize, themeCompartment, highlightCompartment]);
+
+  useEffect(() => {
+    if (!filePath) return;
+
+    return listenForEditorReveal((target) => {
+      if (target.filePath !== filePath) return;
+
+      consumePendingEditorReveal(filePath);
+      const view = viewRef.current;
+      if (view) {
+        applyEditorReveal(view, target);
+      }
+    });
+  }, [filePath]);
+
+  useEffect(() => {
+    if (!filePath) return;
+
+    const view = viewRef.current;
+    const pendingReveal = consumePendingEditorReveal(filePath);
+    if (view && pendingReveal) {
+      applyEditorReveal(view, pendingReveal);
+    }
+  }, [filePath, value]);
 
   // Sync external value changes into the editor (e.g. when visual panel edits arrive)
   useEffect(() => {

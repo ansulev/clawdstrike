@@ -5,6 +5,7 @@ import { useProjectStore } from "@/features/project/stores/project-store";
 import { getProjectFileStatusKey } from "@/features/project/stores/project-store";
 import type { DetectionProject, ProjectFile } from "@/features/project/stores/project-store";
 import { usePaneStore, getActivePaneRoute } from "@/features/panes/pane-store";
+import { useWorkbench } from "@/features/policy/stores/policy-store";
 import { HeartbeatPanel } from "../panels/heartbeat-panel";
 import { SentinelPanel } from "../panels/sentinel-panel";
 import { FindingsPanel } from "../panels/findings-panel";
@@ -39,6 +40,7 @@ function ExplorerPanelConnected() {
   const formatFilter = useProjectStore.use.formatFilter();
   const fileStatuses = useProjectStore.use.fileStatuses();
   const actions = useProjectStore.use.actions();
+  const { openFileByPath } = useWorkbench();
 
   // Build ordered projects array from roots.
   // When loading is true, roots may exist but projects Map is not yet populated,
@@ -97,7 +99,7 @@ function ExplorerPanelConnected() {
       onToggleDir={(rootPath, dirPath) => {
         actions.toggleDirForRoot(rootPath, dirPath);
       }}
-      onOpenFile={(rootPath, file) => {
+      onOpenFile={async (rootPath, file) => {
         const absPath = joinWorkspacePath(rootPath, file.path);
         if (file.fileType === "swarm_bundle") {
           usePaneStore.getState().openApp(
@@ -105,6 +107,7 @@ function ExplorerPanelConnected() {
             file.name.replace(/\.swarm$/, ""),
           );
         } else {
+          await openFileByPath(absPath);
           usePaneStore.getState().openFile(absPath, file.name);
         }
       }}
@@ -137,7 +140,14 @@ function ExplorerPanelConnected() {
       onCreateFile={async (parentPath, fileName) => {
         const savedPath = await actions.createFile(parentPath, fileName, "clawdstrike_policy");
         if (savedPath) {
-          actions.setFileStatus(savedPath, { modified: true });
+          const rootPath = resolveWorkspaceRootPath(projectRoots, savedPath);
+          if (rootPath) {
+            actions.setFileStatus(
+              getProjectFileStatusKey(rootPath, relativeWorkspacePath(rootPath, savedPath)),
+              { modified: true },
+            );
+          }
+          await openFileByPath(savedPath);
           usePaneStore.getState().openFile(savedPath, fileName);
         }
       }}

@@ -226,6 +226,7 @@ export function YamlPreviewPanel({ fileType }: YamlPreviewPanelProps) {
             fileType={fileType}
             showDetectionGutters={isPolicyFile}
             onRunGuardTest={isPolicyFile ? handleRunGuardTest : undefined}
+            filePath={state.filePath}
           />
         ) : (
           <YamlEditor
@@ -235,6 +236,7 @@ export function YamlPreviewPanel({ fileType }: YamlPreviewPanelProps) {
             fileType={fileType}
             showDetectionGutters={isPolicyFile}
             onRunGuardTest={isPolicyFile ? handleRunGuardTest : undefined}
+            filePath={state.filePath}
           />
         )}
       </div>

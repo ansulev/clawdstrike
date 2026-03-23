@@ -9,8 +9,10 @@ import type {
   SearchResultGroup,
 } from "@/features/search/stores/search-store";
 import { useProjectStore } from "@/features/project/stores/project-store";
+import { resolveProjectPath } from "@/features/project/utils/resolve-project-path";
 import { usePaneStore } from "@/features/panes/pane-store";
-import { joinWorkspacePath } from "@/lib/workbench/path-utils";
+import { useWorkbench } from "@/features/policy/stores/policy-store";
+import { requestEditorReveal } from "@/lib/workbench/editor-reveal";
 
 function sliceByCharacterRange(
   value: string,
@@ -333,6 +335,7 @@ export function SearchPanelConnected() {
   const error = useSearchStore.use.error();
   const actions = useSearchStore.use.actions();
   const projectRoots = useProjectStore.use.projectRoots();
+  const { openFileByPath } = useWorkbench();
 
   return (
     <SearchPanel
@@ -347,11 +350,18 @@ export function SearchPanelConnected() {
       onQueryChange={actions.setQuery}
       onOptionToggle={(key) => actions.setOption(key, !options[key], projectRoots)}
       onSearch={() => actions.performSearch(projectRoots)}
-      onResultClick={(match) => {
-        const absolutePath = joinWorkspacePath(match.rootPath, match.filePath);
+      onResultClick={async (match) => {
+        const filePath = resolveProjectPath(match.rootPath, match.filePath);
+        await openFileByPath(filePath);
+        requestEditorReveal({
+          filePath,
+          lineNumber: match.lineNumber,
+          startColumn: match.matchStart + 1,
+          endColumn: match.matchEnd + 1,
+        });
         usePaneStore
           .getState()
-          .openFile(absolutePath, match.filePath.split("/").pop() ?? match.filePath);
+          .openFile(filePath, match.filePath.split("/").pop() ?? match.filePath);
       }}
     />
   );

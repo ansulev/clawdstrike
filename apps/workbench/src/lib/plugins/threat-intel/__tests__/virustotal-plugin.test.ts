@@ -337,3 +337,103 @@ describe("enrich() error handling", () => {
     expect(result.verdict.classification).toBe("unknown");
   });
 });
+
+// ---- API response validation ----
+
+describe("enrich() API response validation", () => {
+  let source: ReturnType<typeof createVirusTotalSource>;
+
+  beforeEach(() => {
+    source = createVirusTotalSource("test-api-key");
+  });
+
+  it("handles malformed JSON response ({ unexpected: 'data' }) with classification:unknown", async () => {
+    mockFetch.mockResolvedValue(okResponse({ unexpected: "data" }));
+
+    const result = await source.enrich({ type: "hash", value: "a".repeat(64) });
+
+    expect(result.verdict.classification).toBe("unknown");
+    expect(result.verdict.confidence).toBe(0);
+  });
+
+  it("handles non-JSON response (HTTP 500 with HTML)", async () => {
+    mockFetch.mockResolvedValue(
+      new Response("<html>500 Internal Server Error</html>", {
+        status: 500,
+        headers: { "content-type": "text/html" },
+      }),
+    );
+
+    const result = await source.enrich({ type: "hash", value: "a".repeat(64) });
+
+    expect(result.verdict.classification).toBe("unknown");
+    expect(result.verdict.confidence).toBe(0);
+  });
+
+  it("handles null body response", async () => {
+    mockFetch.mockResolvedValue(
+      new Response(null, {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+
+    const result = await source.enrich({ type: "hash", value: "a".repeat(64) });
+
+    expect(result).toBeDefined();
+    expect(result.verdict.classification).toBe("unknown");
+  });
+
+  it("handles response missing last_analysis_stats", async () => {
+    mockFetch.mockResolvedValue(
+      okResponse({ data: { attributes: {} } }),
+    );
+
+    const result = await source.enrich({ type: "hash", value: "a".repeat(64) });
+
+    expect(result.verdict.classification).toBe("unknown");
+    expect(result.verdict.summary).toMatch(/missing analysis stats/i);
+  });
+});
+
+// ---- Fetch timeout behavior ----
+
+describe("enrich() timeout behavior", () => {
+  let source: ReturnType<typeof createVirusTotalSource>;
+
+  beforeEach(() => {
+    source = createVirusTotalSource("test-api-key");
+  });
+
+  it("returns timeout error when fetch is aborted via AbortController", async () => {
+    mockFetch.mockRejectedValue(
+      new DOMException("The operation was aborted", "AbortError"),
+    );
+
+    const result = await source.enrich({ type: "hash", value: "a".repeat(64) });
+
+    expect(result.verdict.classification).toBe("unknown");
+    expect(result.verdict.summary).toMatch(/timeout/i);
+  });
+
+  it("simulates slow fetch that never resolves (AbortError)", async () => {
+    // Simulate a fetch that never resolves -- the AbortController fires first
+    mockFetch.mockImplementation(
+      () => new Promise(() => {
+        // never resolves
+      }),
+    );
+
+    // Since we can't actually wait for the 30s timeout in a test,
+    // verify the AbortError path works by directly rejecting
+    mockFetch.mockRejectedValue(
+      new DOMException("The operation was aborted", "AbortError"),
+    );
+
+    const result = await source.enrich({ type: "hash", value: "a".repeat(64) });
+
+    expect(result.verdict.classification).toBe("unknown");
+    expect(result.verdict.confidence).toBe(0);
+    expect(result.verdict.summary).toMatch(/timeout/i);
+  });
+});

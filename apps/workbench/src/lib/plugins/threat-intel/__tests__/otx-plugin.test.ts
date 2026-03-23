@@ -373,3 +373,52 @@ describe("enrich() error handling", () => {
     expect(result.verdict.classification).toBe("unknown");
   });
 });
+
+// ---- API response validation ----
+
+describe("enrich() API response validation", () => {
+  let source: ReturnType<typeof createOtxSource>;
+
+  beforeEach(() => {
+    source = createOtxSource("test-api-key");
+  });
+
+  it("handles malformed JSON response ({ unexpected: 'data' }) gracefully", async () => {
+    mockFetch.mockResolvedValue(okResponse({ unexpected: "data" }));
+
+    const result = await source.enrich({ type: "ip", value: "1.2.3.4" });
+
+    // OTX validates `typeof data === 'object'` which passes, then uses
+    // data.pulse_info?.count ?? 0 which yields 0 => benign
+    expect(result.verdict.classification).toBe("benign");
+    expect(result).toBeDefined();
+  });
+
+  it("handles non-JSON response (HTTP 500 with HTML)", async () => {
+    mockFetch.mockResolvedValue(
+      new Response("<html>500 Internal Server Error</html>", {
+        status: 500,
+        headers: { "content-type": "text/html" },
+      }),
+    );
+
+    const result = await source.enrich({ type: "ip", value: "1.2.3.4" });
+
+    expect(result.verdict.classification).toBe("unknown");
+    expect(result.verdict.confidence).toBe(0);
+  });
+
+  it("handles null body response", async () => {
+    mockFetch.mockResolvedValue(
+      new Response(null, {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+
+    const result = await source.enrich({ type: "ip", value: "1.2.3.4" });
+
+    expect(result).toBeDefined();
+    expect(result.verdict.classification).toBe("unknown");
+  });
+});

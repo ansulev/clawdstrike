@@ -17,6 +17,7 @@ import {
 import {
   statusBarRegistry,
   registerStatusBarItem,
+  unregisterStatusBarItem,
   getStatusBarItems,
   onStatusBarChange,
 } from "@/lib/workbench/status-bar-registry";
@@ -238,65 +239,72 @@ function PolicyVersionOrNullSegment() {
 
 // ---------------------------------------------------------------------------
 // Register built-in items at module scope
+// Guard with unregister-first to survive Vite HMR re-evaluation without
+// throwing on duplicate IDs.
 // ---------------------------------------------------------------------------
 
-registerStatusBarItem({
+function registerBuiltinStatusBarItem(item: StatusBarItem): void {
+  unregisterStatusBarItem(item.id);
+  registerStatusBarItem(item);
+}
+
+registerBuiltinStatusBarItem({
   id: "builtin:validation",
   side: "left",
   priority: 10,
   render: () => <ValidationSegment />,
 });
 
-registerStatusBarItem({
+registerBuiltinStatusBarItem({
   id: "builtin:guard-count-or-file-type",
   side: "left",
   priority: 20,
   render: () => <GuardCountOrFileTypeSegment />,
 });
 
-registerStatusBarItem({
+registerBuiltinStatusBarItem({
   id: "builtin:policy-version",
   side: "left",
   priority: 25,
   render: () => <PolicyVersionOrNullSegment />,
 });
 
-registerStatusBarItem({
+registerBuiltinStatusBarItem({
   id: "builtin:fleet-status",
   side: "left",
   priority: 30,
   render: () => <FleetStatusSegment />,
 });
 
-registerStatusBarItem({
+registerBuiltinStatusBarItem({
   id: "builtin:mcp-status",
   side: "left",
   priority: 40,
   render: () => <McpStatusSegment />,
 });
 
-registerStatusBarItem({
+registerBuiltinStatusBarItem({
   id: "builtin:eval-count",
   side: "right",
   priority: 10,
   render: () => <EvalCountSegment />,
 });
 
-registerStatusBarItem({
+registerBuiltinStatusBarItem({
   id: "builtin:tab-count",
   side: "right",
   priority: 20,
   render: () => <TabCountSegment />,
 });
 
-registerStatusBarItem({
+registerBuiltinStatusBarItem({
   id: "builtin:active-policy",
   side: "right",
   priority: 30,
   render: () => <ActivePolicySegment />,
 });
 
-registerStatusBarItem({
+registerBuiltinStatusBarItem({
   id: "builtin:file-path",
   side: "right",
   priority: 40,

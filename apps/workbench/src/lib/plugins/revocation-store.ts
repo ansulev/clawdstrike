@@ -149,6 +149,9 @@ export class PluginRevocationStore {
     const added: string[] = [];
     const removed: string[] = [];
 
+    // Build a set of plugin IDs present in the remote snapshot (non-expired)
+    const remoteIds = new Set<string>();
+
     for (const entry of remote) {
       // Skip expired entries
       if (entry.until !== null) {
@@ -163,10 +166,21 @@ export class PluginRevocationStore {
         }
       }
 
+      remoteIds.add(entry.pluginId);
+
       // Add new entries (don't overwrite existing local entries)
       if (!this.entries.has(entry.pluginId)) {
         this.entries.set(entry.pluginId, entry);
         added.push(entry.pluginId);
+      }
+    }
+
+    // Remove local revocations that disappeared from the remote snapshot
+    // (e.g., operator lifted a revocation server-side while client was offline)
+    for (const localId of Array.from(this.entries.keys())) {
+      if (!remoteIds.has(localId)) {
+        this.entries.delete(localId);
+        removed.push(localId);
       }
     }
 

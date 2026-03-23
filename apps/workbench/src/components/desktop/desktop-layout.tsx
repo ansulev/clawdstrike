@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useLayoutEffect } from "react";
+import { useEffect, useMemo, useRef, useLayoutEffect, useSyncExternalStore } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Titlebar } from "@/components/desktop/titlebar";
 import { StatusBar } from "@/components/desktop/status-bar";
@@ -16,13 +16,38 @@ import { useMultiPolicy, useWorkbench } from "@/features/policy/stores/multi-pol
 import { useAutoSave } from "@/lib/workbench/use-auto-save";
 import { normalizeWorkbenchRoute } from "./workbench-routes";
 import { useActivePluginView, setActivePluginView } from "@/components/desktop/active-plugin-view";
-import { getView } from "@/lib/plugins/view-registry";
+import { getView, onViewRegistryChange } from "@/lib/plugins/view-registry";
 import type { ViewRegistration, ViewProps } from "@/lib/plugins/view-registry";
 import { ViewContainer } from "@/components/plugins/view-container";
 
 // ---------------------------------------------------------------------------
-// Internal: Plugin view wrapper that injects isCollapsed (ActivityBarPanelProps)
+// Internal: Stable wrapper component that passes isCollapsed via a ref so
+// the ViewContainer registration identity never changes when isCollapsed
+// toggles (avoids unmount/remount destroying plugin local state).
 // ---------------------------------------------------------------------------
+
+/** Inner component that reads isCollapsed from the ref held by the parent. */
+function ActivityBarPluginViewInner({
+  registration,
+  isCollapsedRef,
+}: {
+  registration: ViewRegistration;
+  isCollapsedRef: React.RefObject<boolean>;
+}) {
+  // Build a stable wrapped registration that closes over the ref, not the value.
+  const wrappedRegistration = useMemo(
+    () => ({
+      ...registration,
+      component: function PluginViewWithCollapse(props: ViewProps) {
+        const Component = registration.component;
+        return <Component {...props} isCollapsed={isCollapsedRef.current} />;
+      },
+    }),
+    [registration, isCollapsedRef],
+  );
+
+  return <ViewContainer registration={wrappedRegistration} isActive={true} />;
+}
 
 function ActivityBarPluginView({
   registration,
@@ -31,18 +56,15 @@ function ActivityBarPluginView({
   registration: ViewRegistration;
   isCollapsed: boolean;
 }) {
-  const wrappedRegistration = useMemo(
-    () => ({
-      ...registration,
-      component: (props: ViewProps) => {
-        const Component = registration.component;
-        return <Component {...props} isCollapsed={isCollapsed} />;
-      },
-    }),
-    [registration, isCollapsed],
-  );
+  const isCollapsedRef = useRef(isCollapsed);
+  isCollapsedRef.current = isCollapsed;
 
-  return <ViewContainer registration={wrappedRegistration} isActive={true} />;
+  return (
+    <ActivityBarPluginViewInner
+      registration={registration}
+      isCollapsedRef={isCollapsedRef}
+    />
+  );
 }
 
 export function DesktopLayout() {
@@ -62,9 +84,10 @@ export function DesktopLayout() {
   const currentRoute = normalizeWorkbenchRoute(rawRoute);
 
   const activePluginViewId = useActivePluginView();
-  const activePluginRegistration = activePluginViewId
-    ? getView(activePluginViewId)
-    : undefined;
+  const activePluginRegistration = useSyncExternalStore(
+    onViewRegistryChange,
+    () => (activePluginViewId ? getView(activePluginViewId) : undefined),
+  );
 
   // If the active plugin view was unregistered (e.g., plugin uninstalled),
   // clear the active plugin view automatically.

@@ -84,7 +84,10 @@ export class PluginRevocationClient {
     this.closeEventSource();
     this.clearReconnectTimer();
 
-    const url = `${this.options.hushdUrl}${SSE_EVENTS_PATH}`;
+    let url = `${this.options.hushdUrl}${SSE_EVENTS_PATH}`;
+    if (this.options.authToken) {
+      url += `?token=${encodeURIComponent(this.options.authToken)}`;
+    }
     const es = new EventSource(url);
 
     es.addEventListener("open", () => {
@@ -172,7 +175,7 @@ export class PluginRevocationClient {
         const entry = remoteEntries.find((e) => e.pluginId === pluginId);
         await this.options.pluginLoader.revokePlugin(pluginId, {
           reason: entry?.reason,
-          until: entry?.until != null ? undefined : undefined,
+          until: entry?.until != null ? new Date(entry.until).getTime() : undefined,
         });
       }
 

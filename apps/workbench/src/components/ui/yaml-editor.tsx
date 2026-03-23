@@ -14,6 +14,7 @@ import { policyYamlCompletionSource } from "@/features/policy/yaml-schema";
 import { sigmaYamlCompletionSource } from "@/lib/workbench/sigma-schema";
 import { ocsfJsonCompletionSource } from "@/lib/workbench/ocsf-schema";
 import { yaraLanguage } from "@/lib/workbench/yara-language";
+import { yaraCompletionSource } from "@/lib/workbench/yara-schema";
 import type { FileType } from "@/lib/workbench/file-type-registry";
 import { useGeneralSettings, type FontSize } from "@/features/settings/use-general-settings";
 import { guardTestGutter, updateGuardRanges } from "@/lib/workbench/codemirror/guard-gutter";
@@ -317,8 +318,10 @@ function getCompletionSource(fileType?: FileType): Extension {
         icons: false,
       });
     case "yara_rule":
-      // Phase 3 TODO: yaraCompletionSource
-      return autocompletion({ override: [] });
+      return autocompletion({
+        override: [yaraCompletionSource],
+        icons: false,
+      });
     case "ocsf_event":
       return autocompletion({
         override: [ocsfJsonCompletionSource],

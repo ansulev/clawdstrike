@@ -1,6 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 
+// jsdom does not implement Element.getAnimations; stub it so components
+// that rely on the Web Animations API don't crash during tests.
+if (!Element.prototype.getAnimations) {
+  Element.prototype.getAnimations = () => [];
+}
+
 const fleetClientMocks = vi.hoisted(() => ({
   fetchAuditEvents: vi.fn(),
 }));

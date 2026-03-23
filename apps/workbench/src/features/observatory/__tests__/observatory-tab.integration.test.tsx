@@ -175,13 +175,23 @@ describe("ObservatoryTab integration", () => {
   });
 
   it("opens the mapped workbench route when the selected station is clicked again", () => {
+    const realDateNow = Date.now;
+    let clock = realDateNow();
+    Date.now = () => clock;
+
     render(<ObservatoryTab />);
 
     fireEvent.click(screen.getByTestId("select-station"));
+    // Advance past the 400ms double-click window so the second click
+    // is treated as a repeat-select (opens the route) rather than a
+    // double-click (enters interior mode).
+    clock += 500;
     fireEvent.click(screen.getByTestId("select-station"));
 
     expect(observatoryCommandActionsMock.openObservatoryStationRoute).toHaveBeenCalledWith(
       "receipts",
     );
+
+    Date.now = realDateNow;
   });
 });

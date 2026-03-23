@@ -342,7 +342,7 @@ describe("ObservatoryWorldCanvas performance flags", () => {
     expect(screen.queryByTestId("observatory-vfx-pools")).toBeNull();
     expect(await screen.findByTestId("observatory-postfx")).toBeTruthy();
     expect(screen.getByTestId("observatory-world-scene")).toBeTruthy();
-    expect(fiberMock.canvasProps[fiberMock.canvasProps.length - 1]?.dpr).toEqual([1, 1.2]);
+    expect(fiberMock.canvasProps[fiberMock.canvasProps.length - 1]?.dpr).toEqual([1, 1.1]);
     expect(invalidationMock.props[invalidationMock.props.length - 1]?.sources).toBeDefined();
   });
 

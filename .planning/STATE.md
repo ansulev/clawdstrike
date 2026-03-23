@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: milestone
 status: completed
-stopped_at: Completed 18-01-PLAN.md
-last_updated: "2026-03-23T15:50:07.300Z"
-last_activity: 2026-03-23 — Completed 18-01 PresenceHub WS endpoint
+stopped_at: Completed 19-01-PLAN.md
+last_updated: "2026-03-23T16:11:06.449Z"
+last_activity: 2026-03-23 — Completed 19-01 Presence wire protocol & socket
 progress:
   total_phases: 4
   completed_phases: 1
-  total_plans: 1
-  completed_plans: 1
-  percent: 14
+  total_plans: 3
+  completed_plans: 2
+  percent: 67
 ---
 
 # Project State
@@ -24,12 +24,12 @@ See: .planning/PROJECT.md (updated 2026-03-23)
 
 ## Current Position
 
-Phase: 18 of 21 (Server Foundation) — first of 4 phases in v2.0
-Plan: 1 of 1 in current phase (COMPLETE)
-Status: Phase 18 complete, ready for Phase 19
-Last activity: 2026-03-23 — Completed 18-01 PresenceHub WS endpoint
+Phase: 19 of 21 (Client Connection & Store) — second of 4 phases in v2.0
+Plan: 1 of 2 in current phase (COMPLETE)
+Status: Plan 19-01 complete, ready for Plan 19-02
+Last activity: 2026-03-23 — Completed 19-01 Presence wire protocol & socket
 
-Progress: [#░░░░░░░░░] 14%
+Progress: [███████░░░] 67%
 
 ## Performance Metrics
 
@@ -43,6 +43,7 @@ Progress: [#░░░░░░░░░] 14%
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 18-server-foundation | 1 | 33min | 33min |
+| Phase 19-client-connection-store P01 | 3min | 2 tasks | 2 files |
 
 ## Previous Milestones
 
@@ -63,6 +64,8 @@ Progress: [#░░░░░░░░░] 14%
 - Reuse fleet SSE auth patterns (getCredentials function ref, not cached token)
 - WS route outside require_auth middleware (browser WS API cannot set headers); auth via ?token= query param
 - axum ws feature enabled per-crate (hushd only), not workspace-wide
+- [Phase 19]: Raw wire types keep snake_case field names; parseAnalystInfo converts to camelCase AnalystPresence
+- [Phase 19]: PresenceSocket is standalone class (not React), consumed by Zustand store in Plan 19-02
 
 ### Blockers/Concerns
 
@@ -70,6 +73,6 @@ Progress: [#░░░░░░░░░] 14%
 
 ## Session Continuity
 
-Last session: 2026-03-23
-Stopped at: Completed 18-01-PLAN.md
+Last session: 2026-03-23T16:11:06.447Z
+Stopped at: Completed 19-01-PLAN.md
 Resume file: None

@@ -9,8 +9,8 @@ Requirements for the Presence & Awareness milestone. Each maps to roadmap phases
 
 ### Connection & Transport
 
-- [ ] **CONN-01**: Workbench connects to hushd via WebSocket at `/api/v1/presence` with Bearer auth
-- [ ] **CONN-02**: Connection auto-reconnects with exponential backoff and random jitter on disconnect
+- [x] **CONN-01**: Workbench connects to hushd via WebSocket at `/api/v1/presence` with Bearer auth
+- [x] **CONN-02**: Connection auto-reconnects with exponential backoff and random jitter on disconnect
 - [ ] **CONN-03**: Connection status indicator in status bar (green/amber/red dot)
 - [ ] **CONN-04**: Workbench functions fully when hushd is unavailable (graceful offline degradation)
 
@@ -77,8 +77,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| CONN-01 | Phase 19 | Pending |
-| CONN-02 | Phase 19 | Pending |
+| CONN-01 | Phase 19 | Complete |
+| CONN-02 | Phase 19 | Complete |
 | CONN-03 | Phase 20 | Pending |
 | CONN-04 | Phase 19 | Pending |
 | PRES-01 | Phase 19 | Pending |

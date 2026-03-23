@@ -17,6 +17,7 @@ Add real-time analyst presence and awareness to the workbench. Four phases build
 - [x] **Phase 19: Client Connection & Store** - PresenceSocket class with reconnect/jitter, presence-store Zustand store, offline degradation (completed 2026-03-23)
 - [x] **Phase 20: UI Presence Indicators** - Status bar connection dot, online count, pane tab dots, activity bar pills, analyst roster, Speakeasy presence (completed 2026-03-23)
 - [x] **Phase 21: CodeMirror Cursor Extension** - Remote cursors, selections, hover labels, line:column coordinates, Facet+StateEffect delivery (completed 2026-03-23)
+- [ ] **Phase 22: File Room Membership Wiring** - Send view_file/leave_file from client, normalize paths, enable file-scoped presence (gap closure)
 
 ## Phase Details
 
@@ -81,9 +82,25 @@ Plans:
 Plans:
 - [ ] 21-01-PLAN.md — PresenceCursorExtension ViewPlugin + yaml-editor integration (Facet+StateEffect data injection, cursor carets, selection highlights, name labels, 50ms throttle, store subscription, outbound broadcasting, cleanup)
 
+### Phase 22: File Room Membership Wiring
+**Goal**: Client sends view_file/leave_file messages when files are opened/closed so the server populates rooms, broadcasts file-scoped presence, and enables tab dots, Speakeasy counts, and remote cursors for files opened post-connection
+**Depends on**: Phase 21 (all presence infrastructure must be complete)
+**Requirements**: UI-02, UI-05, CM-01, CM-02
+**Gap Closure:** Closes gaps from v2.0 audit — missing view_file/leave_file outbound sends + path normalization alignment
+**Success Criteria** (what must be TRUE):
+  1. When an analyst opens a policy file, the client sends a view_file message to the server with a workspace-relative file path
+  2. When an analyst closes a file tab, the client sends a leave_file message to the server
+  3. After two analysts open the same file, each sees colored dots on their pane tab for that file (viewersByFile populated)
+  4. The Speakeasy panel shows the correct file-viewer count when other analysts are viewing the same file
+  5. Remote cursors and selections render correctly for files opened after the initial connection (not just welcome roster)
+**Plans**: TBD
+
+Plans:
+- [ ] 22-01: Send view_file/leave_file from client, normalize paths, verify E2E flow
+
 ## Progress
 
-**Execution Order:** 18 -> 19 -> 20 -> 21
+**Execution Order:** 18 -> 19 -> 20 -> 21 -> 22
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -91,3 +108,4 @@ Plans:
 | 19. Client Connection & Store | 2/2 | Complete    | 2026-03-23 |
 | 20. UI Presence Indicators | 3/3 | Complete    | 2026-03-23 |
 | 21. CodeMirror Cursor Extension | 1/1 | Complete    | 2026-03-23 |
+| 22. File Room Membership Wiring | 0/1 | Not started | - |

@@ -90,7 +90,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | UI-02 | Phase 20 | Complete |
 | UI-03 | Phase 20 | Complete |
 | UI-04 | Phase 20 | Complete |
-| UI-05 | Phase 20 | Pending |
+| UI-05 | Phase 20 | Complete |
 | CM-01 | Phase 21 | Complete |
 | CM-02 | Phase 21 | Complete |
 | CM-03 | Phase 21 | Complete |

@@ -1,21 +1,5 @@
-/**
- * UI extension plugin source template.
- *
- * Generates a src/index.ts that creates a UI plugin with:
- * - An EditorTabContribution for a custom panel
- * - An ActivityBarItemContribution for sidebar navigation
- * - An open command
- * - Proper activation with command registration
- */
-
 import type { ScaffoldOptions } from "../types";
 
-/**
- * Generate the source template for a ui-type plugin.
- *
- * @param options - Scaffold options from CLI prompts or flags
- * @returns Complete src/index.ts content for a UI plugin
- */
 export function uiSourceTemplate(options: ScaffoldOptions): string {
   return `import { createPlugin } from "@clawdstrike/plugin-sdk";
 import type {

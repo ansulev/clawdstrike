@@ -1,20 +1,5 @@
-/**
- * Compliance framework plugin source template.
- *
- * Generates a src/index.ts that creates a compliance plugin with:
- * - A ComplianceFrameworkContribution
- * - An audit command
- * - Proper activation with command registration
- */
-
 import type { ScaffoldOptions } from "../types";
 
-/**
- * Generate the source template for a compliance-type plugin.
- *
- * @param options - Scaffold options from CLI prompts or flags
- * @returns Complete src/index.ts content for a compliance plugin
- */
 export function complianceSourceTemplate(options: ScaffoldOptions): string {
   return `import { createPlugin } from "@clawdstrike/plugin-sdk";
 import type {

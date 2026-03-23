@@ -1,11 +1,3 @@
-/**
- * PluginDevConsole - Bottom panel tab for plugin lifecycle events.
- *
- * Displays timestamped plugin lifecycle events with severity icons,
- * plugin ID badges, HMR timing, and filtering controls. Auto-scrolls
- * to the newest event.
- */
-
 import { useRef, useEffect, useState, useMemo, useCallback } from 'react';
 import {
   AlertCircle,
@@ -23,10 +15,6 @@ import {
   devConsoleStore,
 } from '../../lib/plugins/dev/dev-console-store';
 import type { DevLifecycleEvent, DevLifecycleEventType } from '../../lib/plugins/dev/types';
-
-// ---------------------------------------------------------------------------
-// Severity categories for filtering
-// ---------------------------------------------------------------------------
 
 type SeverityCategory = 'log' | 'warn' | 'error' | 'lifecycle' | 'hmr';
 
@@ -47,10 +35,6 @@ const CATEGORY_TYPES: Record<SeverityCategory, DevLifecycleEventType[]> = {
 
 const ALL_CATEGORIES: SeverityCategory[] = ['log', 'warn', 'error', 'lifecycle', 'hmr'];
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
 /** Format a timestamp as HH:MM:SS.mmm. */
 function formatTime(ts: number): string {
   const d = new Date(ts);
@@ -61,7 +45,6 @@ function formatTime(ts: number): string {
   return `${h}:${m}:${s}.${ms}`;
 }
 
-/** Get the severity icon for an event type. */
 function SeverityIcon({ type }: { type: DevLifecycleEventType }) {
   const size = 14;
   switch (type) {
@@ -90,7 +73,6 @@ function SeverityIcon({ type }: { type: DevLifecycleEventType }) {
   }
 }
 
-/** Get category for a given event type. */
 function getCategoryForType(type: DevLifecycleEventType): SeverityCategory {
   for (const [cat, types] of Object.entries(CATEGORY_TYPES) as [SeverityCategory, DevLifecycleEventType[]][]) {
     if (types.includes(type)) return cat;
@@ -98,26 +80,18 @@ function getCategoryForType(type: DevLifecycleEventType): SeverityCategory {
   return 'lifecycle';
 }
 
-// ---------------------------------------------------------------------------
-// Component
-// ---------------------------------------------------------------------------
-
 export default function PluginDevConsole() {
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Filter state
   const [selectedPluginId, setSelectedPluginId] = useState<string | undefined>(undefined);
   const [enabledCategories, setEnabledCategories] = useState<Set<SeverityCategory>>(
     () => new Set(ALL_CATEGORIES),
   );
 
-  // Get events from the store (filtered by plugin if selected)
   const pluginEvents = useDevConsoleFilter(selectedPluginId);
 
-  // Also get all events for the plugin filter dropdown
   const allEvents = useDevConsoleEvents();
 
-  // Derive unique plugin IDs for the filter dropdown
   const pluginIds = useMemo(() => {
     const ids = new Set<string>();
     for (const e of allEvents) {
@@ -126,18 +100,15 @@ export default function PluginDevConsole() {
     return Array.from(ids).sort();
   }, [allEvents]);
 
-  // Apply severity category filter
   const filteredEvents = useMemo(() => {
     if (enabledCategories.size === ALL_CATEGORIES.length) return pluginEvents;
     return pluginEvents.filter((e) => enabledCategories.has(getCategoryForType(e.type)));
   }, [pluginEvents, enabledCategories]);
 
-  // Auto-scroll to bottom when new events arrive
   useEffect(() => {
     scrollRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [filteredEvents]);
 
-  // Toggle a severity category
   const toggleCategory = useCallback((cat: SeverityCategory) => {
     setEnabledCategories((prev) => {
       const next = new Set(prev);
@@ -152,9 +123,7 @@ export default function PluginDevConsole() {
 
   return (
     <div className="flex flex-col h-full bg-zinc-950 text-zinc-300 text-xs">
-      {/* Toolbar */}
       <div className="flex items-center gap-2 px-2 py-1 border-b border-zinc-800 bg-zinc-900/50 shrink-0">
-        {/* Clear button */}
         <button
           onClick={() => devConsoleStore.clear()}
           className="flex items-center gap-1 px-1.5 py-0.5 rounded text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors"
@@ -166,7 +135,6 @@ export default function PluginDevConsole() {
 
         <div className="w-px h-4 bg-zinc-700" />
 
-        {/* Plugin filter dropdown */}
         <select
           value={selectedPluginId ?? ''}
           onChange={(e) => setSelectedPluginId(e.target.value || undefined)}
@@ -182,7 +150,6 @@ export default function PluginDevConsole() {
 
         <div className="w-px h-4 bg-zinc-700" />
 
-        {/* Severity filter checkboxes */}
         {ALL_CATEGORIES.map((cat) => (
           <label
             key={cat}
@@ -202,13 +169,11 @@ export default function PluginDevConsole() {
           </label>
         ))}
 
-        {/* Event count */}
         <span className="ml-auto text-zinc-600">
           {filteredEvents.length} event{filteredEvents.length !== 1 ? 's' : ''}
         </span>
       </div>
 
-      {/* Event list */}
       <div className="flex-1 overflow-y-auto overflow-x-hidden font-mono">
         {filteredEvents.length === 0 ? (
           <div className="flex items-center justify-center h-full text-zinc-600">
@@ -219,37 +184,27 @@ export default function PluginDevConsole() {
             <EventRow key={`${event.timestamp}-${idx}`} event={event} />
           ))
         )}
-        {/* Scroll sentinel */}
         <div ref={scrollRef} />
       </div>
     </div>
   );
 }
 
-// ---------------------------------------------------------------------------
-// Event row sub-component
-// ---------------------------------------------------------------------------
-
 function EventRow({ event }: { event: DevLifecycleEvent }) {
   return (
     <div className="flex items-start gap-2 py-1 px-2 border-b border-zinc-900 hover:bg-zinc-900/50 transition-colors">
-      {/* Timestamp */}
       <span className="text-zinc-600 shrink-0 tabular-nums">
         {formatTime(event.timestamp)}
       </span>
 
-      {/* Severity icon */}
       <SeverityIcon type={event.type} />
 
-      {/* Plugin ID badge */}
       <span className="shrink-0 px-1 py-0.5 rounded bg-zinc-800 text-zinc-500 font-mono text-[10px] leading-tight">
         {event.pluginId}
       </span>
 
-      {/* Message */}
       <span className="text-zinc-300 break-all min-w-0">{event.message}</span>
 
-      {/* Duration for HMR complete events */}
       {event.type === 'hmr:complete' && event.durationMs != null && (
         <span className="shrink-0 text-green-500 ml-auto">
           ({event.durationMs.toFixed(0)}ms)

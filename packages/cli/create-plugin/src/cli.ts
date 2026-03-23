@@ -1,21 +1,8 @@
-/**
- * CLI entry point for @clawdstrike/create-plugin.
- *
- * Routes to interactive prompts or non-interactive flag parsing
- * based on the --non-interactive flag.
- */
-
 import { parseFlags } from "./flags";
 import { runInteractivePrompts } from "./prompts";
 import { scaffoldProject } from "./engine";
 import type { ScaffoldOptions } from "./types";
 
-/**
- * Main CLI function.
- *
- * - If --non-interactive is present, parses flags and scaffolds immediately.
- * - Otherwise, runs interactive @clack/prompts and then scaffolds.
- */
 export async function main(): Promise<void> {
   const argv = process.argv.slice(2);
   const nonInteractive = argv.includes("--non-interactive");
@@ -32,7 +19,6 @@ export async function main(): Promise<void> {
     }
     options = parsed;
   } else {
-    // Extract positional name arg (first non-flag argument)
     const positionalName = argv.find((arg) => !arg.startsWith("-"));
     options = await runInteractivePrompts(positionalName);
   }

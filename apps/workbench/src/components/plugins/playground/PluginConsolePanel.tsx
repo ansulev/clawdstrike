@@ -1,14 +1,3 @@
-/**
- * PluginConsolePanel - Bottom panel tab showing playground plugin console output.
- *
- * Displays console.log/warn/error/info entries captured from the playground
- * plugin via the console proxy. Entries are color-coded by severity with
- * filter toggles, auto-scroll, timestamps, and a clear button.
- *
- * Console output does NOT leak to the global browser console -- the
- * playground-runner.ts console proxy handles interception and this panel
- * only reads from the store.
- */
 import { useState, useRef, useEffect } from "react";
 import {
   Info,
@@ -23,10 +12,6 @@ import {
   clearConsole,
 } from "@/lib/plugins/playground/playground-store";
 import type { ConsoleEntry } from "@/lib/plugins/playground/playground-store";
-
-// ---------------------------------------------------------------------------
-// Severity configuration
-// ---------------------------------------------------------------------------
 
 type LogLevel = ConsoleEntry["level"];
 
@@ -69,11 +54,7 @@ const LEVEL_CONFIGS: LevelConfig[] = [
   },
 ];
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-/** Format a timestamp as HH:MM:SS.mmm */
+/** Format a timestamp as HH:MM:SS.mmm. */
 function formatTimestamp(ts: number): string {
   const d = new Date(ts);
   const h = String(d.getHours()).padStart(2, "0");
@@ -83,7 +64,6 @@ function formatTimestamp(ts: number): string {
   return `${h}:${m}:${s}.${ms}`;
 }
 
-/** Stringify a single console arg for display. */
 function stringifyArg(arg: unknown): string {
   if (typeof arg === "string") return arg;
   if (arg === null) return "null";
@@ -95,19 +75,13 @@ function stringifyArg(arg: unknown): string {
   }
 }
 
-/** Stringify all args in a console entry, joining with spaces. */
 function stringifyArgs(args: unknown[]): string {
   return args.map(stringifyArg).join(" ");
 }
 
-/** Get the LevelConfig for a given level, falling back to log. */
 function getLevelConfig(level: LogLevel): LevelConfig {
   return LEVEL_CONFIGS.find((c) => c.level === level) ?? LEVEL_CONFIGS[0];
 }
-
-// ---------------------------------------------------------------------------
-// Filter toggles
-// ---------------------------------------------------------------------------
 
 function FilterToggle({
   config,
@@ -141,10 +115,6 @@ function FilterToggle({
   );
 }
 
-// ---------------------------------------------------------------------------
-// Console entry row
-// ---------------------------------------------------------------------------
-
 function ConsoleEntryRow({ entry }: { entry: ConsoleEntry }) {
   const config = getLevelConfig(entry.level);
   const Icon = config.icon;
@@ -164,10 +134,6 @@ function ConsoleEntryRow({ entry }: { entry: ConsoleEntry }) {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Main component
-// ---------------------------------------------------------------------------
-
 export function PluginConsolePanel() {
   const entries = usePlaygroundConsole();
   const [activeFilters, setActiveFilters] = useState<Set<string>>(
@@ -176,7 +142,6 @@ export function PluginConsolePanel() {
 
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Auto-scroll to bottom on new entries
   useEffect(() => {
     const el = scrollRef.current;
     if (el) {
@@ -184,7 +149,6 @@ export function PluginConsolePanel() {
     }
   }, [entries]);
 
-  // Toggle a filter level
   const toggleFilter = (level: string) => {
     setActiveFilters((prev) => {
       const next = new Set(prev);
@@ -197,16 +161,13 @@ export function PluginConsolePanel() {
     });
   };
 
-  // Count entries per level
   const counts: Record<string, number> = { log: 0, info: 0, warn: 0, error: 0 };
   for (const entry of entries) {
     counts[entry.level] = (counts[entry.level] ?? 0) + 1;
   }
 
-  // Filter entries by active levels
   const filteredEntries = entries.filter((e) => activeFilters.has(e.level));
 
-  // Empty state
   if (entries.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-[#6f7f9a] text-xs p-4 gap-3 bg-[#0d1117]">
@@ -218,7 +179,6 @@ export function PluginConsolePanel() {
 
   return (
     <div className="flex flex-col h-full bg-[#0d1117]">
-      {/* Filter bar */}
       <div className="flex items-center gap-1.5 px-2 py-1 border-b border-[#2a3142] shrink-0">
         {LEVEL_CONFIGS.map((config) => (
           <FilterToggle
@@ -232,7 +192,6 @@ export function PluginConsolePanel() {
 
         <div className="flex-1" />
 
-        {/* Clear button */}
         <button
           onClick={() => clearConsole()}
           className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium
@@ -244,7 +203,6 @@ export function PluginConsolePanel() {
         </button>
       </div>
 
-      {/* Scrollable entries */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto min-h-0">
         {filteredEntries.length === 0 ? (
           <div className="flex items-center justify-center h-full text-[#6f7f9a] text-xs p-4">

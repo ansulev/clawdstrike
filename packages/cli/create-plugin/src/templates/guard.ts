@@ -1,20 +1,5 @@
-/**
- * Guard plugin source template.
- *
- * Generates a src/index.ts that creates a guard plugin with:
- * - A GuardContribution with configFields
- * - A configure command
- * - Proper activation with ctx.guards.register()
- */
-
 import type { ScaffoldOptions } from "../types";
 
-/**
- * Generate the source template for a guard-type plugin.
- *
- * @param options - Scaffold options from CLI prompts or flags
- * @returns Complete src/index.ts content for a guard plugin
- */
 export function guardSourceTemplate(options: ScaffoldOptions): string {
   const technicalName = options.name.replace(/-/g, "_");
 

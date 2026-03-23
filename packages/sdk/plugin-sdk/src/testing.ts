@@ -1,24 +1,3 @@
-/**
- * Plugin Testing Utilities
- *
- * Provides mock and spy implementations of PluginContext for unit testing
- * plugins in isolation without running the workbench.
- *
- * Usage:
- * ```typescript
- * import { createMockContext, createSpyContext, MockStorageApi } from '@clawdstrike/plugin-sdk/testing';
- *
- * // Simple mock (no-op stubs):
- * const ctx = createMockContext();
- * myPlugin.activate(ctx);
- *
- * // Spy context (tracks registrations):
- * const { ctx, spy } = createSpyContext();
- * myPlugin.activate(ctx);
- * expect(spy.commands.registered).toHaveLength(1);
- * ```
- */
-
 import type {
   Disposable,
   ComponentType,
@@ -49,16 +28,10 @@ import {
   type ManifestValidationResult,
 } from "./manifest-validation";
 
-// ---- Re-exports from manifest-validation ----
 
 export { createTestManifest, type ManifestValidationError, type ManifestValidationResult };
 
-// ---- MockStorageApi ----
 
-/**
- * Map-backed implementation of StorageApi for testing.
- * Provides additional entries() and clear() methods for test assertions.
- */
 export class MockStorageApi implements StorageApi {
   private _store = new Map<string, unknown>();
 
@@ -70,23 +43,16 @@ export class MockStorageApi implements StorageApi {
     this._store.set(key, value);
   }
 
-  /** Returns all stored [key, value] pairs as an array. */
   entries(): Array<[string, unknown]> {
     return Array.from(this._store.entries());
   }
 
-  /** Clears all stored values. Useful for resetting state between tests. */
   clear(): void {
     this._store.clear();
   }
 }
 
-// ---- MockSecretsApi ----
 
-/**
- * Map-backed implementation of SecretsApi for testing.
- * All methods return Promises to match the async SecretsApi interface.
- */
 export class MockSecretsApi implements SecretsApi {
   private _store = new Map<string, string>();
 
@@ -109,12 +75,7 @@ export class MockSecretsApi implements SecretsApi {
   }
 }
 
-// ---- SpyData ----
 
-/**
- * Spy tracking data exposed by createSpyContext().
- * Each API namespace has a `registered` array that captures what was registered.
- */
 export interface SpyData {
   commands: { registered: Array<{ contribution: CommandContribution; handler: () => void }> };
   guards: { registered: GuardContribution[] };
@@ -133,25 +94,15 @@ export interface SpyData {
   subscriptions: Disposable[];
 }
 
-/**
- * A PluginContext augmented with spy tracking.
- */
 export interface SpyContext {
   ctx: PluginContext;
   spy: SpyData;
 }
 
-// ---- No-op Disposable ----
 
 const noop: Disposable = () => {};
 
-// ---- createMockContext ----
 
-/**
- * Creates a PluginContext with no-op stubs for every API method.
- * Storage uses MockStorageApi; secrets uses MockSecretsApi.
- * Pass partial overrides to selectively replace any API namespace.
- */
 export function createMockContext(overrides?: Partial<PluginContext>): PluginContext {
   return {
     pluginId: "test.plugin",
@@ -186,11 +137,7 @@ export function createMockContext(overrides?: Partial<PluginContext>): PluginCon
   };
 }
 
-// ---- createSpyContext ----
 
-/**
- * Helper: creates a disposable that removes an item from an array by reference.
- */
 function makeRemovingDisposable<T>(arr: T[], item: T): Disposable {
   return () => {
     const idx = arr.indexOf(item);
@@ -201,15 +148,7 @@ function makeRemovingDisposable<T>(arr: T[], item: T): Disposable {
 }
 
 /**
- * Creates a PluginContext with spy tracking for all registration APIs.
- * Each register() call pushes to its tracking array and returns a Disposable
- * that splices the item out when called.
- *
- * Returns `{ ctx, spy }` where `ctx` is the PluginContext and `spy` holds
- * all tracking arrays.
- *
- * Overrides merge on top -- overridden APIs will NOT have spy tracking
- * (that's expected, since the caller is providing their own implementation).
+ * Overrides merge on top -- overridden APIs will NOT have spy tracking.
  */
 export function createSpyContext(overrides?: Partial<PluginContext>): SpyContext {
   const commandsRegistered: Array<{ contribution: CommandContribution; handler: () => void }> = [];
@@ -311,22 +250,7 @@ export function createSpyContext(overrides?: Partial<PluginContext>): SpyContext
   return { ctx, spy };
 }
 
-// ---- Assertion Helpers ----
 
-/**
- * Assert that a plugin's manifest declares the expected number of contribution
- * points for each specified key. Checks every key in `expected` and reports
- * all mismatches in a single error.
- *
- * @param plugin - A PluginDefinition (from createPlugin)
- * @param expected - Map of contribution key to expected count
- * @throws Error with "Contribution count mismatch" and per-key details
- *
- * @example
- * ```typescript
- * assertContributions(myPlugin, { guards: 1, commands: 2 });
- * ```
- */
 export function assertContributions(
   plugin: PluginDefinition,
   expected: Partial<Record<keyof PluginContributions, number>>,
@@ -347,19 +271,6 @@ export function assertContributions(
   }
 }
 
-/**
- * Assert that a manifest passes validation. Wraps `validateManifest()` and
- * throws a detailed assertion error listing all field-level validation errors.
- *
- * @param manifest - The value to validate (any shape)
- * @throws Error with "Invalid manifest (N error(s))" and per-field details
- *
- * @example
- * ```typescript
- * assertManifestValid(createTestManifest({ id: "" })); // throws
- * assertManifestValid(createTestManifest());            // passes
- * ```
- */
 export function assertManifestValid(manifest: unknown): void {
   const result = validateManifest(manifest);
   if (!result.valid) {

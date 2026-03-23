@@ -1,24 +1,5 @@
-/**
- * Full plugin source template (kitchen sink).
- *
- * Generates a src/index.ts that demonstrates all major contribution types:
- * - GuardContribution
- * - CommandContribution
- * - FileTypeContribution
- * - ThreatIntelSourceContribution
- * - ComplianceFrameworkContribution
- * - EditorTabContribution
- * - ActivityBarItemContribution
- */
-
 import type { ScaffoldOptions } from "../types";
 
-/**
- * Generate the source template for a full-type plugin.
- *
- * @param options - Scaffold options from CLI prompts or flags
- * @returns Complete src/index.ts content with all contribution types
- */
 export function fullSourceTemplate(options: ScaffoldOptions): string {
   const technicalName = options.name.replace(/-/g, "_");
   const shortLabel = options.name.slice(0, 3).toUpperCase();
@@ -35,7 +16,6 @@ import type {
   ActivityBarItemContribution,
 } from "@clawdstrike/plugin-sdk";
 
-// ---- Guard ----
 
 const guardDef: GuardContribution = {
   id: "${options.name}-guard",
@@ -55,14 +35,12 @@ const guardDef: GuardContribution = {
   ],
 };
 
-// ---- Commands ----
 
 const configureCommand: CommandContribution = {
   id: "${options.publisher}.${options.name}.configure",
   title: "Configure ${options.displayName}",
 };
 
-// ---- File Type ----
 
 const fileTypeDef: FileTypeContribution = {
   id: "${options.name}",
@@ -74,7 +52,6 @@ const fileTypeDef: FileTypeContribution = {
   testable: true,
 };
 
-// ---- Threat Intel ----
 
 const intelSource: ThreatIntelSourceContribution = {
   id: "${options.name}-intel",
@@ -83,7 +60,6 @@ const intelSource: ThreatIntelSourceContribution = {
   entrypoint: "./source",
 };
 
-// ---- Compliance ----
 
 const framework: ComplianceFrameworkContribution = {
   id: "${options.name}-framework",
@@ -92,7 +68,6 @@ const framework: ComplianceFrameworkContribution = {
   entrypoint: "./framework",
 };
 
-// ---- UI ----
 
 const editorTab: EditorTabContribution = {
   id: "${options.name}-panel",

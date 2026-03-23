@@ -5,20 +5,11 @@ import { PLUGIN_UPDATE_EVENT } from './types';
 import type { PluginUpdateEvent } from './types';
 import { FilePluginMap } from './file-plugin-map';
 
-/**
- * Set up file watching for plugin directories.
- *
- * For each plugin entry in options, registers the directory in the
- * FilePluginMap and adds it to Vite's chokidar watcher. On file
- * changes, resolves the affected plugin and sends a custom HMR
- * WebSocket event with the plugin ID, entry path, and timestamp.
- */
 export function setupPluginWatcher(
   server: ViteDevServer,
   fileMap: FilePluginMap,
   options: ClawdstrikePluginOptions,
 ): void {
-  // Register all plugin directories
   for (const plugin of options.plugins) {
     const absoluteDir = resolve(plugin.dir);
     fileMap.register(plugin.pluginId, absoluteDir, plugin.entry);
@@ -26,10 +17,8 @@ export function setupPluginWatcher(
     // Add directory to Vite's chokidar watch list
     server.watcher.add(absoluteDir);
 
-    console.log(`[clawdstrike] Watching plugin: ${plugin.pluginId} at ${absoluteDir}`);
   }
 
-  // Handle file changes
   const handleFileChange = (filePath: string): void => {
     try {
       const pluginId = fileMap.resolve(filePath);
@@ -54,7 +43,6 @@ export function setupPluginWatcher(
     }
   };
 
-  // Listen for file changes and additions
   server.watcher.on('change', handleFileChange);
   server.watcher.on('add', handleFileChange);
 }

@@ -10,7 +10,6 @@
  * which is a MANIFEST type declaring that a plugin provides a threat intel source.
  */
 
-// ---- Indicator Types ----
 
 /**
  * The type of indicator being enriched.
@@ -36,7 +35,6 @@ export interface Indicator {
   };
 }
 
-// ---- Verdict Types ----
 
 /**
  * Threat verdict from a single intelligence source.
@@ -51,7 +49,6 @@ export interface ThreatVerdict {
   summary: string;
 }
 
-// ---- Enrichment Result ----
 
 /**
  * Result of enriching an indicator against a single threat intelligence source.
@@ -82,7 +79,6 @@ export interface EnrichmentResult {
   cacheTtlMs: number;
 }
 
-// ---- Threat Intel Source ----
 
 /**
  * Runtime interface for a threat intelligence source plugin.

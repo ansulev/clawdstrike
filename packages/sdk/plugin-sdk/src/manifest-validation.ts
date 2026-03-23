@@ -1,48 +1,28 @@
 /**
- * Plugin Manifest Validation (SDK)
- *
- * Self-contained runtime validation for PluginManifest objects. Uses manual
- * type guards (no Zod or io-ts) for zero-dependency lightweight validation.
- *
- * Ported from apps/workbench/src/lib/plugins/manifest-validation.ts with
- * permission validation removed (the SDK's PluginManifest type does not have
- * a `permissions` field -- permissions are a workbench runtime concern).
- *
- * All errors are accumulated -- validation does not short-circuit on the first
- * error, so callers see the full list of issues to fix.
+ * Self-contained runtime validation for PluginManifest objects.
+ * All errors are accumulated (not short-circuited).
  */
 
 import type { PluginManifest, PluginTrustTier } from "./types";
 
-// ---- Validation Types ----
 
-/** A single validation error with the field path and a descriptive message. */
 export interface ManifestValidationError {
-  /** Dot-path to the invalid field (e.g. "guards[0].id", "installation.checksum"). */
   field: string;
-  /** Human-readable description of the validation failure. */
   message: string;
 }
 
-/** Result of manifest validation. */
 export interface ManifestValidationResult {
-  /** True if the manifest is valid (no errors). */
   valid: boolean;
-  /** List of validation errors. Empty if valid. */
   errors: ManifestValidationError[];
 }
 
-// ---- Constants ----
 
 const VALID_TRUST_TIERS: PluginTrustTier[] = ["internal", "community", "mcp"];
 
-/** Basic semver pattern: MAJOR.MINOR.PATCH with optional pre-release suffix. */
 const SEMVER_PATTERN = /^\d+\.\d+\.\d+/;
 
-/** SHA-256 hex digest: exactly 64 hexadecimal characters. */
 const SHA256_HEX_PATTERN = /^[0-9a-fA-F]{64}$/;
 
-// ---- Helpers ----
 
 function isNonNullObject(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
@@ -84,7 +64,6 @@ function requireArray(
   }
 }
 
-// ---- Contribution Validators ----
 
 function validateGuardContributions(
   guards: unknown[],
@@ -198,24 +177,10 @@ function validateInstallation(
   requireString(installation, "signature", errors, "installation");
 }
 
-// ---- Main Validator ----
 
-/**
- * Validate a PluginManifest at runtime.
- *
- * Checks all required fields, validates the version is semver,
- * validates the trust tier, and recursively validates contribution
- * points and installation metadata if present.
- *
- * All errors are accumulated (not short-circuited).
- *
- * @param input - The value to validate (typically parsed JSON or a manifest object)
- * @returns Validation result with `valid` flag and accumulated `errors`
- */
 export function validateManifest(input: unknown): ManifestValidationResult {
   const errors: ManifestValidationError[] = [];
 
-  // Must be a non-null object
   if (!isNonNullObject(input)) {
     errors.push({
       field: "(root)",
@@ -224,14 +189,12 @@ export function validateManifest(input: unknown): ManifestValidationResult {
     return { valid: false, errors };
   }
 
-  // Required string fields
   requireString(input, "id", errors);
   requireString(input, "name", errors);
   requireString(input, "displayName", errors);
   requireString(input, "description", errors);
   requireString(input, "publisher", errors);
 
-  // Version: must be a non-empty string matching semver
   if (typeof input.version !== "string" || input.version.length === 0) {
     errors.push({
       field: "version",
@@ -244,7 +207,6 @@ export function validateManifest(input: unknown): ManifestValidationResult {
     });
   }
 
-  // Trust tier
   if (!VALID_TRUST_TIERS.includes(input.trust as PluginTrustTier)) {
     errors.push({
       field: "trust",
@@ -252,7 +214,6 @@ export function validateManifest(input: unknown): ManifestValidationResult {
     });
   }
 
-  // Categories (optional but if present must be string array)
   if (input.categories !== undefined && !isStringArray(input.categories)) {
     errors.push({
       field: "categories",
@@ -260,7 +221,6 @@ export function validateManifest(input: unknown): ManifestValidationResult {
     });
   }
 
-  // Activation events (optional but if present must be string array)
   if (input.activationEvents !== undefined && !isStringArray(input.activationEvents)) {
     errors.push({
       field: "activationEvents",
@@ -268,12 +228,10 @@ export function validateManifest(input: unknown): ManifestValidationResult {
     });
   }
 
-  // Contributions (optional, validate recursively if present)
   if (input.contributions !== undefined) {
     validateContributions(input.contributions, errors);
   }
 
-  // Installation metadata (optional, validate recursively if present)
   if (input.installation !== undefined) {
     validateInstallation(input.installation, errors);
   }
@@ -281,12 +239,7 @@ export function validateManifest(input: unknown): ManifestValidationResult {
   return { valid: errors.length === 0, errors };
 }
 
-// ---- Test Helper ----
 
-/**
- * Create a valid minimal PluginManifest for testing purposes.
- * Override any field by passing partial overrides.
- */
 export function createTestManifest(overrides?: Partial<PluginManifest>): PluginManifest {
   return {
     id: "test.plugin",

@@ -1,12 +1,3 @@
-/**
- * Playground Runner
- *
- * Orchestrates the full cycle of running a playground plugin:
- * transpile -> post to eval server -> dynamic import -> register -> activate.
- *
- * Also provides a console proxy that intercepts console output from the
- * playground plugin and routes it to the playground store.
- */
 import { createPlugin } from "@clawdstrike/plugin-sdk";
 import { transpilePlugin } from "./playground-transpiler";
 import {
@@ -26,10 +17,6 @@ import { pluginRegistry } from "../plugin-registry";
 import { clearSnapshot } from "../dev/storage-snapshot";
 import type { PluginManifest } from "../types";
 
-// ---------------------------------------------------------------------------
-// Window augmentation for playground globals
-// ---------------------------------------------------------------------------
-
 declare global {
   interface Window {
     __PLAYGROUND_CONSOLE__?: Record<string, (...args: unknown[]) => void>;
@@ -42,29 +29,14 @@ declare global {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
-
 const PLAYGROUND_PLUGIN_ID = "__playground__";
 
-// ---------------------------------------------------------------------------
-// Console proxy
-// ---------------------------------------------------------------------------
-
-/**
- * Set up a console proxy that intercepts console.log/warn/error/info
- * and routes them to the playground store as ConsoleEntry items.
- *
- * Returns a cleanup function that restores the original console.
- */
 export function setupConsoleProxy(): () => void {
   const proxy: Record<string, (...args: unknown[]) => void> = {};
   const levels = ["log", "warn", "error", "info"] as const;
 
   for (const level of levels) {
     proxy[level] = (...args: unknown[]) => {
-      // Also call the real console so DevTools still works
       // eslint-disable-next-line no-console
       console[level](...args);
       addConsoleEntry({
@@ -75,7 +47,6 @@ export function setupConsoleProxy(): () => void {
     };
   }
 
-  // Expose the proxy globally for the transpiled plugin code
   window.__PLAYGROUND_CONSOLE__ = proxy;
 
   return () => {
@@ -83,40 +54,17 @@ export function setupConsoleProxy(): () => void {
   };
 }
 
-// ---------------------------------------------------------------------------
-// Runner
-// ---------------------------------------------------------------------------
-
-/**
- * Run the current playground plugin source code.
- *
- * Steps:
- * 1. Read source from store
- * 2. Transpile TS to JS
- * 3. POST transpiled code to /__plugin-eval/
- * 4. Deactivate previous playground plugin if loaded
- * 5. Set window.__CLAWDSTRIKE_PLUGIN_SDK__ for the transpiled code
- * 6. Dynamic import the eval URL
- * 7. Read window.__PLAYGROUND_PLUGIN__ as PluginDefinition
- * 8. Register manifest in pluginRegistry
- * 9. Load via pluginLoader
- * 10. Build ContributionSnapshot
- */
 export async function runPlaygroundPlugin(): Promise<void> {
-  // 1. Read source
   const { source, runCount } = getPlaygroundState();
-  const currentRunCount = runCount + 1; // will be incremented below
+  const currentRunCount = runCount + 1;
 
-  // 2. Set state
   setRunning(true);
   clearErrors();
   incrementRunCount();
 
-  // Set up console proxy
   const cleanupConsole = setupConsoleProxy();
 
   try {
-    // 3. Transpile
     const { code, error } = transpilePlugin(source);
     if (error) {
       addError(error);
@@ -127,7 +75,6 @@ export async function runPlaygroundPlugin(): Promise<void> {
 
     setTranspiled(code);
 
-    // 4. POST to eval server
     const response = await fetch("/__plugin-eval/", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -144,7 +91,6 @@ export async function runPlaygroundPlugin(): Promise<void> {
 
     const { url: evalUrl } = (await response.json()) as { url: string };
 
-    // 5. Deactivate previous playground plugin if loaded
     try {
       const existing = pluginRegistry.get(PLAYGROUND_PLUGIN_ID);
       if (existing) {
@@ -155,21 +101,15 @@ export async function runPlaygroundPlugin(): Promise<void> {
       // Best-effort cleanup of previous instance
     }
 
-    // 5b. Clear any accumulated storage from previous runs
     clearSnapshot(PLAYGROUND_PLUGIN_ID);
 
-    // 6. Set window.__CLAWDSTRIKE_PLUGIN_SDK__
     window.__CLAWDSTRIKE_PLUGIN_SDK__ = { createPlugin };
 
-    // 7. Dynamic import the eval URL
-    // Clear previous plugin reference
+    // TS control-flow narrows __PLAYGROUND_PLUGIN__ to never after delete,
+    // so we read via bracket notation to bypass narrowing.
     delete window.__PLAYGROUND_PLUGIN__;
     await import(/* @vite-ignore */ evalUrl);
 
-    // 8. Read the plugin definition
-    // Re-read from window after dynamic import has populated the global.
-    // TypeScript control-flow narrows __PLAYGROUND_PLUGIN__ to never after
-    // the delete above, so we read via bracket notation to bypass narrowing.
     type PluginDefShape = { manifest?: PluginManifest; activate?: unknown; deactivate?: unknown };
     const pluginDef = (window as unknown as Record<string, PluginDefShape | undefined>).__PLAYGROUND_PLUGIN__;
     const defManifest = pluginDef?.manifest;
@@ -183,20 +123,15 @@ export async function runPlaygroundPlugin(): Promise<void> {
       return;
     }
 
-    // Override the manifest ID to our known playground ID
     const manifest: PluginManifest = {
       ...defManifest,
       id: PLAYGROUND_PLUGIN_ID,
       trust: "internal",
     };
 
-    // 9. Register in plugin registry
     pluginRegistry.register(manifest);
-
-    // 10. Load via plugin loader
     await pluginLoader.loadPlugin(PLAYGROUND_PLUGIN_ID);
 
-    // 11. Build contribution snapshot
     const contributions = manifest.contributions;
     const snapshot: ContributionSnapshot = {
       guards: contributions?.guards?.map((g) => g.name ?? g.id) ?? [],

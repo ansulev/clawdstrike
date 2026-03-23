@@ -1,21 +1,5 @@
-/**
- * Threat intel source plugin source template.
- *
- * Generates a src/index.ts that creates a threat intel plugin with:
- * - A ThreatIntelSourceContribution
- * - A lookup command
- * - requiredSecrets for API key
- * - Proper activation with command registration
- */
-
 import type { ScaffoldOptions } from "../types";
 
-/**
- * Generate the source template for an intel-type plugin.
- *
- * @param options - Scaffold options from CLI prompts or flags
- * @returns Complete src/index.ts content for a threat intel plugin
- */
 export function intelSourceTemplate(options: ScaffoldOptions): string {
   return `import { createPlugin } from "@clawdstrike/plugin-sdk";
 import type {

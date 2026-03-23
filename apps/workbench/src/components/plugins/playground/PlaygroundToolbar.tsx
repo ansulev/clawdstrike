@@ -1,17 +1,6 @@
-/**
- * PlaygroundToolbar - Toolbar for the Plugin Playground editor.
- *
- * Horizontal toolbar with Run button, Clear Console button, run count badge,
- * and error indicator. Uses the playground store for state and the playground
- * runner for execution.
- */
 import { Play, Trash2, AlertCircle } from "lucide-react";
 import { usePlaygroundStore, clearConsole } from "@/lib/plugins/playground/playground-store";
 import { runPlaygroundPlugin } from "@/lib/plugins/playground/playground-runner";
-
-// ---------------------------------------------------------------------------
-// Component
-// ---------------------------------------------------------------------------
 
 export function PlaygroundToolbar() {
   const { isRunning, runCount, errors } = usePlaygroundStore();
@@ -19,7 +8,6 @@ export function PlaygroundToolbar() {
 
   return (
     <div className="flex items-center gap-2 px-3 py-1.5 bg-[#1a1f2e] border-b border-[#2a3142] text-[#c8d1e0] text-sm shrink-0">
-      {/* Run button */}
       <button
         onClick={() => void runPlaygroundPlugin()}
         disabled={isRunning}
@@ -36,7 +24,6 @@ export function PlaygroundToolbar() {
         Run
       </button>
 
-      {/* Clear Console */}
       <button
         onClick={() => clearConsole()}
         className="flex items-center gap-1.5 px-2 py-1 rounded text-xs transition-colors
@@ -47,10 +34,8 @@ export function PlaygroundToolbar() {
         Clear Console
       </button>
 
-      {/* Spacer */}
       <div className="flex-1" />
 
-      {/* Error indicator */}
       {hasErrors && (
         <span className="flex items-center gap-1 text-xs text-[#c45c5c]">
           <AlertCircle className="w-3.5 h-3.5" />
@@ -58,7 +43,6 @@ export function PlaygroundToolbar() {
         </span>
       )}
 
-      {/* Run count badge */}
       {runCount > 0 && (
         <span className="text-xs text-[#6f7f9a] tabular-nums">
           Run #{runCount}

@@ -1,11 +1,3 @@
-/**
- * ContributionInspector - Right sidebar panel showing playground plugin contributions.
- *
- * Displays the ContributionSnapshot from the playground store as a collapsible
- * tree view. Each contribution type is a section header with count and icon.
- * New items are highlighted with a green dot and removed items with a red dot
- * for 2 seconds after each run.
- */
 import { useState, useRef, useEffect, useCallback } from "react";
 import {
   Shield,
@@ -26,19 +18,11 @@ import {
 } from "@/lib/plugins/playground/playground-store";
 import type { ContributionSnapshot } from "@/lib/plugins/playground/playground-store";
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
 interface SectionConfig {
   key: keyof ContributionSnapshot;
   label: string;
   icon: React.ComponentType<{ className?: string }>;
 }
-
-// ---------------------------------------------------------------------------
-// Section configuration
-// ---------------------------------------------------------------------------
 
 const SECTIONS: SectionConfig[] = [
   { key: "guards", label: "Guards", icon: Shield },
@@ -50,11 +34,6 @@ const SECTIONS: SectionConfig[] = [
   { key: "statusBarItems", label: "Status Bar Items", icon: RectangleHorizontal },
 ];
 
-// ---------------------------------------------------------------------------
-// Highlight tracking
-// ---------------------------------------------------------------------------
-
-/** Items that were added or removed relative to the previous snapshot. */
 interface DiffHighlights {
   added: Set<string>;
   removed: Map<string, keyof ContributionSnapshot>;
@@ -89,10 +68,6 @@ function computeDiff(
 
   return { added, removed };
 }
-
-// ---------------------------------------------------------------------------
-// Section component
-// ---------------------------------------------------------------------------
 
 function ContributionSection({
   config,
@@ -150,10 +125,6 @@ function ContributionSection({
   );
 }
 
-// ---------------------------------------------------------------------------
-// Removed items section
-// ---------------------------------------------------------------------------
-
 function RemovedItemsList({
   highlights,
 }: {
@@ -185,18 +156,12 @@ function RemovedItemsList({
   );
 }
 
-// ---------------------------------------------------------------------------
-// Main component
-// ---------------------------------------------------------------------------
-
 export function ContributionInspector() {
   const contributions = usePlaygroundContributions();
   const errors = usePlaygroundErrors();
 
-  // Track collapsed/expanded state per section. Default: all expanded.
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
 
-  // Track previous contributions for diff highlighting
   const prevContributionsRef = useRef<ContributionSnapshot | null>(null);
   const [highlights, setHighlights] = useState<DiffHighlights>({
     added: new Set(),
@@ -204,7 +169,6 @@ export function ContributionInspector() {
   });
   const highlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Compute diff on contribution changes
   useEffect(() => {
     const diff = computeDiff(prevContributionsRef.current, contributions);
     if (diff.added.size > 0 || diff.removed.size > 0) {
@@ -241,7 +205,6 @@ export function ContributionInspector() {
     });
   }, []);
 
-  // Empty state: no run yet
   if (!contributions) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-[#6f7f9a] text-xs p-4 gap-3">
@@ -251,14 +214,12 @@ export function ContributionInspector() {
     );
   }
 
-  // Filter to sections that have entries
   const activeSections = SECTIONS.filter(
     (s) => contributions[s.key].length > 0,
   );
 
   return (
     <div className="flex flex-col h-full overflow-y-auto bg-[#0f1219] text-[#c8d1e0]">
-      {/* Error summary */}
       {errors.length > 0 && (
         <div className="flex items-center gap-1.5 px-3 py-2 bg-[#1a0000]/60 border-b border-[#f87171]/20 text-xs text-[#f87171]">
           <AlertCircle className="w-3.5 h-3.5 shrink-0" />
@@ -269,13 +230,11 @@ export function ContributionInspector() {
         </div>
       )}
 
-      {/* Contribution tree */}
       <div className="p-2">
         <h3 className="text-xs font-semibold mb-2 px-2 text-[#d4a84b]">
           Plugin Contributions
         </h3>
 
-        {/* Removed items (shown temporarily after diff) */}
         <RemovedItemsList highlights={highlights} />
 
         {activeSections.length === 0 ? (

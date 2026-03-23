@@ -1,13 +1,3 @@
-/**
- * PlaygroundErrorBoundary - Error overlay for the Plugin Playground editor.
- *
- * This is NOT a React class-component error boundary. It is a functional
- * component that reactively reads playground errors from the store and
- * renders an overlay with source-mapped stack traces and line numbers.
- *
- * When no errors are present, it renders nothing so the editor remains
- * fully interactive underneath.
- */
 import { useState } from "react";
 import { X, ChevronLeft, ChevronRight, AlertCircle } from "lucide-react";
 import {
@@ -20,29 +10,21 @@ import {
   extractErrorLocation,
 } from "@/lib/plugins/playground/playground-source-map";
 
-// ---------------------------------------------------------------------------
-// Component
-// ---------------------------------------------------------------------------
-
 export function PlaygroundErrorBoundary() {
   const errors = usePlaygroundErrors();
   const source = usePlaygroundSource();
   const [currentIndex, setCurrentIndex] = useState(0);
 
-  // Nothing to show
   if (errors.length === 0) return null;
 
-  // Clamp index if errors array shrinks
   const safeIndex = Math.min(currentIndex, errors.length - 1);
   const error = errors[safeIndex];
   const sourceLines = source.split("\n");
 
-  // Source-mapped stack trace
   const mappedStack = error.stack
     ? mapStackTrace(error.stack, sourceLines)
     : null;
 
-  // Extract line/column for prominent display
   const location = error.stack
     ? extractErrorLocation(error.stack)
     : error.line != null
@@ -52,7 +34,6 @@ export function PlaygroundErrorBoundary() {
   return (
     <div className="absolute inset-x-0 top-0 z-10 mx-2 mt-2">
       <div className="bg-[#1a0000]/95 border border-[#f87171]/30 rounded-lg p-4 shadow-lg">
-        {/* Header with dismiss */}
         <div className="flex items-start justify-between gap-2 mb-2">
           <div className="flex items-center gap-2">
             <AlertCircle className="w-4 h-4 text-[#f87171] shrink-0" />
@@ -73,26 +54,22 @@ export function PlaygroundErrorBoundary() {
           </button>
         </div>
 
-        {/* Error message */}
         <p className="text-[#f87171] font-medium text-sm mb-2">
           {error.message}
         </p>
 
-        {/* Line/column info */}
         {location && (
           <p className="text-[#fbbf24] text-xs mb-2">
             Error at line {location.line}, column {location.column}
           </p>
         )}
 
-        {/* Stack trace */}
         {mappedStack && (
           <pre className="text-[#c8d1e0]/70 text-xs font-mono whitespace-pre-wrap overflow-x-auto max-h-40 overflow-y-auto bg-[#0d1117]/50 rounded p-2 mt-2">
             <code>{mappedStack}</code>
           </pre>
         )}
 
-        {/* Multi-error navigation */}
         {errors.length > 1 && (
           <div className="flex items-center justify-center gap-3 mt-3 pt-2 border-t border-[#f87171]/10">
             <button

@@ -1,21 +1,5 @@
-/**
- * Test file template generator.
- *
- * Generates a tests/plugin.test.ts that:
- * - Imports describe/it/expect from vitest
- * - Imports createSpyContext and assertContributions from @clawdstrike/plugin-sdk/testing
- * - Tests activation, contribution registration, and manifest fields
- * - Adapts assertions based on plugin type
- */
-
 import type { ScaffoldOptions } from "../types";
 
-/**
- * Generate the test template for any plugin type.
- *
- * @param options - Scaffold options including plugin type
- * @returns Complete tests/plugin.test.ts content
- */
 export function getTestTemplate(options: ScaffoldOptions): string {
   const typeAssertions = getTypeSpecificAssertions(options);
 
@@ -45,9 +29,6 @@ ${typeAssertions}
 `;
 }
 
-/**
- * Generate type-specific assertion lines for the test template.
- */
 function getTypeSpecificAssertions(options: ScaffoldOptions): string {
   switch (options.type) {
     case "guard":

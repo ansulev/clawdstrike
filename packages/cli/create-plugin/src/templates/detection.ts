@@ -1,21 +1,5 @@
-/**
- * Detection adapter plugin source template.
- *
- * Generates a src/index.ts that creates a detection plugin with:
- * - A FileTypeContribution for a custom detection format
- * - A DetectionAdapterContribution linking to the file type
- * - A validate command
- * - Proper activation with ctx.fileTypes.register()
- */
-
 import type { ScaffoldOptions } from "../types";
 
-/**
- * Generate the source template for a detection-type plugin.
- *
- * @param options - Scaffold options from CLI prompts or flags
- * @returns Complete src/index.ts content for a detection plugin
- */
 export function detectionSourceTemplate(options: ScaffoldOptions): string {
   const shortLabel = options.name.slice(0, 3).toUpperCase();
 

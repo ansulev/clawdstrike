@@ -1,18 +1,5 @@
-/**
- * Config file template generators for scaffolded plugin projects.
- *
- * Each function returns the string content of a config file to write
- * into the generated project directory.
- */
-
 import type { ScaffoldOptions } from "../types";
 
-/**
- * Generate a package.json for the scaffolded plugin project.
- *
- * @param options - Scaffold options (name, type, etc.)
- * @returns Stringified JSON with trailing newline
- */
 export function generatePackageJson(options: ScaffoldOptions): string {
   const pkg = {
     name: options.name,
@@ -51,11 +38,6 @@ export function generatePackageJson(options: ScaffoldOptions): string {
   return JSON.stringify(pkg, null, 2) + "\n";
 }
 
-/**
- * Generate a tsconfig.json matching the plugin-sdk pattern.
- *
- * @returns Stringified JSON with trailing newline
- */
 export function generateTsconfig(): string {
   const tsconfig = {
     compilerOptions: {
@@ -86,11 +68,6 @@ export function generateTsconfig(): string {
   return JSON.stringify(tsconfig, null, 2) + "\n";
 }
 
-/**
- * Generate a tsup.config.ts for ESM + CJS + DTS output.
- *
- * @returns tsup config file content
- */
 export function generateTsupConfig(): string {
   return `import { defineConfig } from "tsup";
 
@@ -104,11 +81,6 @@ export default defineConfig({
 `;
 }
 
-/**
- * Generate a vitest.config.ts for the scaffolded project.
- *
- * @returns vitest config file content
- */
 export function generateVitestConfig(): string {
   return `import { defineConfig } from "vitest/config";
 
@@ -122,11 +94,6 @@ export default defineConfig({
 `;
 }
 
-/**
- * Generate a .gitignore for the scaffolded project.
- *
- * @returns .gitignore content
- */
 export function generateGitignore(): string {
   return `node_modules/
 dist/

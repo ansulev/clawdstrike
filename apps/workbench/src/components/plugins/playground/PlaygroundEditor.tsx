@@ -1,10 +1,3 @@
-/**
- * PlaygroundEditor - CodeMirror 6 editor for the Plugin Playground.
- *
- * Renders a full-height CodeMirror editor with TypeScript mode, oneDark theme,
- * line numbers, and active line highlighting. Source changes are synced to the
- * playground store via `setSource()`.
- */
 import { useRef, useEffect } from "react";
 import { EditorView, keymap, lineNumbers, highlightActiveLine, highlightActiveLineGutter } from "@codemirror/view";
 import { EditorState } from "@codemirror/state";
@@ -14,18 +7,10 @@ import { autocompletion } from "@codemirror/autocomplete";
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { usePlaygroundSource, setSource } from "@/lib/plugins/playground/playground-store";
 
-// ---------------------------------------------------------------------------
-// Theme override for full-height
-// ---------------------------------------------------------------------------
-
 const fullHeightTheme = EditorView.theme({
   "&": { height: "100%" },
   ".cm-scroller": { overflow: "auto" },
 });
-
-// ---------------------------------------------------------------------------
-// Component
-// ---------------------------------------------------------------------------
 
 export function PlaygroundEditor() {
   const containerRef = useRef<HTMLDivElement>(null);

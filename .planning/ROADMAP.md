@@ -46,8 +46,8 @@ Plans:
 **Plans:** 2/2 plans complete
 
 Plans:
-- [ ] 19-01-PLAN.md — Wire protocol types + PresenceSocket class (WS lifecycle, jittered backoff reconnect, heartbeat, message routing)
-- [ ] 19-02-PLAN.md — presence-store Zustand store (analysts Map, viewersByFile index, selectors, offline defaults) + bootstrap hook
+- [x] 19-01-PLAN.md — Wire protocol types + PresenceSocket class (WS lifecycle, jittered backoff reconnect, heartbeat, message routing)
+- [x] 19-02-PLAN.md — presence-store Zustand store (analysts Map, viewersByFile index, selectors, offline defaults) + bootstrap hook
 
 ### Phase 20: UI Presence Indicators
 **Goal**: Analysts can see at a glance who is online, which files colleagues are viewing, and how many people are looking at their current file
@@ -59,12 +59,12 @@ Plans:
   3. The activity bar shows colored analyst pills indicating who is online
   4. A sidebar roster panel lists each online analyst with their name, sigil color, currently-viewed file, and connection status
   5. The Speakeasy chat panel shows presence context (e.g., "3 analysts viewing this file") when a file-scoped conversation is active
-**Plans**: TBD
+**Plans:** 3 plans
 
 Plans:
-- [ ] 20-01: Connection status dot in status bar, online analyst count
-- [ ] 20-02: Pane tab presence dots, activity bar analyst pills, analyst roster panel
-- [ ] 20-03: Speakeasy presence context bridge
+- [ ] 20-01-PLAN.md — Status bar PresenceStatusIndicator (green/amber/red dot + online count) + People panel registration + AnalystRosterPanel sidebar
+- [ ] 20-02-PLAN.md — Pane tab PresenceTabDots (colored dots per file viewer) + Activity bar PresenceActivityPills (analyst color pills)
+- [ ] 20-03-PLAN.md — Speakeasy presence context ("N analysts viewing this file") + cross-plan type cleanup + visual verification checkpoint
 
 ### Phase 21: CodeMirror Cursor Extension
 **Goal**: Analysts see exactly where colleagues' cursors and selections are in shared policy files, with colored carets, highlighted selections, and name labels

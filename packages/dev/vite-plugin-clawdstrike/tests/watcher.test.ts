@@ -137,4 +137,65 @@ describe('setupPluginWatcher', () => {
       }),
     );
   });
+
+  describe('error handling in file change handler', () => {
+    let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
+
+    beforeEach(() => {
+      consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    });
+
+    it('catches and logs the error when fileMap.resolve throws', () => {
+      const throwingFileMap = new FilePluginMap();
+      vi.spyOn(throwingFileMap, 'resolve').mockImplementation(() => {
+        throw new Error('resolve boom');
+      });
+
+      setupPluginWatcher(mockServer as any, throwingFileMap, options);
+
+      mockServer._emit('change', '/workspace/plugins/guard-a/src/helper.ts');
+
+      expect(consoleErrorSpy).toHaveBeenCalledWith(
+        expect.stringContaining('[clawdstrike]'),
+        expect.any(Error),
+      );
+      expect(mockServer.ws.send).not.toHaveBeenCalled();
+    });
+
+    it('subsequent file changes still trigger after an error (watcher not broken)', () => {
+      let callCount = 0;
+      const flakyFileMap = new FilePluginMap();
+      vi.spyOn(flakyFileMap, 'resolve').mockImplementation((filePath: string) => {
+        callCount++;
+        if (callCount === 1) {
+          throw new Error('transient error');
+        }
+        // Fall through to real resolution for subsequent calls
+        if (filePath.startsWith('/workspace/plugins/guard-a/')) {
+          return 'clawdstrike.guard-a';
+        }
+        return undefined;
+      });
+      vi.spyOn(flakyFileMap, 'getEntry').mockReturnValue('/workspace/plugins/guard-a/src/index.ts');
+
+      setupPluginWatcher(mockServer as any, flakyFileMap, options);
+
+      // First change: throws
+      const errorCountBefore = consoleErrorSpy.mock.calls.length;
+      mockServer._emit('change', '/workspace/plugins/guard-a/src/foo.ts');
+      expect(consoleErrorSpy.mock.calls.length - errorCountBefore).toBe(1);
+      expect(mockServer.ws.send).not.toHaveBeenCalled();
+
+      // Second change: should succeed, watcher is not broken
+      mockServer._emit('change', '/workspace/plugins/guard-a/src/bar.ts');
+      expect(mockServer.ws.send).toHaveBeenCalledTimes(1);
+      expect(mockServer.ws.send).toHaveBeenCalledWith(
+        PLUGIN_UPDATE_EVENT,
+        expect.objectContaining({
+          pluginId: 'clawdstrike.guard-a',
+          entryPath: '/workspace/plugins/guard-a/src/index.ts',
+        }),
+      );
+    });
+  });
 });

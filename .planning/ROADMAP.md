@@ -14,7 +14,7 @@ Eliminate tech debt accumulated during v1.0-v1.3 rapid development. Fix broken t
 
 - [x] **Phase 15: Test Fixes** - Fix 3 broken test suites (App, desktop-layout, shortcut-provider)
 - [x] **Phase 16: Search, Terminal & Keybinding Fixes** - AbortController for search, dynamic terminal sizing, Meta+W conflict resolution (completed 2026-03-22)
-- [ ] **Phase 17: Command Modernization & Store Migration** - Modernize file.new, migrate ~20 components off bridge hooks, delete multi-policy-store
+- [x] **Phase 17: Command Modernization & Store Migration** - Modernize file.new, migrate ~20 components off bridge hooks, delete multi-policy-store (completed 2026-03-23)
 
 ## Phase Details
 
@@ -53,7 +53,7 @@ Plans:
   3. split-editor.tsx and editor-home-tab.tsx import from policy-tabs-store/policy-edit-store directly (no useMultiPolicy)
   4. Searching the codebase for "useMultiPolicy" and "useWorkbench" returns zero consumer call sites (only the deleted file itself)
   5. multi-policy-store.tsx and MultiPolicyProvider are deleted from the source tree
-**Plans:** 2/3 plans executed
+**Plans:** 3/3 plans complete
 Plans:
 - [x] 17-01-PLAN.md — Command modernization + helper hooks + heavy consumer migration (split-editor, editor-home-tab, init-commands, edit-commands)
 - [ ] 17-02-PLAN.md — Bulk consumer migration (~35 remaining files off bridge hooks)
@@ -65,4 +65,4 @@ Plans:
 |-------|----------------|--------|-----------|
 | 15. Test Fixes | 1/1 | Complete | 2026-03-23 |
 | 16. Search, Terminal & Keybinding Fixes | 1/1 | Complete   | 2026-03-22 |
-| 17. Command Modernization & Store Migration | 2/3 | In Progress|  |
+| 17. Command Modernization & Store Migration | 3/3 | Complete   | 2026-03-23 |

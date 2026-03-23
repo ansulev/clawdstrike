@@ -1,17 +1,17 @@
 ---
 gsd_state_version: 1.0
 milestone: v1.4
-milestone_name: Cleanup & Store Migration
-status: executing
-stopped_at: Completed 17-02-PLAN.md
-last_updated: "2026-03-23T00:33:39Z"
-last_activity: 2026-03-23 -- Executed 17-02 (31 files migrated off bridge hooks to direct stores)
+milestone_name: milestone
+status: milestone-complete
+stopped_at: Completed 17-03-PLAN.md -- Phase 17 complete, v1.4 milestone done
+last_updated: "2026-03-23T00:49:26.582Z"
+last_activity: 2026-03-23 -- Executed 17-03 (multi-policy-store.tsx deleted, 18 production + 12 test files migrated)
 progress:
   total_phases: 3
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 5
-  completed_plans: 4
-  percent: 80
+  completed_plans: 5
+  percent: 100
 ---
 
 # Project State
@@ -20,16 +20,16 @@ progress:
 
 See: .planning/PROJECT.md (updated 2026-03-22)
 **Core value:** Security operators work across multiple views simultaneously with IDE-grade workflows
-**Current focus:** v1.4 Cleanup & Store Migration -- Phase 15 and 16 complete, Phase 17 remaining
+**Current focus:** v1.4 Cleanup & Store Migration -- all 3 phases complete
 
 ## Current Position
 
 Phase: 17 (Command Modernization & Store Migration)
-Plan: 02/03 -- done
-Status: Phase 17 in progress, Plan 03 ready
-Last activity: 2026-03-23 -- Executed 17-02 (31 files migrated off bridge hooks to direct stores)
+Plan: 03/03 -- done
+Status: Phase 17 complete. v1.4 milestone complete.
+Last activity: 2026-03-23 -- Executed 17-03 (multi-policy-store.tsx deleted, 18 production + 12 test files migrated)
 
-Progress: [████████░░] 80%
+Progress: [██████████] 100%
 
 ## Previous Milestones
 
@@ -72,11 +72,13 @@ Progress: [████████░░] 80%
 - 31 production files migrated from useWorkbench/useMultiPolicy to direct store calls (Plan 02)
 - 15 complex helper-method consumer files remain (loadPolicy, saveFile, exportYaml patterns)
 - Direct store pattern: usePolicyTabsStore(s => s.activeTabId) + usePolicyEditStore(s => s.editStates.get(id))
+- [Phase 17]: Created usePolicyTabs/useWorkbenchState as named drop-in replacements rather than inline-migrating 18 consumers to raw store calls
+- [Phase 17]: multi-policy-store.tsx (975 lines) fully deleted; PolicyTab type + dispatch moved to policy-tab.ts + use-policy-actions.ts
 
 ### Blockers/Concerns
-- 15 remaining files use useWorkbench() helper methods that need careful inline reimplementation with Tauri bridge calls
+- None -- all store migration work is complete
 
 ## Session Continuity
 
-Last session: 2026-03-23T00:33:39Z
-Stopped at: Completed 17-02-PLAN.md
+Last session: 2026-03-23T00:49:26.579Z
+Stopped at: Completed 17-03-PLAN.md -- Phase 17 complete

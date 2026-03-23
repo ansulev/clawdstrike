@@ -5,6 +5,7 @@
 import { useCallback } from "react";
 import { usePresenceStore } from "../stores/presence-store";
 import { usePaneStore } from "@/features/panes/pane-store";
+import { toPresencePath } from "../presence-paths";
 import type { AnalystPresence } from "../types";
 
 interface PresenceTabDotsProps {
@@ -15,8 +16,9 @@ interface PresenceTabDotsProps {
 const MAX_VISIBLE_DOTS = 3;
 
 export function PresenceTabDots({ route }: PresenceTabDotsProps) {
-  // Derive file path (null for non-file tabs).
-  const filePath = route.startsWith("/file/") ? route.slice("/file/".length) : null;
+  // Derive file path (null for non-file tabs), normalized to match server format.
+  const rawPath = route.startsWith("/file/") ? route.slice("/file/".length) : null;
+  const filePath = rawPath ? toPresencePath(rawPath) : null;
 
   // Hooks must be called unconditionally (React rules of hooks).
   const viewerSet = usePresenceStore((s) => filePath ? s.viewersByFile.get(filePath) : undefined);

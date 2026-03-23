@@ -18,6 +18,7 @@ import { MessageList, type SpeakeasyDisplayMessage } from "./message-list";
 import { usePresenceStore } from "@/features/presence/stores/presence-store";
 import { usePaneStore, getActivePane } from "@/features/panes/pane-store";
 import { getPaneActiveView } from "@/features/panes/pane-tree";
+import { toPresencePath } from "@/features/presence/presence-paths";
 
 
 interface SpeakeasyPanelProps {
@@ -227,7 +228,8 @@ export function SpeakeasyPanel({
   const activeFileRoute = useMemo(() => {
     const pane = getActivePane(paneRoot, activePaneId);
     const view = pane ? getPaneActiveView(pane) : null;
-    return view?.route?.startsWith("/file/") ? view.route.slice("/file/".length) : null;
+    const rawPath = view?.route?.startsWith("/file/") ? view.route.slice("/file/".length) : null;
+    return rawPath ? toPresencePath(rawPath) : null;
   }, [paneRoot, activePaneId]);
 
   const fileViewerCount = usePresenceStore((s) => {

@@ -21,6 +21,7 @@ import { guardTestGutter, updateGuardRanges } from "@/lib/workbench/codemirror/g
 import { coverageGapGutter, updateCoverageGaps } from "@/lib/workbench/codemirror/coverage-gutter";
 import { parseGuardRanges, computeCoverageGaps } from "@/lib/workbench/codemirror/gutter-types";
 import { presenceCursors, presenceFilePath } from "@/lib/workbench/codemirror/presence-cursors";
+import { toPresencePath } from "@/features/presence/presence-paths";
 
 // ---- Active editor tracking ----
 
@@ -423,7 +424,7 @@ export function YamlEditor({
     // so it can filter remote cursors and send outbound updates with the correct path.
     base.push(...presenceCursors());
     if (filePath) {
-      base.push(presenceFilePath.of(filePath));
+      base.push(presenceFilePath.of(toPresencePath(filePath)));
     }
 
     if (readOnly) {

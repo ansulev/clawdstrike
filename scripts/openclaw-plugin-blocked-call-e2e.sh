@@ -157,19 +157,20 @@ PLUGIN_INFO_JSON_PRESENT=false
 if [ -n "$PLUGIN_INFO_PAYLOAD" ]; then
   PLUGIN_INFO_JSON_PRESENT=true
 fi
+PLUGIN_INFO_ROOT_FILTER='(.plugin // .)'
 
 PLUGIN_STATUS_LOADED=false
-if jq -e '.status == "loaded"' "$ARTIFACT_DIR/plugins-info.json" >/dev/null 2>&1; then
+if jq -e "$PLUGIN_INFO_ROOT_FILTER | .status == \"loaded\"" "$ARTIFACT_DIR/plugins-info.json" >/dev/null 2>&1; then
   PLUGIN_STATUS_LOADED=true
 fi
 
 HOOK_PREFLIGHT_PRESENT=false
-if jq -e '(.hookNames // []) | index("clawdstrike:tool-preflight:before-tool-call") != null' "$ARTIFACT_DIR/plugins-info.json" >/dev/null 2>&1; then
+if jq -e '((.plugin // .).hookNames // []) | index("clawdstrike:tool-preflight:before-tool-call") != null' "$ARTIFACT_DIR/plugins-info.json" >/dev/null 2>&1; then
   HOOK_PREFLIGHT_PRESENT=true
 fi
 
 HOOK_CUA_PRESENT=false
-if jq -e '(.hookNames // []) | index("clawdstrike:cua-bridge:before-tool-call") != null' "$ARTIFACT_DIR/plugins-info.json" >/dev/null 2>&1; then
+if jq -e '((.plugin // .).hookNames // []) | index("clawdstrike:cua-bridge:before-tool-call") != null' "$ARTIFACT_DIR/plugins-info.json" >/dev/null 2>&1; then
   HOOK_CUA_PRESENT=true
 fi
 
@@ -224,6 +225,7 @@ jq -n \
   --argjson targetFileAbsent "$TARGET_FILE_ABSENT" \
   --argjson pass "$PASS" \
   '{
+    def pluginRoot: ($pluginInfo.plugin // $pluginInfo);
     script: $script,
     generatedAt: $generatedAt,
     openclawVersion: $openclawVersion,
@@ -241,9 +243,9 @@ jq -n \
       targetFileAbsent: $targetFileAbsent
     },
     observed: {
-      pluginId: ($pluginInfo.id // null),
-      pluginStatus: ($pluginInfo.status // null),
-      hookNames: ($pluginInfo.hookNames // [])
+      pluginId: (pluginRoot.id // null),
+      pluginStatus: (pluginRoot.status // null),
+      hookNames: (pluginRoot.hookNames // [])
     },
     result: (if $pass then "pass" else "fail" end)
   }' >"$ARTIFACT_DIR/summary.json"

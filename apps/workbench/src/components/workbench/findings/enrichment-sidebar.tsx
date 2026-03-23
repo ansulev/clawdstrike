@@ -613,7 +613,7 @@ function SpiderSenseContent({ data }: { data: Record<string, unknown> }) {
           </span>
           {topMatches.map((match, idx) => (
             <div
-              key={`${match.label}-${idx}`}
+              key={`${match.category}:${match.label}`}
               className="flex items-center gap-2 rounded border border-[#2d3240]/20 bg-[#05060a] px-2 py-1"
             >
               <span className="text-[9px] text-[#d4a84b]/60 shrink-0">

@@ -1,17 +1,20 @@
 import { useCallback } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
-import { IconAlertTriangle, IconBrain } from "@tabler/icons-react";
+import { IconAlertTriangle, IconBrain, IconChartBar } from "@tabler/icons-react";
 import { cn } from "@/lib/utils";
 import { useFindings } from "@/lib/workbench/finding-store";
 import { useIntel } from "@/lib/workbench/intel-store";
 import { promoteToIntel } from "@/lib/workbench/intel-forge";
 import { FindingsList } from "./findings-list";
 import { IntelPage } from "../intel/intel-page";
+import { EnrichmentDashboard } from "./enrichment-dashboard";
 
-type Tab = "findings" | "intel";
+type Tab = "findings" | "intel" | "dashboard";
 
 function resolveTab(raw: string | null): Tab {
-  return raw === "intel" ? "intel" : "findings";
+  if (raw === "intel") return "intel";
+  if (raw === "dashboard") return "dashboard";
+  return "findings";
 }
 
 export function FindingsIntelPage() {
@@ -72,6 +75,18 @@ export function FindingsIntelPage() {
           <IconBrain size={14} stroke={1.5} className="mr-1.5" />
           Intel
         </button>
+        <button
+          onClick={() => setTab("dashboard")}
+          className={cn(
+            "px-4 py-2.5 text-[11px] font-mono uppercase tracking-wider flex items-center border-b-2 transition-colors",
+            activeTab === "dashboard"
+              ? "text-[#ece7dc] border-[#d4a84b]"
+              : "text-[#6f7f9a] hover:text-[#ece7dc]/70 border-transparent",
+          )}
+        >
+          <IconChartBar size={14} stroke={1.5} className="mr-1.5" />
+          Dashboard
+        </button>
       </div>
 
       <div className="flex-1 overflow-hidden">
@@ -86,7 +101,7 @@ export function FindingsIntelPage() {
               markFalsePositive(id, "operator")
             }
           />
-        ) : (
+        ) : activeTab === "intel" ? (
           <IntelPage
             localIntel={localIntel}
             swarmIntel={swarmIntel}
@@ -94,6 +109,8 @@ export function FindingsIntelPage() {
               navigate(`/intel/${intelId}`)
             }
           />
+        ) : (
+          <EnrichmentDashboard findings={findings} />
         )}
       </div>
     </div>

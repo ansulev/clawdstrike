@@ -205,7 +205,7 @@ export function ReplayAnnotationLayer({
             color="white"
             outlineWidth={0.02}
             outlineColor="#000"
-            depthTest={false}
+            material-depthTest={false}
           >
             {pin.note.trim() !== "" ? pin.note : "Pin"}
           </Text>

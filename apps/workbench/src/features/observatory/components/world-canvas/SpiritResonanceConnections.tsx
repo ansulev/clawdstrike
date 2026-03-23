@@ -40,7 +40,8 @@ export function SpiritResonanceConnections({
   // Animate dash offset for sparkle/flow effect
   const dashOffsetRef = useRef(0);
   // We store line material refs to mutate dashOffset each frame
-  const lineRefs = useRef<(THREE.LineSegments | null)[]>([]);
+  // Line from drei resolves to Line2 | LineSegments2; we only access .material so use Mesh as base.
+  const lineRefs = useRef<(THREE.Mesh | null)[]>([]);
 
   useEffect(() => {
     lineRefs.current = [];
@@ -76,7 +77,7 @@ export function SpiritResonanceConnections({
       {connectionPoints.map((conn, i) => (
         <Line
           key={conn.key}
-          ref={(el: THREE.LineSegments | null) => {
+          ref={(el) => {
             lineRefs.current[i] = el;
           }}
           points={conn.points}

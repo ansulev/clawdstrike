@@ -1,6 +1,7 @@
 import { IconX } from "@tabler/icons-react";
 import { cn } from "@/lib/utils";
 import { FileTypeIcon } from "@/lib/workbench/file-type-icons";
+import { PresenceTabDots } from "@/features/presence/components/presence-tab-dots";
 import { usePaneStore } from "./pane-store";
 import type { PaneView } from "./pane-types";
 
@@ -53,6 +54,8 @@ export function PaneTab({
       <span className="min-w-0 truncate text-[11px] font-mono font-medium tracking-[0.04em]">
         {view.label}
       </span>
+
+      <PresenceTabDots route={view.route} />
 
       <span
         role="button"

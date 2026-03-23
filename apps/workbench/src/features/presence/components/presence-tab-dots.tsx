@@ -1,0 +1,70 @@
+// PresenceTabDots — colored dots rendered inside pane tabs to indicate which
+// remote analysts are viewing the same file. Max 3 dots with +N overflow.
+// Clicking a dot navigates to that analyst's current file (locked decision).
+
+import { useCallback } from "react";
+import { usePresenceStore } from "../stores/presence-store";
+import { usePaneStore } from "@/features/panes/pane-store";
+import type { AnalystPresence } from "../types";
+
+interface PresenceTabDotsProps {
+  /** The pane view route, e.g. "/file/{absolutePath}" */
+  route: string;
+}
+
+const MAX_VISIBLE_DOTS = 3;
+
+export function PresenceTabDots({ route }: PresenceTabDotsProps) {
+  // Presence dots only apply to file tabs.
+  if (!route.startsWith("/file/")) return null;
+
+  const filePath = route.slice("/file/".length);
+
+  const viewerSet = usePresenceStore((s) => s.viewersByFile.get(filePath));
+  const localAnalystId = usePresenceStore((s) => s.localAnalystId);
+  const analysts = usePresenceStore((s) => s.analysts);
+
+  // Filter out the local analyst — only show REMOTE viewers.
+  const remoteViewers: AnalystPresence[] = [];
+  if (viewerSet) {
+    for (const fingerprint of viewerSet) {
+      if (fingerprint === localAnalystId) continue;
+      const analyst = analysts.get(fingerprint);
+      if (analyst) remoteViewers.push(analyst);
+    }
+  }
+
+  if (remoteViewers.length === 0) return null;
+
+  const overflow = Math.max(0, remoteViewers.length - MAX_VISIBLE_DOTS);
+
+  const handleDotClick = useCallback(
+    (e: React.MouseEvent, analyst: AnalystPresence) => {
+      e.stopPropagation(); // Prevent tab activation from the parent button
+      if (!analyst.activeFile) return; // No-op when analyst has no active file
+      const label = analyst.activeFile.split("/").pop() ?? analyst.activeFile;
+      usePaneStore.getState().openFile(analyst.activeFile, label);
+    },
+    [],
+  );
+
+  return (
+    <span className="flex items-center gap-0.5 ml-1 shrink-0">
+      {remoteViewers.slice(0, MAX_VISIBLE_DOTS).map((analyst) => (
+        <button
+          key={analyst.fingerprint}
+          type="button"
+          className="inline-block w-[5px] h-[5px] rounded-full hover:ring-1 hover:ring-white/30 transition-shadow cursor-pointer"
+          style={{ backgroundColor: analyst.color }}
+          title={`${analyst.displayName} — click to open ${analyst.activeFile ?? "their file"}`}
+          onClick={(e) => handleDotClick(e, analyst)}
+        />
+      ))}
+      {overflow > 0 && (
+        <span className="text-[8px] font-mono text-[#6f7f9a]/60 ml-0.5">
+          +{overflow}
+        </span>
+      )}
+    </span>
+  );
+}

@@ -214,3 +214,47 @@ describe("EnrichmentSidebar", () => {
     expect(screen.getByText("Test threat intel")).toBeInTheDocument();
   });
 });
+
+describe("EnrichmentSidebar structural (React.memo effectiveness)", () => {
+  it("enrichment-sidebar.tsx exports via React.memo (or memo())", async () => {
+    const fs = await import("fs");
+    const path = await import("path");
+
+    const source = fs.readFileSync(
+      path.resolve(import.meta.dirname, "../enrichment-sidebar.tsx"),
+      "utf-8",
+    );
+
+    // The component should be exported via memo() wrapping
+    const hasMemoExport =
+      source.includes("export const EnrichmentSidebar = memo(") ||
+      source.includes("export const EnrichmentSidebar = React.memo(");
+    expect(hasMemoExport).toBe(true);
+  });
+
+  it("useMemo is applied to groupByType computation", async () => {
+    const fs = await import("fs");
+    const path = await import("path");
+
+    const source = fs.readFileSync(
+      path.resolve(import.meta.dirname, "../enrichment-sidebar.tsx"),
+      "utf-8",
+    );
+
+    // groupByType should be wrapped in useMemo
+    expect(source).toMatch(/useMemo\(\s*\(\)\s*=>\s*groupByType/);
+  });
+
+  it("useMemo is applied to extractRelatedIndicators computation", async () => {
+    const fs = await import("fs");
+    const path = await import("path");
+
+    const source = fs.readFileSync(
+      path.resolve(import.meta.dirname, "../enrichment-sidebar.tsx"),
+      "utf-8",
+    );
+
+    // extractRelatedIndicators should be wrapped in useMemo
+    expect(source).toMatch(/useMemo\(\s*[\s\S]*?extractRelatedIndicators/);
+  });
+});

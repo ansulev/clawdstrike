@@ -26,6 +26,7 @@ import type {
   EnrichmentResult,
   ThreatVerdict,
 } from "@clawdstrike/plugin-sdk";
+import { sanitizeErrorMessage } from "./sanitize-error";
 
 // ---- Constants ----
 
@@ -316,6 +317,8 @@ export function createMispSource(
     async enrich(indicator: Indicator): Promise<EnrichmentResult> {
       const url = `${normalizedBaseUrl}/attributes/restSearch`;
 
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 30_000);
       try {
         const response = await fetch(url, {
           method: "POST",
@@ -328,6 +331,7 @@ export function createMispSource(
             value: indicator.value,
             returnFormat: "json",
           }),
+          signal: controller.signal,
         });
 
         if (!response.ok) {
@@ -341,6 +345,12 @@ export function createMispSource(
         }
 
         const data = (await response.json()) as MispSearchResponse;
+
+        // Validate response shape
+        if (!data || typeof data !== "object" || !("response" in data)) {
+          return errorResult("Unexpected API response format");
+        }
+
         const attributes = data?.response?.Attribute ?? [];
 
         if (attributes.length === 0) {
@@ -392,12 +402,16 @@ export function createMispSource(
           return errorResult("Network error contacting MISP");
         }
         return errorResult(
-          `MISP error: ${err instanceof Error ? err.message : String(err)}`,
+          `MISP error: ${sanitizeErrorMessage(err)}`,
         );
+      } finally {
+        clearTimeout(timeout);
       }
     },
 
     async healthCheck(): Promise<{ healthy: boolean; message?: string }> {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 10_000);
       try {
         const response = await fetch(
           `${normalizedBaseUrl}/servers/getVersion`,
@@ -407,6 +421,7 @@ export function createMispSource(
               Authorization: apiKey,
               Accept: "application/json",
             },
+            signal: controller.signal,
           },
         );
         if (response.ok) {
@@ -419,8 +434,10 @@ export function createMispSource(
       } catch (err: unknown) {
         return {
           healthy: false,
-          message: `MISP health check error: ${err instanceof Error ? err.message : String(err)}`,
+          message: `MISP health check error: ${sanitizeErrorMessage(err)}`,
         };
+      } finally {
+        clearTimeout(timeout);
       }
     },
   };

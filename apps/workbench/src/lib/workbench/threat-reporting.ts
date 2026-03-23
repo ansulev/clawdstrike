@@ -7,6 +7,8 @@
  * confirmed-malicious indicators back to community databases.
  */
 
+import { sanitizeErrorMessage } from "@/lib/plugins/threat-intel/sanitize-error";
+
 // ---- Types ----
 
 export interface AbuseIPDBReportPayload {
@@ -77,6 +79,8 @@ export async function reportToAbuseIPDB(
   payload: AbuseIPDBReportPayload,
   apiKey: string,
 ): Promise<ReportResult> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 30_000);
   try {
     const response = await fetch(ABUSEIPDB_REPORT_URL, {
       method: "POST",
@@ -90,6 +94,7 @@ export async function reportToAbuseIPDB(
         categories: payload.categories.join(","),
         comment: payload.comment,
       }),
+      signal: controller.signal,
     });
 
     if (!response.ok) {
@@ -103,11 +108,12 @@ export async function reportToAbuseIPDB(
     const data = await response.json();
     return { success: true, data };
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
     return {
       success: false,
-      error: `AbuseIPDB report failed: ${message}`,
+      error: `AbuseIPDB report failed: ${sanitizeErrorMessage(err)}`,
     };
+  } finally {
+    clearTimeout(timeout);
   }
 }
 
@@ -145,6 +151,8 @@ export async function reportToMisp(
     },
   };
 
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 30_000);
   try {
     const response = await fetch(url, {
       method: "POST",
@@ -154,6 +162,7 @@ export async function reportToMisp(
         "Content-Type": "application/json",
       },
       body: JSON.stringify(body),
+      signal: controller.signal,
     });
 
     if (!response.ok) {
@@ -167,8 +176,9 @@ export async function reportToMisp(
     const eventId = data?.Event?.id;
     return { success: true, eventId: eventId ? String(eventId) : undefined };
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    return { success: false, error: `MISP report failed: ${message}` };
+    return { success: false, error: `MISP report failed: ${sanitizeErrorMessage(err)}` };
+  } finally {
+    clearTimeout(timeout);
   }
 }
 

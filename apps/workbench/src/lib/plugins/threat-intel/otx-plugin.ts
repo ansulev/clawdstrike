@@ -24,6 +24,7 @@ import type {
   EnrichmentResult,
   ThreatVerdict,
 } from "@clawdstrike/plugin-sdk";
+import { sanitizeErrorMessage } from "./sanitize-error";
 
 // ---- Constants ----
 
@@ -204,6 +205,8 @@ export function createOtxSource(apiKey: string): ThreatIntelSource {
 
       const url = `${OTX_API_BASE}/indicators/${typePath}/${indicator.value}/general`;
 
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 30_000);
       try {
         const response = await fetch(url, {
           method: "GET",
@@ -211,6 +214,7 @@ export function createOtxSource(apiKey: string): ThreatIntelSource {
             "X-OTX-API-KEY": apiKey,
             Accept: "application/json",
           },
+          signal: controller.signal,
         });
 
         if (!response.ok) {
@@ -224,6 +228,11 @@ export function createOtxSource(apiKey: string): ThreatIntelSource {
         }
 
         const data = (await response.json()) as OtxGeneralResponse;
+
+        // Validate response shape
+        if (!data || typeof data !== "object") {
+          return errorResult("Unexpected API response format");
+        }
 
         const pulseCount = data.pulse_info?.count ?? 0;
         const verdict = normalizeVerdict(pulseCount);
@@ -254,12 +263,16 @@ export function createOtxSource(apiKey: string): ThreatIntelSource {
           return errorResult("Network error contacting OTX");
         }
         return errorResult(
-          `OTX error: ${err instanceof Error ? err.message : String(err)}`,
+          `OTX error: ${sanitizeErrorMessage(err)}`,
         );
+      } finally {
+        clearTimeout(timeout);
       }
     },
 
     async healthCheck(): Promise<{ healthy: boolean; message?: string }> {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 10_000);
       try {
         const response = await fetch(`${OTX_API_BASE}/user/me`, {
           method: "GET",
@@ -267,6 +280,7 @@ export function createOtxSource(apiKey: string): ThreatIntelSource {
             "X-OTX-API-KEY": apiKey,
             Accept: "application/json",
           },
+          signal: controller.signal,
         });
         if (response.ok) {
           return { healthy: true };
@@ -278,8 +292,10 @@ export function createOtxSource(apiKey: string): ThreatIntelSource {
       } catch (err: unknown) {
         return {
           healthy: false,
-          message: `OTX health check error: ${err instanceof Error ? err.message : String(err)}`,
+          message: `OTX health check error: ${sanitizeErrorMessage(err)}`,
         };
+      } finally {
+        clearTimeout(timeout);
       }
     },
   };

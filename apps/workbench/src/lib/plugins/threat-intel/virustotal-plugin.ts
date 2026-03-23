@@ -19,6 +19,7 @@ import type {
   EnrichmentResult,
   ThreatVerdict,
 } from "@clawdstrike/plugin-sdk";
+import { sanitizeErrorMessage } from "./sanitize-error";
 
 // ---- Constants ----
 
@@ -187,6 +188,8 @@ export function createVirusTotalSource(apiKey: string): ThreatIntelSource {
         return errorResult(`Unsupported indicator type: ${indicator.type}`);
       }
 
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 30_000);
       try {
         const response = await fetch(url, {
           method: "GET",
@@ -194,6 +197,7 @@ export function createVirusTotalSource(apiKey: string): ThreatIntelSource {
             "x-apikey": apiKey,
             Accept: "application/json",
           },
+          signal: controller.signal,
         });
 
         if (!response.ok) {
@@ -216,6 +220,11 @@ export function createVirusTotalSource(apiKey: string): ThreatIntelSource {
             };
           };
         };
+
+        // Validate response shape
+        if (!data || typeof data !== "object" || !("data" in data)) {
+          return errorResult("Unexpected API response format");
+        }
 
         const stats = data?.data?.attributes?.last_analysis_stats;
         if (!stats) {
@@ -244,12 +253,16 @@ export function createVirusTotalSource(apiKey: string): ThreatIntelSource {
           return errorResult("Network error contacting VirusTotal");
         }
         return errorResult(
-          `VirusTotal error: ${err instanceof Error ? err.message : String(err)}`,
+          `VirusTotal error: ${sanitizeErrorMessage(err)}`,
         );
+      } finally {
+        clearTimeout(timeout);
       }
     },
 
     async healthCheck(): Promise<{ healthy: boolean; message?: string }> {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 10_000);
       try {
         const response = await fetch(`${VT_API_BASE}/users/me`, {
           method: "GET",
@@ -257,6 +270,7 @@ export function createVirusTotalSource(apiKey: string): ThreatIntelSource {
             "x-apikey": apiKey,
             Accept: "application/json",
           },
+          signal: controller.signal,
         });
         if (response.ok) {
           return { healthy: true };
@@ -268,8 +282,10 @@ export function createVirusTotalSource(apiKey: string): ThreatIntelSource {
       } catch (err: unknown) {
         return {
           healthy: false,
-          message: `VirusTotal health check error: ${err instanceof Error ? err.message : String(err)}`,
+          message: `VirusTotal health check error: ${sanitizeErrorMessage(err)}`,
         };
+      } finally {
+        clearTimeout(timeout);
       }
     },
   };

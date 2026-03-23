@@ -21,6 +21,7 @@ import type {
   EnrichmentResult,
   ThreatVerdict,
 } from "@clawdstrike/plugin-sdk";
+import { sanitizeErrorMessage } from "./sanitize-error";
 
 // ---- Constants ----
 
@@ -161,6 +162,8 @@ export function createAbuseIPDBSource(apiKey: string): ThreatIntelSource {
         );
       }
 
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 30_000);
       try {
         const url = `${ABUSEIPDB_API_BASE}/check?ipAddress=${indicator.value}&maxAgeInDays=90&verbose`;
         const response = await fetch(url, {
@@ -169,6 +172,7 @@ export function createAbuseIPDBSource(apiKey: string): ThreatIntelSource {
             Key: apiKey,
             Accept: "application/json",
           },
+          signal: controller.signal,
         });
 
         if (!response.ok) {
@@ -186,6 +190,12 @@ export function createAbuseIPDBSource(apiKey: string): ThreatIntelSource {
         const responseData = (await response.json()) as {
           data: AbuseIPDBCheckData;
         };
+
+        // Validate response shape
+        if (!responseData || typeof responseData !== "object" || !("data" in responseData) || typeof responseData.data?.abuseConfidenceScore !== "number") {
+          return errorResult("Unexpected API response format");
+        }
+
         const data = responseData.data;
         const verdict = normalizeVerdict(data);
 
@@ -218,12 +228,16 @@ export function createAbuseIPDBSource(apiKey: string): ThreatIntelSource {
           return errorResult("Network error contacting AbuseIPDB");
         }
         return errorResult(
-          `AbuseIPDB error: ${err instanceof Error ? err.message : String(err)}`,
+          `AbuseIPDB error: ${sanitizeErrorMessage(err)}`,
         );
+      } finally {
+        clearTimeout(timeout);
       }
     },
 
     async healthCheck(): Promise<{ healthy: boolean; message?: string }> {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 10_000);
       try {
         // Check a well-known IP (Google DNS) with short window
         const response = await fetch(
@@ -234,6 +248,7 @@ export function createAbuseIPDBSource(apiKey: string): ThreatIntelSource {
               Key: apiKey,
               Accept: "application/json",
             },
+            signal: controller.signal,
           },
         );
         if (response.ok) {
@@ -246,8 +261,10 @@ export function createAbuseIPDBSource(apiKey: string): ThreatIntelSource {
       } catch (err: unknown) {
         return {
           healthy: false,
-          message: `AbuseIPDB health check error: ${err instanceof Error ? err.message : String(err)}`,
+          message: `AbuseIPDB health check error: ${sanitizeErrorMessage(err)}`,
         };
+      } finally {
+        clearTimeout(timeout);
       }
     },
   };

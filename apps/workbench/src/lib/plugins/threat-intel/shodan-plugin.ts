@@ -24,6 +24,7 @@ import type {
   EnrichmentResult,
   ThreatVerdict,
 } from "@clawdstrike/plugin-sdk";
+import { sanitizeErrorMessage } from "./sanitize-error";
 
 // ---- Constants ----
 
@@ -81,6 +82,21 @@ interface ShodanHostResponse {
 }
 
 // ---- Helpers ----
+
+/** Check if an IP address is private or reserved (SSRF prevention). */
+function isPrivateOrReservedIP(ip: string): boolean {
+  const parts = ip.split(".").map(Number);
+  if (parts.length !== 4 || parts.some((p) => isNaN(p) || p < 0 || p > 255))
+    return false;
+  return (
+    parts[0] === 10 ||
+    parts[0] === 127 ||
+    (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) ||
+    (parts[0] === 192 && parts[1] === 168) ||
+    (parts[0] === 169 && parts[1] === 254) ||
+    parts[0] >= 224
+  );
+}
 
 /** Normalize Shodan host data into a ThreatVerdict. */
 function normalizeVerdict(data: ShodanHostResponse): ThreatVerdict {
@@ -143,6 +159,15 @@ export function createShodanSource(apiKey: string): ThreatIntelSource {
     rateLimit: { maxPerMinute: RATE_LIMIT_MAX_PER_MINUTE },
 
     async enrich(indicator: Indicator): Promise<EnrichmentResult> {
+      // SSRF prevention: reject private/reserved IPs
+      if (indicator.type === "ip" && isPrivateOrReservedIP(indicator.value)) {
+        return errorResult(
+          "Refused to query private or reserved IP address",
+        );
+      }
+
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 30_000);
       try {
         // For domain indicators, first resolve to IP via Shodan DNS
         let targetIp: string;
@@ -153,6 +178,7 @@ export function createShodanSource(apiKey: string): ThreatIntelSource {
           const dnsResponse = await fetch(dnsUrl, {
             method: "GET",
             headers: { Accept: "application/json" },
+            signal: controller.signal,
           });
 
           if (!dnsResponse.ok) {
@@ -166,6 +192,13 @@ export function createShodanSource(apiKey: string): ThreatIntelSource {
           if (!resolvedIp) {
             return errorResult(
               `No DNS resolution for domain: ${indicator.value}`,
+            );
+          }
+
+          // Also check resolved IP for SSRF
+          if (isPrivateOrReservedIP(resolvedIp)) {
+            return errorResult(
+              "Refused to query private or reserved IP address (resolved from domain)",
             );
           }
 
@@ -184,6 +217,7 @@ export function createShodanSource(apiKey: string): ThreatIntelSource {
         const response = await fetch(hostUrl, {
           method: "GET",
           headers: { Accept: "application/json" },
+          signal: controller.signal,
         });
 
         if (!response.ok) {
@@ -202,6 +236,12 @@ export function createShodanSource(apiKey: string): ThreatIntelSource {
         }
 
         const data = (await response.json()) as ShodanHostResponse;
+
+        // Validate response shape
+        if (!data || typeof data !== "object" || !("ip_str" in data)) {
+          return errorResult("Unexpected API response format");
+        }
+
         const verdict = normalizeVerdict(data);
 
         return {
@@ -233,18 +273,23 @@ export function createShodanSource(apiKey: string): ThreatIntelSource {
           return errorResult("Network error contacting Shodan");
         }
         return errorResult(
-          `Shodan error: ${err instanceof Error ? err.message : String(err)}`,
+          `Shodan error: ${sanitizeErrorMessage(err)}`,
         );
+      } finally {
+        clearTimeout(timeout);
       }
     },
 
     async healthCheck(): Promise<{ healthy: boolean; message?: string }> {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 10_000);
       try {
         const response = await fetch(
           `${SHODAN_API_BASE}/api-info?key=${apiKey}`,
           {
             method: "GET",
             headers: { Accept: "application/json" },
+            signal: controller.signal,
           },
         );
         if (response.ok) {
@@ -257,8 +302,10 @@ export function createShodanSource(apiKey: string): ThreatIntelSource {
       } catch (err: unknown) {
         return {
           healthy: false,
-          message: `Shodan health check error: ${err instanceof Error ? err.message : String(err)}`,
+          message: `Shodan health check error: ${sanitizeErrorMessage(err)}`,
         };
+      } finally {
+        clearTimeout(timeout);
       }
     },
   };

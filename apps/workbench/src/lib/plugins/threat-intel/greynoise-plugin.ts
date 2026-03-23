@@ -19,6 +19,7 @@ import type {
   EnrichmentResult,
   ThreatVerdict,
 } from "@clawdstrike/plugin-sdk";
+import { sanitizeErrorMessage } from "./sanitize-error";
 
 // ---- Constants ----
 
@@ -149,6 +150,8 @@ export function createGreyNoiseSource(apiKey: string): ThreatIntelSource {
         );
       }
 
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 30_000);
       try {
         const url = `${GN_API_BASE}/v3/community/${indicator.value}`;
         const response = await fetch(url, {
@@ -157,6 +160,7 @@ export function createGreyNoiseSource(apiKey: string): ThreatIntelSource {
             key: apiKey,
             Accept: "application/json",
           },
+          signal: controller.signal,
         });
 
         if (!response.ok) {
@@ -172,6 +176,12 @@ export function createGreyNoiseSource(apiKey: string): ThreatIntelSource {
         }
 
         const data = (await response.json()) as GnCommunityResponse;
+
+        // Validate response shape
+        if (!data || typeof data !== "object" || !("ip" in data) || !("classification" in data)) {
+          return errorResult("Unexpected API response format");
+        }
+
         const verdict = normalizeVerdict(data);
 
         // Construct permalink: prefer response link field, fallback to constructed URL
@@ -204,12 +214,16 @@ export function createGreyNoiseSource(apiKey: string): ThreatIntelSource {
           return errorResult("Network error contacting GreyNoise");
         }
         return errorResult(
-          `GreyNoise error: ${err instanceof Error ? err.message : String(err)}`,
+          `GreyNoise error: ${sanitizeErrorMessage(err)}`,
         );
+      } finally {
+        clearTimeout(timeout);
       }
     },
 
     async healthCheck(): Promise<{ healthy: boolean; message?: string }> {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 10_000);
       try {
         // Use Google DNS (8.8.8.8) as a known benign IP for health checks
         const response = await fetch(
@@ -220,6 +234,7 @@ export function createGreyNoiseSource(apiKey: string): ThreatIntelSource {
               key: apiKey,
               Accept: "application/json",
             },
+            signal: controller.signal,
           },
         );
         if (response.ok) {
@@ -232,8 +247,10 @@ export function createGreyNoiseSource(apiKey: string): ThreatIntelSource {
       } catch (err: unknown) {
         return {
           healthy: false,
-          message: `GreyNoise health check error: ${err instanceof Error ? err.message : String(err)}`,
+          message: `GreyNoise health check error: ${sanitizeErrorMessage(err)}`,
         };
+      } finally {
+        clearTimeout(timeout);
       }
     },
   };

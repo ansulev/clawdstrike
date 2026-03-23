@@ -419,6 +419,10 @@ async fn handle_ws(socket: WebSocket, state: AppState) {
                         display_name,
                         sigil,
                     } => {
+                        // TODO(security): Derive identity from auth token instead of trusting
+                        // client-provided fingerprint/display_name/sigil. Currently any client
+                        // with a valid API key can impersonate another analyst. Requires auth_store
+                        // to return user identity on validate_key(). Tracked for v2.1.
                         let info = hub.join(&fingerprint, &display_name, &sigil);
                         analyst_fingerprint = Some(fingerprint.clone());
                         let _ = internal_tx

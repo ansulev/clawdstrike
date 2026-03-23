@@ -1499,9 +1499,9 @@ pub struct SearchMatch {
     pub line_number: usize,
     /// Full line text (trimmed to 500 chars max).
     pub line_content: String,
-    /// Byte offset of match start within `line_content`.
+    /// Character offset of match start within `line_content`.
     pub match_start: usize,
-    /// Byte offset of match end within `line_content`.
+    /// Character offset of match end within `line_content`.
     pub match_end: usize,
 }
 
@@ -1537,6 +1537,37 @@ const SKIP_DIRS: &[&str] = &["node_modules", "target", ".git"];
 /// Check whether a character is a word boundary delimiter (not alphanumeric or underscore).
 fn is_word_boundary_char(c: char) -> bool {
     !c.is_alphanumeric() && c != '_'
+}
+
+fn is_match_on_word_boundary(line: &str, match_start: usize, match_end: usize) -> bool {
+    let before_ok = if match_start == 0 {
+        true
+    } else {
+        line[..match_start]
+            .chars()
+            .next_back()
+            .map_or(true, is_word_boundary_char)
+    };
+    let after_ok = if match_end >= line.len() {
+        true
+    } else {
+        line[match_end..]
+            .chars()
+            .next()
+            .map_or(true, is_word_boundary_char)
+    };
+    before_ok && after_ok
+}
+
+fn truncate_line_content(line: &str) -> &str {
+    match line.char_indices().nth(MAX_LINE_CONTENT_LEN) {
+        Some((idx, _)) => &line[..idx],
+        None => line,
+    }
+}
+
+fn byte_index_to_char_index(line: &str, byte_index: usize) -> usize {
+    line[..byte_index.min(line.len())].chars().count()
 }
 
 /// Walk a directory tree recursively, collecting file paths that are eligible for search.
@@ -1623,15 +1654,12 @@ pub async fn search_in_project(
             } else {
                 pattern
             };
-            Some(regex::Regex::new(&pattern).map_err(|e| format!("Invalid regex: {e}"))?)
+            regex::Regex::new(&pattern).map_err(|e| format!("Invalid regex: {e}"))?
         } else {
-            None
-        };
-
-        let literal_query = if !use_regex && !case_sensitive {
-            query_clone.to_lowercase()
-        } else {
-            query_clone.clone()
+            regex::RegexBuilder::new(&regex::escape(&query_clone))
+                .case_insensitive(!case_sensitive)
+                .build()
+                .map_err(|e| format!("Invalid literal search: {e}"))?
         };
 
         // Collect eligible files.
@@ -1660,51 +1688,19 @@ pub async fn search_in_project(
                 let line_number = line_idx + 1;
 
                 // Collect matches for this line.
-                let line_matches: Vec<(usize, usize)> = if let Some(ref re) = compiled_regex {
-                    re.find_iter(line).map(|m| (m.start(), m.end())).collect()
-                } else {
-                    // Literal search.
-                    let haystack = if !case_sensitive {
-                        line.to_lowercase()
-                    } else {
-                        line.to_string()
-                    };
-                    let mut matches = Vec::new();
-                    let mut start = 0;
-                    while let Some(pos) = haystack[start..].find(&literal_query) {
-                        let abs_start = start + pos;
-                        let abs_end = abs_start + literal_query.len();
-
-                        // Whole-word check for literal mode.
-                        if whole_word {
-                            let before_ok = if abs_start == 0 {
-                                true
-                            } else {
-                                // Check the character before the match in the original line.
-                                line[..abs_start]
-                                    .chars()
-                                    .next_back()
-                                    .map_or(true, is_word_boundary_char)
-                            };
-                            let after_ok = if abs_end >= line.len() {
-                                true
-                            } else {
-                                line[abs_end..]
-                                    .chars()
-                                    .next()
-                                    .map_or(true, is_word_boundary_char)
-                            };
-                            if before_ok && after_ok {
-                                matches.push((abs_start, abs_end));
-                            }
-                        } else {
-                            matches.push((abs_start, abs_end));
+                let line_matches: Vec<(usize, usize)> = compiled_regex
+                    .find_iter(line)
+                    .filter_map(|m| {
+                        let match_start = m.start();
+                        let match_end = m.end();
+                        if !use_regex && whole_word
+                            && !is_match_on_word_boundary(line, match_start, match_end)
+                        {
+                            return None;
                         }
-
-                        start = abs_end.max(start + 1);
-                    }
-                    matches
-                };
+                        Some((match_start, match_end))
+                    })
+                    .collect();
 
                 for (match_start, match_end) in line_matches {
                     if all_matches.len() >= MAX_SEARCH_MATCHES {
@@ -1713,15 +1709,11 @@ pub async fn search_in_project(
                     }
 
                     // Truncate line content to MAX_LINE_CONTENT_LEN.
-                    let line_content = if line.len() > MAX_LINE_CONTENT_LEN {
-                        line[..MAX_LINE_CONTENT_LEN].to_string()
-                    } else {
-                        line.to_string()
-                    };
+                    let line_content = truncate_line_content(line).to_string();
 
                     // Clamp match offsets to truncated line.
-                    let clamped_start = match_start.min(line_content.len());
-                    let clamped_end = match_end.min(line_content.len());
+                    let clamped_start = byte_index_to_char_index(&line_content, match_start);
+                    let clamped_end = byte_index_to_char_index(&line_content, match_end);
 
                     file_had_match = true;
                     all_matches.push(SearchMatch {
@@ -1761,7 +1753,7 @@ mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used)]
 
     use super::*;
-    use tempfile::NamedTempFile;
+    use tempfile::{tempdir, NamedTempFile};
 
     /// A minimal valid policy YAML string for testing.
     fn minimal_valid_policy() -> String {
@@ -1775,6 +1767,41 @@ guards:
       - "**/.ssh/**"
 "#
         .to_string()
+    }
+
+    #[test]
+    fn search_byte_offsets_convert_to_character_offsets() {
+        let line = "漢漢needle";
+        let byte_start = line.find("needle").unwrap();
+        let byte_end = byte_start + "needle".len();
+
+        assert_eq!(byte_index_to_char_index(line, byte_start), 2);
+        assert_eq!(byte_index_to_char_index(line, byte_end), 8);
+    }
+
+    #[tokio::test]
+    async fn search_in_project_truncates_multibyte_lines_without_panicking() {
+        let root = tempdir().unwrap();
+        let file_path = root.path().join("search.txt");
+        let content = format!("{}needle\n", "漢".repeat(MAX_LINE_CONTENT_LEN + 10));
+        std::fs::write(&file_path, content).unwrap();
+
+        let result = search_in_project(
+            root.path().to_string_lossy().to_string(),
+            "needle".to_string(),
+            false,
+            false,
+            false,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(result.matches.len(), 1);
+        let first_match = &result.matches[0];
+        assert_eq!(first_match.file_path, "search.txt");
+        assert_eq!(first_match.line_content.chars().count(), MAX_LINE_CONTENT_LEN);
+        assert_eq!(first_match.match_start, MAX_LINE_CONTENT_LEN);
+        assert_eq!(first_match.match_end, MAX_LINE_CONTENT_LEN);
     }
 
     // =======================================================================

@@ -5,7 +5,7 @@
  * The SHORTCUT_DEFINITIONS export is preserved (derived from the registry)
  * so that ShortcutHelpDialog continues to work unchanged.
  */
-import { useEffect, useSyncExternalStore, useMemo } from "react";
+import { useEffect } from "react";
 import { useBottomPaneStore } from "@/features/bottom-pane/bottom-pane-store";
 import { getActivePaneRoute, usePaneStore } from "@/features/panes/pane-store";
 import {
@@ -34,6 +34,61 @@ function parseKeybinding(binding: string): ParsedKeybinding {
   const shift = parts.some((p) => p === "Shift");
   const alt = parts.some((p) => p === "Alt");
   return { key, meta, shift, alt };
+}
+
+const SHIFTED_SYMBOL_KEY_MAP: Record<string, string> = {
+  "~": "`",
+  "!": "1",
+  "@": "2",
+  "#": "3",
+  "$": "4",
+  "%": "5",
+  "^": "6",
+  "&": "7",
+  "*": "8",
+  "(": "9",
+  ")": "0",
+  "_": "-",
+  "+": "=",
+  "{": "[",
+  "}": "]",
+  "|": "\\",
+  ":": ";",
+  "\"": "'",
+  "<": ",",
+  ">": ".",
+  "?": "/",
+};
+
+function normalizePressedKey(key: string): string {
+  const normalized = key.toLowerCase();
+  return SHIFTED_SYMBOL_KEY_MAP[key] ?? SHIFTED_SYMBOL_KEY_MAP[normalized] ?? normalized;
+}
+
+function isShiftedSymbolAlias(key: string): boolean {
+  return key in SHIFTED_SYMBOL_KEY_MAP;
+}
+
+function getShortcutBindings(): Array<{
+  cmd: Command & { keybinding: string };
+  parsed: ParsedKeybinding;
+}> {
+  const bindings = commandRegistry
+    .getAll()
+    .filter((cmd): cmd is Command & { keybinding: string } => !!cmd.keybinding)
+    .map((cmd) => ({
+      cmd,
+      parsed: parseKeybinding(cmd.keybinding),
+    }));
+
+  bindings.sort((a, b) => {
+    if (a.parsed.key === b.parsed.key) {
+      return (b.parsed.shift ? 1 : 0) - (a.parsed.shift ? 1 : 0);
+    }
+    return 0;
+  });
+
+  return bindings;
 }
 
 // ---- Shortcut definition type (for help dialog compatibility) ----
@@ -126,47 +181,22 @@ export function getShortcutDefinitions(): ShortcutDefinition[] {
  * by InitCommands which manages the dialog open/close state.
  */
 export function ShortcutProvider() {
-  // Subscribe to registry changes so the keydown handler always has fresh commands.
-  const registryVersion = useSyncExternalStore(
-    (cb) => commandRegistry.subscribe(cb),
-    () => commandRegistry.getVersion(),
-  );
-
-  // Build sorted bindings: shift-modified entries first for same key (so Meta+Shift+Z
-  // matches before Meta+Z).
-  const bindings = useMemo(() => {
-    const all = commandRegistry.getAll();
-    const withBindings = all
-      .filter((cmd): cmd is Command & { keybinding: string } => !!cmd.keybinding)
-      .map((cmd) => ({
-        cmd,
-        parsed: parseKeybinding(cmd.keybinding),
-      }));
-
-    // Sort: shift=true entries first for same key, so Shift variants match before non-Shift
-    withBindings.sort((a, b) => {
-      if (a.parsed.key === b.parsed.key) {
-        return (b.parsed.shift ? 1 : 0) - (a.parsed.shift ? 1 : 0);
-      }
-      return 0;
-    });
-
-    return withBindings;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [registryVersion]);
-
   useEffect(() => {
     function handleKeydown(e: KeyboardEvent) {
       const modifierPressed = e.metaKey || e.ctrlKey;
+      const normalizedKey = normalizePressedKey(e.key);
+      const bindings = getShortcutBindings();
 
       for (const { cmd, parsed } of bindings) {
         if (!commandMatchesShortcutContext(cmd, e.target)) {
           continue;
         }
 
-        const keyMatches = e.key.toLowerCase() === parsed.key;
+        const keyMatches = normalizedKey === parsed.key;
         const metaMatches = parsed.meta ? modifierPressed : !modifierPressed;
-        const shiftMatches = parsed.shift ? e.shiftKey : !e.shiftKey;
+        const shiftMatches = parsed.shift
+          ? e.shiftKey
+          : !e.shiftKey || (isShiftedSymbolAlias(e.key) && normalizedKey === parsed.key);
         const altMatches = parsed.alt ? e.altKey : !e.altKey;
 
         if (keyMatches && metaMatches && shiftMatches && altMatches) {
@@ -177,27 +207,13 @@ export function ShortcutProvider() {
         }
       }
 
-      // Handle Cmd+Shift+/ which produces "?" as e.key on many keyboards
-      // Match it to the Meta+/ binding (shortcuts help)
-      if (modifierPressed && e.shiftKey && e.key === "?") {
-        const slashCmd = bindings.find(
-          (binding) =>
-            binding.parsed.key === "/" &&
-            commandMatchesShortcutContext(binding.cmd, e.target),
-        );
-        if (slashCmd) {
-          e.preventDefault();
-          e.stopPropagation();
-          void commandRegistry.execute(slashCmd.cmd.id);
-        }
-      }
     }
 
     window.addEventListener("keydown", handleKeydown, { capture: true });
     return () => {
       window.removeEventListener("keydown", handleKeydown, { capture: true });
     };
-  }, [bindings]);
+  }, []);
 
   // ShortcutHelpDialog is now rendered by InitCommands.
   return null;

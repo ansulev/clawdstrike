@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useActivityBarStore } from "../stores/activity-bar-store";
 import { ExplorerPanel } from "@/components/workbench/explorer/explorer-panel";
 import { useProjectStore } from "@/features/project/stores/project-store";
+import { getProjectFileStatusKey } from "@/features/project/stores/project-store";
 import type { DetectionProject, ProjectFile } from "@/features/project/stores/project-store";
 import { usePaneStore, getActivePaneRoute } from "@/features/panes/pane-store";
 import { HeartbeatPanel } from "../panels/heartbeat-panel";
@@ -46,17 +47,19 @@ function ExplorerPanelConnected() {
   const paneRoot = usePaneStore((s) => s.root);
   const activePaneId = usePaneStore((s) => s.activePaneId);
 
-  const activeFilePath = useMemo(() => {
+  const activeFileKey = useMemo(() => {
     const route = getActivePaneRoute(paneRoot, activePaneId);
     if (!route.startsWith("/file/")) return null;
     const absPath = route.slice("/file/".length);
-    // Strip project root prefix to get relative path matching ProjectFile.path
-    for (const rootPath of projectRoots) {
-      if (absPath.startsWith(rootPath + "/")) {
-        return absPath.slice(rootPath.length + 1);
+    for (const rootPath of [...projectRoots].sort((a, b) => b.length - a.length)) {
+      if (absPath === rootPath || absPath.startsWith(rootPath + "/")) {
+        return getProjectFileStatusKey(
+          rootPath,
+          absPath.slice(rootPath.length).replace(/^\//, ""),
+        );
       }
     }
-    return absPath;
+    return null;
   }, [paneRoot, activePaneId, projectRoots]);
 
   // Show loading indicator briefly while bootstrap scans directories.
@@ -89,22 +92,12 @@ function ExplorerPanelConnected() {
   return (
     <ExplorerPanel
       projects={projects}
-      activeFilePath={activeFilePath}
+      activeFileKey={activeFileKey}
       onToggleDir={(rootPath, dirPath) => {
         actions.toggleDirForRoot(rootPath, dirPath);
       }}
-      onOpenFile={(file) => {
-        // Resolve relative ProjectFile.path to absolute using the project root
-        // so that Tauri fs reads (which require absolute paths) work correctly.
-        const project = projects.find((p) =>
-          p.files.some(function findFile(f: ProjectFile): boolean {
-            if (f.path === file.path) return true;
-            return f.children?.some(findFile) ?? false;
-          }),
-        );
-        const absPath = project
-          ? `${project.rootPath}/${file.path}`
-          : file.path;
+      onOpenFile={(rootPath, file) => {
+        const absPath = `${rootPath}/${file.path}`;
         if (file.fileType === "swarm_bundle") {
           usePaneStore.getState().openApp(
             `/swarm-board/${encodeURIComponent(absPath)}`,
@@ -143,39 +136,15 @@ function ExplorerPanelConnected() {
       onCreateFile={async (parentPath, fileName) => {
         const savedPath = await actions.createFile(parentPath, fileName, "clawdstrike_policy");
         if (savedPath) {
-          // Find the correct project root that contains parentPath.
-          const storeProjects = useProjectStore.getState().projects;
-          const matchingProject = [...storeProjects.values()].find(
-            (p) => parentPath.startsWith(p.rootPath),
-          );
-          const relPath = matchingProject && savedPath.startsWith(matchingProject.rootPath)
-            ? savedPath.slice(matchingProject.rootPath.length).replace(/^\//, "")
-            : fileName;
-          actions.setFileStatus(relPath, { modified: true });
+          actions.setFileStatus(savedPath, { modified: true });
           usePaneStore.getState().openFile(savedPath, fileName);
         }
       }}
-      onRenameFile={async (file, newName) => {
-        // Resolve to absolute path so multi-root renames target the correct directory.
-        const project = projects.find((p) =>
-          p.files.some(function findFile(f: ProjectFile): boolean {
-            if (f.path === file.path) return true;
-            return f.children?.some(findFile) ?? false;
-          }),
-        );
-        const absPath = project ? `${project.rootPath}/${file.path}` : file.path;
-        await actions.renameFile(absPath, newName);
+      onRenameFile={async (rootPath, file, newName) => {
+        await actions.renameFile(`${rootPath}/${file.path}`, newName);
       }}
-      onDeleteFile={async (file) => {
-        // Resolve to absolute path so multi-root deletes target the correct directory.
-        const project = projects.find((p) =>
-          p.files.some(function findFile(f: ProjectFile): boolean {
-            if (f.path === file.path) return true;
-            return f.children?.some(findFile) ?? false;
-          }),
-        );
-        const absPath = project ? `${project.rootPath}/${file.path}` : file.path;
-        await actions.deleteFile(absPath);
+      onDeleteFile={async (rootPath, file) => {
+        await actions.deleteFile(`${rootPath}/${file.path}`);
       }}
       onRevealInFinder={async (absPath) => {
         const { revealInFinder } = await import("@/lib/tauri-bridge");

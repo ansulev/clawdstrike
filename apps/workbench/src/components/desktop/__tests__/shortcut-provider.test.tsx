@@ -1,9 +1,10 @@
 import React from "react";
 import { useEffect } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor } from "@testing-library/react";
 import { ShortcutProvider } from "../shortcut-provider";
 import { InitCommands } from "@/lib/commands/init-commands";
+import { useBottomPaneStore } from "@/features/bottom-pane/bottom-pane-store";
 import { usePaneStore } from "@/features/panes/pane-store";
 import { renderWithProviders } from "@/test/test-helpers";
 import { useWorkbenchState } from "@/features/policy/hooks/use-policy-actions";
@@ -47,6 +48,8 @@ function PolicyValidateShortcutHarness() {
 
 beforeEach(() => {
   vi.mocked(isDesktop).mockReturnValue(false);
+  usePaneStore.getState()._reset();
+  useBottomPaneStore.getState()._reset();
 });
 
 describe("ShortcutProvider", () => {
@@ -81,5 +84,32 @@ describe("ShortcutProvider", () => {
     fireEvent.keyDown(terminalContext, { key: "v", metaKey: true, shiftKey: true });
 
     expect(screen.getByTestId("sync-direction").textContent).toBe("");
+  });
+
+  it("re-evaluates shortcut availability when a command's when() predicate flips", () => {
+    renderWithProviders(<PolicyValidateShortcutHarness />);
+
+    expect(usePaneStore.getState().paneCount()).toBe(1);
+
+    act(() => {
+      const { activePaneId, splitPane } = usePaneStore.getState();
+      splitPane(activePaneId, "vertical");
+    });
+
+    expect(usePaneStore.getState().paneCount()).toBe(2);
+
+    fireEvent.keyDown(window, { key: "w", metaKey: true, shiftKey: true });
+
+    expect(usePaneStore.getState().paneCount()).toBe(1);
+  });
+
+  it("matches shifted symbol shortcuts against browser-reported keys", () => {
+    renderWithProviders(<PolicyValidateShortcutHarness />);
+
+    expect(usePaneStore.getState().paneCount()).toBe(1);
+
+    fireEvent.keyDown(window, { key: "|", metaKey: true, shiftKey: true });
+
+    expect(usePaneStore.getState().paneCount()).toBe(2);
   });
 });

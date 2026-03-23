@@ -13,6 +13,7 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { FILE_TYPE_REGISTRY, type FileType } from "@/lib/workbench/file-type-registry";
 import type { DetectionProject, ProjectFile, FileStatus } from "@/features/project/stores/project-store";
+import { getProjectFileStatusKey } from "@/features/project/stores/project-store";
 import { ExplorerTreeItem } from "./explorer-tree-item";
 import { ExplorerContextMenu, type ContextMenuTarget } from "./explorer-context-menu";
 import { DeleteConfirmDialog } from "./delete-confirm-dialog";
@@ -25,7 +26,7 @@ interface ExplorerPanelProps {
   /** Array of mounted workspace roots (multi-root support). */
   projects: DetectionProject[];
   onToggleDir: (rootPath: string, dirPath: string) => void;
-  onOpenFile: (file: ProjectFile) => void;
+  onOpenFile: (rootPath: string, file: ProjectFile) => void;
   onExpandAll: () => void;
   onCollapseAll: () => void;
   filter: string;
@@ -37,16 +38,21 @@ interface ExplorerPanelProps {
   onAddFolder?: () => void;
   /** Callback to remove a mounted root from the workspace. */
   onRemoveRoot?: (rootPath: string) => void;
-  activeFilePath?: string | null;
+  activeFileKey?: string | null;
   className?: string;
   onCreateFile?: (parentPath: string, fileName: string) => void;
-  onRenameFile?: (file: ProjectFile, newName: string) => void;
-  onDeleteFile?: (file: ProjectFile) => void;
+  onRenameFile?: (rootPath: string, file: ProjectFile, newName: string) => void;
+  onDeleteFile?: (rootPath: string, file: ProjectFile) => void;
   fileStatuses?: Map<string, FileStatus>;
   onRevealInFinder?: (absolutePath: string) => void;
   onCreateFolder?: (parentPath: string, folderName: string) => void;
   onCollapseChildren?: (rootPath: string, dirPath: string) => void;
   onRefreshRoot?: (rootPath: string) => void;
+}
+
+interface DeleteTarget {
+  rootPath: string;
+  file: ProjectFile;
 }
 
 // ---- Filter logic ----
@@ -168,32 +174,32 @@ function RootTreeSection({
   formatFilter,
   onToggleDir,
   onOpenFile,
-  activeFilePath,
+  activeFileKey,
   fileStatuses,
   onCreateFile,
   onRenameFile,
   creatingInDir,
   setCreatingInDir,
-  renamingFilePath,
-  setRenamingFilePath,
+  renamingFileKey,
+  setRenamingFileKey,
   setContextMenu,
-  setDeletingFile,
+  setDeleteTarget,
 }: {
   project: DetectionProject;
   filter: string;
   formatFilter: FileType | null;
   onToggleDir: (rootPath: string, dirPath: string) => void;
-  onOpenFile: (file: ProjectFile) => void;
-  activeFilePath?: string | null;
+  onOpenFile: (rootPath: string, file: ProjectFile) => void;
+  activeFileKey?: string | null;
   fileStatuses?: Map<string, FileStatus>;
   onCreateFile?: (parentPath: string, fileName: string) => void;
-  onRenameFile?: (file: ProjectFile, newName: string) => void;
+  onRenameFile?: (rootPath: string, file: ProjectFile, newName: string) => void;
   creatingInDir: string | null;
   setCreatingInDir: (dir: string | null) => void;
-  renamingFilePath: string | null;
-  setRenamingFilePath: (path: string | null) => void;
+  renamingFileKey: string | null;
+  setRenamingFileKey: (path: string | null) => void;
   setContextMenu: (menu: ContextMenuTarget | null) => void;
-  setDeletingFile: (file: ProjectFile | null) => void;
+  setDeleteTarget: (target: DeleteTarget | null) => void;
 }) {
   const filteredFiles = useMemo(() => {
     if (!filter && !formatFilter) return project.files;
@@ -259,16 +265,17 @@ function RootTreeSection({
 
   for (let i = 0; i < visibleItems.length; i++) {
     const file = visibleItems[i];
-    const status = fileStatuses?.get(file.path);
+    const fileKey = getProjectFileStatusKey(project.rootPath, file.path);
+    const status = fileStatuses?.get(fileKey);
     items.push(
       <ExplorerTreeItem
         key={file.path}
         file={file}
         isExpanded={project.expandedDirs.has(file.path)}
         onToggle={() => onToggleDir(project.rootPath, file.path)}
-        onOpen={() => onOpenFile(file)}
+        onOpen={() => onOpenFile(project.rootPath, file)}
         isActive={
-          !file.isDirectory && activeFilePath === file.path
+          !file.isDirectory && activeFileKey === fileKey
         }
         onContextMenu={(e) => {
           e.preventDefault();
@@ -280,13 +287,13 @@ function RootTreeSection({
             y: e.clientY,
           });
         }}
-        isRenaming={renamingFilePath === file.path}
+        isRenaming={renamingFileKey === fileKey}
         onRenameSubmit={(newName) => {
-          onRenameFile?.(file, newName);
-          setRenamingFilePath(null);
+          onRenameFile?.(project.rootPath, file, newName);
+          setRenamingFileKey(null);
         }}
-        onRenameCancel={() => setRenamingFilePath(null)}
-        onStartRename={() => setRenamingFilePath(file.path)}
+        onRenameCancel={() => setRenamingFileKey(null)}
+        onStartRename={() => setRenamingFileKey(fileKey)}
         isModified={status?.modified}
         hasError={status?.hasError}
       />,
@@ -331,7 +338,7 @@ export function ExplorerPanel({
   onRefresh,
   onAddFolder,
   onRemoveRoot,
-  activeFilePath,
+  activeFileKey,
   className,
   onCreateFile,
   onRenameFile,
@@ -349,9 +356,9 @@ export function ExplorerPanel({
   // Inline folder creation state: the parent directory path where a folder is being created.
   const [creatingFolderInDir, setCreatingFolderInDir] = useState<string | null>(null);
   // Inline rename state: which file path is being renamed.
-  const [renamingFilePath, setRenamingFilePath] = useState<string | null>(null);
+  const [renamingFileKey, setRenamingFileKey] = useState<string | null>(null);
   // Delete confirmation dialog state.
-  const [deletingFile, setDeletingFile] = useState<ProjectFile | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
   // Track which root sections are expanded (all expanded by default).
   const [expandedRoots, setExpandedRoots] = useState<Set<string>>(
     () => new Set(projects.map((p) => p.rootPath)),
@@ -628,16 +635,16 @@ export function ExplorerPanel({
                       formatFilter={formatFilter}
                       onToggleDir={onToggleDir}
                       onOpenFile={onOpenFile}
-                      activeFilePath={activeFilePath}
+                      activeFileKey={activeFileKey}
                       fileStatuses={fileStatuses}
                       onCreateFile={onCreateFile}
                       onRenameFile={onRenameFile}
                       creatingInDir={creatingInDir}
                       setCreatingInDir={setCreatingInDir}
-                      renamingFilePath={renamingFilePath}
-                      setRenamingFilePath={setRenamingFilePath}
+                      renamingFileKey={renamingFileKey}
+                      setRenamingFileKey={setRenamingFileKey}
                       setContextMenu={setContextMenu}
-                      setDeletingFile={setDeletingFile}
+                      setDeleteTarget={setDeleteTarget}
                     />
                   )}
                 </div>
@@ -652,16 +659,16 @@ export function ExplorerPanel({
                 formatFilter={formatFilter}
                 onToggleDir={onToggleDir}
                 onOpenFile={onOpenFile}
-                activeFilePath={activeFilePath}
+                activeFileKey={activeFileKey}
                 fileStatuses={fileStatuses}
                 onCreateFile={onCreateFile}
                 onRenameFile={onRenameFile}
                 creatingInDir={creatingInDir}
                 setCreatingInDir={setCreatingInDir}
-                renamingFilePath={renamingFilePath}
-                setRenamingFilePath={setRenamingFilePath}
+                renamingFileKey={renamingFileKey}
+                setRenamingFileKey={setRenamingFileKey}
                 setContextMenu={setContextMenu}
-                setDeletingFile={setDeletingFile}
+                setDeleteTarget={setDeleteTarget}
               />
             )
           )}
@@ -690,15 +697,15 @@ export function ExplorerPanel({
             setContextMenu(null);
           }}
           onOpen={(file) => {
-            onOpenFile(file);
+            onOpenFile(contextMenu.rootPath, file);
             setContextMenu(null);
           }}
           onRename={(file) => {
-            setRenamingFilePath(file.path);
+            setRenamingFileKey(getProjectFileStatusKey(contextMenu.rootPath, file.path));
             setContextMenu(null);
           }}
           onDelete={(file) => {
-            setDeletingFile(file);
+            setDeleteTarget({ rootPath: contextMenu.rootPath, file });
             setContextMenu(null);
           }}
           onRevealInFinder={(absPath) => {
@@ -755,15 +762,15 @@ export function ExplorerPanel({
 
       {/* Delete confirmation dialog */}
       <DeleteConfirmDialog
-        file={deletingFile}
-        open={deletingFile !== null}
+        file={deleteTarget?.file ?? null}
+        open={deleteTarget !== null}
         onConfirm={() => {
-          if (deletingFile) {
-            onDeleteFile?.(deletingFile);
+          if (deleteTarget) {
+            onDeleteFile?.(deleteTarget.rootPath, deleteTarget.file);
           }
-          setDeletingFile(null);
+          setDeleteTarget(null);
         }}
-        onCancel={() => setDeletingFile(null)}
+        onCancel={() => setDeleteTarget(null)}
       />
     </div>
   );

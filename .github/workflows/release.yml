@@ -95,11 +95,14 @@ jobs:
         run: |
           set -euo pipefail
 
-          # Keep this list to crates that verify against published registry dependencies.
-          # clawdstrike/hunt/hush-cli currently rely on vendored nono+hushspec APIs that have
-          # not been published to crates.io in matching form, so they are intentionally excluded
-          # from the automated crates.io release lane until the upstream registry surface catches up.
-          crates=(hush-core hush-proxy hush-spine)
+          # Keep this list to crates that currently pass `cargo publish --dry-run`
+          # against registry dependencies.
+          #
+          # The remaining 0.2.7-drifting public crates stay excluded for now:
+          # - clawdstrike: dry-run fails against crates.io's hushspec/nono surface
+          # - clawdstrike-policy-event, hunt-scan, hunt-query, hunt-correlate, hush-cli,
+          #   clawdstrike-logos: blocked transitively on clawdstrike 0.2.7 being unpublished
+          crates=(logos-ffi clawdstrike-ocsf hush-core hush-proxy hush-spine)
           missing=()
           for crate in "${crates[@]}"; do
             code="$(curl -s -o /dev/null -w '%{http_code}' "https://crates.io/api/v1/crates/${crate}/${VERSION}")"
@@ -168,6 +171,8 @@ jobs:
             exit 1
           }
 
+          publish_with_retry logos-ffi
+          publish_with_retry clawdstrike-ocsf
           publish_with_retry hush-core
           publish_with_retry hush-proxy
           publish_with_retry hush-spine

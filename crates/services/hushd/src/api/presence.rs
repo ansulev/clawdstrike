@@ -21,6 +21,7 @@ use tokio::sync::broadcast;
 use tokio::sync::Notify;
 
 use crate::api::v1::V1Error;
+use crate::auth::{ApiKey, Scope};
 use crate::state::AppState;
 
 // ---------------------------------------------------------------------------
@@ -311,6 +312,52 @@ pub fn assign_color(fingerprint: &str) -> String {
     PRESENCE_COLORS[(hash as usize) % PRESENCE_COLORS.len()].to_string()
 }
 
+fn derive_presence_sigil(display_name: &str) -> String {
+    let sigil: String = display_name
+        .split_whitespace()
+        .filter_map(|part| part.chars().find(|ch| ch.is_alphanumeric()))
+        .take(2)
+        .map(|ch| ch.to_ascii_uppercase())
+        .collect();
+
+    if sigil.is_empty() {
+        display_name
+            .chars()
+            .find(|ch| ch.is_alphanumeric())
+            .map(|ch| ch.to_ascii_uppercase().to_string())
+            .unwrap_or_else(|| "?".to_string())
+    } else {
+        sigil
+    }
+}
+
+fn resolve_presence_identity(
+    authenticated_key: Option<&ApiKey>,
+    fingerprint: &str,
+    display_name: &str,
+    sigil: &str,
+) -> (String, String, String) {
+    if let Some(key) = authenticated_key {
+        let resolved_display_name = if key.name.trim().is_empty() {
+            format!("API Key {}", key.id)
+        } else {
+            key.name.clone()
+        };
+
+        return (
+            format!("api_key:{}", key.id),
+            resolved_display_name.clone(),
+            derive_presence_sigil(&resolved_display_name),
+        );
+    }
+
+    (
+        fingerprint.to_string(),
+        display_name.to_string(),
+        sigil.to_string(),
+    )
+}
+
 // ---------------------------------------------------------------------------
 // Heartbeat reaper
 // ---------------------------------------------------------------------------
@@ -357,24 +404,35 @@ pub async fn ws_handler(
     State(state): State<AppState>,
     Query(query): Query<PresenceQuery>,
 ) -> Result<impl IntoResponse, V1Error> {
-    if state.auth_enabled() {
+    let authenticated_key = if state.auth_enabled() {
         let token = query.token.as_deref().ok_or_else(|| {
             V1Error::unauthorized(
                 "MISSING_TOKEN",
                 "WebSocket requires ?token= query parameter",
             )
         })?;
-        state
+        let key = state
             .auth_store
             .validate_key(token)
             .await
             .map_err(|_| V1Error::unauthorized("INVALID_TOKEN", "Invalid or expired token"))?;
-    }
 
-    Ok(ws.on_upgrade(move |socket| handle_ws(socket, state)))
+        if !key.has_scope(Scope::Read) && !key.has_scope(Scope::Admin) {
+            return Err(V1Error::forbidden(
+                "INSUFFICIENT_SCOPE",
+                "presence websocket requires read scope",
+            ));
+        }
+
+        Some(key)
+    } else {
+        None
+    };
+
+    Ok(ws.on_upgrade(move |socket| handle_ws(socket, state, authenticated_key)))
 }
 
-async fn handle_ws(socket: WebSocket, state: AppState) {
+async fn handle_ws(socket: WebSocket, state: AppState, authenticated_key: Option<ApiKey>) {
     use futures::stream::SplitSink;
     let (sender, mut receiver): (SplitSink<WebSocket, Message>, _) = socket.split();
     let hub = &state.presence_hub;
@@ -419,15 +477,22 @@ async fn handle_ws(socket: WebSocket, state: AppState) {
                         display_name,
                         sigil,
                     } => {
-                        // TODO(security): Derive identity from auth token instead of trusting
-                        // client-provided fingerprint/display_name/sigil. Currently any client
-                        // with a valid API key can impersonate another analyst. Requires auth_store
-                        // to return user identity on validate_key(). Tracked for v2.1.
-                        let info = hub.join(&fingerprint, &display_name, &sigil);
-                        analyst_fingerprint = Some(fingerprint.clone());
+                        let (resolved_fingerprint, resolved_display_name, resolved_sigil) =
+                            resolve_presence_identity(
+                                authenticated_key.as_ref(),
+                                &fingerprint,
+                                &display_name,
+                                &sigil,
+                            );
+                        let info = hub.join(
+                            &resolved_fingerprint,
+                            &resolved_display_name,
+                            &resolved_sigil,
+                        );
+                        analyst_fingerprint = Some(resolved_fingerprint.clone());
                         let _ = internal_tx
                             .send(ServerMessage::Welcome {
-                                analyst_id: fingerprint.clone(),
+                                analyst_id: resolved_fingerprint.clone(),
                                 color: info.color.clone(),
                                 roster: hub.roster(),
                             })
@@ -620,6 +685,36 @@ mod tests {
         // They CAN be the same by coincidence, but the function should at least not crash
         assert!(!c1.is_empty());
         assert!(!c2.is_empty());
+    }
+
+    #[test]
+    fn resolve_presence_identity_uses_authenticated_api_key() {
+        let key = ApiKey {
+            id: "key-123".to_string(),
+            key_hash: "hash".to_string(),
+            name: "Blue Team".to_string(),
+            tier: None,
+            scopes: std::collections::HashSet::new(),
+            created_at: chrono::Utc::now(),
+            expires_at: None,
+        };
+
+        let (fingerprint, display_name, sigil) =
+            resolve_presence_identity(Some(&key), "spoofed", "Mallory", "M");
+
+        assert_eq!(fingerprint, "api_key:key-123");
+        assert_eq!(display_name, "Blue Team");
+        assert_eq!(sigil, "BT");
+    }
+
+    #[test]
+    fn resolve_presence_identity_preserves_client_values_without_auth() {
+        let (fingerprint, display_name, sigil) =
+            resolve_presence_identity(None, "fp-1", "Alice", "A");
+
+        assert_eq!(fingerprint, "fp-1");
+        assert_eq!(display_name, "Alice");
+        assert_eq!(sigil, "A");
     }
 
     #[test]

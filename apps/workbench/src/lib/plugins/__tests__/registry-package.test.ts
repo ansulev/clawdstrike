@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  extractRegistryPackageFile,
   extractRegistryPackageMetadata,
   selectLatestInstallableVersion,
 } from "../registry-package";
@@ -94,5 +95,18 @@ describe("registry-package helpers", () => {
     );
 
     expect(version).toBe("1.1.0");
+  });
+
+  it("extracts a package file relative to the tarball root", () => {
+    const archiveBuffer = createTarArchive([
+      {
+        name: "package/dist/index.js",
+        content: 'export { plugin as default };',
+      },
+    ]);
+
+    expect(extractRegistryPackageFile(archiveBuffer, "./dist/index.js")).toBe(
+      'export { plugin as default };',
+    );
   });
 });

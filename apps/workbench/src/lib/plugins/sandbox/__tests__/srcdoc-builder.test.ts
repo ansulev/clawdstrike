@@ -70,6 +70,13 @@ describe("buildPluginSrcdoc()", () => {
     expect(html).toContain("PluginBridgeClient");
   });
 
+  it("output injects the SDK bridge runtime for community plugin activation", () => {
+    const html = buildPluginSrcdoc(defaultOpts);
+    expect(html).toContain("window.__CLAWDSTRIKE_PLUGIN_SDK__");
+    expect(html).toContain("createPluginContext");
+    expect(html).toContain("plugin.activate(context)");
+  });
+
   it("output wraps plugin code execution after bridge initialization", () => {
     const html = buildPluginSrcdoc(defaultOpts);
     // Bridge init should come before the plugin code

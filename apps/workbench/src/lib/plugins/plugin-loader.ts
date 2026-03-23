@@ -52,6 +52,7 @@ import type { SecretsApi } from "./secrets-api";
 import type { GutterConfig } from "./types";
 import { PluginBridgeHost } from "./bridge";
 import { buildPluginSrcdoc } from "./sandbox";
+import { resolveRegistryPluginCode } from "./community-plugin-runtime";
 import {
   PluginRevocationStore,
   getPluginRevocationStore,
@@ -1138,4 +1139,6 @@ export class PluginLoader {
 // ---- Singleton ----
 
 /** Singleton PluginLoader instance for the workbench. */
-export const pluginLoader = new PluginLoader();
+export const pluginLoader = new PluginLoader({
+  resolvePluginCode: resolveRegistryPluginCode,
+});

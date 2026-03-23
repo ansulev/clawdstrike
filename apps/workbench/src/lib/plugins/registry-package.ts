@@ -19,6 +19,10 @@ function normalizePackagePath(path: string): string {
   return path.replace(/^package\//, "").replace(/^\.\//, "");
 }
 
+function decodeText(bytes: Uint8Array): string {
+  return new TextDecoder("utf-8").decode(bytes);
+}
+
 function parseTarEntries(bytes: Uint8Array): Map<string, Uint8Array> {
   const entries = new Map<string, Uint8Array>();
   let offset = 0;
@@ -106,7 +110,7 @@ export function extractRegistryPackageMetadata(
   }
 
   const packageJson = JSON.parse(
-    new TextDecoder("utf-8").decode(packageJsonEntry),
+    decodeText(packageJsonEntry),
   ) as Record<string, unknown>;
 
   return {
@@ -114,6 +118,27 @@ export function extractRegistryPackageMetadata(
     packageJson,
     size: archiveBuffer.byteLength,
   };
+}
+
+export function extractRegistryPackageFile(
+  archiveBuffer: ArrayBuffer,
+  filePath: string,
+): string | null {
+  const archiveBytes = new Uint8Array(archiveBuffer);
+  const tarBytes =
+    archiveBytes[0] === 0x1f && archiveBytes[1] === 0x8b
+      ? gunzipSync(archiveBytes)
+      : archiveBytes;
+  const entries = parseTarEntries(tarBytes);
+  const normalizedTarget = normalizePackagePath(filePath);
+
+  for (const [name, content] of entries) {
+    if (normalizePackagePath(name) === normalizedTarget) {
+      return decodeText(content);
+    }
+  }
+
+  return null;
 }
 
 export function selectLatestInstallableVersion(

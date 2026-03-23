@@ -88,7 +88,7 @@ export function generateTsconfig(): string {
       target: "ES2022",
       module: "ESNext",
       moduleResolution: "bundler",
-      lib: ["ES2022"],
+      lib: ["ES2022", "DOM"],
       strict: true,
       esModuleInterop: true,
       skipLibCheck: true,

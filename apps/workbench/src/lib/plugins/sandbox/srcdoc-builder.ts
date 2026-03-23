@@ -140,6 +140,101 @@ class PluginBridgeClient {
 }
 `;
 
+const INLINED_PLUGIN_RUNTIME = `
+function createUnsupportedSyncMethod(name) {
+  return function() {
+    throw new Error(name + " is not supported for sandboxed community plugins");
+  };
+}
+
+function createUnsupportedAsyncMethod(name) {
+  return function() {
+    return Promise.reject(new Error(name + " is not supported for sandboxed community plugins"));
+  };
+}
+
+function createPluginContext(plugin, fallbackPluginId) {
+  var bridge = window.__bridge;
+  var commandHandlers = new Map();
+  var storage = new Map();
+
+  bridge.subscribe("command.execute", function(params) {
+    var commandId = params && params.id;
+    var handler = commandHandlers.get(commandId);
+    if (typeof handler === "function") {
+      try {
+        handler();
+      } catch (error) {
+        console.error("[plugin-sandbox] command handler failed", error);
+      }
+    }
+  });
+
+  function sendBridgeCall(method, params) {
+    try {
+      var result = bridge.call(method, params);
+      if (result && typeof result.catch === "function") {
+        result.catch(function(error) {
+          console.error("[plugin-sandbox] bridge call failed for " + method, error);
+        });
+      }
+    } catch (error) {
+      console.error("[plugin-sandbox] bridge call failed for " + method, error);
+    }
+  }
+
+  function noopDisposable() {
+    return function() {};
+  }
+
+  return {
+    pluginId: plugin && plugin.manifest && plugin.manifest.id ? plugin.manifest.id : fallbackPluginId,
+    subscriptions: [],
+    commands: {
+      register: function(command, handler) {
+        if (command && command.id) {
+          commandHandlers.set(command.id, handler);
+          sendBridgeCall("commands.register", command);
+        }
+        return function() {
+          if (command && command.id) {
+            commandHandlers.delete(command.id);
+          }
+        };
+      }
+    },
+    guards: { register: noopDisposable },
+    fileTypes: { register: noopDisposable },
+    statusBar: { register: noopDisposable },
+    sidebar: { register: noopDisposable },
+    storage: {
+      get: function(key) {
+        return storage.get(key);
+      },
+      set: function(key, value) {
+        storage.set(key, value);
+        sendBridgeCall("storage.set", { key: key, value: value });
+      }
+    },
+    secrets: {
+      get: createUnsupportedAsyncMethod("secrets.get"),
+      set: createUnsupportedAsyncMethod("secrets.set"),
+      delete: createUnsupportedAsyncMethod("secrets.delete"),
+      has: createUnsupportedAsyncMethod("secrets.has")
+    },
+    enrichmentRenderers: {
+      register: createUnsupportedSyncMethod("enrichmentRenderers.register")
+    },
+    views: {
+      registerEditorTab: createUnsupportedSyncMethod("views.registerEditorTab"),
+      registerBottomPanelTab: createUnsupportedSyncMethod("views.registerBottomPanelTab"),
+      registerRightSidebarPanel: createUnsupportedSyncMethod("views.registerRightSidebarPanel"),
+      registerStatusBarWidget: createUnsupportedSyncMethod("views.registerStatusBarWidget")
+    }
+  };
+}
+`;
+
 // ---- Builder ----
 
 /**
@@ -171,9 +266,28 @@ ${styleBlock}
 ${INLINED_BRIDGE_CLIENT}
 // ---- Bridge Initialization ----
 window.__bridge = new PluginBridgeClient();
+window.__CLAWDSTRIKE_PLUGIN__ = undefined;
+window.__CLAWDSTRIKE_PLUGIN_SDK__ = {
+  createPlugin: function(definition) {
+    return definition;
+  },
+};
+${INLINED_PLUGIN_RUNTIME}
 
 // ---- Plugin Code ----
-(function() { ${pluginCode} })();
+try {
+  (function() { ${pluginCode} })();
+  var plugin = window.__CLAWDSTRIKE_PLUGIN__;
+  if (plugin && typeof plugin.activate === "function") {
+    var context = createPluginContext(plugin, ${JSON.stringify(pluginId)});
+    var activateResult = plugin.activate(context);
+    if (Array.isArray(activateResult)) {
+      Array.prototype.push.apply(context.subscriptions, activateResult);
+    }
+  }
+} catch (error) {
+  console.error("[plugin-sandbox] plugin bootstrap failed", error);
+}
 </script>
 </body>
 </html>`;

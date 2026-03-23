@@ -84,6 +84,7 @@ for (const type of ALL_TYPES) {
       expect(tsconfig.compilerOptions.strict).toBe(true);
       expect(tsconfig.compilerOptions.target).toBe("ES2022");
       expect(tsconfig.compilerOptions.module).toBe("ESNext");
+      expect(tsconfig.compilerOptions.lib).toContain("DOM");
     });
 
     it("creates tsup.config.ts", () => {

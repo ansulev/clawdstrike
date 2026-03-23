@@ -14,7 +14,7 @@ Add real-time analyst presence and awareness to the workbench. Four phases build
 ## Phases
 
 - [x] **Phase 18: Server Foundation** - hushd PresenceHub with axum WebSocket endpoint, room management, heartbeat timeout, path normalization (completed 2026-03-23)
-- [ ] **Phase 19: Client Connection & Store** - PresenceSocket class with reconnect/jitter, presence-store Zustand store, offline degradation
+- [x] **Phase 19: Client Connection & Store** - PresenceSocket class with reconnect/jitter, presence-store Zustand store, offline degradation (completed 2026-03-23)
 - [ ] **Phase 20: UI Presence Indicators** - Status bar connection dot, online count, pane tab dots, activity bar pills, analyst roster, Speakeasy presence
 - [ ] **Phase 21: CodeMirror Cursor Extension** - Remote cursors, selections, hover labels, line:column coordinates, Facet+StateEffect delivery
 
@@ -43,7 +43,7 @@ Plans:
   2. When hushd goes down and comes back, the workbench automatically reconnects within a bounded time (exponential backoff with jitter) without user intervention
   3. When hushd is unavailable, the workbench functions normally with all features except presence (no errors, no spinners, empty presence state)
   4. When a second analyst connects from another workbench, both clients see each other in the presence roster within one heartbeat interval
-**Plans:** 1/2 plans executed
+**Plans:** 2/2 plans complete
 
 Plans:
 - [ ] 19-01-PLAN.md — Wire protocol types + PresenceSocket class (WS lifecycle, jittered backoff reconnect, heartbeat, message routing)
@@ -88,6 +88,6 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 18. Server Foundation | 1/1 | Complete    | 2026-03-23 |
-| 19. Client Connection & Store | 1/2 | In Progress|  |
+| 19. Client Connection & Store | 2/2 | Complete   | 2026-03-23 |
 | 20. UI Presence Indicators | 0/3 | Not started | - |
 | 21. CodeMirror Cursor Extension | 0/1 | Not started | - |

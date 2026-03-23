@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: milestone
 status: completed
-stopped_at: Completed 19-01-PLAN.md
-last_updated: "2026-03-23T16:11:06.449Z"
-last_activity: 2026-03-23 — Completed 19-01 Presence wire protocol & socket
+stopped_at: Completed 19-02-PLAN.md
+last_updated: "2026-03-23T16:15:44Z"
+last_activity: 2026-03-23 — Completed 19-02 Presence store & bootstrap hook
 progress:
   total_phases: 4
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 3
-  completed_plans: 2
-  percent: 67
+  completed_plans: 3
+  percent: 100
 ---
 
 # Project State
@@ -25,18 +25,18 @@ See: .planning/PROJECT.md (updated 2026-03-23)
 ## Current Position
 
 Phase: 19 of 21 (Client Connection & Store) — second of 4 phases in v2.0
-Plan: 1 of 2 in current phase (COMPLETE)
-Status: Plan 19-01 complete, ready for Plan 19-02
-Last activity: 2026-03-23 — Completed 19-01 Presence wire protocol & socket
+Plan: 2 of 2 in current phase (COMPLETE — phase finished)
+Status: Phase 19 complete, ready for Phase 20
+Last activity: 2026-03-23 — Completed 19-02 Presence store & bootstrap hook
 
-Progress: [███████░░░] 67%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 1
-- Average duration: 33min
-- Total execution time: 0.55 hours
+- Total plans completed: 3
+- Average duration: 13min
+- Total execution time: 0.67 hours
 
 **By Phase:**
 
@@ -44,6 +44,7 @@ Progress: [███████░░░] 67%
 |-------|-------|-------|----------|
 | 18-server-foundation | 1 | 33min | 33min |
 | Phase 19-client-connection-store P01 | 3min | 2 tasks | 2 files |
+| Phase 19-client-connection-store P02 | 4min | 3 tasks | 3 files |
 
 ## Previous Milestones
 
@@ -66,6 +67,9 @@ Progress: [███████░░░] 67%
 - axum ws feature enabled per-crate (hushd only), not workspace-wide
 - [Phase 19]: Raw wire types keep snake_case field names; parseAnalystInfo converts to camelCase AnalystPresence
 - [Phase 19]: PresenceSocket is standalone class (not React), consumed by Zustand store in Plan 19-02
+- [Phase 19]: enableMapSet() from immer required for Map/Set mutations in Zustand presence store
+- [Phase 19]: Module-level PresenceSocket singleton (same pattern as fleetEventStream)
+- [Phase 19]: getPresenceSocket() exported for Phase 21 CM6 ViewPlugin (non-React consumer)
 
 ### Blockers/Concerns
 
@@ -73,6 +77,6 @@ Progress: [███████░░░] 67%
 
 ## Session Continuity
 
-Last session: 2026-03-23T16:11:06.447Z
-Stopped at: Completed 19-01-PLAN.md
+Last session: 2026-03-23T16:15:44Z
+Stopped at: Completed 19-02-PLAN.md (Phase 19 complete)
 Resume file: None

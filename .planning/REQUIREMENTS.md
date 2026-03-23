@@ -12,11 +12,11 @@ Requirements for the Presence & Awareness milestone. Each maps to roadmap phases
 - [x] **CONN-01**: Workbench connects to hushd via WebSocket at `/api/v1/presence` with Bearer auth
 - [x] **CONN-02**: Connection auto-reconnects with exponential backoff and random jitter on disconnect
 - [ ] **CONN-03**: Connection status indicator in status bar (green/amber/red dot)
-- [ ] **CONN-04**: Workbench functions fully when hushd is unavailable (graceful offline degradation)
+- [x] **CONN-04**: Workbench functions fully when hushd is unavailable (graceful offline degradation)
 
 ### Presence Protocol
 
-- [ ] **PRES-01**: Analyst presence is broadcast to all connected clients (join/leave/heartbeat)
+- [x] **PRES-01**: Analyst presence is broadcast to all connected clients (join/leave/heartbeat)
 - [x] **PRES-02**: Server detects stale analysts via heartbeat timeout (15s interval, 45s TTL)
 - [x] **PRES-03**: Presence is scoped to file rooms (only receive cursor updates for files you have open)
 - [x] **PRES-04**: File paths are normalized to workspace-relative before transmission
@@ -80,8 +80,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CONN-01 | Phase 19 | Complete |
 | CONN-02 | Phase 19 | Complete |
 | CONN-03 | Phase 20 | Pending |
-| CONN-04 | Phase 19 | Pending |
-| PRES-01 | Phase 19 | Pending |
+| CONN-04 | Phase 19 | Complete |
+| PRES-01 | Phase 19 | Complete |
 | PRES-02 | Phase 18 | Complete |
 | PRES-03 | Phase 18 | Complete |
 | PRES-04 | Phase 18 | Complete |

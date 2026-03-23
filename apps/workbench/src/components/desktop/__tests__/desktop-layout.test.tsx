@@ -1,3 +1,4 @@
+import React from "react";
 import { afterEach, describe, it, expect, vi } from "vitest";
 import { screen } from "@testing-library/react";
 import { cleanup, render } from "@testing-library/react";
@@ -41,13 +42,55 @@ vi.mock("@/components/desktop/titlebar", () => ({
   ),
 }));
 
-vi.mock("@/components/desktop/desktop-sidebar", () => ({
-  DesktopSidebar: () => (
+vi.mock("@/features/activity-bar/components/activity-bar", () => ({
+  ActivityBar: () => (
     <aside role="complementary">
       <span>Editor</span>
       <span>Lab</span>
     </aside>
   ),
+}));
+
+vi.mock("@/features/activity-bar/components/sidebar-panel", () => ({
+  SidebarPanel: () => null,
+}));
+
+vi.mock("@/features/activity-bar/components/sidebar-resize-handle", () => ({
+  SidebarResizeHandle: () => null,
+}));
+
+vi.mock("@/features/navigation/quick-open-dialog", () => ({
+  QuickOpenDialog: () => null,
+}));
+
+vi.mock("@/features/right-sidebar/components/right-sidebar", () => ({
+  RightSidebar: () => null,
+}));
+
+vi.mock("@/features/right-sidebar/components/right-sidebar-resize-handle", () => ({
+  RightSidebarResizeHandle: () => null,
+}));
+
+vi.mock("@/features/right-sidebar/stores/right-sidebar-store", () => ({
+  useRightSidebarStore: () => ({ visible: false }),
+}));
+
+vi.mock("@/components/ui/resizable", () => ({
+  ResizablePanelGroup: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  ResizablePanel: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  ResizableHandle: () => null,
+}));
+
+vi.mock("@/features/panes/pane-session", () => ({
+  savePaneSession: vi.fn(),
+  loadPaneSession: () => null,
+}));
+
+vi.mock("@/features/bottom-pane/bottom-pane-store", () => ({
+  useBottomPaneStore: Object.assign(() => ({ isOpen: false, size: 30 }), {
+    getState: () => ({ isOpen: false, activeTab: "terminal", setSize: vi.fn() }),
+    subscribe: () => () => {},
+  }),
 }));
 
 vi.mock("@/components/desktop/status-bar", () => ({

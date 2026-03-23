@@ -1,7 +1,7 @@
 import React from "react";
 import { useEffect } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, screen } from "@testing-library/react";
+import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { ShortcutProvider } from "../shortcut-provider";
 import { InitCommands } from "@/lib/commands/init-commands";
 import { usePaneStore } from "@/features/panes/pane-store";
@@ -21,7 +21,9 @@ function PolicyValidateShortcutHarness() {
   const { dispatch, state } = useWorkbench();
 
   useEffect(() => {
-    usePaneStore.getState().syncRoute("/editor");
+    // Use a sub-route of /editor that doesn't get redirected by normalizeWorkbenchRoute
+    // (which maps bare "/editor" to "/home"). This keeps the "editor" shortcut context active.
+    usePaneStore.getState().syncRoute("/editor/visual");
   }, []);
 
   return (
@@ -48,7 +50,7 @@ beforeEach(() => {
 });
 
 describe("ShortcutProvider", () => {
-  it("syncs policy YAML before validating on web", () => {
+  it("syncs policy YAML before validating on web", async () => {
     renderWithProviders(<PolicyValidateShortcutHarness />);
 
     fireEvent.click(screen.getByRole("button", { name: "rename-policy" }));
@@ -59,8 +61,10 @@ describe("ShortcutProvider", () => {
 
     fireEvent.keyDown(window, { key: "v", metaKey: true, shiftKey: true });
 
-    expect(screen.getByTestId("yaml").textContent).toContain('name: "Shortcut Rename"');
-    expect(screen.getByTestId("sync-direction").textContent).toBe("yaml");
+    await waitFor(() => {
+      expect(screen.getByTestId("yaml").textContent).toContain('name: "Shortcut Rename"');
+      expect(screen.getByTestId("sync-direction").textContent).toBe("yaml");
+    });
   });
 
   it("does not fire editor-only shortcuts while terminal context is focused", () => {

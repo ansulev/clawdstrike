@@ -32,6 +32,7 @@ import type { TabMeta } from "@/features/policy/stores/policy-tabs-store";
 import type { TabEditState } from "@/features/policy/stores/policy-edit-store";
 import { usePolicyTabsStore } from "@/features/policy/stores/policy-tabs-store";
 import { usePolicyEditStore } from "@/features/policy/stores/policy-edit-store";
+import { DEFAULT_POLICY } from "@/features/policy/stores/policy-store";
 
 // ---- Props ----
 
@@ -145,7 +146,7 @@ function RunButtonGroup() {
     (test: TestScenario) => {
       setDropdownOpen(false);
       try {
-        const result = simulatePolicy((_editState?.policy ?? { version: "1.1.0", name: "", description: "", guards: {}, settings: {} }), test);
+        const result = simulatePolicy((_editState?.policy ?? DEFAULT_POLICY), test);
         const verdict = result.overallVerdict;
         toast({
           type: verdict === "deny" ? "success" : "warning",
@@ -160,7 +161,7 @@ function RunButtonGroup() {
         });
       }
     },
-    [(_editState?.policy ?? { version: "1.1.0", name: "", description: "", guards: {}, settings: {} }), toast],
+    [(_editState?.policy ?? DEFAULT_POLICY), toast],
   );
 
   return (
@@ -251,7 +252,7 @@ export function FileEditorToolbar({
   const runQuickTest = useCallback(() => {
     const test = QUICK_TESTS[0];
     try {
-      const result = simulatePolicy((_editState?.policy ?? { version: "1.1.0", name: "", description: "", guards: {}, settings: {} }), test);
+      const result = simulatePolicy((_editState?.policy ?? DEFAULT_POLICY), test);
       const verdict = result.overallVerdict;
       toast({
         type: verdict === "deny" ? "success" : "warning",
@@ -265,7 +266,7 @@ export function FileEditorToolbar({
         description: err instanceof Error ? err.message : "Simulation error",
       });
     }
-  }, [(_editState?.policy ?? { version: "1.1.0", name: "", description: "", guards: {}, settings: {} }), toast]);
+  }, [(_editState?.policy ?? DEFAULT_POLICY), toast]);
 
   const handleLaunchSwarm = useCallback(async () => {
     const { isDesktop, createSwarmBundleFromPolicy } = await import("@/lib/tauri-bridge");

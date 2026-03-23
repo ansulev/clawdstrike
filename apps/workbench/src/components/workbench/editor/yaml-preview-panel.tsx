@@ -10,6 +10,7 @@ import type { TestScenario } from "@/lib/workbench/types";
 import { usePolicyTabsStore } from "@/features/policy/stores/policy-tabs-store";
 import { usePolicyEditStore } from "@/features/policy/stores/policy-edit-store";
 import { useWorkbenchUIStore } from "@/features/policy/stores/workbench-ui-store";
+import { DEFAULT_POLICY } from "@/features/policy/stores/policy-store";
 
 type Tab = "preview" | "edit";
 
@@ -48,16 +49,17 @@ export function YamlPreviewPanel({ fileType }: YamlPreviewPanelProps) {
   const editState = usePolicyEditStore(s => s.editStates.get(activeTabId));
   const { toast } = useToast();
   const testRunner = useTestRunnerOptional();
+  const editorSyncDirection = useWorkbenchUIStore(s => s.editorSyncDirection);
   const [activeTab, setActiveTab] = useState<Tab>("preview");
   const [localYaml, setLocalYaml] = useState((editState?.yaml ?? ""));
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Sync local yaml when state changes from visual panel edits
   useEffect(() => {
-    if (useWorkbenchUIStore.getState().editorSyncDirection !== "yaml") {
+    if (editorSyncDirection !== "yaml") {
       setLocalYaml((editState?.yaml ?? ""));
     }
-  }, [(editState?.yaml ?? ""), useWorkbenchUIStore.getState().editorSyncDirection]);
+  }, [(editState?.yaml ?? ""), editorSyncDirection]);
 
   const handleYamlChange = useCallback(
     (value: string) => {
@@ -86,7 +88,7 @@ export function YamlPreviewPanel({ fileType }: YamlPreviewPanelProps) {
   // Gutter "Run Test" callback: generates scenarios for the clicked guard and imports into test runner
   const handleRunGuardTest = useCallback(
     (guardId: string) => {
-      const result = generateScenariosFromPolicy((editState?.policy ?? { version: "1.1.0", name: "", description: "", guards: {}, settings: {} }));
+      const result = generateScenariosFromPolicy((editState?.policy ?? DEFAULT_POLICY));
       const prefix = `auto-${guardId}-`;
       const guardScenarios = result.scenarios.filter((s) => s.id.startsWith(prefix));
 
@@ -115,7 +117,7 @@ export function YamlPreviewPanel({ fileType }: YamlPreviewPanelProps) {
         });
       }
     },
-    [(editState?.policy ?? { version: "1.1.0", name: "", description: "", guards: {}, settings: {} }), testRunner, toast],
+    [(editState?.policy ?? DEFAULT_POLICY), testRunner, toast],
   );
 
   const isPolicyFile = fileType === "clawdstrike_policy";

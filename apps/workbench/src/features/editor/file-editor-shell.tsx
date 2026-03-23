@@ -32,6 +32,7 @@ import type { SuiteScenario } from "@/lib/workbench/suite-parser";
 import type { TestScenario } from "@/lib/workbench/types";
 import type { FileType } from "@/lib/workbench/file-type-registry";
 import type { YamlEditorError } from "@/components/ui/yaml-editor";
+import { DEFAULT_POLICY } from "@/features/policy/stores/policy-store";
 import { FileEditorToolbar } from "./file-editor-toolbar";
 
 /** Convert a TestScenario to the SuiteScenario format used by the test runner. */
@@ -198,32 +199,37 @@ export function FileEditorShell() {
   );
 
   // --- Cmd+S save handler ---
+  // Depend on scalar fields only (not the whole tabMeta/editState objects
+  // which are new references on every store update) to avoid re-creating
+  // the callback unnecessarily.
+  const tabDirty = tabMeta?.dirty;
+  const editStateYaml = editState?.yaml;
   const handleSave = useCallback(async () => {
-    if (!tabMeta || !editState) return;
+    if (!tabId || editStateYaml === undefined) return;
     try {
       const { saveDetectionFile } = await import("@/lib/tauri-bridge");
       const savedPath = await saveDetectionFile(
-        editState.yaml,
-        tabMeta.fileType,
-        tabMeta.filePath,    // null triggers Save As dialog
-        tabMeta.name,        // suggested filename for Save As
+        editStateYaml,
+        tabFileType!,
+        tabFilePath ?? null,   // null triggers Save As dialog
+        tabName ?? "File",     // suggested filename for Save As
       );
       if (!savedPath) return; // user cancelled Save As
 
       // If file was untitled (no filePath), set the new path
-      if (!tabMeta.filePath) {
-        usePolicyTabsStore.getState().setFilePath(tabMeta.id, savedPath);
+      if (!tabFilePath) {
+        usePolicyTabsStore.getState().setFilePath(tabId, savedPath);
       }
 
       // Mark clean in edit store (resets cleanSnapshot)
-      usePolicyEditStore.getState().markClean(tabMeta.id);
+      usePolicyEditStore.getState().markClean(tabId);
 
       // Clear dirty in tabs store (drives pane tab dirty dot)
-      usePolicyTabsStore.getState().setDirty(tabMeta.id, false);
+      usePolicyTabsStore.getState().setDirty(tabId, false);
     } catch (err) {
       console.error("[FileEditorShell] Save failed:", err);
     }
-  }, [tabMeta, editState]);
+  }, [tabId, tabFileType, tabFilePath, tabName, tabDirty, editStateYaml]);
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
@@ -290,7 +296,7 @@ export function FileEditorShell() {
   // Both hooks must be called unconditionally before early returns (React rules of hooks).
   // They are safe with empty/undefined values: useNativeValidation is a no-op outside
   // Tauri, and useAutoVersion only acts when policyId is defined and dirty transitions.
-  const workbenchActivePolicy = editState?.policy ?? { version: "1.1.0", name: "", description: "", guards: {}, settings: {} };
+  const workbenchActivePolicy = editState?.policy ?? DEFAULT_POLICY;
   const workbenchDispatch = (action: { type: "SET_NATIVE_VALIDATION"; payload: import("@/features/policy/stores/policy-store").NativeValidationState }) => {
     if (action.type === "SET_NATIVE_VALIDATION" && tabMeta) {
       usePolicyEditStore.getState().setNativeValidation(tabMeta.id, action.payload);

@@ -274,7 +274,7 @@ describe("enrich() response normalization", () => {
   it("returns unknown classification when API returns 404", async () => {
     mockFetch.mockResolvedValue(errorResponse(404, { error: "No information available" }));
 
-    const result = await source.enrich({ type: "ip", value: "192.168.0.1" });
+    const result = await source.enrich({ type: "ip", value: "203.0.113.1" });
 
     expect(result.verdict.classification).toBe("unknown");
     expect(result.verdict.summary).toMatch(/No data found|no information/i);
@@ -386,5 +386,221 @@ describe("enrich() error handling", () => {
     expect(result).toBeDefined();
     expect(result.sourceId).toBe("shodan");
     expect(result.verdict.classification).toBe("unknown");
+  });
+});
+
+// ---- SSRF prevention: isPrivateOrReservedIP ----
+
+describe("SSRF prevention: isPrivateOrReservedIP", () => {
+  let source: ReturnType<typeof createShodanSource>;
+
+  beforeEach(() => {
+    source = createShodanSource("test-api-key");
+  });
+
+  describe("blocks private IPs (RFC 1918)", () => {
+    it.each([
+      "10.0.0.1",
+      "10.255.255.255",
+      "172.16.0.1",
+      "172.31.255.255",
+      "192.168.0.1",
+      "192.168.255.255",
+    ])("blocks %s", async (ip) => {
+      const result = await source.enrich({ type: "ip", value: ip });
+
+      expect(result.verdict.classification).toBe("unknown");
+      expect(result.verdict.summary).toMatch(/private or reserved/i);
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("blocks loopback addresses", () => {
+    it.each(["127.0.0.1", "127.255.255.255"])("blocks %s", async (ip) => {
+      const result = await source.enrich({ type: "ip", value: ip });
+
+      expect(result.verdict.classification).toBe("unknown");
+      expect(result.verdict.summary).toMatch(/private or reserved/i);
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("blocks link-local addresses", () => {
+    it.each(["169.254.0.1", "169.254.255.255"])("blocks %s", async (ip) => {
+      const result = await source.enrich({ type: "ip", value: ip });
+
+      expect(result.verdict.classification).toBe("unknown");
+      expect(result.verdict.summary).toMatch(/private or reserved/i);
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("blocks multicast and broadcast addresses", () => {
+    it.each(["224.0.0.1", "239.255.255.255", "255.255.255.255"])(
+      "blocks %s",
+      async (ip) => {
+        const result = await source.enrich({ type: "ip", value: ip });
+
+        expect(result.verdict.classification).toBe("unknown");
+        expect(result.verdict.summary).toMatch(/private or reserved/i);
+        expect(mockFetch).not.toHaveBeenCalled();
+      },
+    );
+  });
+
+  describe("allows public IPs", () => {
+    it.each(["8.8.8.8", "1.1.1.1", "93.184.216.34"])(
+      "allows %s",
+      async (ip) => {
+        mockFetch.mockResolvedValue(
+          okResponse(makeShodanHostResponse({ ip_str: ip })),
+        );
+
+        const result = await source.enrich({ type: "ip", value: ip });
+
+        expect(result.verdict.classification).not.toBe("unknown");
+        expect(mockFetch).toHaveBeenCalled();
+      },
+    );
+  });
+
+  describe("handles invalid IPs", () => {
+    it("treats empty string as non-private (returns false from validator)", async () => {
+      mockFetch.mockResolvedValue(
+        okResponse(makeShodanHostResponse()),
+      );
+      // Empty string fails the parts.length !== 4 check so isPrivateOrReservedIP returns false.
+      // The IP will be sent to Shodan API as-is (Shodan will reject it).
+      const result = await source.enrich({ type: "ip", value: "" });
+      // fetch is called because the function does not detect it as private
+      expect(mockFetch).toHaveBeenCalled();
+    });
+
+    it("treats 'not-an-ip' as non-private (passes to API)", async () => {
+      mockFetch.mockResolvedValue(
+        okResponse(makeShodanHostResponse()),
+      );
+      const result = await source.enrich({ type: "ip", value: "not-an-ip" });
+      expect(mockFetch).toHaveBeenCalled();
+    });
+
+    it("treats '999.999.999.999' as non-private (NaN octets fail validation)", async () => {
+      mockFetch.mockResolvedValue(
+        okResponse(makeShodanHostResponse()),
+      );
+      const result = await source.enrich({
+        type: "ip",
+        value: "999.999.999.999",
+      });
+      // Octets > 255 fail the validator, returning false, so fetch IS called
+      expect(mockFetch).toHaveBeenCalled();
+    });
+  });
+
+  describe("enrich() returns error result for private IPs without calling fetch", () => {
+    it("returns error and does NOT call fetch for 10.0.0.1", async () => {
+      const result = await source.enrich({
+        type: "ip",
+        value: "10.0.0.1",
+      });
+
+      expect(result.sourceId).toBe("shodan");
+      expect(result.verdict.classification).toBe("unknown");
+      expect(result.verdict.confidence).toBe(0);
+      expect(result.verdict.summary).toMatch(/private or reserved/i);
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("SSRF via DNS rebinding for domain indicators", () => {
+    it("blocks domain that resolves to private IP", async () => {
+      // DNS resolves to private IP
+      mockFetch.mockResolvedValueOnce(
+        okResponse(makeShodanDnsResponse("evil.internal", "192.168.1.1")),
+      );
+
+      const result = await source.enrich({
+        type: "domain",
+        value: "evil.internal",
+      });
+
+      // Should block after DNS resolution
+      expect(result.verdict.classification).toBe("unknown");
+      expect(result.verdict.summary).toMatch(/private or reserved/i);
+      // Only 1 fetch call (DNS resolution), host lookup should NOT happen
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+    });
+  });
+});
+
+// ---- API response validation ----
+
+describe("enrich() API response validation", () => {
+  let source: ReturnType<typeof createShodanSource>;
+
+  beforeEach(() => {
+    source = createShodanSource("test-api-key");
+  });
+
+  it("handles malformed JSON response (missing ip_str)", async () => {
+    mockFetch.mockResolvedValue(
+      okResponse({ unexpected: "data" }),
+    );
+
+    const result = await source.enrich({ type: "ip", value: "8.8.8.8" });
+
+    expect(result.verdict.classification).toBe("unknown");
+    expect(result.verdict.summary).toMatch(/unexpected/i);
+  });
+
+  it("handles non-JSON response (HTTP 500 with HTML)", async () => {
+    mockFetch.mockResolvedValue(
+      new Response("<html>500 Internal Server Error</html>", {
+        status: 500,
+        headers: { "content-type": "text/html" },
+      }),
+    );
+
+    const result = await source.enrich({ type: "ip", value: "8.8.8.8" });
+
+    expect(result.verdict.classification).toBe("unknown");
+    expect(result.verdict.confidence).toBe(0);
+  });
+
+  it("handles null body in response", async () => {
+    // response.json() will throw on null body, caught by error handler
+    mockFetch.mockResolvedValue(
+      new Response(null, {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+
+    const result = await source.enrich({ type: "ip", value: "8.8.8.8" });
+
+    // Should not crash -- returns unknown classification
+    expect(result).toBeDefined();
+    expect(result.verdict.classification).toBe("unknown");
+  });
+});
+
+// ---- Fetch timeout behavior ----
+
+describe("enrich() timeout behavior", () => {
+  let source: ReturnType<typeof createShodanSource>;
+
+  beforeEach(() => {
+    source = createShodanSource("test-api-key");
+  });
+
+  it("returns timeout error when fetch is aborted", async () => {
+    mockFetch.mockRejectedValue(
+      new DOMException("The operation was aborted", "AbortError"),
+    );
+
+    const result = await source.enrich({ type: "ip", value: "8.8.8.8" });
+
+    expect(result.verdict.classification).toBe("unknown");
+    expect(result.verdict.summary).toMatch(/timeout/i);
   });
 });

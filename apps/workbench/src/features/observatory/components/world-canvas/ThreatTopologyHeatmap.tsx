@@ -1,39 +1,19 @@
-/**
- * ThreatTopologyHeatmap.tsx — Phase 40 HEAT-01/02/03
- *
- * Ground-plane CircleGeometry disc at y=-2 that projects threat pressure as a
- * continuous SOC-standard color gradient across the station ring, with animated
- * pulse breathing (sine-wave opacity 0.3→0.7 over 3 seconds).
- *
- * The GLSL fragment shader uses inverse-distance-weighted blending across all
- * 6 station pressure values mapped to a 6-stop SOC color ramp.
- */
-
 import { useEffect, useMemo, useRef } from "react";
-import type { ReactElement } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { WORLD_RADIUS, OBSERVATORY_STATION_POSITIONS } from "../../world/observatory-world-template";
 import { HUNT_STATION_ORDER } from "../../world/stations";
 import type { HuntStationId } from "../../world/types";
 
-// ---------------------------------------------------------------------------
-// SOC 6-stop color ramp (exported for tests)
 // blue (calm) → teal (low) → green (moderate-low) → yellow (moderate) → amber (elevated) → red (critical)
-// ---------------------------------------------------------------------------
-
 export const HEATMAP_SOC_COLORS: THREE.Color[] = [
-  new THREE.Color("#1a5fb4"), // blue — calm
-  new THREE.Color("#26a269"), // teal — low
-  new THREE.Color("#33d17a"), // green — moderate-low
-  new THREE.Color("#f5c211"), // yellow — moderate
-  new THREE.Color("#e66100"), // amber — elevated
-  new THREE.Color("#c01c28"), // red — critical
+  new THREE.Color("#1a5fb4"),
+  new THREE.Color("#26a269"),
+  new THREE.Color("#33d17a"),
+  new THREE.Color("#f5c211"),
+  new THREE.Color("#e66100"),
+  new THREE.Color("#c01c28"),
 ];
-
-// ---------------------------------------------------------------------------
-// GLSL Shaders
-// ---------------------------------------------------------------------------
 
 const VERTEX_SHADER = /* glsl */ `
   varying vec2 vWorldXZ;
@@ -111,95 +91,77 @@ const FRAGMENT_SHADER = /* glsl */ `
   }
 `;
 
-// ---------------------------------------------------------------------------
-// Props
-// ---------------------------------------------------------------------------
-
 export interface ThreatTopologyHeatmapProps {
-  /** 6-element normalized pressure array from deriveHeatmapDataTexture (index = HUNT_STATION_ORDER) */
   pressureData: Float32Array;
-  /** Station world positions for gradient centers */
   stationPositions: Record<HuntStationId, readonly [number, number, number]>;
-  /** Gate rendering — default true */
   visible?: boolean;
-  /** Preset opacity multiplier — default 1.0; THREAT preset passes 1.5 */
   presetOpacityMultiplier?: number;
 }
 
-// ---------------------------------------------------------------------------
-// Component
-// ---------------------------------------------------------------------------
+function colorToVec3(c: THREE.Color): THREE.Vector3 {
+  return new THREE.Vector3(c.r, c.g, c.b);
+}
 
 export function ThreatTopologyHeatmap({
   pressureData,
   stationPositions,
   visible = true,
   presetOpacityMultiplier = 1.0,
-}: ThreatTopologyHeatmapProps): ReactElement | null {
+}: ThreatTopologyHeatmapProps) {
   const materialRef = useRef<THREE.ShaderMaterial>(null);
 
-  // Build station XZ position vec2 uniforms once
-  const stationUniforms = useMemo<Record<string, { value: THREE.Vector2 }>>(() => {
-    const uniforms: Record<string, { value: THREE.Vector2 }> = {};
+  const stationUniforms = useMemo(() => {
+    const result: Record<string, { value: THREE.Vector2 }> = {};
     HUNT_STATION_ORDER.forEach((stationId, i) => {
       const pos = stationPositions[stationId] ?? OBSERVATORY_STATION_POSITIONS[stationId];
-      uniforms[`uStation${i}`] = { value: new THREE.Vector2(pos[0], pos[2]) };
+      result[`uStation${i}`] = { value: new THREE.Vector2(pos[0], pos[2]) };
     });
-    return uniforms;
+    return result;
   }, [stationPositions]);
 
-  // Build initial ShaderMaterial
-  const material = useMemo(
-    () =>
-      new THREE.ShaderMaterial({
-        vertexShader: VERTEX_SHADER,
-        fragmentShader: FRAGMENT_SHADER,
-        uniforms: {
-          ...stationUniforms,
-          uPressure0: { value: 0 },
-          uPressure1: { value: 0 },
-          uPressure2: { value: 0 },
-          uPressure3: { value: 0 },
-          uPressure4: { value: 0 },
-          uPressure5: { value: 0 },
-          uColor0: { value: new THREE.Vector3(HEATMAP_SOC_COLORS[0].r, HEATMAP_SOC_COLORS[0].g, HEATMAP_SOC_COLORS[0].b) },
-          uColor1: { value: new THREE.Vector3(HEATMAP_SOC_COLORS[1].r, HEATMAP_SOC_COLORS[1].g, HEATMAP_SOC_COLORS[1].b) },
-          uColor2: { value: new THREE.Vector3(HEATMAP_SOC_COLORS[2].r, HEATMAP_SOC_COLORS[2].g, HEATMAP_SOC_COLORS[2].b) },
-          uColor3: { value: new THREE.Vector3(HEATMAP_SOC_COLORS[3].r, HEATMAP_SOC_COLORS[3].g, HEATMAP_SOC_COLORS[3].b) },
-          uColor4: { value: new THREE.Vector3(HEATMAP_SOC_COLORS[4].r, HEATMAP_SOC_COLORS[4].g, HEATMAP_SOC_COLORS[4].b) },
-          uColor5: { value: new THREE.Vector3(HEATMAP_SOC_COLORS[5].r, HEATMAP_SOC_COLORS[5].g, HEATMAP_SOC_COLORS[5].b) },
-          uPulse: { value: 0 },
-          uOpacityMultiplier: { value: presetOpacityMultiplier },
-        },
-        transparent: true,
-        depthWrite: false,
-        side: THREE.DoubleSide,
-      }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [stationUniforms],
-  );
+  const material = useMemo(() => {
+    const colorUniforms: Record<string, { value: THREE.Vector3 }> = {};
+    HEATMAP_SOC_COLORS.forEach((c, i) => {
+      colorUniforms[`uColor${i}`] = { value: colorToVec3(c) };
+    });
 
-  // Keep materialRef in sync with the memoized ShaderMaterial instance
+    const pressureUniforms: Record<string, { value: number }> = {};
+    for (let i = 0; i < 6; i++) {
+      pressureUniforms[`uPressure${i}`] = { value: 0 };
+    }
+
+    return new THREE.ShaderMaterial({
+      vertexShader: VERTEX_SHADER,
+      fragmentShader: FRAGMENT_SHADER,
+      uniforms: {
+        ...stationUniforms,
+        ...pressureUniforms,
+        ...colorUniforms,
+        uPulse: { value: 0 },
+        uOpacityMultiplier: { value: presetOpacityMultiplier },
+      },
+      transparent: true,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stationUniforms]);
+
   useEffect(() => {
     materialRef.current = material;
   }, [material]);
 
-  // Animate pulse + update pressure uniforms each frame (no re-creation)
   useFrame(({ clock }) => {
     const mat = materialRef.current;
     if (!mat) return;
 
-    // Sine wave: period = 3s, range 0-1
     mat.uniforms.uPulse.value =
       Math.sin(clock.elapsedTime * ((2 * Math.PI) / 3)) * 0.5 + 0.5;
 
-    // Update pressure uniforms from prop (live, no re-creation)
     for (let i = 0; i < 6; i++) {
-      const key = `uPressure${i}` as keyof typeof mat.uniforms;
-      mat.uniforms[key].value = pressureData[i] ?? 0;
+      mat.uniforms[`uPressure${i}`].value = pressureData[i] ?? 0;
     }
 
-    // Update opacity multiplier
     mat.uniforms.uOpacityMultiplier.value = presetOpacityMultiplier;
   });
 

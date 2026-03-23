@@ -1,19 +1,3 @@
-/**
- * ProbeDeltaCard.tsx — Phase 40 PRBI-01, PRBI-02, PRBI-03, PRBI-04
- *
- * A floating glassmorphism DOM card rendered via drei Html that appears
- * above a station after a probe fires and completes.
- *
- * Shows:
- *   - Station label + pressure shift direction arrow
- *   - Delta summary sentence (what changed)
- *   - Why-it-matters sentence (why it's significant)
- *   - Clickable recommended action button (one-click navigation)
- *
- * Dismisses on outer div click. Action button navigates to the relevant
- * workbench route and then dismisses.
- */
-
 import type { JSX } from "react";
 import type {
   ObservatoryProbeGuidance,
@@ -21,51 +5,28 @@ import type {
 } from "../../world/observatory-recommendations";
 import { openObservatoryRecommendationRoute } from "../../commands/observatory-command-actions";
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
 export interface ProbeDeltaCardProps {
-  /** Probe guidance data including delta, whyItMatters, and recommendation. */
   guidance: ObservatoryProbeGuidance;
-  /** Called when the card should be dismissed (outer click or action button). */
   onDismiss: () => void;
-  /**
-   * Optional override for the action button click handler.
-   * Defaults to openObservatoryRecommendationRoute.
-   */
   onActionClick?: (recommendation: ObservatoryRecommendation) => void;
 }
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-interface ShiftArrowConfig {
-  symbol: string;
-  color: string;
-}
-
-function getShiftArrow(kind: ObservatoryProbeGuidance["delta"]["kind"]): ShiftArrowConfig {
+function getShiftArrow(kind: ObservatoryProbeGuidance["delta"]["kind"]): { symbol: string; color: string } {
   switch (kind) {
     case "lane-up":
     case "pressure-shift":
-      return { symbol: "↑", color: "#f87171" }; // text-red-400
+      return { symbol: "↑", color: "#f87171" };
     case "cause-shift":
-      return { symbol: "→", color: "#fbbf24" }; // text-amber-400
+      return { symbol: "→", color: "#fbbf24" };
     case "steady":
-      return { symbol: "—", color: "#60a5fa" }; // text-blue-400
+      return { symbol: "—", color: "#60a5fa" };
     default: {
       const _exhaustive: never = kind;
       void _exhaustive;
-      return { symbol: "→", color: "#60a5fa" }; // fallback for unknown kinds
+      return { symbol: "→", color: "#60a5fa" };
     }
   }
 }
-
-// ---------------------------------------------------------------------------
-// Component
-// ---------------------------------------------------------------------------
 
 export function ProbeDeltaCard({
   guidance,
@@ -93,7 +54,6 @@ export function ProbeDeltaCard({
         userSelect: "none",
       }}
     >
-      {/* Header: station label + shift arrow */}
       <div
         style={{
           display: "flex",
@@ -124,7 +84,6 @@ export function ProbeDeltaCard({
         </span>
       </div>
 
-      {/* Delta summary (PRBI-02) */}
       <div
         style={{
           color: "var(--hud-text, rgba(255, 255, 255, 0.85))",
@@ -136,7 +95,6 @@ export function ProbeDeltaCard({
         {guidance.delta.summary}
       </div>
 
-      {/* Why it matters (PRBI-03) */}
       <div
         style={{
           color: "var(--hud-text-muted, rgba(255, 255, 255, 0.45))",
@@ -148,7 +106,6 @@ export function ProbeDeltaCard({
         {guidance.whyItMatters}
       </div>
 
-      {/* Recommended action button (PRBI-04) */}
       {guidance.recommendation && (
         <button
           data-testid="probe-delta-action"

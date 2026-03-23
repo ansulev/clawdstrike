@@ -29,6 +29,11 @@ async function writeProjectFile(
   filename: string,
   content: string,
 ): Promise<void> {
+  const resolved = path.resolve(dir, filename);
+  const dirResolved = path.resolve(dir);
+  if (!resolved.startsWith(dirResolved + path.sep) && resolved !== dirResolved) {
+    throw new Error(`Path traversal detected: ${filename}`);
+  }
   const filePath = path.join(dir, filename);
   await fsWriteFile(filePath, content, "utf-8");
 }

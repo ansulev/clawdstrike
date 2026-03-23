@@ -174,7 +174,7 @@ export function LibraryPanel() {
                         </span>
                         {/* Source label */}
                         <span className="text-[9px] font-mono text-[#6f7f9a] shrink-0">
-                          built-in
+                          {entry.author === "Clawdstrike Team" ? "built-in" : entry.author}
                         </span>
                       </button>
                     ))}

@@ -14,10 +14,14 @@ function normalizeModuleId(id: string) {
 
 export function matchesNodeModulePackage(id: string, packageName: string) {
   const normalizedId = normalizeModuleId(id);
-  return (
-    normalizedId.includes(`/node_modules/${packageName}/`) ||
-    normalizedId.includes(`/node_modules/${packageName}`)
-  );
+  const packageRoot = `/node_modules/${packageName}`;
+  const packageIndex = normalizedId.indexOf(packageRoot);
+  if (packageIndex === -1) {
+    return false;
+  }
+
+  const remainder = normalizedId.slice(packageIndex + packageRoot.length);
+  return remainder === "" || remainder.startsWith("/") || remainder.startsWith("?");
 }
 
 export function resolveWorkbenchManualChunk(id: string) {

@@ -32,6 +32,14 @@ describe("workbench chunking", () => {
     ).toBeUndefined();
   });
 
+  it("does not let package prefixes override more specific chunk groups", () => {
+    expect(
+      resolveWorkbenchManualChunk(
+        "/repo/apps/workbench/node_modules/three-stdlib/math/CurveModifier.js",
+      ),
+    ).toBe("vendor-r3f");
+  });
+
   it("leaves unrelated modules ungrouped", () => {
     expect(
       resolveWorkbenchManualChunk(

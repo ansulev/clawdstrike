@@ -50,8 +50,9 @@ class TokenBucket {
     const now = Date.now();
     const elapsed = now - this.lastRefill;
     if (elapsed >= this.refillIntervalMs) {
-      this.tokens = this.maxTokens;
-      this.lastRefill = now;
+      const periods = Math.floor(elapsed / this.refillIntervalMs);
+      this.tokens = Math.min(this.tokens + periods * this.maxTokens, this.maxTokens);
+      this.lastRefill += periods * this.refillIntervalMs;
     }
   }
 }
@@ -66,6 +67,9 @@ interface CacheEntry {
 function cacheKey(sourceId: string, indicator: Indicator): string {
   return `${sourceId}:${indicator.type}:${indicator.value}`;
 }
+
+const MAX_CACHE_SIZE = 10_000;
+const CACHE_CLEANUP_INTERVAL_MS = 300_000; // 5 minutes
 
 // ---- Enrichment Options ----
 
@@ -83,6 +87,19 @@ export interface EnrichOptions {
 export class EnrichmentOrchestrator {
   private readonly rateLimiters = new Map<string, TokenBucket>();
   private readonly cache = new Map<string, CacheEntry>();
+  private readonly cleanupTimer: ReturnType<typeof setInterval>;
+
+  constructor() {
+    // Periodically purge expired cache entries to bound memory
+    this.cleanupTimer = setInterval(() => {
+      this.evictExpiredEntries();
+    }, CACHE_CLEANUP_INTERVAL_MS);
+  }
+
+  /** Stop the periodic cleanup timer. */
+  destroy(): void {
+    clearInterval(this.cleanupTimer);
+  }
 
   /**
    * Enrich an indicator across matching or specified sources.
@@ -210,11 +227,39 @@ export class EnrichmentOrchestrator {
         expiresAt: Date.now() + result.cacheTtlMs,
       });
 
+      // LRU eviction: if cache exceeds max size, remove oldest entries
+      if (this.cache.size > MAX_CACHE_SIZE) {
+        this.evictOldestEntries(this.cache.size - MAX_CACHE_SIZE);
+      }
+
       onResult?.(result);
       return result;
-    } catch {
-      // One source failing does not block others -- return null
+    } catch (err: unknown) {
+      console.error(
+        `[EnrichmentOrchestrator] Source ${source.id} failed for ${indicator.type}:${indicator.value}:`,
+        err instanceof Error ? err.message : String(err),
+      );
       return null;
+    }
+  }
+
+  /** Remove the N oldest (first-inserted) cache entries. */
+  private evictOldestEntries(count: number): void {
+    const keys = this.cache.keys();
+    for (let i = 0; i < count; i++) {
+      const next = keys.next();
+      if (next.done) break;
+      this.cache.delete(next.value);
+    }
+  }
+
+  /** Remove all expired cache entries. */
+  private evictExpiredEntries(): void {
+    const now = Date.now();
+    for (const [key, entry] of this.cache) {
+      if (now >= entry.expiresAt) {
+        this.cache.delete(key);
+      }
     }
   }
 

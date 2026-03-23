@@ -19,6 +19,7 @@ import { ToastProvider } from "@/components/ui/toast";
 import { DesktopLayout } from "@/components/desktop/desktop-layout";
 import { IdentityPrompt } from "@/components/workbench/identity/identity-prompt";
 import { secureStore, migrateCredentialsToStronghold } from "@/lib/workbench/secure-store";
+import { bootstrapThreatIntelPlugins } from "@/lib/plugins/threat-intel/bootstrap";
 
 
 const PolicyEditor = lazy(() =>
@@ -326,11 +327,15 @@ function AppProviders({ children }: { children: ReactNode }) {
  * support HTML5 history pushState).
  */
 export function App() {
-  // Initialise Stronghold vault + migrate legacy localStorage credentials on first launch.
+  // Initialise Stronghold vault, migrate legacy credentials, then bootstrap threat intel plugins.
   useEffect(() => {
-    secureStore.init().then(() => migrateCredentialsToStronghold()).catch((err) => {
-      console.warn("[secure-store] Stronghold init failed:", err);
-    });
+    secureStore
+      .init()
+      .then(() => migrateCredentialsToStronghold())
+      .then(() => bootstrapThreatIntelPlugins())
+      .catch((err) => {
+        console.warn("[secure-store] Startup init failed:", err);
+      });
   }, []);
 
   return (

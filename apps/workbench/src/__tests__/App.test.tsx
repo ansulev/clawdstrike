@@ -116,8 +116,8 @@ vi.mock("@/features/findings/hooks/use-signal-correlator", () => ({
   useSignalCorrelator: () => {},
 }));
 
-vi.mock("@/features/policy/stores/multi-policy-store", () => ({
-  useMultiPolicyBootstrap: () => {},
+vi.mock("@/features/policy/hooks/use-policy-bootstrap", () => ({
+  usePolicyBootstrap: () => {},
 }));
 
 vi.mock("@/features/panes/pane-session", () => ({

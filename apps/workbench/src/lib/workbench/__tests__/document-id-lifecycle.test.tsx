@@ -1,5 +1,5 @@
 /**
- * Tests for documentId lifecycle across tab operations in multi-policy-store.
+ * Tests for documentId lifecycle across tab operations in policy stores.
  *
  * Covers W0.1 acceptance criteria:
  * - every tab has a stable documentId

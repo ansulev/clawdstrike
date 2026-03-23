@@ -15,7 +15,7 @@ Add real-time analyst presence and awareness to the workbench. Four phases build
 
 - [x] **Phase 18: Server Foundation** - hushd PresenceHub with axum WebSocket endpoint, room management, heartbeat timeout, path normalization (completed 2026-03-23)
 - [x] **Phase 19: Client Connection & Store** - PresenceSocket class with reconnect/jitter, presence-store Zustand store, offline degradation (completed 2026-03-23)
-- [ ] **Phase 20: UI Presence Indicators** - Status bar connection dot, online count, pane tab dots, activity bar pills, analyst roster, Speakeasy presence
+- [x] **Phase 20: UI Presence Indicators** - Status bar connection dot, online count, pane tab dots, activity bar pills, analyst roster, Speakeasy presence (completed 2026-03-23)
 - [ ] **Phase 21: CodeMirror Cursor Extension** - Remote cursors, selections, hover labels, line:column coordinates, Facet+StateEffect delivery
 
 ## Phase Details
@@ -59,7 +59,7 @@ Plans:
   3. The activity bar shows colored analyst pills indicating who is online
   4. A sidebar roster panel lists each online analyst with their name, sigil color, currently-viewed file, and connection status
   5. The Speakeasy chat panel shows presence context (e.g., "3 analysts viewing this file") when a file-scoped conversation is active
-**Plans:** 2/3 plans executed
+**Plans:** 3/3 plans complete
 
 Plans:
 - [ ] 20-01-PLAN.md — Status bar PresenceStatusIndicator (green/amber/red dot + online count) + People panel registration + AnalystRosterPanel sidebar
@@ -89,5 +89,5 @@ Plans:
 |-------|----------------|--------|-----------|
 | 18. Server Foundation | 1/1 | Complete    | 2026-03-23 |
 | 19. Client Connection & Store | 2/2 | Complete    | 2026-03-23 |
-| 20. UI Presence Indicators | 2/3 | In Progress|  |
+| 20. UI Presence Indicators | 3/3 | Complete    | 2026-03-23 |
 | 21. CodeMirror Cursor Extension | 0/1 | Not started | - |

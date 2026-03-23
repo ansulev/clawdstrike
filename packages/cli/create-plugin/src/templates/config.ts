@@ -5,14 +5,8 @@ function getEntrypointModules(options: ScaffoldOptions): string[] {
 
   for (const contribution of options.contributions) {
     switch (contribution) {
-      case "detectionAdapters":
-        modules.add("adapter");
-        break;
       case "threatIntelSources":
         modules.add("source");
-        break;
-      case "complianceFrameworks":
-        modules.add("framework");
         break;
       case "editorTabs":
       case "bottomPanelTabs":

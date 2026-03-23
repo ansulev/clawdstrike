@@ -16,9 +16,7 @@ export type ContributionPoint =
   | "guards"
   | "commands"
   | "fileTypes"
-  | "detectionAdapters"
   | "threatIntelSources"
-  | "complianceFrameworks"
   | "editorTabs"
   | "bottomPanelTabs"
   | "rightSidebarPanels"
@@ -58,9 +56,7 @@ export const CONTRIBUTION_POINTS: ContributionPoint[] = [
   "guards",
   "commands",
   "fileTypes",
-  "detectionAdapters",
   "threatIntelSources",
-  "complianceFrameworks",
   "editorTabs",
   "bottomPanelTabs",
   "rightSidebarPanels",
@@ -71,17 +67,15 @@ export const CONTRIBUTION_POINTS: ContributionPoint[] = [
 /** Default contribution points for each plugin type. */
 export const PLUGIN_TYPE_DEFAULTS: Record<PluginType, ContributionPoint[]> = {
   guard: ["guards", "commands"],
-  detection: ["detectionAdapters", "fileTypes", "commands"],
+  detection: ["fileTypes", "commands"],
   ui: ["editorTabs", "commands", "activityBarItems"],
   intel: ["threatIntelSources", "commands"],
-  compliance: ["complianceFrameworks", "commands"],
+  compliance: ["commands"],
   full: [
     "guards",
     "commands",
     "fileTypes",
-    "detectionAdapters",
     "threatIntelSources",
-    "complianceFrameworks",
     "editorTabs",
     "bottomPanelTabs",
     "rightSidebarPanels",
@@ -95,9 +89,7 @@ export const CONTRIBUTION_LABELS: Record<ContributionPoint, string> = {
   guards: "Guards - Custom security guards",
   commands: "Commands - Command palette entries",
   fileTypes: "File Types - Detection file formats",
-  detectionAdapters: "Detection Adapters - Detection format adapters",
   threatIntelSources: "Threat Intel - Threat intelligence sources",
-  complianceFrameworks: "Compliance - Compliance frameworks",
   editorTabs: "Editor Tabs - Custom editor tab views",
   bottomPanelTabs: "Bottom Panel - Bottom panel tabs",
   rightSidebarPanels: "Right Sidebar - Right sidebar panels",

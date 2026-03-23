@@ -53,6 +53,7 @@ import type { GutterConfig } from "./types";
 import { PluginBridgeHost } from "./bridge";
 import { buildPluginSrcdoc } from "./sandbox";
 import { resolveRegistryPluginCode } from "./community-plugin-runtime";
+import { trackStorageWrite } from "./dev/storage-snapshot";
 import {
   PluginRevocationStore,
   getPluginRevocationStore,
@@ -235,6 +236,7 @@ export class PluginLoader {
   private resolvePluginCode?: PluginCodeResolver;
   private revocationStore: PluginRevocationStore;
   private pluginStorage = new Map<string, Map<string, unknown>>();
+  private pendingLoadTokens = new Map<string, symbol>();
 
   /** Plugins that have been loaded and activated. */
   private loadedPlugins = new Map<string, LoadedPlugin>();
@@ -328,6 +330,7 @@ export class PluginLoader {
 
     const manifest = registered.manifest;
     const disposables: Disposable[] = [];
+    const loadToken = this.beginLoad(pluginId);
 
     try {
       // 1. Trust gate
@@ -346,7 +349,7 @@ export class PluginLoader {
 
       // 2. Trust-tier fork: community plugins load via iframe sandbox
       if (manifest.trust === "community") {
-        await this.loadCommunityPlugin(pluginId, manifest, disposables);
+        await this.loadCommunityPlugin(pluginId, manifest, disposables, loadToken);
         return;
       }
 
@@ -357,10 +360,18 @@ export class PluginLoader {
 
       // 4. Resolve module
       const pluginModule = await this.resolveModule(manifest);
+      if (this.shouldAbortLoad(pluginId, loadToken)) {
+        this.disposeAll(disposables);
+        return;
+      }
 
       // 5. Route contributions BEFORE calling activate()
       if (manifest.contributions) {
-        this.routeContributions(manifest, disposables);
+        await this.routeContributions(manifest, disposables, loadToken);
+      }
+      if (this.shouldAbortLoad(pluginId, loadToken)) {
+        this.disposeAll(disposables);
+        return;
       }
 
       // 6. Create activation context and call activate()
@@ -373,6 +384,11 @@ export class PluginLoader {
         disposables.push(...activateResult);
       }
       disposables.push(...context.subscriptions);
+      if (this.shouldAbortLoad(pluginId, loadToken)) {
+        pluginModule.deactivate?.();
+        this.disposeAll(disposables);
+        return;
+      }
 
       // 7. Store loaded plugin and set state to "activated"
       this.loadedPlugins.set(pluginId, {
@@ -383,17 +399,16 @@ export class PluginLoader {
       this.registry.setState(pluginId, "activated");
     } catch (err) {
       // Clean up any already-registered contributions
-      for (const dispose of disposables) {
-        try {
-          dispose();
-        } catch {
-          // Best-effort cleanup
-        }
+      this.disposeAll(disposables);
+      if (this.shouldAbortLoad(pluginId, loadToken) || !this.registry.get(pluginId)) {
+        return;
       }
 
       const message =
         err instanceof Error ? err.message : String(err);
       this.registry.setState(pluginId, "error", message);
+    } finally {
+      this.finishLoad(pluginId, loadToken);
     }
   }
 
@@ -436,6 +451,8 @@ export class PluginLoader {
     pluginId: string,
     options?: { preserveState?: boolean },
   ): Promise<void> {
+    this.cancelPendingLoad(pluginId);
+
     const loaded = this.loadedPlugins.get(pluginId);
     if (!loaded) {
       return;
@@ -522,6 +539,7 @@ export class PluginLoader {
     pluginId: string,
     manifest: PluginManifest,
     disposables: Disposable[],
+    loadToken: symbol,
   ): Promise<void> {
     // Set state to "activating"
     this.registry.setState(pluginId, "activating");
@@ -536,6 +554,10 @@ export class PluginLoader {
         );
       }
       const pluginCode = await this.resolvePluginCode(manifest);
+      if (this.shouldAbortLoad(pluginId, loadToken)) {
+        this.disposeAll(disposables);
+        return;
+      }
 
       // Create and configure the iframe
       iframe = document.createElement("iframe");
@@ -599,9 +621,25 @@ export class PluginLoader {
       };
       window.addEventListener("message", messageHandler);
 
+      const cleanupPendingLoad = () => {
+        host.destroy();
+        window.removeEventListener("message", messageHandler);
+        iframe?.remove();
+        this.disposeAll(disposables);
+      };
+
+      if (this.shouldAbortLoad(pluginId, loadToken)) {
+        cleanupPendingLoad();
+        return;
+      }
+
       // Route manifest contributions (static declarations go through host registries)
       if (manifest.contributions) {
-        this.routeContributions(manifest, disposables);
+        await this.routeContributions(manifest, disposables, loadToken);
+      }
+      if (this.shouldAbortLoad(pluginId, loadToken)) {
+        cleanupPendingLoad();
+        return;
       }
 
       // Store community plugin state
@@ -622,12 +660,9 @@ export class PluginLoader {
       }
 
       // Clean up any already-registered contributions
-      for (const dispose of disposables) {
-        try {
-          dispose();
-        } catch {
-          // Best-effort cleanup
-        }
+      this.disposeAll(disposables);
+      if (this.shouldAbortLoad(pluginId, loadToken) || !this.registry.get(pluginId)) {
+        return;
       }
 
       const message = err instanceof Error ? err.message : String(err);
@@ -704,6 +739,7 @@ export class PluginLoader {
         get: (key) => storage.get(key),
         set: (key, value) => {
           storage.set(key, value);
+          trackStorageWrite(pluginId, key, value);
         },
       },
       secrets: createSecretsApi(pluginId),
@@ -824,12 +860,14 @@ export class PluginLoader {
    * Route a plugin's contributions to the appropriate Phase 1 registries.
    * Stores dispose functions in the provided array for cleanup.
    */
-  private routeContributions(
+  private async routeContributions(
     manifest: PluginManifest,
     disposables: Disposable[],
-  ): void {
+    loadToken?: symbol,
+  ): Promise<void> {
     const contributions = manifest.contributions;
     if (!contributions) return;
+    const asyncRegistrations: Promise<void>[] = [];
 
     // Route guard contributions
     if (contributions.guards) {
@@ -924,9 +962,12 @@ export class PluginLoader {
       for (const deco of contributions.gutterDecorations) {
         const decoId = `${manifest.id}.${deco.id}`;
         const resolvedDecoEntrypoint = this.resolveEntrypointUrl(deco.entrypoint, manifest);
-        void (async () => {
+        asyncRegistrations.push((async () => {
           try {
             const mod = await import(/* @vite-ignore */ resolvedDecoEntrypoint);
+            if (loadToken && this.shouldAbortLoad(manifest.id, loadToken)) {
+              return;
+            }
             const factory = mod.createGutterExtension ?? mod.default;
             if (typeof factory === "function") {
               const config: GutterConfig = { pluginId: manifest.id, decorationId: decoId };
@@ -937,14 +978,13 @@ export class PluginLoader {
           } catch (err) {
             console.warn(`[PluginLoader] Failed to load gutter extension "${decoId}":`, err);
           }
-        })();
+        })());
       }
     }
 
     // Route detection adapter contributions
-    // The actual registerAdapter() call happens when the plugin's activate()
-    // function runs through the SDK bridge. The manifest contribution here is
-    // declarative -- it tells the system which file types the plugin handles.
+    // Detection adapter entrypoints remain declarative until the workbench
+    // exposes a stable external adapter-registration API.
     if (contributions.detectionAdapters) {
       for (const adapter of contributions.detectionAdapters) {
         console.debug(
@@ -961,9 +1001,12 @@ export class PluginLoader {
           source.entrypoint,
           manifest,
         );
-        void (async () => {
+        asyncRegistrations.push((async () => {
           try {
             const mod = await this.resolveEntrypoint(resolvedSourceEntrypoint);
+            if (loadToken && this.shouldAbortLoad(manifest.id, loadToken)) {
+              return;
+            }
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const sourceImpl = (mod.default ?? mod) as Record<string, any>;
             if (sourceImpl && typeof sourceImpl.enrich === "function") {
@@ -979,7 +1022,7 @@ export class PluginLoader {
           } catch (err) {
             console.warn(`[PluginLoader] Failed to load threat intel source "${sourceId}":`, err);
           }
-        })();
+        })());
       }
     }
 
@@ -1005,6 +1048,46 @@ export class PluginLoader {
         const LazyComponent = lazy(() => this.resolveViewEntrypoint(renderer.entrypoint, manifest));
         const dispose = registerEnrichmentRenderer(renderer.type, LazyComponent);
         disposables.push(dispose);
+      }
+    }
+
+    await Promise.all(asyncRegistrations);
+  }
+
+  private beginLoad(pluginId: string): symbol {
+    const loadToken = Symbol(pluginId);
+    this.pendingLoadTokens.set(pluginId, loadToken);
+    return loadToken;
+  }
+
+  private finishLoad(pluginId: string, loadToken: symbol): void {
+    if (this.pendingLoadTokens.get(pluginId) === loadToken) {
+      this.pendingLoadTokens.delete(pluginId);
+    }
+  }
+
+  private cancelPendingLoad(pluginId: string): void {
+    if (this.pendingLoadTokens.has(pluginId)) {
+      this.pendingLoadTokens.set(pluginId, Symbol(`${pluginId}:cancelled`));
+    }
+  }
+
+  private shouldAbortLoad(pluginId: string, loadToken: symbol): boolean {
+    if (this.pendingLoadTokens.get(pluginId) !== loadToken) {
+      return true;
+    }
+    if (!this.registry.get(pluginId)) {
+      return true;
+    }
+    return this.revocationStore.isRevoked(pluginId);
+  }
+
+  private disposeAll(disposables: Disposable[]): void {
+    for (const dispose of disposables) {
+      try {
+        dispose();
+      } catch {
+        // Best-effort cleanup
       }
     }
   }
@@ -1074,7 +1157,11 @@ export class PluginLoader {
           id: item.id,
           side: item.side,
           priority: item.priority,
-          render: () => createElement(resolvedComponent!, { viewId: item.id }),
+          render: () =>
+            createElement(
+              resolvedComponent as ComponentType<{ viewId: string }>,
+              { viewId: item.id },
+            ),
         });
       } catch {
         // Entrypoint resolution failed -- render stays null gracefully
@@ -1087,7 +1174,10 @@ export class PluginLoader {
       priority: item.priority,
       render: () => {
         if (resolvedComponent) {
-          return createElement(resolvedComponent, { viewId: item.id });
+          return createElement(
+            resolvedComponent as ComponentType<{ viewId: string }>,
+            { viewId: item.id },
+          );
         }
         return null;
       },

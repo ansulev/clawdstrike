@@ -11,7 +11,6 @@ import type {
   CommandContribution,
   FileTypeContribution,
   ThreatIntelSourceContribution,
-  ComplianceFrameworkContribution,
   EditorTabContribution,
   ActivityBarItemContribution,
 } from "@clawdstrike/plugin-sdk";
@@ -52,27 +51,12 @@ const fileTypeDef: FileTypeContribution = {
   testable: true,
 };
 
-const adapterDef = {
-  fileType: "${options.name}",
-  entrypoint: "./adapter",
-};
-
-
 const intelSource: ThreatIntelSourceContribution = {
   id: "${options.name}-intel",
   name: "${options.displayName}",
   description: "Threat intelligence source provided by ${options.displayName}",
   entrypoint: "./source",
 };
-
-
-const framework: ComplianceFrameworkContribution = {
-  id: "${options.name}-framework",
-  name: "${options.displayName}",
-  description: "Compliance framework: ${options.displayName}",
-  entrypoint: "./framework",
-};
-
 
 const editorTab: EditorTabContribution = {
   id: "${options.name}-panel",
@@ -117,7 +101,7 @@ export default createPlugin({
     description: "A full-featured plugin for ClawdStrike",
     version: "0.1.0",
     publisher: "${options.publisher}",
-    categories: ["guards", "detection", "intel", "compliance", "ui"],
+    categories: ["guards", "detection", "intel", "ui"],
     trust: "community",
     activationEvents: ["onStartup"],
     main: "./dist/index.js",
@@ -125,9 +109,7 @@ export default createPlugin({
       guards: [guardDef],
       commands: [configureCommand],
       fileTypes: [fileTypeDef],
-      detectionAdapters: [adapterDef],
       threatIntelSources: [intelSource],
-      complianceFrameworks: [framework],
       editorTabs: [editorTab],
       bottomPanelTabs: [bottomPanelTab],
       rightSidebarPanels: [rightSidebarPanel],

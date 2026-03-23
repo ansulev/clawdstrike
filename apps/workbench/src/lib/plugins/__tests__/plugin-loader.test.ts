@@ -19,6 +19,7 @@ import {
 import { getView, getViewsBySlot } from "../view-registry";
 import { getThreatIntelSource, _resetForTesting as resetThreatIntelRegistry } from "../../workbench/threat-intel-registry";
 import { commandRegistry } from "../../command-registry";
+import { clearSnapshot, getSnapshot } from "../dev/storage-snapshot";
 import type { PluginManifest, GuardContribution, NetworkPermission } from "../types";
 import { PluginLoader } from "../plugin-loader";
 import type { PluginModule, PluginActivationContext } from "../plugin-loader";
@@ -181,6 +182,35 @@ describe("PluginLoader", () => {
     expect(ctx.secrets.get).toBeTypeOf("function");
     expect(ctx.enrichmentRenderers.register).toBeTypeOf("function");
     expect(ctx.views.registerEditorTab).toBeTypeOf("function");
+  });
+
+  it("mirrors ctx.storage.set writes into the HMR snapshot cache", async () => {
+    const pluginId = "hmr-storage-test";
+    const manifest = createTestManifest({
+      id: pluginId,
+      trust: "internal",
+      activationEvents: ["onStartup"],
+      main: "./index.ts",
+    });
+    registry.register(manifest);
+
+    loader = new PluginLoader({
+      registry,
+      resolveModule: async () =>
+        createMockModule({
+          activate: (ctx) => {
+            ctx.storage.set("theme", "dark");
+            return [];
+          },
+        }),
+    });
+
+    await loader.loadPlugin(pluginId);
+
+    expect(getSnapshot(pluginId).get("theme")).toBe("dark");
+
+    await loader.deactivatePlugin(pluginId);
+    clearSnapshot(pluginId);
   });
 
   it("internal plugins can register commands through ctx.commands.register and clean them up on deactivate", async () => {
@@ -683,14 +713,6 @@ describe("PluginLoader", () => {
   describe("permission wiring", () => {
     // Test 19: loadCommunityPlugin passes manifest.permissions to PluginBridgeHost options
     it("community plugin with string permissions passes them to PluginBridgeHost", async () => {
-      const BridgeHostSpy = vi.spyOn(
-        PluginBridgeHost.prototype as unknown as Record<string, unknown>,
-        "constructor",
-      );
-
-      // We can't easily spy on the constructor, so instead we'll verify
-      // behavior: a community plugin with guards:register permission
-      // should allow that method via the bridge
       const manifest = createTestManifest({
         id: "perm-wire-test",
         trust: "community",
@@ -715,7 +737,6 @@ describe("PluginLoader", () => {
       expect(registry.get("perm-wire-test")!.state).toBe("activated");
 
       // Clean up
-      BridgeHostSpy.mockRestore();
       await loader.deactivatePlugin("perm-wire-test");
       iframeContainer.remove();
     });
@@ -1140,8 +1161,6 @@ describe("PluginLoader", () => {
       });
 
       await loader.loadPlugin("ti-plugin");
-      // Allow the async IIFE inside routeContributions to complete
-      await new Promise((resolve) => setTimeout(resolve, 50));
 
       // resolveEntrypoint should receive the plugin-root-relative resolved URL
       expect(resolveEntrypoint).toHaveBeenCalledWith(
@@ -1189,7 +1208,6 @@ describe("PluginLoader", () => {
       });
 
       await loader.loadPlugin("ti-register-test");
-      await new Promise((resolve) => setTimeout(resolve, 50));
 
       const source = getThreatIntelSource("ti-register-test.vt");
       expect(source).toBeDefined();
@@ -1234,7 +1252,6 @@ describe("PluginLoader", () => {
       });
 
       await loader.loadPlugin("ti-dispose-test");
-      await new Promise((resolve) => setTimeout(resolve, 50));
 
       // Source should be registered
       expect(getThreatIntelSource("ti-dispose-test.abuseipdb")).toBeDefined();
@@ -1271,7 +1288,6 @@ describe("PluginLoader", () => {
       });
 
       await loader.loadPlugin("ti-fail-test");
-      await new Promise((resolve) => setTimeout(resolve, 50));
 
       // Plugin should still be activated despite source load failure
       expect(registry.get("ti-fail-test")!.state).toBe("activated");
@@ -1319,7 +1335,6 @@ describe("PluginLoader", () => {
       });
 
       await loader.loadPlugin("ti-noenrich-test");
-      await new Promise((resolve) => setTimeout(resolve, 50));
 
       // Plugin should still be activated
       expect(registry.get("ti-noenrich-test")!.state).toBe("activated");
@@ -1334,6 +1349,55 @@ describe("PluginLoader", () => {
 
       warnSpy.mockRestore();
       await loader.deactivatePlugin("ti-noenrich-test");
+    });
+
+    it("abandons pending async contribution loads after an uninstall race", async () => {
+      let resolveEntrypoint:
+        | ((value: Record<string, unknown>) => void)
+        | undefined;
+      const delayedEntrypoint = new Promise<Record<string, unknown>>((resolve) => {
+        resolveEntrypoint = resolve;
+      });
+
+      const manifest = createTestManifest({
+        id: "ti-cancel-test",
+        trust: "internal",
+        activationEvents: ["onStartup"],
+        main: "./index.ts",
+        contributions: {
+          threatIntelSources: [
+            { id: "vt", name: "VirusTotal", description: "VT enrichment", entrypoint: "./sources/vt.ts" },
+          ],
+        },
+      });
+      registry.register(manifest);
+
+      loader = new PluginLoader({
+        registry,
+        resolveModule: async () => createMockModule(),
+        resolveEntrypoint: async () => delayedEntrypoint,
+      });
+
+      const loadPromise = loader.loadPlugin("ti-cancel-test");
+
+      await Promise.resolve();
+      await loader.deactivatePlugin("ti-cancel-test");
+      registry.unregister("ti-cancel-test");
+
+      resolveEntrypoint?.({
+        default: {
+          id: "placeholder",
+          name: "VirusTotal",
+          supportedIndicatorTypes: ["hash"],
+          rateLimit: { maxPerMinute: 4 },
+          enrich: vi.fn(),
+        },
+      });
+
+      await loadPromise;
+
+      expect(getThreatIntelSource("ti-cancel-test.vt")).toBeUndefined();
+      expect(registry.get("ti-cancel-test")).toBeUndefined();
     });
   });
 

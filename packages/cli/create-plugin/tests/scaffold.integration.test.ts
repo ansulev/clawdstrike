@@ -32,14 +32,12 @@ function makeOptions(type: PluginType): ScaffoldOptions {
 
 const expectedSupplementalFiles: Record<PluginType, string[]> = {
   guard: [],
-  detection: ["src/adapter.ts"],
+  detection: [],
   ui: ["src/panel.ts"],
   intel: ["src/source.ts"],
-  compliance: ["src/framework.ts"],
+  compliance: [],
   full: [
-    "src/adapter.ts",
     "src/source.ts",
-    "src/framework.ts",
     "src/panel.ts",
     "src/status-widget.ts",
   ],
@@ -47,11 +45,11 @@ const expectedSupplementalFiles: Record<PluginType, string[]> = {
 
 const expectedExportKeys: Record<PluginType, string[]> = {
   guard: ["."],
-  detection: [".", "./adapter"],
+  detection: ["."],
   ui: [".", "./panel"],
   intel: [".", "./source"],
-  compliance: [".", "./framework"],
-  full: [".", "./adapter", "./source", "./framework", "./panel", "./status-widget"],
+  compliance: ["."],
+  full: [".", "./source", "./panel", "./status-widget"],
 };
 
 for (const type of ALL_TYPES) {
@@ -129,6 +127,12 @@ for (const type of ALL_TYPES) {
 
       const content = readFileSync(filePath, "utf-8");
       expect(content).toContain("createPlugin");
+    });
+
+    it("does not advertise unsupported runtime contribution scaffolds", () => {
+      const content = readFileSync(join(projectDir, "src/index.ts"), "utf-8");
+      expect(content).not.toContain("detectionAdapters");
+      expect(content).not.toContain("complianceFrameworks");
     });
 
     it("creates tests/plugin.test.ts containing createSpyContext", () => {

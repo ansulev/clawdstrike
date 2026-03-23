@@ -24,20 +24,6 @@ function getSupplementalEntrypointFiles(
   const files = new Map<string, string>();
   const register = (contribution: ContributionPoint): void => {
     switch (contribution) {
-      case "detectionAdapters":
-        files.set(
-          "src/adapter.ts",
-          `export default {
-  parse(_source: string) {
-    throw new Error("${options.displayName} adapter parse() is not implemented yet.");
-  },
-  serialize(_document: unknown) {
-    throw new Error("${options.displayName} adapter serialize() is not implemented yet.");
-  },
-};
-`,
-        );
-        break;
       case "threatIntelSources":
         files.set(
           "src/source.ts",
@@ -49,18 +35,6 @@ function getSupplementalEntrypointFiles(
   async enrich(_indicator: unknown) {
     throw new Error("${options.displayName} source enrich() is not implemented yet.");
   },
-};
-`,
-        );
-        break;
-      case "complianceFrameworks":
-        files.set(
-          "src/framework.ts",
-          `export default {
-  id: "${options.name}-framework",
-  name: "${options.displayName}",
-  description: "TODO: describe this framework",
-  controls: [],
 };
 `,
         );

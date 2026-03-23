@@ -7,7 +7,6 @@ export function detectionSourceTemplate(options: ScaffoldOptions): string {
 import type {
   PluginContext,
   FileTypeContribution,
-  DetectionAdapterContribution,
   CommandContribution,
 } from "@clawdstrike/plugin-sdk";
 
@@ -21,11 +20,6 @@ const fileTypeDef: FileTypeContribution = {
   testable: true,
 };
 
-const adapterDef: DetectionAdapterContribution = {
-  fileType: "${options.name}",
-  entrypoint: "./adapter",
-};
-
 const validateCommand: CommandContribution = {
   id: "${options.publisher}.${options.name}.validate",
   title: "Validate ${options.displayName}",
@@ -36,7 +30,7 @@ export default createPlugin({
     id: "${options.publisher}.${options.name}",
     name: "${options.name}",
     displayName: "${options.displayName}",
-    description: "A detection adapter plugin for ClawdStrike",
+    description: "A detection workflow plugin for ClawdStrike",
     version: "0.1.0",
     publisher: "${options.publisher}",
     categories: ["detection"],
@@ -45,7 +39,6 @@ export default createPlugin({
     main: "./dist/index.js",
     contributions: {
       fileTypes: [fileTypeDef],
-      detectionAdapters: [adapterDef],
       commands: [validateCommand],
     },
   },

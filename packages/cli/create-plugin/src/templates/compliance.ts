@@ -4,16 +4,8 @@ export function complianceSourceTemplate(options: ScaffoldOptions): string {
   return `import { createPlugin } from "@clawdstrike/plugin-sdk";
 import type {
   PluginContext,
-  ComplianceFrameworkContribution,
   CommandContribution,
 } from "@clawdstrike/plugin-sdk";
-
-const framework: ComplianceFrameworkContribution = {
-  id: "${options.name}-framework",
-  name: "${options.displayName}",
-  description: "Compliance framework: ${options.displayName}",
-  entrypoint: "./framework",
-};
 
 const auditCommand: CommandContribution = {
   id: "${options.publisher}.${options.name}.audit",
@@ -25,7 +17,7 @@ export default createPlugin({
     id: "${options.publisher}.${options.name}",
     name: "${options.name}",
     displayName: "${options.displayName}",
-    description: "A compliance framework plugin for ClawdStrike",
+    description: "A compliance workflow plugin for ClawdStrike",
     version: "0.1.0",
     publisher: "${options.publisher}",
     categories: ["compliance"],
@@ -33,7 +25,6 @@ export default createPlugin({
     activationEvents: ["onStartup"],
     main: "./dist/index.js",
     contributions: {
-      complianceFrameworks: [framework],
       commands: [auditCommand],
     },
   },

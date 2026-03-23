@@ -70,6 +70,17 @@ describe("parseFlags", () => {
       expect(result).toBeNull();
     });
 
+    it("rejects contribution points that are not scaffold-supported yet", () => {
+      const result = parseFlags([
+        "my-plugin",
+        "--type",
+        "full",
+        "--contributions",
+        "guards,detectionAdapters",
+      ]);
+      expect(result).toBeNull();
+    });
+
     it("rejects invalid package manager", () => {
       const result = parseFlags(["my-guard", "--type", "guard", "--pm", "yarn"]);
       expect(result).toBeNull();

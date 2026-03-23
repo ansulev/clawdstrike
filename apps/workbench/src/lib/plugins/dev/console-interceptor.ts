@@ -22,8 +22,8 @@ let origError: typeof console.error | null = null;
 /** Guard flag to prevent re-entrant interception. */
 let isIntercepting = false;
 
-/** Active plugin ID for the current interception scope. */
-let activePluginId: string | null = null;
+/** Stack of active plugin IDs for nested interception scopes. */
+const activePluginStack: string[] = [];
 
 // ---------------------------------------------------------------------------
 // Internal helpers
@@ -63,13 +63,14 @@ function makeWrapper(
 
     // Guard against re-entrancy
     if (isIntercepting) return;
-    if (!activePluginId) return;
+    const currentPluginId = activePluginStack[activePluginStack.length - 1] ?? null;
+    if (!currentPluginId) return;
 
     isIntercepting = true;
     try {
       devConsoleStore.push({
         type: eventType,
-        pluginId: activePluginId,
+        pluginId: currentPluginId,
         timestamp: Date.now(),
         message: formatArgs(args),
       });
@@ -105,18 +106,25 @@ export function interceptConsole(pluginId: string): () => void {
     origError = console.error;
   }
 
-  activePluginId = pluginId;
+  activePluginStack.push(pluginId);
 
   console.log = makeWrapper(origLog!, 'console:log');
   console.warn = makeWrapper(origWarn!, 'console:warn');
   console.error = makeWrapper(origError!, 'console:error');
 
   return () => {
-    // Restore originals
-    if (origLog) console.log = origLog;
-    if (origWarn) console.warn = origWarn;
-    if (origError) console.error = origError;
-    activePluginId = null;
+    // Pop this plugin from the stack
+    const idx = activePluginStack.lastIndexOf(pluginId);
+    if (idx !== -1) {
+      activePluginStack.splice(idx, 1);
+    }
+
+    // Restore originals only when no more interceptors are active
+    if (activePluginStack.length === 0) {
+      if (origLog) console.log = origLog;
+      if (origWarn) console.warn = origWarn;
+      if (origError) console.error = origError;
+    }
   };
 }
 
@@ -131,6 +139,6 @@ export function stopIntercepting(): void {
   origLog = null;
   origWarn = null;
   origError = null;
-  activePluginId = null;
+  activePluginStack.length = 0;
   isIntercepting = false;
 }

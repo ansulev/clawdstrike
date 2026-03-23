@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo, useCallback, memo } from "react";
 import { formatRelativeTime } from "@/lib/workbench/format-utils";
 import {
   IconChevronDown,
@@ -87,7 +87,7 @@ const KILL_CHAIN_DEPTH_LABELS: Record<number, { label: string; color: string }> 
   5: { label: "Full Chain", color: "#c45c5c" },
 };
 
-export function EnrichmentSidebar({
+export const EnrichmentSidebar = memo(function EnrichmentSidebar({
   enrichments,
   onRunEnrichment,
   onPivotEnrich,
@@ -95,9 +95,16 @@ export function EnrichmentSidebar({
   isEnriching,
   onCancel,
 }: EnrichmentSidebarProps) {
-  const grouped = groupByType(enrichments);
+  const grouped = useMemo(() => groupByType(enrichments), [enrichments]);
   const hasStreamingStatuses = sourceStatuses && sourceStatuses.length > 0;
-  const relatedIndicators = extractRelatedIndicators(enrichments);
+  const relatedIndicators = useMemo(
+    () => extractRelatedIndicators(enrichments),
+    [enrichments],
+  );
+  const handlePivotEnrich = useCallback(
+    (ind: { type: string; value: string }) => onPivotEnrich?.(ind.type, ind.value),
+    [onPivotEnrich],
+  );
 
   return (
     <div className="flex flex-col h-full">
@@ -183,7 +190,7 @@ export function EnrichmentSidebar({
             {relatedIndicators.length > 0 && (
               <RelatedIndicatorsSection
                 indicators={relatedIndicators}
-                onEnrich={(ind) => onPivotEnrich?.(ind.type, ind.value)}
+                onEnrich={handlePivotEnrich}
               />
             )}
           </div>
@@ -191,7 +198,7 @@ export function EnrichmentSidebar({
       </div>
     </div>
   );
-}
+});
 
 // ---- Source Status Card (streaming) ----
 

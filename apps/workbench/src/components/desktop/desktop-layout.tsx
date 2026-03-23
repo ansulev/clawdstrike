@@ -19,12 +19,12 @@ import { getActivePaneRoute, usePaneStore } from "@/features/panes/pane-store";
 import { savePaneSession } from "@/features/panes/pane-session";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import { InitCommands } from "@/lib/commands/init-commands";
-import { useMultiPolicy } from "@/features/policy/stores/multi-policy-store";
 import { useAutoSave } from "@/lib/workbench/use-auto-save";
 import { normalizeWorkbenchRoute } from "./workbench-routes";
+import { usePolicyTabsStore } from "@/features/policy/stores/policy-tabs-store";
 
 export function DesktopLayout() {
-  const { tabs } = useMultiPolicy();
+  const tabs = usePolicyTabsStore(s => s.tabs);
   const { pendingRecovery, dismissRecovery, restoreRecovery } = useAutoSave();
   const location = useLocation();
   const navigate = useNavigate();

@@ -10,7 +10,7 @@
  * secureStore.init() completes.
  */
 
-import { secureStore } from "@/lib/workbench/secure-store";
+import { secureStore } from "@/features/settings/secure-store";
 import { registerThreatIntelSource } from "@/lib/workbench/threat-intel-registry";
 
 // Manifests (used for plugin IDs)

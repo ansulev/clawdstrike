@@ -89,7 +89,7 @@ Provide the developer tooling layer for the ClawdStrike plugin ecosystem. The ru
 | PLAY-01 | Phase 5 | Complete |
 | PLAY-02 | Phase 5 | Complete |
 | PLAY-03 | Phase 5 | Complete |
-| PLAY-04 | Phase 5 | Pending |
-| PLAY-05 | Phase 5 | Pending |
-| PLAY-06 | Phase 5 | Pending |
+| PLAY-04 | Phase 5 | Complete |
+| PLAY-05 | Phase 5 | Complete |
+| PLAY-06 | Phase 5 | Complete |
 | PLAY-07 | Phase 5 | Complete |

@@ -91,7 +91,7 @@ Plans:
 **Plans:** 2 plans
 Plans:
 - [x] 05-01-PLAN.md — Core playground infrastructure: store, transpiler, eval server, CodeMirror editor, toolbar, plugin registration
-- [ ] 05-02-PLAN.md — Contribution inspector, plugin console panel, error boundary with source-mapped traces
+- [x] 05-02-PLAN.md — Contribution inspector, plugin console panel, error boundary with source-mapped traces
 
 ## Progress
 
@@ -104,4 +104,4 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 | 2. CLI Scaffolding | 3/3 | Complete | 2026-03-23 |
 | 3. Dev Server | 2/3 | Executing | - |
 | 4. Documentation | 2/2 | Complete | 2026-03-23 |
-| 5. Plugin Playground | 1/2 | Executing | - |
+| 5. Plugin Playground | 2/2 | Complete | 2026-03-23 |

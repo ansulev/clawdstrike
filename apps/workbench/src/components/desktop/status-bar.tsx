@@ -347,7 +347,8 @@ registerBuiltinStatusBarItem({
 });
 
 function useStatusBarItems(side: "left" | "right") {
-  return useSyncExternalStore(onStatusBarChange, () => getStatusBarItems(side));
+  const getSnapshot = useCallback(() => getStatusBarItems(side), [side]);
+  return useSyncExternalStore(onStatusBarChange, getSnapshot, getSnapshot);
 }
 
 const Separator = () => <span className="h-3 w-px bg-[#2d3240]/60" />;

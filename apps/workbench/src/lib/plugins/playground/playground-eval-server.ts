@@ -20,8 +20,11 @@ const codeStore = new Map<number, string>();
 /** Active cleanup timers keyed by runId. */
 const cleanupTimers = new Map<number, ReturnType<typeof setTimeout>>();
 
-/** Duration after which stored code is evicted (60 seconds). */
-const EVICTION_MS = 60_000;
+/** Track runIds with an active fetch in progress (don't evict). */
+const activeFetches = new Set<number>();
+
+/** Duration after which stored code is evicted (5 minutes). */
+const EVICTION_MS = 300_000;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -103,9 +106,11 @@ export function pluginEvalMiddleware(
         // Store the code
         codeStore.set(runId, code);
 
-        // Schedule eviction after 60 seconds
+        // Schedule eviction after timeout (skip if a fetch is active)
         const timer = setTimeout(() => {
-          codeStore.delete(runId);
+          if (!activeFetches.has(runId)) {
+            codeStore.delete(runId);
+          }
           cleanupTimers.delete(runId);
         }, EVICTION_MS);
         cleanupTimers.set(runId, timer);
@@ -131,7 +136,22 @@ export function pluginEvalMiddleware(
       return;
     }
 
+    // Keep-alive: reset eviction timer on fetch
+    const existingTimer = cleanupTimers.get(runId);
+    if (existingTimer !== undefined) {
+      clearTimeout(existingTimer);
+    }
+    activeFetches.add(runId);
+    const timer = setTimeout(() => {
+      if (!activeFetches.has(runId)) {
+        codeStore.delete(runId);
+      }
+      cleanupTimers.delete(runId);
+    }, EVICTION_MS);
+    cleanupTimers.set(runId, timer);
+
     sendJs(res, code);
+    activeFetches.delete(runId);
     return;
   }
 

@@ -235,14 +235,6 @@ const ReceiptPreviewTab = lazy(() =>
   })),
 );
 
-function PlaceholderPane({ label }: { label: string }) {
-  return (
-    <div className="flex flex-1 items-center justify-center text-[#6f7f9a] text-sm font-mono">
-      {label} — coming in a later phase
-    </div>
-  );
-}
-
 function parseRoute(route: string): URL {
   const normalized = route.startsWith("/") ? route : `/${route}`;
   return new URL(normalized, "https://clawdstrike.local");

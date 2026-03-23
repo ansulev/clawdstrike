@@ -1622,6 +1622,28 @@ fn is_match_on_word_boundary(line: &str, match_start: usize, match_end: usize) -
     before_ok && after_ok
 }
 
+fn build_search_regex(
+    query: &str,
+    case_sensitive: bool,
+    whole_word: bool,
+    use_regex: bool,
+) -> Result<regex::Regex, String> {
+    let pattern = if use_regex {
+        if whole_word {
+            format!(r"\b(?:{})\b", query)
+        } else {
+            query.to_string()
+        }
+    } else {
+        regex::escape(query)
+    };
+
+    regex::RegexBuilder::new(&pattern)
+        .case_insensitive(!case_sensitive)
+        .build()
+        .map_err(|e| format!("Invalid regex: {e}"))
+}
+
 fn truncate_line_content(line: &str) -> &str {
     match line.char_indices().nth(MAX_LINE_CONTENT_LEN) {
         Some((idx, _)) => &line[..idx],
@@ -1737,25 +1759,8 @@ pub async fn search_in_project(
             return Err("Search canceled".into());
         }
 
-        // Build the regex or prepare the literal query.
-        let compiled_regex = if use_regex {
-            let pattern = if whole_word {
-                format!(r"\b(?:{})\b", query_clone)
-            } else {
-                query_clone.clone()
-            };
-            let pattern = if !case_sensitive {
-                format!("(?i){}", pattern)
-            } else {
-                pattern
-            };
-            regex::Regex::new(&pattern).map_err(|e| format!("Invalid regex: {e}"))?
-        } else {
-            regex::RegexBuilder::new(&regex::escape(&query_clone))
-                .case_insensitive(!case_sensitive)
-                .build()
-                .map_err(|e| format!("Invalid literal search: {e}"))?
-        };
+        let compiled_regex =
+            build_search_regex(&query_clone, case_sensitive, whole_word, use_regex)?;
 
         // Collect eligible files.
         let mut file_paths = Vec::new();
@@ -1799,7 +1804,8 @@ pub async fn search_in_project(
                     .filter_map(|m| {
                         let match_start = m.start();
                         let match_end = m.end();
-                        if !use_regex && whole_word
+                        if !use_regex
+                            && whole_word
                             && !is_match_on_word_boundary(line, match_start, match_end)
                         {
                             return None;
@@ -1966,7 +1972,10 @@ guards:
         assert_eq!(result.matches.len(), 1);
         let first_match = &result.matches[0];
         assert_eq!(first_match.file_path, "search.txt");
-        assert_eq!(first_match.line_content.chars().count(), MAX_LINE_CONTENT_LEN);
+        assert_eq!(
+            first_match.line_content.chars().count(),
+            MAX_LINE_CONTENT_LEN
+        );
         assert_eq!(first_match.match_start, MAX_LINE_CONTENT_LEN);
         assert_eq!(first_match.match_end, MAX_LINE_CONTENT_LEN);
     }
@@ -2769,6 +2778,66 @@ guards: {}
 
         let err = validate_file_path(&path).unwrap_err();
         assert_eq!(err, "Refusing to access sensitive file");
+    }
+
+    #[tokio::test]
+    async fn search_in_project_handles_case_insensitive_unicode_literal_offsets() {
+        let dir = tempfile::tempdir().unwrap();
+        let file_path = dir.path().join("unicode.txt");
+        std::fs::write(&file_path, "foo ẞ bar\n").unwrap();
+
+        let result = search_in_project(
+            dir.path().to_string_lossy().to_string(),
+            "ß".into(),
+            false,
+            true,
+            false,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(result.file_count, 1);
+        assert_eq!(result.total_matches, 1);
+        assert_eq!(result.matches.len(), 1);
+
+        let first_match = &result.matches[0];
+        assert_eq!(first_match.file_path, "unicode.txt");
+        assert_eq!(first_match.line_number, 1);
+        assert_eq!(first_match.line_content, "foo ẞ bar");
+        assert_eq!(first_match.match_start, 4);
+        assert_eq!(first_match.match_end, 5);
+    }
+
+    #[tokio::test]
+    async fn search_in_project_truncates_multibyte_lines_without_panic() {
+        let dir = tempfile::tempdir().unwrap();
+        let file_path = dir.path().join("emoji.txt");
+        let prefix = "😀".repeat(MAX_LINE_CONTENT_LEN);
+        std::fs::write(&file_path, format!("{prefix}needle\n")).unwrap();
+
+        let result = search_in_project(
+            dir.path().to_string_lossy().to_string(),
+            "needle".into(),
+            true,
+            false,
+            false,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(result.file_count, 1);
+        assert_eq!(result.total_matches, 1);
+        assert_eq!(result.matches.len(), 1);
+
+        let first_match = &result.matches[0];
+        assert_eq!(first_match.file_path, "emoji.txt");
+        assert_eq!(first_match.line_content, prefix);
+        assert_eq!(
+            first_match.line_content.chars().count(),
+            MAX_LINE_CONTENT_LEN
+        );
+        assert_eq!(first_match.match_start, MAX_LINE_CONTENT_LEN);
+        assert_eq!(first_match.match_end, MAX_LINE_CONTENT_LEN);
     }
 
     // =======================================================================

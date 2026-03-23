@@ -131,8 +131,8 @@ describe("ReplayAnnotationLayer (Phase 42 ANNO)", () => {
     expect(groups.length).toBe(2);
   });
 
-  // Test 3: Component file contains ConeGeometry (diamond visual)
-  it("component source uses ConeGeometry for diamond pin visual", async () => {
+  // Test 3: Component file contains coneGeometry (diamond visual)
+  it("component source uses coneGeometry for diamond pin visual", async () => {
     const fs = await import("fs");
     const path = await import("path");
     const filePath = path.resolve(
@@ -140,7 +140,7 @@ describe("ReplayAnnotationLayer (Phase 42 ANNO)", () => {
       "../components/world-canvas/ReplayAnnotationLayer.tsx",
     );
     const source = fs.readFileSync(filePath, "utf-8");
-    expect(source).toContain("ConeGeometry");
+    expect(source).toContain("coneGeometry");
   });
 
   // Test 4: When replayEnabled is false, ground plane click does not invoke onDropPin

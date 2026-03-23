@@ -1679,6 +1679,11 @@ function replaceSwarmFeedStoreState(state: SwarmFeedState): void {
   useSwarmFeedStoreBase.setState(state);
 }
 
+function resetDigestHydrationTracker(): void {
+  _digestHydrationGeneration += 1;
+  _digestHydrationPending.clear();
+}
+
 function queueFindingDigestHydration(record: SwarmFindingEnvelopeRecord): void {
   if (record.digest !== undefined) {
     return;
@@ -2076,6 +2081,7 @@ export function SwarmFeedProvider({ children }: { children: ReactNode }) {
   const initialized = useRef(false);
   if (!initialized.current) {
     initialized.current = true;
+    resetDigestHydrationTracker();
     const restored = loadPersistedSwarmFeed() ?? INITIAL_SWARM_FEED_STATE;
     lastSwarmFeedStorageSnapshot = readSwarmFeedStorageSnapshot();
     replaceSwarmFeedStoreState(restored);

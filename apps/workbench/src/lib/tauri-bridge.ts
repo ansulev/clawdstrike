@@ -12,6 +12,7 @@ import {
   sanitizeFilenameStem,
   type FileType,
 } from "@/lib/workbench/file-type-registry";
+import { getWorkbenchE2EBridge } from "@/lib/workbench/e2e-bridge";
 
 const TAURI_FS_SPECIFIER = "@tauri-apps/plugin-fs";
 const TAURI_OPENER_SPECIFIER = "@tauri-apps/plugin-opener";
@@ -84,6 +85,11 @@ export interface OpenFileResult {
  * Returns null if the user cancels.
  */
 export async function openDetectionFile(): Promise<OpenFileResult | null> {
+  const e2eBridge = getWorkbenchE2EBridge();
+  if (e2eBridge?.openDetectionFile) {
+    return e2eBridge.openDetectionFile();
+  }
+
   if (!isDesktop()) return null;
 
   const { open } = await import("@tauri-apps/plugin-dialog");
@@ -123,6 +129,11 @@ export async function openDetectionFile(): Promise<OpenFileResult | null> {
  * Returns null if not in desktop mode or if the file cannot be read.
  */
 export async function readDetectionFileByPath(filePath: string): Promise<OpenFileResult | null> {
+  const e2eBridge = getWorkbenchE2EBridge();
+  if (e2eBridge?.readDetectionFileByPath) {
+    return e2eBridge.readDetectionFileByPath(filePath);
+  }
+
   if (!isDesktop()) return null;
 
   try {
@@ -219,6 +230,11 @@ export async function saveDetectionFile(
   filePath?: string | null,
   suggestedName?: string,
 ): Promise<string | null> {
+  const e2eBridge = getWorkbenchE2EBridge();
+  if (e2eBridge?.saveDetectionFile) {
+    return e2eBridge.saveDetectionFile(content, fileType, filePath, suggestedName);
+  }
+
   if (!isDesktop()) return null;
 
   let targetPath = filePath;
@@ -261,6 +277,11 @@ export async function createDetectionFile(
   fileName: string,
   fileType: FileType,
 ): Promise<string | null> {
+  const e2eBridge = getWorkbenchE2EBridge();
+  if (e2eBridge?.createDetectionFile) {
+    return e2eBridge.createDetectionFile(dirPath, fileName, fileType);
+  }
+
   if (!isDesktop()) return null;
 
   try {
@@ -284,6 +305,11 @@ export async function renameDetectionFile(
   oldPath: string,
   newPath: string,
 ): Promise<boolean> {
+  const e2eBridge = getWorkbenchE2EBridge();
+  if (e2eBridge?.renameDetectionFile) {
+    return e2eBridge.renameDetectionFile(oldPath, newPath);
+  }
+
   if (!isDesktop()) return false;
 
   try {
@@ -305,6 +331,11 @@ export async function renameDetectionFile(
 export async function deleteDetectionFile(
   filePath: string,
 ): Promise<boolean> {
+  const e2eBridge = getWorkbenchE2EBridge();
+  if (e2eBridge?.deleteDetectionFile) {
+    return e2eBridge.deleteDetectionFile(filePath);
+  }
+
   if (!isDesktop()) return false;
 
   try {

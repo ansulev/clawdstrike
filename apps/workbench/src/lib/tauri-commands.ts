@@ -10,6 +10,7 @@
  */
 
 import { isDesktop } from "./tauri-bridge";
+import { getWorkbenchE2EBridge, hasWorkbenchE2EInvoke } from "@/lib/workbench/e2e-bridge";
 
 
 export interface TauriValidationError {
@@ -172,6 +173,11 @@ export interface TauriChainVerificationResponse {
 
 
 async function tauriInvoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
+  const e2eInvoke = getWorkbenchE2EBridge()?.invoke;
+  if (e2eInvoke) {
+    return e2eInvoke<T>(cmd, args);
+  }
+
   const { invoke } = await import("@tauri-apps/api/core");
   return invoke<T>(cmd, args);
 }
@@ -639,7 +645,7 @@ export async function searchInProjectNative(
   useRegex: boolean,
   searchId?: string,
 ): Promise<TauriSearchResult | null> {
-  if (!isDesktop()) return null;
+  if (!isDesktop() && !hasWorkbenchE2EInvoke()) return null;
   try {
     return await tauriInvoke<TauriSearchResult>("search_in_project", {
       rootPath,

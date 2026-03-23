@@ -22,9 +22,9 @@ describeIfBuild("observatory bundle graph smoke", () => {
     expect(worldCanvasAsset).toContain("ObservatoryFlowRuntimeScene");
   });
 
-  it("retains vendor-physics behind the lazy flow runtime edge", () => {
+  it("retains the lazy flow controller behind the flow runtime edge", () => {
     const flowRuntimeAsset = readFileSync(findAssetByPrefix("ObservatoryFlowRuntimeScene-"), "utf8");
-    expect(flowRuntimeAsset).toContain("vendor-physics");
-    expect(flowRuntimeAsset).toContain("ObservatoryFlowPhysicsBootstrap");
+    expect(flowRuntimeAsset).not.toContain("vendor-physics");
+    expect(flowRuntimeAsset).toContain("SpaceFlightController");
   });
 });

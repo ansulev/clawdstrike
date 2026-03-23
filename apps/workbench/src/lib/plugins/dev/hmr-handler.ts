@@ -13,7 +13,7 @@ import { pluginRegistry } from '../plugin-registry';
 import type { PluginManifest } from '../types';
 import type { PluginUpdateEvent, DevLifecycleEvent } from './types';
 import { PLUGIN_UPDATE_EVENT } from './types';
-import { getSnapshot, restoreToApi } from './storage-snapshot';
+import { getSnapshot, restoreToApi, trackStorageWrite } from './storage-snapshot';
 
 /** Event listeners for dev lifecycle events. */
 type DevEventListener = (event: DevLifecycleEvent) => void;
@@ -67,7 +67,7 @@ export async function handlePluginUpdate(
 
   try {
     // 1. Snapshot storage before deactivation
-    const _storageSnapshot = getSnapshot(pluginId);
+    const storageSnapshot = getSnapshot(pluginId);
 
     // 2. Get current manifest before unregistering
     const registered = pluginRegistry.get(pluginId);
@@ -102,6 +102,13 @@ export async function handlePluginUpdate(
 
     // 7. Re-load the plugin (this triggers activate())
     await pluginLoader.loadPlugin(pluginId);
+
+    // 8. Restore storage snapshot after re-activation
+    if (storageSnapshot.size > 0) {
+      restoreToApi(pluginId, {
+        set: (key: string, value: unknown) => trackStorageWrite(pluginId, key, value),
+      });
+    }
 
     const durationMs = performance.now() - startTime;
     emit({

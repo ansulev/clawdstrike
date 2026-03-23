@@ -73,6 +73,22 @@ export interface RegistryPopularPackage {
   latest_version: string | null;
 }
 
+/** Version info response from GET /api/v1/packages/{name}/{version}. Matches api/info.rs VersionInfoResponse. */
+export interface RegistryVersionInfo {
+  name: string;
+  version: string;
+  pkg_type: string;
+  checksum: string;
+  manifest_toml: string;
+  publisher_key: string;
+  publisher_sig: string;
+  registry_sig: string | null;
+  dependencies: Record<string, unknown>;
+  yanked: boolean;
+  published_at: string;
+  downloads: number;
+}
+
 /** Attestation response from GET /api/v1/packages/{name}/{version}/attestation. Matches api/attestation.rs AttestationResponse. */
 export interface RegistryAttestation {
   name: string;
@@ -203,6 +219,29 @@ export class RegistryClient {
     }
 
     return (await response.json()) as RegistryPackageStats;
+  }
+
+  /**
+   * Get detailed info for a specific version, including manifest TOML,
+   * checksum, and publisher/registry signatures.
+   *
+   * Throws on network error or non-ok response.
+   */
+  async getVersionInfo(
+    name: string,
+    version: string,
+  ): Promise<RegistryVersionInfo> {
+    const response = await fetch(
+      `${this.baseUrl}/api/v1/packages/${encodeURIComponent(name)}/${encodeURIComponent(version)}`,
+    );
+
+    if (!response.ok) {
+      throw new Error(
+        `Failed to get version info for '${name}@${version}': HTTP ${response.status}`,
+      );
+    }
+
+    return (await response.json()) as RegistryVersionInfo;
   }
 
   /**

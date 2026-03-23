@@ -182,16 +182,26 @@ export function PluginsBrowser() {
   const handleInstallFromRegistry = useCallback(
     async (stub: RegistrySearchResult) => {
       try {
-        // Fetch full package info from the registry to get accurate metadata
+        // Fetch full package info to resolve the latest non-yanked version
         const info = await registryClient.getPackageInfo(stub.name);
         const latestVersion = info.versions.find((v) => !v.yanked);
         const version = latestVersion?.version ?? stub.latest_version ?? "0.0.0";
 
-        // Build the manifest with registry-resolved fields
+        // Fetch the signed version info (includes manifest_toml, checksum, signatures)
+        const versionInfo = await registryClient.getVersionInfo(stub.name, version);
+
+        // Build manifest from registry data including installation metadata
         const manifest: PluginManifest = {
           ...asManifest(stub),
           version,
           description: info.description ?? stub.description ?? "",
+          main: `index.js`, // Default entry point — registry manifest_toml may override
+          installation: {
+            downloadUrl: registryClient.getDownloadUrl(stub.name, version),
+            size: 0, // Not available from version info endpoint
+            checksum: versionInfo.checksum,
+            signature: versionInfo.publisher_sig,
+          },
         };
 
         await installPlugin(manifest);

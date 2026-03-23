@@ -168,6 +168,12 @@ export class PluginBridgeHost {
       return;
     }
 
+    // Source window validation -- all srcdoc iframes share origin "null",
+    // so we must also verify the message came from THIS plugin's iframe.
+    if (event.source !== this.targetWindow) {
+      return;
+    }
+
     const data = event.data;
 
     // Only process valid bridge request messages

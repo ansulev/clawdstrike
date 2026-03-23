@@ -187,14 +187,14 @@ export function App() {
   useEffect(() => {
     secureStore
       .init()
-      .then(() => migrateCredentialsToStronghold())
-      .catch((err) => {
-        // Migration failure is non-fatal — keys may already exist from prior run
-        console.warn("[secure-store] Credential migration failed (non-fatal):", err);
+      .then(() => {
+        migrateCredentialsToStronghold().catch((err) => {
+          console.warn("[secure-store] Credential migration failed (non-fatal):", err);
+        });
+        return bootstrapThreatIntelPlugins();
       })
-      .then(() => bootstrapThreatIntelPlugins())
       .catch((err) => {
-        console.warn("[secure-store] Threat intel bootstrap failed:", err);
+        console.warn("[secure-store] Startup init failed:", err);
       });
   }, []);
 

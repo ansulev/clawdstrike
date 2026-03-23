@@ -477,10 +477,13 @@ export class PluginLoader {
     let iframe: HTMLIFrameElement | undefined;
 
     try {
-      // Resolve plugin code (if resolver provided, otherwise empty string)
-      const pluginCode = this.resolvePluginCode
-        ? await this.resolvePluginCode(manifest)
-        : "";
+      // Resolve plugin code -- a resolver is required for community plugins
+      if (!this.resolvePluginCode) {
+        throw new Error(
+          `Cannot load community plugin "${pluginId}": no code resolver configured`,
+        );
+      }
+      const pluginCode = await this.resolvePluginCode(manifest);
 
       // Create and configure the iframe
       iframe = document.createElement("iframe");

@@ -16,7 +16,7 @@ Add real-time analyst presence and awareness to the workbench. Four phases build
 - [x] **Phase 18: Server Foundation** - hushd PresenceHub with axum WebSocket endpoint, room management, heartbeat timeout, path normalization (completed 2026-03-23)
 - [x] **Phase 19: Client Connection & Store** - PresenceSocket class with reconnect/jitter, presence-store Zustand store, offline degradation (completed 2026-03-23)
 - [x] **Phase 20: UI Presence Indicators** - Status bar connection dot, online count, pane tab dots, activity bar pills, analyst roster, Speakeasy presence (completed 2026-03-23)
-- [ ] **Phase 21: CodeMirror Cursor Extension** - Remote cursors, selections, hover labels, line:column coordinates, Facet+StateEffect delivery
+- [x] **Phase 21: CodeMirror Cursor Extension** - Remote cursors, selections, hover labels, line:column coordinates, Facet+StateEffect delivery (completed 2026-03-23)
 
 ## Phase Details
 
@@ -76,7 +76,7 @@ Plans:
   3. Hovering over a remote cursor caret displays a label with the analyst's name
   4. Rapid cursor movement from a remote analyst updates smoothly without editor flicker, jank, or extension rebuild (Facet+StateEffect delivery, not extension array mutation)
   5. Closing a file tab cleanly removes all cursor decorations and unsubscribes from presence updates for that file (no memory leak)
-**Plans:** 1 plan
+**Plans:** 1/1 plans complete
 
 Plans:
 - [ ] 21-01-PLAN.md — PresenceCursorExtension ViewPlugin + yaml-editor integration (Facet+StateEffect data injection, cursor carets, selection highlights, name labels, 50ms throttle, store subscription, outbound broadcasting, cleanup)
@@ -90,4 +90,4 @@ Plans:
 | 18. Server Foundation | 1/1 | Complete    | 2026-03-23 |
 | 19. Client Connection & Store | 2/2 | Complete    | 2026-03-23 |
 | 20. UI Presence Indicators | 3/3 | Complete    | 2026-03-23 |
-| 21. CodeMirror Cursor Extension | 0/1 | Not started | - |
+| 21. CodeMirror Cursor Extension | 1/1 | Complete    | 2026-03-23 |

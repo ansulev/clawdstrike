@@ -32,11 +32,11 @@ Requirements for the Presence & Awareness milestone. Each maps to roadmap phases
 
 ### CodeMirror Awareness
 
-- [ ] **CM-01**: Remote analyst cursors shown as colored carets in CodeMirror editors
-- [ ] **CM-02**: Remote analyst selections shown as colored highlights in CodeMirror editors
-- [ ] **CM-03**: Cursor name labels appear on hover over remote cursors
-- [ ] **CM-04**: Cursor positions use line:column coordinates (stable across independent edits)
-- [ ] **CM-05**: Cursor updates throttled to 50ms and delivered via Facet + StateEffect (no extension rebuild)
+- [x] **CM-01**: Remote analyst cursors shown as colored carets in CodeMirror editors
+- [x] **CM-02**: Remote analyst selections shown as colored highlights in CodeMirror editors
+- [x] **CM-03**: Cursor name labels appear on hover over remote cursors
+- [x] **CM-04**: Cursor positions use line:column coordinates (stable across independent edits)
+- [x] **CM-05**: Cursor updates throttled to 50ms and delivered via Facet + StateEffect (no extension rebuild)
 
 ## v2.1+ Requirements
 
@@ -91,11 +91,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 | UI-03 | Phase 20 | Complete |
 | UI-04 | Phase 20 | Complete |
 | UI-05 | Phase 20 | Pending |
-| CM-01 | Phase 21 | Pending |
-| CM-02 | Phase 21 | Pending |
-| CM-03 | Phase 21 | Pending |
-| CM-04 | Phase 21 | Pending |
-| CM-05 | Phase 21 | Pending |
+| CM-01 | Phase 21 | Complete |
+| CM-02 | Phase 21 | Complete |
+| CM-03 | Phase 21 | Complete |
+| CM-04 | Phase 21 | Complete |
+| CM-05 | Phase 21 | Complete |
 
 **Coverage:**
 - v2.0 requirements: 19 total

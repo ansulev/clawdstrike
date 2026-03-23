@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: milestone
 status: completed
-stopped_at: Completed 20-01-PLAN.md
-last_updated: "2026-03-23T16:57:06.943Z"
-last_activity: 2026-03-23 — Completed 20-02 Pane tab dots & activity bar pills
+stopped_at: Completed 21-01-PLAN.md
+last_updated: "2026-03-23T17:29:13.712Z"
+last_activity: 2026-03-23 — Completed 21-01 CodeMirror cursor extension
 progress:
   total_phases: 4
-  completed_phases: 3
-  total_plans: 6
-  completed_plans: 6
-  percent: 67
+  completed_phases: 4
+  total_plans: 7
+  completed_plans: 7
+  percent: 100
 ---
 
 # Project State
@@ -20,16 +20,16 @@ progress:
 
 See: .planning/PROJECT.md (updated 2026-03-23)
 **Core value:** Security operators work across multiple views simultaneously with IDE-grade workflows
-**Current focus:** v2.0 Presence & Awareness — Phase 20: UI Presence Indicators
+**Current focus:** v2.0 Presence & Awareness — Phase 21: CodeMirror Cursor Extension
 
 ## Current Position
 
-Phase: 20 of 21 (UI Presence Indicators) — third of 4 phases in v2.0
-Plan: 2 of 3 in current phase
-Status: Plan 20-02 complete, ready for Plan 20-03
-Last activity: 2026-03-23 — Completed 20-02 Pane tab dots & activity bar pills
+Phase: 21 of 21 (CodeMirror Cursor Extension) — fourth of 4 phases in v2.0
+Plan: 1 of 1 in current phase
+Status: Plan 21-01 complete, Phase 21 complete, v2.0 milestone complete
+Last activity: 2026-03-23 — Completed 21-01 CodeMirror cursor extension
 
-Progress: [███████░░░] 67%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
@@ -48,6 +48,7 @@ Progress: [███████░░░] 67%
 | Phase 20-ui-presence-indicators P02 | 2min | 2 tasks | 4 files |
 | Phase 20 P02 | 2min | 2 tasks | 4 files |
 | Phase 20-ui-presence-indicators P01 | 3min | 2 tasks | 5 files |
+| Phase 21-codemirror-cursor-extension P01 | 4min | 2 tasks | 3 files |
 
 ## Previous Milestones
 
@@ -77,6 +78,10 @@ Progress: [███████░░░] 67%
 - [Phase 20]: Activity bar pills placed below icon group with subtle gradient divider matching existing pattern
 - [Phase 20]: Granular selectors for PresenceStatusIndicator: connectionState and analysts.size read separately to avoid re-render storms
 - [Phase 20]: Local analyst filtered from roster: 'you' should not appear in 'who else is here' People panel
+- [Phase 21]: Facet+StateEffect injection: cursor data flows via StateEffect dispatched from Zustand subscription, never as extension array dependency
+- [Phase 21]: presenceFilePath Facet: file identity injected via Facet.define, read inside ViewPlugin for cursor filtering and outbound path
+- [Phase 21]: Prec.low wrapping for presence extension to avoid conflicts with guard-gutter and coverage-gutter
+- [Phase 21]: 50ms throttle with JSON dedup for outbound cursor sends; MAX_REMOTE_CURSORS=20 cap
 
 ### Blockers/Concerns
 
@@ -84,6 +89,6 @@ Progress: [███████░░░] 67%
 
 ## Session Continuity
 
-Last session: 2026-03-23T16:46:53.821Z
-Stopped at: Completed 20-01-PLAN.md
+Last session: 2026-03-23T17:26:20.010Z
+Stopped at: Completed 21-01-PLAN.md
 Resume file: None

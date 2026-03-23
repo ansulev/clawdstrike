@@ -22,7 +22,15 @@ import { useDock } from "./DockContext";
 import { SessionRail } from "./SessionRail";
 import type { CapsuleContentProps, CapsuleViewMode, DockCapsuleState, ShelfMode } from "./types";
 import { useDockDemo } from "./useDockDemo";
-import { registerCapsuleRenderer, getCapsuleRenderer } from "./capsule-renderer-registry";
+import { registerCapsuleRenderer, unregisterCapsuleRenderer, getCapsuleRenderer } from "./capsule-renderer-registry";
+import type { ComponentType } from "react";
+import type { CapsuleContentProps } from "./types";
+
+/** Guard with unregister-first to survive Vite HMR re-evaluation */
+function registerBuiltinCapsuleRenderer(kind: string, component: ComponentType<CapsuleContentProps>): void {
+  unregisterCapsuleRenderer(kind);
+  registerCapsuleRenderer(kind, component);
+}
 
 // =============================================================================
 // Design Tokens
@@ -934,15 +942,15 @@ function SeasonPassContent({ capsule }: CapsuleContentProps) {
 }
 
 // Register built-in capsule renderers
-registerCapsuleRenderer("output", OutputContent);
-registerCapsuleRenderer("events", EventsContent);
-registerCapsuleRenderer("artifact", ArtifactContent);
-registerCapsuleRenderer("inspector", InspectorContent);
-registerCapsuleRenderer("terminal", TerminalContent);
-registerCapsuleRenderer("action", ActionContent);
-registerCapsuleRenderer("chat", ChatContent);
-registerCapsuleRenderer("social", SocialContent);
-registerCapsuleRenderer("season_pass", SeasonPassContent);
+registerBuiltinCapsuleRenderer("output", OutputContent);
+registerBuiltinCapsuleRenderer("events", EventsContent);
+registerBuiltinCapsuleRenderer("artifact", ArtifactContent);
+registerBuiltinCapsuleRenderer("inspector", InspectorContent);
+registerBuiltinCapsuleRenderer("terminal", TerminalContent);
+registerBuiltinCapsuleRenderer("action", ActionContent);
+registerBuiltinCapsuleRenderer("chat", ChatContent);
+registerBuiltinCapsuleRenderer("social", SocialContent);
+registerBuiltinCapsuleRenderer("season_pass", SeasonPassContent);
 // kernel_agent uses an inline fallback (no dedicated component)
 
 function getCapsuleContent(capsule: DockCapsuleState): ReactNode {

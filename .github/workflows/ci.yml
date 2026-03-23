@@ -1176,10 +1176,12 @@ jobs:
           - name: Adapter Core
             dir: packages/adapters/clawdstrike-adapter-core
             bootstrap_adapter_core: false
+            bootstrap_broker_client: false
             bootstrap_sdk: false
           - name: Hush CLI Engine
             dir: packages/adapters/clawdstrike-hush-cli-engine
             bootstrap_adapter_core: true
+            bootstrap_broker_client: false
             bootstrap_sdk: false
             bootstrap_hush: true
           - name: OpenAI

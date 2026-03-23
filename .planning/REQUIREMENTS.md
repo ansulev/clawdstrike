@@ -79,7 +79,7 @@ Provide the developer tooling layer for the ClawdStrike plugin ecosystem. The ru
 | DEVS-02 | Phase 3 | Complete |
 | DEVS-03 | Phase 3 | Complete |
 | DEVS-04 | Phase 3 | Complete |
-| DEVS-05 | Phase 3 | Pending |
+| DEVS-05 | Phase 3 | Complete |
 | DEVS-06 | Phase 3 | Complete |
 | DOCS-01 | Phase 4 | Complete |
 | DOCS-02 | Phase 4 | Complete |

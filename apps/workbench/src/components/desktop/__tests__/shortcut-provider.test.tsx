@@ -6,7 +6,7 @@ import { ShortcutProvider } from "../shortcut-provider";
 import { InitCommands } from "@/lib/commands/init-commands";
 import { usePaneStore } from "@/features/panes/pane-store";
 import { renderWithProviders } from "@/test/test-helpers";
-import { useWorkbench } from "@/features/policy/stores/multi-policy-store";
+import { useWorkbenchState } from "@/features/policy/hooks/use-policy-actions";
 import { isDesktop } from "@/lib/tauri-bridge";
 
 vi.mock("@/lib/tauri-bridge", () => ({
@@ -18,7 +18,7 @@ vi.mock("@/lib/tauri-bridge", () => ({
 }));
 
 function PolicyValidateShortcutHarness() {
-  const { dispatch, state } = useWorkbench();
+  const { dispatch, state } = useWorkbenchState();
 
   useEffect(() => {
     // Use a sub-route of /editor that doesn't get redirected by normalizeWorkbenchRoute

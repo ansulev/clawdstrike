@@ -15,8 +15,8 @@ let activePolicy: {
   };
 };
 
-vi.mock("@/features/policy/stores/multi-policy-store", () => ({
-  useWorkbench: () => ({
+vi.mock("@/features/policy/hooks/use-policy-actions", () => ({
+  useWorkbenchState: () => ({
     state: { activePolicy },
     dispatch,
   }),

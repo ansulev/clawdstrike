@@ -19,8 +19,8 @@ vi.mock("@/lib/commands/init-commands", () => ({
   InitCommands: () => null,
 }));
 
-vi.mock("@/features/policy/stores/multi-policy-store", () => ({
-  useMultiPolicy: () => ({
+vi.mock("@/features/policy/hooks/use-policy-actions", () => ({
+  usePolicyTabs: () => ({
     tabs: hasDirtyBackgroundTabs ? [{ id: "dirty", dirty: true }] : [{ id: "clean", dirty: false }],
   }),
 }));

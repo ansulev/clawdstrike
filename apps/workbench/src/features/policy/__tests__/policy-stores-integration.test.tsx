@@ -2,18 +2,15 @@ import React from "react";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import {
-  MultiPolicyProvider,
-  useMultiPolicy,
-  useWorkbench,
-} from "@/features/policy/stores/multi-policy-store";
+import { PolicyBootstrapProvider } from "@/features/policy/hooks/use-policy-bootstrap";
+import { usePolicyTabs, useWorkbenchState } from "@/features/policy/hooks/use-policy-actions";
 
 const TABS_STORAGE_KEY = "clawdstrike_workbench_tabs";
 const SAVED_POLICIES_KEY = "clawdstrike_workbench_policies";
 
 function ReopenHarness() {
-  const { multiDispatch } = useMultiPolicy();
-  const { state } = useWorkbench();
+  const { multiDispatch } = usePolicyTabs();
+  const { state } = useWorkbenchState();
 
   return React.createElement(
     "div",
@@ -55,7 +52,7 @@ function ReopenHarness() {
 }
 
 function PersistedSensitiveHarness() {
-  const { state } = useWorkbench();
+  const { state } = useWorkbenchState();
 
   return React.createElement(
     "div",
@@ -67,7 +64,7 @@ function PersistedSensitiveHarness() {
 }
 
 function PersistedSuiteHarness() {
-  const { activeTab } = useMultiPolicy();
+  const { activeTab } = usePolicyTabs();
 
   return React.createElement(
     "span",
@@ -77,7 +74,7 @@ function PersistedSuiteHarness() {
 }
 
 function PersistedFileTypeHarness() {
-  const { activeTab } = useMultiPolicy();
+  const { activeTab } = usePolicyTabs();
 
   return React.createElement(
     "span",
@@ -87,8 +84,8 @@ function PersistedFileTypeHarness() {
 }
 
 function SigmaTabHarness() {
-  const { multiDispatch, activeTab, tabs } = useMultiPolicy();
-  const { state } = useWorkbench();
+  const { multiDispatch, activeTab, tabs } = usePolicyTabs();
+  const { state } = useWorkbenchState();
 
   return React.createElement(
     "div",
@@ -150,7 +147,7 @@ level: medium
 }
 
 function SaveSensitivePolicyHarness() {
-  const { dispatch, saveCurrentPolicy } = useWorkbench();
+  const { dispatch, saveCurrentPolicy } = useWorkbenchState();
 
   return React.createElement(
     "div",
@@ -204,8 +201,8 @@ guards:
 }
 
 function YaraValidationHarness() {
-  const { multiDispatch } = useMultiPolicy();
-  const { state } = useWorkbench();
+  const { multiDispatch } = usePolicyTabs();
+  const { state } = useWorkbenchState();
 
   return React.createElement(
     "div",
@@ -321,8 +318,8 @@ rule actual_rule {
 }
 
 function StructuredValidationHarness() {
-  const { multiDispatch } = useMultiPolicy();
-  const { state } = useWorkbench();
+  const { multiDispatch } = usePolicyTabs();
+  const { state } = useWorkbenchState();
 
   return React.createElement(
     "div",
@@ -375,11 +372,11 @@ beforeEach(() => {
   localStorage.clear();
 });
 
-describe("MultiPolicyProvider", () => {
+describe("Policy store integration", () => {
   it("reloads already-open files from disk instead of only switching tabs", () => {
     render(
       React.createElement(
-        MultiPolicyProvider,
+        PolicyBootstrapProvider,
         null,
         React.createElement(ReopenHarness),
       ),
@@ -424,7 +421,7 @@ guards:
 
     render(
       React.createElement(
-        MultiPolicyProvider,
+        PolicyBootstrapProvider,
         null,
         React.createElement(PersistedSensitiveHarness),
       ),
@@ -456,7 +453,7 @@ guards:
 
       render(
         React.createElement(
-          MultiPolicyProvider,
+          PolicyBootstrapProvider,
           null,
           React.createElement(PersistedSuiteHarness),
         ),
@@ -495,7 +492,7 @@ guards:
 
     render(
       React.createElement(
-        MultiPolicyProvider,
+        PolicyBootstrapProvider,
         null,
         React.createElement(PersistedFileTypeHarness),
       ),
@@ -507,7 +504,7 @@ guards:
   it("sanitizes saved policies before persisting them to localStorage", async () => {
     render(
       React.createElement(
-        MultiPolicyProvider,
+        PolicyBootstrapProvider,
         null,
         React.createElement(SaveSensitivePolicyHarness),
       ),
@@ -527,7 +524,7 @@ guards:
   it("sanitizes saved policies even when the current yaml is invalid", async () => {
     render(
       React.createElement(
-        MultiPolicyProvider,
+        PolicyBootstrapProvider,
         null,
         React.createElement(SaveSensitivePolicyHarness),
       ),
@@ -548,7 +545,7 @@ guards:
   it("does not rewrite non-policy tabs through UPDATE_META actions", () => {
     render(
       React.createElement(
-        MultiPolicyProvider,
+        PolicyBootstrapProvider,
         null,
         React.createElement(SigmaTabHarness),
       ),
@@ -567,7 +564,7 @@ guards:
   it("opens typed detection files in new tabs without clobbering the current tab", () => {
     render(
       React.createElement(
-        MultiPolicyProvider,
+        PolicyBootstrapProvider,
         null,
         React.createElement(SigmaTabHarness),
       ),
@@ -611,7 +608,7 @@ level: medium
 
     render(
       React.createElement(
-        MultiPolicyProvider,
+        PolicyBootstrapProvider,
         null,
         React.createElement(SigmaTabHarness),
       ),
@@ -625,7 +622,7 @@ level: medium
   it("does not miscount braces inside YARA regex literals", () => {
     render(
       React.createElement(
-        MultiPolicyProvider,
+        PolicyBootstrapProvider,
         null,
         React.createElement(YaraValidationHarness),
       ),
@@ -640,7 +637,7 @@ level: medium
   it("keeps multi-line YARA hex strings out of structural brace counting", () => {
     render(
       React.createElement(
-        MultiPolicyProvider,
+        PolicyBootstrapProvider,
         null,
         React.createElement(YaraValidationHarness),
       ),
@@ -655,7 +652,7 @@ level: medium
   it("ignores braces inside YARA block comments", () => {
     render(
       React.createElement(
-        MultiPolicyProvider,
+        PolicyBootstrapProvider,
         null,
         React.createElement(YaraValidationHarness),
       ),
@@ -670,7 +667,7 @@ level: medium
   it("ignores rule declarations that appear only inside multiline comments", () => {
     render(
       React.createElement(
-        MultiPolicyProvider,
+        PolicyBootstrapProvider,
         null,
         React.createElement(YaraValidationHarness),
       ),
@@ -685,7 +682,7 @@ level: medium
   it("detects rule declarations that follow an inline block-comment prefix", () => {
     render(
       React.createElement(
-        MultiPolicyProvider,
+        PolicyBootstrapProvider,
         null,
         React.createElement(YaraValidationHarness),
       ),
@@ -700,7 +697,7 @@ level: medium
   it("rejects Sigma sources without object-valued detection selectors", () => {
     render(
       React.createElement(
-        MultiPolicyProvider,
+        PolicyBootstrapProvider,
         null,
         React.createElement(StructuredValidationHarness),
       ),
@@ -717,7 +714,7 @@ level: medium
   it("rejects OCSF sources with invalid required field types", () => {
     render(
       React.createElement(
-        MultiPolicyProvider,
+        PolicyBootstrapProvider,
         null,
         React.createElement(StructuredValidationHarness),
       ),

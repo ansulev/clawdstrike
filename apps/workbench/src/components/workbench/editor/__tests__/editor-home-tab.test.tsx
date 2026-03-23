@@ -15,9 +15,9 @@ const multiPolicyState = {
   canAddTab: true,
 };
 
-vi.mock("@/features/policy/stores/multi-policy-store", () => ({
-  useMultiPolicy: () => multiPolicyState,
-  useWorkbench: () => ({ openFile, openFileByPath }),
+vi.mock("@/features/policy/hooks/use-policy-actions", () => ({
+  usePolicyTabs: () => multiPolicyState,
+  useWorkbenchState: () => ({ openFile, openFileByPath }),
 }));
 
 vi.mock("@/features/policy/stores/policy-store", () => ({

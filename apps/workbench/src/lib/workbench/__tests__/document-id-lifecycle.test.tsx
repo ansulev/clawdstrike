@@ -11,14 +11,12 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { render, act } from "@testing-library/react";
 import React from "react";
-import {
-  MultiPolicyProvider,
-  useMultiPolicy,
-} from "../multi-policy-store";
+import { PolicyBootstrapProvider } from "@/features/policy/hooks/use-policy-bootstrap";
+import { usePolicyTabs } from "@/features/policy/hooks/use-policy-actions";
 
 // Helper to capture the multi-policy context
-function TestHarness({ onContext }: { onContext: (ctx: ReturnType<typeof useMultiPolicy>) => void }) {
-  const ctx = useMultiPolicy();
+function TestHarness({ onContext }: { onContext: (ctx: ReturnType<typeof usePolicyTabs>) => void }) {
+  const ctx = usePolicyTabs();
   React.useEffect(() => {
     onContext(ctx);
   });
@@ -35,12 +33,12 @@ describe("documentId lifecycle", () => {
   });
 
   it("new tabs have a documentId", () => {
-    let captured: ReturnType<typeof useMultiPolicy> | null = null;
+    let captured: ReturnType<typeof usePolicyTabs> | null = null;
 
     render(
-      <MultiPolicyProvider>
+      <PolicyBootstrapProvider>
         <TestHarness onContext={(ctx) => { captured = ctx; }} />
-      </MultiPolicyProvider>,
+      </PolicyBootstrapProvider>,
     );
 
     expect(captured).not.toBeNull();
@@ -51,12 +49,12 @@ describe("documentId lifecycle", () => {
   });
 
   it("tabs created via NEW_TAB each get unique documentIds", () => {
-    let captured: ReturnType<typeof useMultiPolicy> | null = null;
+    let captured: ReturnType<typeof usePolicyTabs> | null = null;
 
     render(
-      <MultiPolicyProvider>
+      <PolicyBootstrapProvider>
         <TestHarness onContext={(ctx) => { captured = ctx; }} />
-      </MultiPolicyProvider>,
+      </PolicyBootstrapProvider>,
     );
 
     const firstDocId = captured!.activeTab!.documentId;
@@ -71,12 +69,12 @@ describe("documentId lifecycle", () => {
   });
 
   it("DUPLICATE_TAB generates a new documentId", () => {
-    let captured: ReturnType<typeof useMultiPolicy> | null = null;
+    let captured: ReturnType<typeof usePolicyTabs> | null = null;
 
     render(
-      <MultiPolicyProvider>
+      <PolicyBootstrapProvider>
         <TestHarness onContext={(ctx) => { captured = ctx; }} />
-      </MultiPolicyProvider>,
+      </PolicyBootstrapProvider>,
     );
 
     const originalTab = captured!.activeTab!;
@@ -91,12 +89,12 @@ describe("documentId lifecycle", () => {
   });
 
   it("documentId persists across save/restore cycle", () => {
-    let captured: ReturnType<typeof useMultiPolicy> | null = null;
+    let captured: ReturnType<typeof usePolicyTabs> | null = null;
 
     const { unmount } = render(
-      <MultiPolicyProvider>
+      <PolicyBootstrapProvider>
         <TestHarness onContext={(ctx) => { captured = ctx; }} />
-      </MultiPolicyProvider>,
+      </PolicyBootstrapProvider>,
     );
 
     const originalDocId = captured!.activeTab!.documentId;
@@ -114,11 +112,11 @@ describe("documentId lifecycle", () => {
         unmount();
 
         // Re-render to restore from localStorage
-        let restored: ReturnType<typeof useMultiPolicy> | null = null;
+        let restored: ReturnType<typeof usePolicyTabs> | null = null;
         render(
-          <MultiPolicyProvider>
+          <PolicyBootstrapProvider>
             <TestHarness onContext={(ctx) => { restored = ctx; }} />
-          </MultiPolicyProvider>,
+          </PolicyBootstrapProvider>,
         );
 
         expect(restored).not.toBeNull();
@@ -132,12 +130,12 @@ describe("documentId lifecycle", () => {
   });
 
   it("OPEN_TAB_OR_SWITCH preserves documentId when switching to existing tab", () => {
-    let captured: ReturnType<typeof useMultiPolicy> | null = null;
+    let captured: ReturnType<typeof usePolicyTabs> | null = null;
 
     render(
-      <MultiPolicyProvider>
+      <PolicyBootstrapProvider>
         <TestHarness onContext={(ctx) => { captured = ctx; }} />
-      </MultiPolicyProvider>,
+      </PolicyBootstrapProvider>,
     );
 
     // Open a file
@@ -173,12 +171,12 @@ describe("documentId lifecycle", () => {
   });
 
   it("opening same file after close resolves same documentId via alias store", () => {
-    let captured: ReturnType<typeof useMultiPolicy> | null = null;
+    let captured: ReturnType<typeof usePolicyTabs> | null = null;
 
     render(
-      <MultiPolicyProvider>
+      <PolicyBootstrapProvider>
         <TestHarness onContext={(ctx) => { captured = ctx; }} />
-      </MultiPolicyProvider>,
+      </PolicyBootstrapProvider>,
     );
 
     // Open a file
@@ -230,12 +228,12 @@ describe("documentId lifecycle", () => {
     };
     localStorage.setItem("clawdstrike_workbench_tabs", JSON.stringify(legacyState));
 
-    let captured: ReturnType<typeof useMultiPolicy> | null = null;
+    let captured: ReturnType<typeof usePolicyTabs> | null = null;
 
     render(
-      <MultiPolicyProvider>
+      <PolicyBootstrapProvider>
         <TestHarness onContext={(ctx) => { captured = ctx; }} />
-      </MultiPolicyProvider>,
+      </PolicyBootstrapProvider>,
     );
 
     expect(captured).not.toBeNull();
@@ -247,12 +245,12 @@ describe("documentId lifecycle", () => {
   });
 
   it("Sigma and YARA tabs also get documentIds", () => {
-    let captured: ReturnType<typeof useMultiPolicy> | null = null;
+    let captured: ReturnType<typeof usePolicyTabs> | null = null;
 
     render(
-      <MultiPolicyProvider>
+      <PolicyBootstrapProvider>
         <TestHarness onContext={(ctx) => { captured = ctx; }} />
-      </MultiPolicyProvider>,
+      </PolicyBootstrapProvider>,
     );
 
     act(() => {

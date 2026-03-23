@@ -107,14 +107,19 @@ export function getPluginIconPath(icon: string): string | undefined {
   return pluginIconMap.get(icon);
 }
 
-/** Register a custom icon SVG path. Returns dispose function. */
+/** Register a custom icon SVG path. Returns dispose function that restores the previous value. */
 export function registerPluginIcon(
   icon: string,
   svgPath: string,
 ): () => void {
+  const previous = pluginIconMap.get(icon);
   pluginIconMap.set(icon, svgPath);
   return () => {
-    pluginIconMap.delete(icon);
+    if (previous !== undefined) {
+      pluginIconMap.set(icon, previous);
+    } else {
+      pluginIconMap.delete(icon);
+    }
   };
 }
 

@@ -798,6 +798,7 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           cargo build --release --target ${{ matrix.target }} -p hush-cli --bin hush --bin clawdstrike
+          cargo build --release --target ${{ matrix.target }} -p hushd --bin hushd
 
       - name: Rename binary (Unix)
         if: runner.os != 'Windows'

@@ -4,6 +4,7 @@ import type {
   HuntStationId,
 } from "@/features/observatory/world/types";
 import { ObservatoryWorldCanvas } from "@/features/observatory/components/ObservatoryWorldCanvas";
+import { createInitialObservatoryProbeState } from "@/features/observatory/world/probeRuntime";
 import type { NexusSpiritSceneActor } from "../scene/spirits/runtime";
 import type {
   NexusLayoutMode,
@@ -48,6 +49,7 @@ const STRIKECELL_BY_STATION: Record<HuntStationId, StrikecellDomainId> = {
   "case-notes": "policies",
   watch: "threat-radar",
 };
+const EMPTY_OBSERVATORY_PROBE_STATE = createInitialObservatoryProbeState();
 
 export function NexusCanvas({
   activeStrikecellId,
@@ -67,6 +69,8 @@ export function NexusCanvas({
         className="absolute inset-0"
         mode="atlas"
         sceneState={observatorySceneState}
+        mission={null}
+        probeState={EMPTY_OBSERVATORY_PROBE_STATE}
         activeStationId={activeStationId}
         cameraResetToken={cameraResetToken}
         spirit={

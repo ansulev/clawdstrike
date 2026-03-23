@@ -45,7 +45,7 @@ describe("observatory mission loop", () => {
     expect(getCurrentObservatoryMissionObjective(complete)).toBeNull();
   });
 
-  it("can branch to evidence before operations after Subjects", () => {
+  it("preserves the default objective order unless a dynamic plan is supplied", () => {
     const mission = createObservatoryMissionLoopState("hunt-42", 100);
     const afterHorizon = completeObservatoryMissionObjective(mission, "signal-dish-tower", 200);
     const afterSubjects = completeObservatoryMissionObjective(
@@ -56,10 +56,10 @@ describe("observatory mission loop", () => {
     );
 
     expect(afterSubjects.branch).toBe("evidence-first");
-    expect(getCurrentObservatoryMissionObjective(afterSubjects)?.stationId).toBe("receipts");
+    expect(getCurrentObservatoryMissionObjective(afterSubjects)?.stationId).toBe("run");
 
-    const afterEvidence = completeObservatoryMissionObjective(afterSubjects, "evidence-vault-rack", 400);
-    expect(getCurrentObservatoryMissionObjective(afterEvidence)?.stationId).toBe("run");
+    const afterRun = completeObservatoryMissionObjective(afterSubjects, "operations-scan-rig", 400);
+    expect(getCurrentObservatoryMissionObjective(afterRun)?.stationId).toBe("receipts");
   });
 
   it("derives the evidence-first branch from live scene pressure", () => {

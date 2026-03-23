@@ -22,7 +22,7 @@ const COOLDOWN_MS = 10_000;
 
 export function SpiritExperienceTracker() {
   const kind = useSpiritStore.use.kind();
-  const activeProbes = useObservatoryStore.use.seamSummary().activeProbes;
+  const activeProbes = useObservatoryStore((state) => state.seamSummary.activeProbes);
   const { tabs } = useMultiPolicy();
   const hasLintErrors = tabs.some((t) => t.validation.errors.length > 0);
 

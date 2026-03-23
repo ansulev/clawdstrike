@@ -224,6 +224,7 @@ export function DesktopLayout() {
       <HuntTelemetryBridge />
       {/* Observatory live adapter — derives routeable observatory state from hunt telemetry */}
       <ObservatoryTelemetryBridge />
+      {/* Command registry initialization + global keyboard shortcuts */}
       <InitCommands />
       <ShortcutProvider />
       <CommandPalette />

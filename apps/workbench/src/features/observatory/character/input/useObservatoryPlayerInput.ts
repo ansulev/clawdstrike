@@ -10,6 +10,7 @@ import {
   type ObservatoryPlayerIntent,
   type ObservatoryPlayerKeyState,
 } from "../types";
+import { getObservatoryNowMs } from "../../utils/observatory-time";
 
 const DOUBLE_SPACE_FLIP_WINDOW_MS = 300;
 
@@ -139,7 +140,7 @@ export function useObservatoryPlayerInput(
             type: "keydown",
             code: event.code,
             repeat: event.repeat,
-            nowMs: performance.now(),
+            nowMs: getObservatoryNowMs(),
           },
           bindings,
         ));
@@ -152,7 +153,7 @@ export function useObservatoryPlayerInput(
             type: "keyup",
             code: event.code,
             repeat: event.repeat,
-            nowMs: performance.now(),
+            nowMs: getObservatoryNowMs(),
           },
           bindings,
         ));

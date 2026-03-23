@@ -1,6 +1,6 @@
 // apps/workbench/src/features/observatory/__tests__/flow-mode-controller.test.tsx
 // Covers OBS-06 (WASD character controller Easter-egg)
-import { describe, it, expect, vi } from "vitest";
+import { afterEach, beforeEach, describe, it, expect, vi } from "vitest";
 import { render, fireEvent } from "@testing-library/react";
 
 // Mock @react-three/fiber so jsdom doesn't break
@@ -15,6 +15,14 @@ vi.mock("@react-three/fiber", () => ({
 import { FlowModeController } from "@/features/observatory/components/FlowModeController";
 
 describe("FlowModeController (OBS-06)", () => {
+  beforeEach(() => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it("renders null when characterControllerEnabled is false", () => {
     const { container } = render(
       <FlowModeController characterControllerEnabled={false} onEnable={vi.fn()} />,

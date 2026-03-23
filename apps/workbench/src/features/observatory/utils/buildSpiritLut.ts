@@ -2,6 +2,7 @@ import * as THREE from "three";
 import type { SpiritKind } from "@/features/spirit/types";
 
 export const SPIRIT_LUT_SIZE = 17; // 17×17×17 — sufficient quality, low memory
+const SPIRIT_LUT_CACHE = new Map<SpiritKind, THREE.Data3DTexture>();
 
 /**
  * Color transform functions — one per spirit kind.
@@ -86,6 +87,11 @@ const SPIRIT_LUT_TRANSFORMS: Record<SpiritKind, ColorTransform> = {
  * internally — callers should memoize with useMemo keyed on spiritKind).
  */
 export function buildSpiritLut(kind: SpiritKind): THREE.Data3DTexture {
+  const cached = SPIRIT_LUT_CACHE.get(kind);
+  if (cached) {
+    return cached;
+  }
+
   const SIZE = SPIRIT_LUT_SIZE;
   const data = new Uint8Array(SIZE * SIZE * SIZE * 4);
   const transform = SPIRIT_LUT_TRANSFORMS[kind];
@@ -118,5 +124,6 @@ export function buildSpiritLut(kind: SpiritKind): THREE.Data3DTexture {
   texture.wrapT = THREE.ClampToEdgeWrapping;
   texture.wrapR = THREE.ClampToEdgeWrapping;
   texture.needsUpdate = true;
+  SPIRIT_LUT_CACHE.set(kind, texture);
   return texture;
 }

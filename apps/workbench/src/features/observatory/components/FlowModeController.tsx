@@ -12,6 +12,7 @@ import { useObservatoryPlayerRuntime } from "../character/controller/useObservat
 import { DEFAULT_OBSERVATORY_PLAYER_SPAWN } from "../character/types";
 import { createObservatoryBoundaryColliders } from "../character/physics/colliders";
 import type { RapierRigidBody } from "@react-three/rapier";
+import { getObservatoryNowMs } from "../utils/observatory-time";
 
 export interface FlowModeControllerProps {
   /** Whether the character controller Easter-egg is active */
@@ -78,7 +79,7 @@ function PlayerController({ paneIsActive }: { paneIsActive: boolean }) {
   useFrame((_, delta) => {
     if (!rigidBodyRef.current) return;
 
-    const nowMs = performance.now();
+    const nowMs = getObservatoryNowMs();
     const result = runtime.step(intent, {
       deltaSeconds: delta,
       nowMs,

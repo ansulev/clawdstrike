@@ -5,12 +5,16 @@ import { SpiritCompanionCanvas } from "../components/spirit-companion-canvas";
 import { useSpiritStore } from "../stores/spirit-store";
 import { useSpiritEvolutionStore } from "../stores/spirit-evolution-store";
 
+const fiberMock = vi.hoisted(() => ({
+  canvasProps: [] as Array<Record<string, unknown>>,
+}));
+
 vi.mock("@react-three/fiber", () => ({
-  Canvas: ({ children }: { children: React.ReactNode }) => (
-    <div data-testid="r3f-canvas">{children}</div>
-  ),
+  Canvas: ({ children, ...props }: { children: React.ReactNode }) => {
+    fiberMock.canvasProps.push(props);
+    return <div data-testid="r3f-canvas">{children}</div>;
+  },
   useFrame: vi.fn(),
-  useThree: () => ({ invalidate: vi.fn() }),
 }));
 
 vi.mock("@react-three/drei", () => ({
@@ -19,6 +23,7 @@ vi.mock("@react-three/drei", () => ({
 
 describe("SpiritCompanionCanvas", () => {
   beforeEach(() => {
+    fiberMock.canvasProps.length = 0;
     useSpiritStore.getState().actions.unbindSpirit();
     useSpiritEvolutionStore.getState().actions._reset();
   });
@@ -41,6 +46,13 @@ describe("SpiritCompanionCanvas", () => {
     useSpiritStore.getState().actions.bindSpirit("oracle");
     const { getByTestId } = render(<SpiritCompanionCanvas />);
     expect(getByTestId("r3f-canvas")).toBeDefined();
+  });
+
+  it("keeps the companion canvas on an always-on frameloop so ambient motion does not stall", () => {
+    useSpiritStore.getState().actions.bindSpirit("oracle");
+    render(<SpiritCompanionCanvas />);
+    const latestCanvasProps = fiberMock.canvasProps[fiberMock.canvasProps.length - 1];
+    expect(latestCanvasProps?.frameloop).toBe("always");
   });
 
   describe("level-gated geometry", () => {

@@ -18,7 +18,7 @@ import { deriveSpiritMood } from "../mood";
 export function SpiritMoodReactor() {
   const kind = useSpiritStore.use.kind();
   const setMood = useSpiritStore.use.actions().setMood;
-  const activeProbes = useObservatoryStore.use.seamSummary().activeProbes;
+  const activeProbes = useObservatoryStore((state) => state.seamSummary.activeProbes);
   const { tabs } = useMultiPolicy();
 
   const hasLintErrors = tabs.some((t) => t.validation.errors.length > 0);

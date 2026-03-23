@@ -1,8 +1,8 @@
 // apps/workbench/src/features/spirit/components/spirit-companion-canvas.tsx
 
-import { Canvas, useFrame, useThree } from "@react-three/fiber";
+import { Canvas, useFrame } from "@react-three/fiber";
 import { Trail } from "@react-three/drei";
-import { useRef, Suspense, useEffect } from "react";
+import { useRef, Suspense } from "react";
 import * as THREE from "three";
 import { useSpiritStore } from "../stores/spirit-store";
 import { useSpiritEvolutionStore } from "../stores/spirit-evolution-store";
@@ -121,17 +121,11 @@ function SpiritOrbScene({
   level: number;
 }) {
   const meshRef = useRef<THREE.Mesh>(null);
-  const { invalidate } = useThree();
   const burstRef = useRef<{ active: boolean; t: number }>({
     active: false,
     t: 0,
   });
   const levelRef = useRef<number>(level);
-
-  // Trigger a render whenever spirit state changes (demand frameloop)
-  useEffect(() => {
-    invalidate();
-  }, [accentColor, mood, level, invalidate]);
 
   useFrame((_, delta) => {
     if (!meshRef.current) return;
@@ -205,7 +199,7 @@ export function SpiritCompanionCanvas() {
   return (
     <div style={{ width: 150, height: 150 }}>
       <Canvas
-        frameloop="demand"
+        frameloop="always"
         dpr={[1, 1.8]}
         gl={{ antialias: true, alpha: false, powerPreference: "high-performance" }}
         camera={{ position: [0, 0, 3.5], fov: 40 }}

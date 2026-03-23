@@ -1,4 +1,5 @@
 // Ported from huntronomer apps/desktop/src/features/hunt-observatory/world/missionLoop.ts
+import type { HuntPattern, Investigation } from "@/lib/workbench/hunt-types";
 import type { HuntObservatorySceneState, HuntStationId } from "./types";
 import type { ObservatoryHeroPropAssetId } from "./propAssets";
 
@@ -7,7 +8,8 @@ export type ObservatoryMissionObjectiveId =
   | "resolve-subject-cluster"
   | "arm-operations-scan"
   | "inspect-evidence-arrival"
-  | "seal-judgment-finding";
+  | "seal-judgment-finding"
+  | "raise-watchfield-perimeter";
 
 export type ObservatoryMissionBranch = "operations-first" | "evidence-first";
 
@@ -19,6 +21,9 @@ export interface ObservatoryMissionObjective {
   actionLabel: string;
   hint: string;
   completionRead: string;
+  supportingStationIds?: HuntStationId[];
+  rationale?: string | null;
+  confidence?: number;
 }
 
 export interface ObservatoryMissionLoopProgress {
@@ -27,6 +32,12 @@ export interface ObservatoryMissionLoopProgress {
   runArmed: boolean;
   evidenceInspected: boolean;
   findingSealed: boolean;
+  watchfieldRaised: boolean;
+}
+
+export interface ObservatoryMissionPlan {
+  briefing: string;
+  objectives: ObservatoryMissionObjective[];
 }
 
 export interface ObservatoryMissionLoopState {
@@ -35,12 +46,15 @@ export interface ObservatoryMissionLoopState {
   completedAtMs: number | null;
   status: "in-progress" | "completed";
   branch: ObservatoryMissionBranch | null;
+  briefing: string;
   completedObjectiveIds: ObservatoryMissionObjectiveId[];
+  objectives: ObservatoryMissionObjective[];
   progress: ObservatoryMissionLoopProgress;
 }
 
 export interface ObservatoryMissionLoopOptions {
   branchHint?: ObservatoryMissionBranch | null;
+  plan?: ObservatoryMissionPlan;
 }
 
 const OBJECTIVES: Record<ObservatoryMissionObjectiveId, ObservatoryMissionObjective> = {
@@ -89,6 +103,15 @@ const OBJECTIVES: Record<ObservatoryMissionObjectiveId, ObservatoryMissionObject
     hint: "Climb to Judgment and seal the active finding on the dais.",
     completionRead: "Judgment has sealed the current finding into the hunt scaffold.",
   },
+  "raise-watchfield-perimeter": {
+    id: "raise-watchfield-perimeter",
+    stationId: "watch",
+    assetId: "watchfield-sentinel-beacon",
+    title: "Raise the Watchfield perimeter",
+    actionLabel: "Raise perimeter",
+    hint: "Move to Watchfield and raise the outer beacon lattice before returning to the finding.",
+    completionRead: "The watchfield perimeter is raised and the outer patrol ring is holding.",
+  },
 };
 
 export const OBSERVATORY_MISSION_OBJECTIVES: ObservatoryMissionObjective[] = [
@@ -96,6 +119,7 @@ export const OBSERVATORY_MISSION_OBJECTIVES: ObservatoryMissionObjective[] = [
   OBJECTIVES["resolve-subject-cluster"],
   OBJECTIVES["arm-operations-scan"],
   OBJECTIVES["inspect-evidence-arrival"],
+  OBJECTIVES["raise-watchfield-perimeter"],
   OBJECTIVES["seal-judgment-finding"],
 ];
 
@@ -114,7 +138,225 @@ function nextMissionProgress(
       return { ...progress, evidenceInspected: true };
     case "seal-judgment-finding":
       return { ...progress, findingSealed: true };
+    case "raise-watchfield-perimeter":
+      return { ...progress, watchfieldRaised: true };
   }
+}
+
+function stationArtifactCount(
+  sceneState: HuntObservatorySceneState | null,
+  stationId: HuntStationId,
+): number {
+  return sceneState?.stations.find((station) => station.id === stationId)?.artifactCount ?? 0;
+}
+
+function stationReason(
+  sceneState: HuntObservatorySceneState | null,
+  stationId: HuntStationId,
+): string | null {
+  return sceneState?.stations.find((station) => station.id === stationId)?.reason ?? null;
+}
+
+function withObjectiveOverrides(
+  objectiveId: ObservatoryMissionObjectiveId,
+  overrides: Partial<ObservatoryMissionObjective>,
+): ObservatoryMissionObjective {
+  return {
+    ...OBJECTIVES[objectiveId],
+    ...overrides,
+  };
+}
+
+const COMPOUND_SUPPORT_MAP: Record<HuntStationId, HuntStationId[]> = {
+  signal: ["targets", "receipts"],
+  targets: ["signal", "receipts"],
+  run: ["receipts", "case-notes"],
+  receipts: ["run", "signal"],
+  "case-notes": ["watch", "receipts"],
+  watch: ["case-notes", "signal"],
+};
+
+function getStation(
+  sceneState: HuntObservatorySceneState | null,
+  stationId: HuntStationId,
+) {
+  return sceneState?.stations.find((station) => station.id === stationId) ?? null;
+}
+
+function getStationPressureScore(
+  sceneState: HuntObservatorySceneState | null,
+  stationId: HuntStationId,
+): number {
+  const station = getStation(sceneState, stationId);
+  if (!station) return 0;
+  const statusBoost =
+    station.status === "receiving"
+      ? 0.18
+      : station.status === "active"
+        ? 0.1
+        : station.status === "warming"
+          ? 0.04
+          : 0;
+  return Math.min(1, station.emphasis * 0.58 + station.affinity * 0.28 + Math.min(0.12, station.artifactCount * 0.03) + statusBoost);
+}
+
+function joinStationLabels(labels: string[]): string {
+  if (labels.length <= 1) {
+    return labels[0] ?? "";
+  }
+  if (labels.length === 2) {
+    return `${labels[0]} and ${labels[1]}`;
+  }
+  return `${labels.slice(0, -1).join(", ")}, and ${labels[labels.length - 1]}`;
+}
+
+function buildCompoundMissionContext(
+  sceneState: HuntObservatorySceneState | null,
+  primaryId: HuntStationId,
+): {
+  confidence: number;
+  rationale: string;
+  supportingStationIds: HuntStationId[];
+} | null {
+  const primary = getStation(sceneState, primaryId);
+  if (!primary) return null;
+
+  const candidateIds = COMPOUND_SUPPORT_MAP[primaryId];
+  const supportingStations = candidateIds
+    .map((stationId) => getStation(sceneState, stationId))
+    .filter((station): station is NonNullable<typeof station> => Boolean(station))
+    .filter((station) => {
+      const supportScore = getStationPressureScore(sceneState, station.id);
+      return (
+        supportScore >= 0.36
+        || station.status === "receiving"
+        || station.status === "active"
+        || station.artifactCount > 1
+      );
+    });
+
+  if (supportingStations.length === 0) {
+    return null;
+  }
+
+  const primaryScore = getStationPressureScore(sceneState, primaryId);
+  const supportScores = supportingStations.map((station) => getStationPressureScore(sceneState, station.id));
+  const supportLabels = supportingStations.map((station) => station.label);
+  const rationaleParts = supportingStations.map((station) => {
+    const reason = station.reason?.trim().replace(/\.$/, "");
+    return reason ?? `${station.label} pressure is elevated`;
+  });
+  const rationale = `${primary.label} should stay paired with ${joinStationLabels(supportLabels)} because ${joinStationLabels(rationaleParts)}.`;
+  const confidence = Math.min(
+    0.98,
+    0.4
+      + primaryScore * 0.26
+      + (supportScores.reduce((sum, score) => sum + score, 0) / supportScores.length) * 0.28
+      + Math.min(0.08, (supportingStations.length - 1) * 0.04),
+  );
+
+  return {
+    confidence,
+    rationale,
+    supportingStationIds: supportingStations.map((station) => station.id),
+  };
+}
+
+export function createObservatoryMissionPlan(input: {
+  investigations?: Investigation[];
+  patterns?: HuntPattern[];
+  sceneState: HuntObservatorySceneState | null;
+}): ObservatoryMissionPlan {
+  const investigations = input.investigations ?? [];
+  const patterns = input.patterns ?? [];
+  const branch = deriveObservatoryMissionBranch(input.sceneState);
+  const watchCount = stationArtifactCount(input.sceneState, "watch");
+  const policyGapCount = investigations.filter((investigation) => investigation.verdict === "policy-gap").length;
+  const openInvestigations = investigations.filter(
+    (investigation) => investigation.status === "open" || investigation.status === "in-progress",
+  ).length;
+  const livePatterns = patterns.filter((pattern) => pattern.status !== "dismissed").length;
+  const includeWatchfield = watchCount > 0 || openInvestigations >= 2;
+  const middleObjectiveIds: ObservatoryMissionObjectiveId[] =
+    branch === "evidence-first"
+      ? ["inspect-evidence-arrival", "arm-operations-scan"]
+      : ["arm-operations-scan", "inspect-evidence-arrival"];
+  const watchfieldObjectiveIds: ObservatoryMissionObjectiveId[] = includeWatchfield
+    ? ["raise-watchfield-perimeter"]
+    : [];
+  const sequence: ObservatoryMissionObjectiveId[] = [
+    "acknowledge-horizon-ingress",
+    "resolve-subject-cluster",
+    ...middleObjectiveIds,
+    ...watchfieldObjectiveIds,
+    "seal-judgment-finding",
+  ];
+
+  const objectives = sequence.map((objectiveId) => {
+    const compoundSupport = buildCompoundMissionContext(input.sceneState, OBJECTIVES[objectiveId].stationId);
+    switch (objectiveId) {
+      case "acknowledge-horizon-ingress":
+        return withObjectiveOverrides(objectiveId, {
+          hint: stationReason(input.sceneState, "signal") ?? OBJECTIVES[objectiveId].hint,
+          supportingStationIds: compoundSupport?.supportingStationIds,
+          rationale: compoundSupport?.rationale ?? null,
+          confidence: compoundSupport?.confidence,
+        });
+      case "resolve-subject-cluster":
+        return withObjectiveOverrides(objectiveId, {
+          hint: stationReason(input.sceneState, "targets") ?? OBJECTIVES[objectiveId].hint,
+          supportingStationIds: compoundSupport?.supportingStationIds,
+          rationale: compoundSupport?.rationale ?? null,
+          confidence: compoundSupport?.confidence,
+        });
+      case "arm-operations-scan":
+        return withObjectiveOverrides(objectiveId, {
+          hint: stationReason(input.sceneState, "run") ?? OBJECTIVES[objectiveId].hint,
+          supportingStationIds: compoundSupport?.supportingStationIds,
+          rationale: compoundSupport?.rationale ?? null,
+          confidence: compoundSupport?.confidence,
+        });
+      case "inspect-evidence-arrival":
+        return withObjectiveOverrides(objectiveId, {
+          hint: stationReason(input.sceneState, "receipts") ?? OBJECTIVES[objectiveId].hint,
+          supportingStationIds: compoundSupport?.supportingStationIds,
+          rationale: compoundSupport?.rationale ?? null,
+          confidence: compoundSupport?.confidence,
+        });
+      case "raise-watchfield-perimeter":
+        return withObjectiveOverrides(objectiveId, {
+          hint: stationReason(input.sceneState, "watch") ?? OBJECTIVES[objectiveId].hint,
+          supportingStationIds: compoundSupport?.supportingStationIds,
+          rationale: compoundSupport?.rationale ?? null,
+          confidence: compoundSupport?.confidence,
+        });
+      case "seal-judgment-finding":
+        {
+          const judgmentPressureCount = Math.max(policyGapCount, livePatterns, openInvestigations);
+        return withObjectiveOverrides(objectiveId, {
+          hint:
+            stationReason(input.sceneState, "case-notes")
+            ?? (judgmentPressureCount > 0
+              ? `Judgment is holding ${judgmentPressureCount} live pressure lane${judgmentPressureCount === 1 ? "" : "s"} for sealing.`
+              : OBJECTIVES[objectiveId].hint),
+          supportingStationIds: compoundSupport?.supportingStationIds,
+          rationale: compoundSupport?.rationale ?? null,
+          confidence: compoundSupport?.confidence,
+        });
+        }
+    }
+  });
+
+  const compoundObjective = objectives.find((objective) => objective.supportingStationIds?.length);
+  const briefing =
+    branch === "evidence-first"
+      ? `Evidence is outrunning Operations, so route the loop through receipts before returning to the scan rig.${compoundObjective?.rationale ? ` Compound recommendation: ${compoundObjective.rationale}` : ""}${includeWatchfield ? " Watchfield pressure is high enough to raise the perimeter before sealing the finding." : ""}`
+      : `Operations is carrying the current load, so stabilize the run lane before fanning evidence into Judgment.${compoundObjective?.rationale ? ` Compound recommendation: ${compoundObjective.rationale}` : ""}${includeWatchfield ? " Watchfield pressure is high enough to raise the perimeter before sealing the finding." : ""}`;
+
+  return {
+    briefing,
+    objectives,
+  };
 }
 
 // NOTE: deriveObservatoryMissionBranch reads station status fields ("receiving" | "active").
@@ -148,19 +390,23 @@ export function createObservatoryMissionLoopState(
   nowMs = 0,
   options: ObservatoryMissionLoopOptions = {},
 ): ObservatoryMissionLoopState {
+  const plan = options.plan ?? createObservatoryMissionPlan({ sceneState: null });
   return {
     huntId,
     startedAtMs: nowMs,
     completedAtMs: null,
     status: "in-progress",
     branch: options.branchHint ?? null,
+    briefing: plan.briefing,
     completedObjectiveIds: [],
+    objectives: plan.objectives,
     progress: {
       acknowledgedIngress: false,
       subjectsResolved: false,
       runArmed: false,
       evidenceInspected: false,
       findingSealed: false,
+      watchfieldRaised: false,
     },
   };
 }
@@ -169,6 +415,11 @@ function resolveCurrentObjectiveId(
   mission: ObservatoryMissionLoopState,
 ): ObservatoryMissionObjectiveId | null {
   if (mission.status === "completed") return null;
+  if (mission.objectives.length > 0) {
+    return mission.objectives.find(
+      (objective) => !mission.completedObjectiveIds.includes(objective.id),
+    )?.id ?? null;
+  }
   if (!mission.progress.acknowledgedIngress) return "acknowledge-horizon-ingress";
   if (!mission.progress.subjectsResolved) return "resolve-subject-cluster";
 
@@ -190,7 +441,8 @@ export function getCurrentObservatoryMissionObjective(
 ): ObservatoryMissionObjective | null {
   if (!mission) return null;
   const objectiveId = resolveCurrentObjectiveId(mission);
-  return objectiveId ? OBJECTIVES[objectiveId] : null;
+  if (!objectiveId) return null;
+  return mission.objectives.find((objective) => objective.id === objectiveId) ?? OBJECTIVES[objectiveId];
 }
 
 export function resolveObservatoryMissionProbeTargetStationId(

@@ -41,7 +41,7 @@ export function PaneContainer({
         initial={{ opacity: 0, y: 6 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.15, ease: "easeOut" }}
-        className="min-h-0 flex-1 overflow-auto"
+        className="relative min-h-0 flex-1 flex flex-col overflow-auto"
       >
         <PaneRouteRenderer route={activeView.route} />
       </motion.div>

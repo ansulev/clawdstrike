@@ -1,6 +1,11 @@
 import { commandRegistry } from "@/lib/command-registry";
 import type { Command } from "@/lib/command-registry";
 import { usePaneStore } from "@/features/panes/pane-store";
+import {
+  dispatchObservatoryProbeCommand,
+  resetObservatoryMission,
+  startObservatoryMission,
+} from "@/features/observatory/commands/observatory-command-actions";
 
 /**
  * registerHuntronomerCommands — 5 Hunt-category commands for the command palette.
@@ -45,9 +50,7 @@ export function registerHuntronomerCommands(): void {
       id: "observatory.probe",
       title: "Probe Active Station",
       category: "Hunt",
-      execute: () => {
-        window.dispatchEvent(new CustomEvent("observatory:probe"));
-      },
+      execute: () => dispatchObservatoryProbeCommand(),
     },
     {
       id: "receipt.open",
@@ -59,18 +62,13 @@ export function registerHuntronomerCommands(): void {
       id: "observatory.mission.start",
       title: "Start Observatory Mission",
       category: "Observatory",
-      execute: () => {
-        window.dispatchEvent(new CustomEvent("observatory:mission:start"));
-        usePaneStore.getState().openApp("/observatory", "Observatory");
-      },
+      execute: () => startObservatoryMission(),
     },
     {
       id: "observatory.mission.reset",
       title: "Reset Observatory Mission",
       category: "Observatory",
-      execute: () => {
-        window.dispatchEvent(new CustomEvent("observatory:mission:reset"));
-      },
+      execute: () => resetObservatoryMission(),
     },
   ];
 

@@ -54,7 +54,11 @@ Plans:
   2. Plugin storage state set via `context.storage.set()` before a hot reload is still readable via `context.storage.get()` after the reload completes
   3. The dev console bottom panel shows timestamped lifecycle events (activated, deactivated, error) and console output from the active dev plugin
   4. Changing a shared utility imported by one plugin only reloads that plugin, leaving other loaded plugins untouched
-**Plans**: TBD
+**Plans:** 3 plans
+Plans:
+- [ ] 03-01-PLAN.md — Vite plugin package: file watching, HMR WebSocket events, per-file plugin ID mapping
+- [ ] 03-02-PLAN.md — Client-side HMR handler: deactivate/unregister/reimport/reload cycle, storage state preservation
+- [ ] 03-03-PLAN.md — Dev console bottom panel: lifecycle event store, console interceptor, PluginDevConsole component
 
 ### Phase 4: Documentation
 **Goal**: Plugin authors can learn the entire plugin development lifecycle -- from scaffolding to publishing -- through structured guides and auto-generated API reference
@@ -91,6 +95,6 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 |-------|----------------|--------|-----------|
 | 1. Testing Harness | 0/2 | Planning complete | - |
 | 2. CLI Scaffolding | 0/TBD | Not started | - |
-| 3. Dev Server | 0/TBD | Not started | - |
+| 3. Dev Server | 0/3 | Planning complete | - |
 | 4. Documentation | 0/2 | Planned | - |
 | 5. Plugin Playground | 0/TBD | Not started | - |

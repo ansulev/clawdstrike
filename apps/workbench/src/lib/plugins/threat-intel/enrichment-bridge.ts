@@ -62,7 +62,6 @@ export function useEnrichmentBridge(
   const [isEnriching, setIsEnriching] = useState(false);
   const [results, setResults] = useState<EnrichmentResult[]>([]);
   const abortControllerRef = useRef<AbortController | null>(null);
-  const pendingCountRef = useRef(0);
 
   const cancel = useCallback(() => {
     if (abortControllerRef.current) {
@@ -114,67 +113,50 @@ export function useEnrichmentBridge(
         return;
       }
 
-      // Track how many enrich calls are in flight
-      const totalCalls = indicators.length;
-      pendingCountRef.current = totalCalls;
-      let completedCalls = 0;
-
-      // Accumulate all received results from onResult callbacks
-      const receivedSourceIds = new Set<string>();
-
-      // Fan out enrichment requests (one per indicator)
-      for (const indicator of indicators) {
-        orchestrator
-          .enrich(indicator, {
-            signal,
-            onResult: (result: EnrichmentResult) => {
-              receivedSourceIds.add(result.sourceId);
-
-              // Update the specific source status to "done"
-              setSourceStatuses((prev) =>
-                prev.map((s) =>
-                  s.sourceId === result.sourceId
-                    ? { ...s, status: "done" as const, result }
-                    : s,
-                ),
-              );
-
-              // Append to results
-              setResults((prev) => [...prev, result]);
-            },
-          })
-          .then(() => {
-            completedCalls++;
-            if (completedCalls >= totalCalls) {
-              // All enrich calls have resolved -- mark any sources still "loading" as "done"
-              setSourceStatuses((prev) =>
-                prev.map((s) =>
-                  s.status === "loading" ? { ...s, status: "done" as const } : s,
-                ),
-              );
-              setIsEnriching(false);
-            }
-          })
-          .catch((err: unknown) => {
-            completedCalls++;
-            // onError path: mark sources that haven't responded as "error"
-            const errorMessage =
-              err instanceof Error ? err.message : "Enrichment failed";
-
+      // Fan out enrichment requests (one per indicator) using Promise.allSettled
+      // to avoid the race condition of manual counter tracking.
+      const promises = indicators.map((indicator) =>
+        orchestrator.enrich(indicator, {
+          signal,
+          onResult: (result: EnrichmentResult) => {
             setSourceStatuses((prev) =>
-              prev.map((s) => {
-                if (s.status === "loading" && !receivedSourceIds.has(s.sourceId)) {
-                  return { ...s, status: "error" as const, error: errorMessage };
-                }
-                return s;
-              }),
+              prev.map((s) =>
+                s.sourceId === result.sourceId
+                  ? { ...s, status: "done" as const, result }
+                  : s,
+              ),
             );
+            setResults((prev) => [...prev, result]);
+          },
+        }),
+      );
 
-            if (completedCalls >= totalCalls) {
-              setIsEnriching(false);
+      Promise.allSettled(promises).then((settled) => {
+        // Collect error messages from rejected promises
+        const errors = settled
+          .filter(
+            (r): r is PromiseRejectedResult => r.status === "rejected",
+          )
+          .map((r) =>
+            r.reason instanceof Error
+              ? r.reason.message
+              : "Enrichment failed",
+          );
+
+        // Mark any remaining loading sources as done or errored
+        setSourceStatuses((prev) =>
+          prev.map((s) => {
+            if (s.status === "loading") {
+              if (errors.length > 0) {
+                return { ...s, status: "error" as const, error: errors[0] };
+              }
+              return { ...s, status: "done" as const };
             }
-          });
-      }
+            return s;
+          }),
+        );
+        setIsEnriching(false);
+      });
     },
     [orchestrator, cancel],
   );

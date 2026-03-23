@@ -62,8 +62,13 @@ export function unregisterStatusBarItem(id: string): void {
   }
 }
 
-/** Get all items for a side, sorted by priority. */
+/** Get all items for a side, sorted by priority. Rebuilds if stale. */
 export function getStatusBarItems(side: "left" | "right"): StatusBarItem[] {
+  // Ensure snapshots are current even if called before any listener fires
+  // (e.g., module-scope registrations before React mounts)
+  if (snapshotLeft.length === 0 && snapshotRight.length === 0 && itemMap.size > 0) {
+    rebuildSnapshots();
+  }
   return side === "left" ? snapshotLeft : snapshotRight;
 }
 

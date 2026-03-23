@@ -42,43 +42,50 @@ interface PluginDescriptor {
   create: (secrets: (string | null)[]) => ReturnType<typeof createVirusTotalSource>;
 }
 
+/** Validate primary secret is present; throws if missing (caller should have checked). */
+function requireSecret(secrets: (string | null)[], index: number, name: string): string {
+  const val = secrets[index];
+  if (!val) throw new Error(`Missing required secret: ${name}`);
+  return val;
+}
+
 const PLUGINS: PluginDescriptor[] = [
   {
     pluginId: VIRUSTOTAL_MANIFEST.id,
     displayName: VIRUSTOTAL_MANIFEST.displayName ?? "VirusTotal",
     secretKeys: ["api_key"],
-    create: ([apiKey]) => createVirusTotalSource(apiKey!),
+    create: (secrets) => createVirusTotalSource(requireSecret(secrets, 0, "api_key")),
   },
   {
     pluginId: GREYNOISE_MANIFEST.id,
     displayName: GREYNOISE_MANIFEST.displayName ?? "GreyNoise",
     secretKeys: ["api_key"],
-    create: ([apiKey]) => createGreyNoiseSource(apiKey!),
+    create: (secrets) => createGreyNoiseSource(requireSecret(secrets, 0, "api_key")),
   },
   {
     pluginId: SHODAN_MANIFEST.id,
     displayName: SHODAN_MANIFEST.displayName ?? "Shodan",
     secretKeys: ["api_key"],
-    create: ([apiKey]) => createShodanSource(apiKey!),
+    create: (secrets) => createShodanSource(requireSecret(secrets, 0, "api_key")),
   },
   {
     pluginId: ABUSEIPDB_MANIFEST.id,
     displayName: ABUSEIPDB_MANIFEST.displayName ?? "AbuseIPDB",
     secretKeys: ["api_key"],
-    create: ([apiKey]) => createAbuseIPDBSource(apiKey!),
+    create: (secrets) => createAbuseIPDBSource(requireSecret(secrets, 0, "api_key")),
   },
   {
     pluginId: OTX_MANIFEST.id,
     displayName: OTX_MANIFEST.displayName ?? "AlienVault OTX",
     secretKeys: ["api_key"],
-    create: ([apiKey]) => createOtxSource(apiKey!),
+    create: (secrets) => createOtxSource(requireSecret(secrets, 0, "api_key")),
   },
   {
     pluginId: MISP_MANIFEST.id,
     displayName: MISP_MANIFEST.displayName ?? "MISP",
     secretKeys: ["api_key", "base_url"],
-    create: ([apiKey, baseUrl]) =>
-      createMispSource(apiKey!, baseUrl ?? "https://localhost"),
+    create: (secrets) =>
+      createMispSource(requireSecret(secrets, 0, "api_key"), requireSecret(secrets, 1, "base_url")),
   },
 ];
 

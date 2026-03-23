@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v6.0
 milestone_name: milestone
 status: executing
-stopped_at: Milestone activated
-last_updated: "2026-03-23T01:00:00.000Z"
+stopped_at: Completed 01-02-PLAN.md
+last_updated: "2026-03-23T00:31:15.403Z"
 progress:
   total_phases: 5
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 12
-  completed_plans: 1
-  percent: 8
+  completed_plans: 2
+  percent: 17
 ---
 
 # Project State
@@ -20,15 +20,15 @@ progress:
 See: .planning/PROJECT.md
 
 **Core value:** Plugin developer experience — testing, scaffolding, dev server, docs, playground
-**Current focus:** v6.0 Plugin Developer Experience — Phase 1 Testing Harness
+**Current focus:** v6.0 Plugin Developer Experience — Phase 2 CLI Scaffolding
 
 ## Current Position
 
-Phase: 1 of 5 (Testing Harness)
+Phase: 2 of 5 (CLI Scaffolding)
 Plan: 1 of 2
 Status: Executing
 
-Progress: [█░░░░░░░░░] 8%
+Progress: [██░░░░░░░░] 17%
 
 ## Previous Milestones
 
@@ -52,6 +52,8 @@ Progress: [█░░░░░░░░░] 8%
 ### Decisions
 - SpyContext returns { ctx, spy } object rather than extending PluginContext with a spy property (01-01)
 - MockStorageApi/MockSecretsApi are exported classes for instanceof checks and convenience methods (01-01)
+- Removed permissions validation from SDK manifest-validation.ts -- SDK PluginManifest has no permissions field (01-02)
+- Re-exported createTestManifest through testing.ts for single import path convenience (01-02)
 
 ### Pending Todos
 None.
@@ -61,6 +63,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-23T00:24:19Z
-Stopped at: Completed 01-01-PLAN.md
+Last session: 2026-03-23T00:30:24Z
+Stopped at: Completed 01-02-PLAN.md
 Resume file: None

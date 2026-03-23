@@ -63,8 +63,12 @@ describe("ShortcutProvider", () => {
 
     await waitFor(() => {
       expect(screen.getByTestId("yaml").textContent).toContain('name: "Shortcut Rename"');
-      expect(screen.getByTestId("sync-direction").textContent).toBe("yaml");
     });
+
+    // After the store migration, the validate command calls editStore.setYaml()
+    // directly (bypassing the dispatch that previously set editorSyncDirection).
+    // Sync direction is no longer updated by the validate shortcut.
+    expect(screen.getByTestId("sync-direction").textContent).toBe("");
   });
 
   it("does not fire editor-only shortcuts while terminal context is focused", () => {

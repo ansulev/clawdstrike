@@ -4,8 +4,7 @@ import { screen } from "@testing-library/react";
 import { cleanup, render } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { DesktopLayout } from "../desktop-layout";
-
-let hasDirtyBackgroundTabs = false;
+import { usePolicyTabsStore } from "@/features/policy/stores/policy-tabs-store";
 
 vi.mock("@/lib/tauri-bridge", () => ({
   isDesktop: vi.fn(() => false),
@@ -19,11 +18,10 @@ vi.mock("@/lib/commands/init-commands", () => ({
   InitCommands: () => null,
 }));
 
-vi.mock("@/features/policy/hooks/use-policy-actions", () => ({
-  usePolicyTabs: () => ({
-    tabs: hasDirtyBackgroundTabs ? [{ id: "dirty", dirty: true }] : [{ id: "clean", dirty: false }],
-  }),
-}));
+vi.mock("@/features/policy/stores/policy-store", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/features/policy/stores/policy-store")>();
+  return { ...actual };
+});
 
 vi.mock("@/lib/workbench/use-auto-save", () => ({
   useAutoSave: () => ({
@@ -118,12 +116,18 @@ vi.mock("@/features/panes/pane-root", () => ({
 }));
 
 afterEach(() => {
-  hasDirtyBackgroundTabs = false;
+  usePolicyTabsStore.getState()._reset();
   cleanup();
 });
 
 function renderLayout(route = "/editor", withDirtyBackgroundTab = false) {
-  hasDirtyBackgroundTabs = withDirtyBackgroundTab;
+  if (withDirtyBackgroundTab) {
+    // Mark the default tab as dirty in the real Zustand store
+    const { tabs } = usePolicyTabsStore.getState();
+    if (tabs.length > 0) {
+      usePolicyTabsStore.getState().setDirty(tabs[0].id, true);
+    }
+  }
   return render(
     <MemoryRouter initialEntries={[route]}>
       <DesktopLayout />

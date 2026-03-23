@@ -370,7 +370,7 @@ export function SystemHeartbeat({
 export function DesktopSidebar() {
   const pathname = useLocation().pathname;
   
-  const collapsed = useWorkbenchUIStore.getState().sidebarCollapsed;
+  const collapsed = useWorkbenchUIStore((s) => s.sidebarCollapsed);
   const { currentOperator } = useOperator();
   const { connection } = useFleetConnection();
   const fleetConnected = connection.connected;

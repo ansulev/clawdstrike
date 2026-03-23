@@ -54,8 +54,12 @@ function getShiftArrow(kind: ObservatoryProbeGuidance["delta"]["kind"]): ShiftAr
     case "cause-shift":
       return { symbol: "→", color: "#fbbf24" }; // text-amber-400
     case "steady":
-    default:
       return { symbol: "—", color: "#60a5fa" }; // text-blue-400
+    default: {
+      const _exhaustive: never = kind;
+      void _exhaustive;
+      return { symbol: "→", color: "#60a5fa" }; // fallback for unknown kinds
+    }
   }
 }
 

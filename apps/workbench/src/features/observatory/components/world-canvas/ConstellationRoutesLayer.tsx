@@ -48,7 +48,10 @@ export function ConstellationRoutesLayer({
   // Respect the 12-constellation cap (display only up to CONSTELLATION_MAX_COUNT)
   const visibleConstellations = constellations.slice(0, CONSTELLATION_MAX_COUNT);
 
-  const constellationKey = visibleConstellations.map((c) => c.id).join(",");
+  const constellationKey = useMemo(
+    () => visibleConstellations.map((c) => c.id).join(","),
+    [visibleConstellations],
+  );
 
   const lineData = useMemo(() => {
     return visibleConstellations.map((route) => {

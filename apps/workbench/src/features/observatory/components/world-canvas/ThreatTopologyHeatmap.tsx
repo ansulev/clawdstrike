@@ -9,7 +9,7 @@
  * 6 station pressure values mapped to a 6-stop SOC color ramp.
  */
 
-import { useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import type { ReactElement } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
@@ -136,7 +136,7 @@ export function ThreatTopologyHeatmap({
   visible = true,
   presetOpacityMultiplier = 1.0,
 }: ThreatTopologyHeatmapProps): ReactElement | null {
-  const materialRef = useRef<THREE.ShaderMaterial | null>(null);
+  const materialRef = useRef<THREE.ShaderMaterial>(null);
 
   // Build station XZ position vec2 uniforms once
   const stationUniforms = useMemo<Record<string, { value: THREE.Vector2 }>>(() => {
@@ -179,6 +179,11 @@ export function ThreatTopologyHeatmap({
     [stationUniforms],
   );
 
+  // Keep materialRef in sync with the memoized ShaderMaterial instance
+  useEffect(() => {
+    materialRef.current = material;
+  }, [material]);
+
   // Animate pulse + update pressure uniforms each frame (no re-creation)
   useFrame(({ clock }) => {
     const mat = materialRef.current;
@@ -203,7 +208,6 @@ export function ThreatTopologyHeatmap({
   return (
     <mesh
       material={material}
-      ref={materialRef as unknown as React.RefObject<THREE.Mesh>}
       position={[0, -2, 0]}
       rotation={[-Math.PI / 2, 0, 0]}
     >

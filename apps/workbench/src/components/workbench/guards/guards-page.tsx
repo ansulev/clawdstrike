@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { useWorkbench } from "@/lib/workbench/multi-policy-store";
+import { useWorkbench } from "@/features/policy/stores/multi-policy-store";
 import { GUARD_REGISTRY, GUARD_CATEGORIES } from "@/lib/workbench/guard-registry";
 import type { GuardMeta, GuardCategory, GuardId } from "@/lib/workbench/types";
 import { useToast } from "@/components/ui/toast";

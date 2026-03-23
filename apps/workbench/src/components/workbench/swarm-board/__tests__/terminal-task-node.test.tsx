@@ -2,7 +2,7 @@ import React from "react";
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 
-import type { SwarmBoardNodeData, SessionStatus } from "@/lib/workbench/swarm-board-types";
+import type { SwarmBoardNodeData, SessionStatus } from "@/features/swarm/swarm-board-types";
 
 // ---------------------------------------------------------------------------
 // Mock @xyflow/react — Handle is used by the real component

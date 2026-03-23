@@ -9,7 +9,7 @@ import { memo } from "react";
 import { Handle, Position, NodeResizer, type NodeProps } from "@xyflow/react";
 import { IconFileDiff } from "@tabler/icons-react";
 import { cn } from "@/lib/utils";
-import type { SwarmBoardNodeData } from "@/lib/workbench/swarm-board-types";
+import type { SwarmBoardNodeData } from "@/features/swarm/swarm-board-types";
 
 function DiffNodeInner({ data, selected }: NodeProps) {
   const d = data as SwarmBoardNodeData;

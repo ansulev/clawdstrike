@@ -1,8 +1,8 @@
 import { useState, useCallback, useRef, useMemo, useEffect } from "react";
-import { useWorkbench } from "@/lib/workbench/multi-policy-store";
-import { useFleetConnection } from "@/lib/workbench/use-fleet-connection";
+import { useWorkbench } from "@/features/policy/stores/multi-policy-store";
+import { useFleetConnection } from "@/features/fleet/use-fleet-connection";
 import { useToast } from "@/components/ui/toast";
-import { policyToYaml } from "@/lib/workbench/yaml-utils";
+import { policyToYaml } from "@/features/policy/yaml-utils";
 import { isDesktop, savePolicyFile } from "@/lib/tauri-bridge";
 import { cn } from "@/lib/utils";
 import { SubTabBar, type SubTab } from "../shared/sub-tab-bar";

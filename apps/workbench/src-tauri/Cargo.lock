@@ -592,7 +592,7 @@ dependencies = [
 
 [[package]]
 name = "clawdstrike"
-version = "0.2.7"
+version = "0.2.6"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
@@ -628,25 +628,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "clawdstrike-logos"
-version = "0.2.7"
-dependencies = [
- "clawdstrike",
- "glob",
- "hush-core",
- "hush-proxy",
- "logos-ffi",
- "regex",
- "regex-syntax",
- "serde",
- "serde_json",
- "thiserror 2.0.18",
- "tracing",
-]
-
-[[package]]
 name = "clawdstrike-ocsf"
-version = "0.2.7"
+version = "0.2.6"
 dependencies = [
  "chrono",
  "serde",
@@ -662,7 +645,6 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "clawdstrike",
- "clawdstrike-logos",
  "clawdstrike-ocsf",
  "dirs-next",
  "getrandom 0.2.17",
@@ -2240,7 +2222,7 @@ checksum = "6dbf3de79e51f3d586ab4cb9d5c3e2c14aa28ed23d180cf89b4df0454a69cc87"
 
 [[package]]
 name = "hunt-correlate"
-version = "0.2.7"
+version = "0.2.6"
 dependencies = [
  "async-nats",
  "chrono",
@@ -2262,7 +2244,7 @@ dependencies = [
 
 [[package]]
 name = "hunt-query"
-version = "0.2.7"
+version = "0.2.6"
 dependencies = [
  "async-nats",
  "chrono",
@@ -2285,7 +2267,7 @@ dependencies = [
 
 [[package]]
 name = "hunt-scan"
-version = "0.2.7"
+version = "0.2.6"
 dependencies = [
  "chrono",
  "clawdstrike",
@@ -2309,7 +2291,7 @@ dependencies = [
 
 [[package]]
 name = "hush-core"
-version = "0.2.7"
+version = "0.2.6"
 dependencies = [
  "chrono",
  "ed25519-dalek",
@@ -2328,7 +2310,7 @@ dependencies = [
 
 [[package]]
 name = "hush-proxy"
-version = "0.2.7"
+version = "0.2.6"
 dependencies = [
  "globset",
  "serde",
@@ -2337,7 +2319,7 @@ dependencies = [
 
 [[package]]
 name = "hush-spine"
-version = "0.2.7"
+version = "0.2.6"
 dependencies = [
  "async-nats",
  "chrono",
@@ -3000,18 +2982,6 @@ name = "log"
 version = "0.4.29"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5e5032e24019045c762d3c0f28f5b6b8bbf38563a65908389bf7978758920897"
-
-[[package]]
-name = "logos-ffi"
-version = "0.2.7"
-dependencies = [
- "chrono",
- "hex",
- "serde",
- "serde_json",
- "sha2",
- "thiserror 2.0.18",
-]
 
 [[package]]
 name = "lru-slab"

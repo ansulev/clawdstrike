@@ -1,7 +1,7 @@
 import { useCallback, useRef, useState } from "react";
-import { useWorkbench } from "@/lib/workbench/multi-policy-store";
+import { useWorkbench } from "@/features/policy/stores/multi-policy-store";
 import { useToast } from "@/components/ui/toast";
-import { yamlToPolicy, policyToFormat, formatExtension, formatMimeType, type ExportFormat } from "@/lib/workbench/yaml-utils";
+import { yamlToPolicy, policyToFormat, formatExtension, formatMimeType, type ExportFormat } from "@/features/policy/yaml-utils";
 import { emitAuditEvent } from "@/lib/workbench/local-audit";
 import {
   Select,

@@ -8,7 +8,7 @@ import {
 } from "@tabler/icons-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { FILE_TYPE_REGISTRY, type FileType } from "@/lib/workbench/file-type-registry";
-import type { DetectionProject, ProjectFile } from "@/lib/workbench/project-store";
+import type { DetectionProject, ProjectFile } from "@/features/project/stores/project-store";
 import { ExplorerTreeItem } from "./explorer-tree-item";
 import { cn } from "@/lib/utils";
 

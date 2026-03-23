@@ -10,8 +10,8 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Button as MovingBorderButton } from "@/components/ui/moving-border";
-import { useWorkbench } from "@/lib/workbench/multi-policy-store";
-import { useFleetConnection } from "@/lib/workbench/use-fleet-connection";
+import { useWorkbench } from "@/features/policy/stores/multi-policy-store";
+import { useFleetConnection } from "@/features/fleet/use-fleet-connection";
 import type {
   TestScenario,
   TestActionType,

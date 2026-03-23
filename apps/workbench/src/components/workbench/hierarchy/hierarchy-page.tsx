@@ -32,7 +32,7 @@ import {
   IconLoader2,
 } from "@tabler/icons-react";
 import { cn } from "@/lib/utils";
-import { useWorkbench } from "@/lib/workbench/multi-policy-store";
+import { useWorkbench } from "@/features/policy/stores/multi-policy-store";
 import { GUARD_REGISTRY } from "@/lib/workbench/guard-registry";
 import type { OrgNode, OrgNodeType, PolicyHierarchy, EffectivePolicy } from "@/lib/workbench/hierarchy-types";
 import {
@@ -54,7 +54,7 @@ import {
   normalizeHierarchy,
   type HierarchyValidationIssue,
 } from "@/lib/workbench/hierarchy-engine";
-import { useFleetConnection } from "@/lib/workbench/use-fleet-connection";
+import { useFleetConnection } from "@/features/fleet/use-fleet-connection";
 import {
   fetchScopedPolicies,
   fetchPolicyAssignments,
@@ -62,12 +62,12 @@ import {
   createHierarchyNode,
   updateHierarchyNode,
   deleteHierarchyNode,
-} from "@/lib/workbench/fleet-client";
+} from "@/features/fleet/fleet-client";
 import type {
   HierarchyNode,
   HierarchyNodeInput,
   HierarchyTreeResponse,
-} from "@/lib/workbench/fleet-client";
+} from "@/features/fleet/fleet-client";
 
 
 const NODE_TYPE_COLORS: Record<OrgNodeType, string> = {

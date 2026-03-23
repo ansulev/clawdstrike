@@ -2,7 +2,7 @@ import React from "react";
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
-import type { SwarmBoardNodeData } from "@/lib/workbench/swarm-board-types";
+import type { SwarmBoardNodeData } from "@/features/swarm/swarm-board-types";
 
 // ---------------------------------------------------------------------------
 // Stub component exercising the artifact node contract.

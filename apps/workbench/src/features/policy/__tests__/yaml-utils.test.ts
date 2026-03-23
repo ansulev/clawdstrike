@@ -8,8 +8,8 @@ import {
   formatMimeType,
   yamlToPolicy,
   validatePolicy,
-} from "../yaml-utils";
-import type { WorkbenchPolicy } from "../types";
+} from "@/features/policy/yaml-utils";
+import type { WorkbenchPolicy } from "@/lib/workbench/types";
 
 
 function makeMinimalPolicy(overrides?: Partial<WorkbenchPolicy>): WorkbenchPolicy {

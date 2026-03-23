@@ -9,8 +9,8 @@ import {
 } from "@tabler/icons-react";
 import { cn } from "@/lib/utils";
 import { PageHeader } from "../shared/page-header";
-import { AGENT_POLL_MS, useFleetConnection } from "@/lib/workbench/use-fleet-connection";
-import type { AgentInfo } from "@/lib/workbench/fleet-client";
+import { AGENT_POLL_MS, useFleetConnection } from "@/features/fleet/use-fleet-connection";
+import type { AgentInfo } from "@/features/fleet/fleet-client";
 import { Link } from "react-router-dom";
 
 const STALE_THRESHOLD_SECS = 90;

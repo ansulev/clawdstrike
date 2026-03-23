@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback } from "react";
-import { useMultiPolicy } from "@/lib/workbench/multi-policy-store";
-import type { PolicyTab } from "@/lib/workbench/multi-policy-store";
+import { useMultiPolicy } from "@/features/policy/stores/multi-policy-store";
+import type { PolicyTab } from "@/features/policy/stores/multi-policy-store";
 import { GUARD_REGISTRY, GUARD_CATEGORIES } from "@/lib/workbench/guard-registry";
 import type { GuardId } from "@/lib/workbench/types";
 import { cn } from "@/lib/utils";

@@ -8,7 +8,7 @@
 import { memo, useMemo } from "react";
 import { Handle, Position, NodeResizer, type NodeProps } from "@xyflow/react";
 import { cn } from "@/lib/utils";
-import type { SwarmBoardNodeData, SessionStatus } from "@/lib/workbench/swarm-board-types";
+import type { SwarmBoardNodeData, SessionStatus } from "@/features/swarm/swarm-board-types";
 
 // ---------------------------------------------------------------------------
 // Status styles — restrained, functional colors

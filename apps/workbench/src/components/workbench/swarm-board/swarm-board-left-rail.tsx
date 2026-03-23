@@ -10,8 +10,8 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { IconCircleFilled } from "@tabler/icons-react";
 import { cn } from "@/lib/utils";
-import { useSwarmBoard } from "@/lib/workbench/swarm-board-store";
-import type { SwarmBoardNodeData, SessionStatus } from "@/lib/workbench/swarm-board-types";
+import { useSwarmBoard } from "@/features/swarm/stores/swarm-board-store";
+import type { SwarmBoardNodeData, SessionStatus } from "@/features/swarm/swarm-board-types";
 
 // ---------------------------------------------------------------------------
 // Constants

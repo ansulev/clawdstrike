@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useFleetConnection } from "@/lib/workbench/use-fleet-connection";
+import { useFleetConnection } from "@/features/fleet/use-fleet-connection";
 import { cn } from "@/lib/utils";
 import { IconUpload, IconRadar, IconCircle } from "@tabler/icons-react";
 import { ObserveSynthPanel } from "./observe-synth-panel";

@@ -5,9 +5,9 @@ const fleetClientMocks = vi.hoisted(() => ({
   fetchAuditEvents: vi.fn(),
 }));
 
-vi.mock("@/lib/workbench/fleet-client", async () => {
-  const actual = await vi.importActual<typeof import("@/lib/workbench/fleet-client")>(
-    "@/lib/workbench/fleet-client",
+vi.mock("@/features/fleet/fleet-client", async () => {
+  const actual = await vi.importActual<typeof import("@/features/fleet/fleet-client")>(
+    "@/features/fleet/fleet-client",
   );
 
   return {
@@ -16,9 +16,9 @@ vi.mock("@/lib/workbench/fleet-client", async () => {
   };
 });
 
-vi.mock("@/lib/workbench/use-fleet-connection", async () => {
-  const actual = await vi.importActual<typeof import("@/lib/workbench/use-fleet-connection")>(
-    "@/lib/workbench/use-fleet-connection",
+vi.mock("@/features/fleet/use-fleet-connection", async () => {
+  const actual = await vi.importActual<typeof import("@/features/fleet/use-fleet-connection")>(
+    "@/features/fleet/use-fleet-connection",
   );
 
   return {
@@ -49,7 +49,7 @@ vi.mock("@/lib/workbench/use-fleet-connection", async () => {
 });
 
 import { HuntLayout } from "../hunt-layout";
-import { MultiPolicyProvider } from "@/lib/workbench/multi-policy-store";
+import { MultiPolicyProvider } from "@/features/policy/stores/multi-policy-store";
 
 async function flushMicrotasks() {
   await Promise.resolve();

@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useSyncExternalStore } from "react";
 import { useNavigate } from "react-router-dom";
-import { useWorkbench, useMultiPolicy } from "@/lib/workbench/multi-policy-store";
-import { useFleetConnection } from "@/lib/workbench/use-fleet-connection";
+import { useWorkbench, useMultiPolicy } from "@/features/policy/stores/multi-policy-store";
+import { useFleetConnection } from "@/features/fleet/use-fleet-connection";
 import { useMcpStatus } from "@/lib/workbench/use-mcp-status";
 import { isDesktop } from "@/lib/tauri-bridge";
 import { FILE_TYPE_REGISTRY } from "@/lib/workbench/file-type-registry";

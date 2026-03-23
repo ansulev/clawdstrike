@@ -1,8 +1,8 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { useWorkbench, useMultiPolicy } from "@/lib/workbench/multi-policy-store";
-import { getRecentFiles } from "@/lib/workbench/policy-store";
-import { BUILTIN_RULESETS, type BuiltinRuleset } from "@/lib/workbench/builtin-rulesets";
+import { useWorkbench, useMultiPolicy } from "@/features/policy/stores/multi-policy-store";
+import { getRecentFiles } from "@/features/policy/stores/policy-store";
+import { BUILTIN_RULESETS, type BuiltinRuleset } from "@/features/policy/builtin-rulesets";
 import {
   listBuiltinRulesets,
   loadBuiltinRuleset,
@@ -10,7 +10,7 @@ import {
 import { isDesktop } from "@/lib/tauri-bridge";
 import { cn } from "@/lib/utils";
 import { SubTabBar, type SubTab } from "../shared/sub-tab-bar";
-import { useHintSettingsSafe, type HintId } from "@/lib/workbench/use-hint-settings";
+import { useHintSettingsSafe, type HintId } from "@/features/settings/use-hint-settings";
 import {
   IconFile,
   IconFolderOpen,

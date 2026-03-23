@@ -1,5 +1,5 @@
 import { useState, useCallback, useMemo, useEffect, useRef } from "react";
-import { useWorkbench } from "@/lib/workbench/multi-policy-store";
+import { useWorkbench } from "@/features/policy/stores/multi-policy-store";
 import { usePersistedReceipts } from "@/lib/workbench/use-persisted-receipts";
 import type { Receipt, Verdict, GuardId, TestActionType } from "@/lib/workbench/types";
 import { GUARD_REGISTRY } from "@/lib/workbench/guard-registry";
@@ -16,12 +16,12 @@ import {
 import { signReceiptNative, signReceiptPersistentNative, simulateActionNative } from "@/lib/tauri-commands";
 import { isDesktop } from "@/lib/tauri-bridge";
 import { emitAuditEvent } from "@/lib/workbench/local-audit";
-import { useFleetConnection } from "@/lib/workbench/use-fleet-connection";
+import { useFleetConnection } from "@/features/fleet/use-fleet-connection";
 import {
   storeReceiptsBatch,
   fetchReceipts as apiFetchReceipts,
   type FleetReceipt,
-} from "@/lib/workbench/fleet-client";
+} from "@/features/fleet/fleet-client";
 import {
   verdictFromNativeGuardResult,
   verdictFromNativeSimulation,

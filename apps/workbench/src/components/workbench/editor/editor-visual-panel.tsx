@@ -8,8 +8,8 @@ import { DeployPanel } from "@/components/workbench/editor/deploy-panel";
 import { OriginEditor } from "@/components/workbench/editor/origin-editor";
 import { GUARD_CATEGORIES } from "@/lib/workbench/guard-registry";
 import type { GuardId } from "@/lib/workbench/types";
-import { useWorkbench } from "@/lib/workbench/multi-policy-store";
-import { countNativeErrors } from "@/lib/workbench/use-native-validation";
+import { useWorkbench } from "@/features/policy/stores/multi-policy-store";
+import { countNativeErrors } from "@/features/policy/use-native-validation";
 import { useGuardOrder } from "@/lib/workbench/use-guard-order";
 import { cn } from "@/lib/utils";
 import {

@@ -6,7 +6,7 @@ import {
   MultiPolicyProvider,
   useMultiPolicy,
   useWorkbench,
-} from "../multi-policy-store";
+} from "@/features/policy/stores/multi-policy-store";
 
 const TABS_STORAGE_KEY = "clawdstrike_workbench_tabs";
 const SAVED_POLICIES_KEY = "clawdstrike_workbench_policies";

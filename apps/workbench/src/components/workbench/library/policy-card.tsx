@@ -1,7 +1,7 @@
 import { useCallback } from "react";
 import { WobbleCard } from "@/components/ui/wobble-card";
-import { useWorkbench } from "@/lib/workbench/multi-policy-store";
-import { yamlToPolicy } from "@/lib/workbench/yaml-utils";
+import { useWorkbench } from "@/features/policy/stores/multi-policy-store";
+import { yamlToPolicy } from "@/features/policy/yaml-utils";
 import { cn } from "@/lib/utils";
 import { IconEye, IconDownload, IconTrash } from "@tabler/icons-react";
 

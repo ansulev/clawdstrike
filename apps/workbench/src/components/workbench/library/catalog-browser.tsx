@@ -6,9 +6,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useWorkbench } from "@/lib/workbench/multi-policy-store";
-import { yamlToPolicy, policyToYaml } from "@/lib/workbench/yaml-utils";
-import { useFleetConnection } from "@/lib/workbench/use-fleet-connection";
+import { useWorkbench } from "@/features/policy/stores/multi-policy-store";
+import { yamlToPolicy, policyToYaml } from "@/features/policy/yaml-utils";
+import { useFleetConnection } from "@/features/fleet/use-fleet-connection";
 import {
   POLICY_CATALOG,
   CATALOG_CATEGORIES,
@@ -16,7 +16,7 @@ import {
   type CatalogEntry,
   type CatalogCategory,
   type CatalogDifficulty,
-} from "@/lib/workbench/policy-catalog";
+} from "@/features/policy/policy-catalog";
 import {
   fetchCatalogTemplates,
   fetchCatalogCategories,
@@ -24,7 +24,7 @@ import {
   forkCatalogTemplate,
   type CatalogTemplate,
   type CatalogCategoryInfo,
-} from "@/lib/workbench/fleet-client";
+} from "@/features/fleet/fleet-client";
 import { cn } from "@/lib/utils";
 import {
   IconSearch,

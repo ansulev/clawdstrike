@@ -4,11 +4,11 @@ import {
   CollapsibleTrigger,
   CollapsibleContent,
 } from "@/components/ui/collapsible";
-import { useWorkbench } from "@/lib/workbench/multi-policy-store";
+import { useWorkbench } from "@/features/policy/stores/multi-policy-store";
 import { GUARD_REGISTRY } from "@/lib/workbench/guard-registry";
 import { loadBuiltinRuleset } from "@/lib/tauri-commands";
-import { BUILTIN_RULESETS } from "@/lib/workbench/builtin-rulesets";
-import { yamlToPolicy } from "@/lib/workbench/yaml-utils";
+import { BUILTIN_RULESETS } from "@/features/policy/builtin-rulesets";
+import { yamlToPolicy } from "@/features/policy/yaml-utils";
 import type { WorkbenchPolicy, GuardId, GuardConfigMap } from "@/lib/workbench/types";
 import { cn } from "@/lib/utils";
 import {

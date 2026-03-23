@@ -22,8 +22,8 @@ import {
   DialogClose,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
-import { useFleetConnection } from "@/lib/workbench/use-fleet-connection";
-import { useWorkbench, useMultiPolicy } from "@/lib/workbench/multi-policy-store";
+import { useFleetConnection } from "@/features/fleet/use-fleet-connection";
+import { useWorkbench, useMultiPolicy } from "@/features/policy/stores/multi-policy-store";
 import { isPolicyFileType } from "@/lib/workbench/file-type-registry";
 import {
   deployPolicy,
@@ -31,7 +31,7 @@ import {
   fetchRemotePolicy,
   type DeployResponse,
   type ValidateResponse,
-} from "@/lib/workbench/fleet-client";
+} from "@/features/fleet/fleet-client";
 import { useToast } from "@/components/ui/toast";
 
 // ---- Deploy confirmation text ----

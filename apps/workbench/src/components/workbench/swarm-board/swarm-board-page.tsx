@@ -33,13 +33,13 @@ import {
   IconCommand,
 } from "@tabler/icons-react";
 
-import { SwarmBoardProvider, useSwarmBoard } from "@/lib/workbench/swarm-board-store";
+import { SwarmBoardProvider, useSwarmBoard } from "@/features/swarm/stores/swarm-board-store";
 import { swarmBoardNodeTypes } from "./nodes";
 import { swarmBoardEdgeTypes } from "./edges";
 import { SwarmBoardToolbar } from "./swarm-board-toolbar";
 import { SwarmBoardLeftRail } from "./swarm-board-left-rail";
 import { SwarmBoardInspector } from "./swarm-board-inspector";
-import type { SwarmBoardNodeData, SwarmNodeType } from "@/lib/workbench/swarm-board-types";
+import type { SwarmBoardNodeData, SwarmNodeType } from "@/features/swarm/swarm-board-types";
 
 // ---------------------------------------------------------------------------
 // Styles

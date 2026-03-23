@@ -1,8 +1,8 @@
 import { useCallback, useMemo } from "react";
 import { motion } from "motion/react";
-import { useMultiPolicy, useWorkbench } from "@/lib/workbench/multi-policy-store";
-import type { PolicyTab } from "@/lib/workbench/multi-policy-store";
-import { getRecentFiles } from "@/lib/workbench/policy-store";
+import { useMultiPolicy, useWorkbench } from "@/features/policy/stores/multi-policy-store";
+import type { PolicyTab } from "@/features/policy/stores/multi-policy-store";
+import { getRecentFiles } from "@/features/policy/stores/policy-store";
 import {
   FILE_TYPE_REGISTRY,
   type FileType,

@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { IntelProvider, useIntel } from "../intel-store";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { useIntel, useIntelStore } from "../intel-store";
 import type { Intel } from "../sentinel-types";
 
 const STORAGE_KEY = "clawdstrike_workbench_intel";
@@ -161,6 +161,15 @@ function IntelHarness() {
   );
 }
 
+beforeEach(() => {
+  // Reset the Zustand store to initial empty state before each test
+  useIntelStore.setState({
+    localIntel: [],
+    swarmIntel: [],
+    activeIntelId: null,
+  });
+});
+
 afterEach(() => {
   vi.useRealTimers();
   localStorage.clear();
@@ -170,11 +179,7 @@ describe("intel-store", () => {
   it("persists local and swarm intel and restores source-backed queries", () => {
     vi.useFakeTimers();
 
-    const { unmount } = render(
-      <IntelProvider>
-        <IntelHarness />
-      </IntelProvider>,
-    );
+    const { unmount } = render(<IntelHarness />);
 
     fireEvent.click(screen.getByTestId("add-local"));
     fireEvent.click(screen.getByTestId("ingest-swarm"));
@@ -218,11 +223,7 @@ describe("intel-store", () => {
 
     unmount();
 
-    render(
-      <IntelProvider>
-        <IntelHarness />
-      </IntelProvider>,
-    );
+    render(<IntelHarness />);
 
     expect(JSON.parse(screen.getByTestId("snapshot").textContent ?? "{}")).toMatchObject({
       localTitles: ["Local Intel"],
@@ -233,11 +234,7 @@ describe("intel-store", () => {
   });
 
   it("preserves per-swarm provenance when the same intel arrives from multiple swarms", () => {
-    render(
-      <IntelProvider>
-        <IntelHarness />
-      </IntelProvider>,
-    );
+    render(<IntelHarness />);
 
     fireEvent.click(screen.getByTestId("ingest-shared-alpha"));
     fireEvent.click(screen.getByTestId("ingest-shared-bravo"));

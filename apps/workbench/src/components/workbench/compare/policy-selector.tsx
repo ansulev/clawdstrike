@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useWorkbench } from "@/lib/workbench/multi-policy-store";
-import { yamlToPolicy, policyToYaml } from "@/lib/workbench/yaml-utils";
+import { useWorkbench } from "@/features/policy/stores/multi-policy-store";
+import { yamlToPolicy, policyToYaml } from "@/features/policy/yaml-utils";
 import type { WorkbenchPolicy } from "@/lib/workbench/types";
-import { BUILTIN_RULESETS } from "@/lib/workbench/builtin-rulesets";
+import { BUILTIN_RULESETS } from "@/features/policy/builtin-rulesets";
 import {
   listBuiltinRulesets,
   loadBuiltinRuleset,

@@ -17,7 +17,7 @@ import {
   computeCoverageStats,
 } from "@/lib/workbench/trustprint-patterns";
 import { useGuardProvenance } from "@/components/workbench/editor/inheritance-chain";
-import { useWorkbench } from "@/lib/workbench/multi-policy-store";
+import { useWorkbench } from "@/features/policy/stores/multi-policy-store";
 import { GUARD_REGISTRY } from "@/lib/workbench/guard-registry";
 import { useGuardTestStatus, useTestRunnerOptional } from "@/lib/workbench/test-store";
 import { generateScenariosFromPolicy } from "@/lib/workbench/scenario-generator";

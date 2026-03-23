@@ -37,7 +37,7 @@ import {
   IconMail,
 } from "@tabler/icons-react";
 import { cn } from "@/lib/utils";
-import { useSwarms } from "@/lib/workbench/swarm-store";
+import { useSwarms } from "@/features/swarm/stores/swarm-store";
 import type {
   Swarm,
   SwarmMember,

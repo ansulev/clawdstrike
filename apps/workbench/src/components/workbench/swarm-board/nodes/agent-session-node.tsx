@@ -17,9 +17,9 @@ import {
   IconMinimize,
 } from "@tabler/icons-react";
 import { cn } from "@/lib/utils";
-import { useSwarmBoard } from "@/lib/workbench/swarm-board-store";
+import { useSwarmBoard } from "@/features/swarm/stores/swarm-board-store";
 import { TerminalRenderer } from "../terminal-renderer";
-import type { SwarmBoardNodeData, SessionStatus, RiskLevel } from "@/lib/workbench/swarm-board-types";
+import type { SwarmBoardNodeData, SessionStatus, RiskLevel } from "@/features/swarm/swarm-board-types";
 
 // ---------------------------------------------------------------------------
 // Status dot colors — slightly tinted, never neon

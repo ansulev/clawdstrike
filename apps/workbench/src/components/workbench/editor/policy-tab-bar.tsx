@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from "react";
-import { useMultiPolicy } from "@/lib/workbench/multi-policy-store";
-import type { PolicyTab } from "@/lib/workbench/multi-policy-store";
+import { useMultiPolicy } from "@/features/policy/stores/multi-policy-store";
+import type { PolicyTab } from "@/features/policy/stores/multi-policy-store";
 import { FILE_TYPE_REGISTRY } from "@/lib/workbench/file-type-registry";
 import type { FileType } from "@/lib/workbench/file-type-registry";
 import {

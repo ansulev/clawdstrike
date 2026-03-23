@@ -340,12 +340,13 @@ describe("App", () => {
   it("keeps workbench state available to the shell", async () => {
     render(<App />);
 
-    // If workbench state bootstrapping is broken, the sidebar would throw.
-    // The sidebar nav items prove the context is available.
+    // If workbench state bootstrapping is broken, the activity bar would
+    // throw.  The activity bar toolbar and its icon buttons prove the
+    // Zustand stores initialised correctly.
     await waitFor(() => {
-      expect(screen.getByText("Editor")).toBeTruthy();
-      expect(screen.getByText("Lab")).toBeTruthy();
-      expect(screen.getByText("Mission Control")).toBeTruthy();
+      expect(screen.getByRole("toolbar", { name: "Activity Bar" })).toBeTruthy();
+      expect(screen.getByTitle("Sentinels")).toBeTruthy();
+      expect(screen.getByTitle("Settings")).toBeTruthy();
     });
   });
 });

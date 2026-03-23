@@ -1,8 +1,8 @@
-# Roadmap: v5.0 Threat Intel Source Plugins
+# Roadmap: Plugin Developer Experience (v6.0)
 
 ## Overview
 
-Transform ClawdStrike findings from isolated guard violations into threat-contextualized intelligence by building a plugin-based enrichment pipeline. The journey starts with the registry and orchestrator infrastructure all plugins need, proves the pipeline end-to-end with VirusTotal and GreyNoise (covering hash and IP indicator types), scales to operational readiness with API key management and four more source plugins, and finishes with differentiation features like pivot enrichment and bidirectional reporting that turn ClawdStrike from a consumer of threat intel into a participant in the ecosystem.
+Build the developer experience layer on top of the complete plugin runtime (v1.0). The journey starts with a testing harness that validates the SDK API surface, then uses those test utilities in a CLI scaffolding tool that gives plugin authors a zero-to-plugin-in-one-command experience. A Vite dev server plugin adds hot reload for the edit-test-debug loop. Documentation captures the stable APIs. Finally, an in-app playground lets authors prototype plugins without leaving the workbench. Each phase delivers a standalone, useful tool; together they form a cohesive plugin authoring experience.
 
 ## Phases
 
@@ -12,87 +12,69 @@ Transform ClawdStrike findings from isolated guard violations into threat-contex
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [x] **Phase 1: Enrichment Infrastructure** - ThreatIntelSource registry, EnrichmentOrchestrator with rate limiting/caching, SecretsApi, loader routing, indicator extraction
-- [ ] **Phase 2: First Plugins** - VirusTotal and GreyNoise plugins proving the pipeline end-to-end with streaming enrichment UI
-- [ ] **Phase 3: Operational Readiness** - API key settings UI, four remaining plugins (Shodan, AbuseIPDB, OTX, MISP), enrichment badges, auto-enrichment
-- [x] **Phase 4: Intelligence Participation** - Pivot enrichment, bidirectional reporting, custom renderers, aggregation dashboard
-- [ ] **Phase 5: Gap Closure** - Bootstrap plugin registration, mount FindingDetailActions and EnrichmentDashboard
+- [ ] **Phase 1: Testing Harness** - Export mock/spy contexts and assertion helpers from `@clawdstrike/plugin-sdk/testing`
+- [ ] **Phase 2: CLI Scaffolding** - Create `@clawdstrike/create-plugin` package with 6 template types and interactive prompts
+- [ ] **Phase 3: Dev Server** - Build `vite-plugin-clawdstrike` with custom HMR, state preservation, and dev console panel
+- [ ] **Phase 4: Documentation** - Add mdBook plugin development guide and TypeDoc API reference
+- [ ] **Phase 5: Plugin Playground** - Built-in workbench panel with CodeMirror editor, live preview, and contribution inspector
 
 ## Phase Details
 
-### Phase 1: Enrichment Infrastructure
-**Goal**: The workbench has a complete enrichment pipeline -- from indicator extraction through source registration to orchestrated async enrichment with rate limiting and caching -- ready for plugins to plug into
-**Depends on**: Nothing (first phase; assumes plugin SDK and loader from v1.0 are available)
-**Requirements**: FOUND-01, FOUND-02, FOUND-03, FOUND-04, FOUND-05, FOUND-06, FOUND-07, FOUND-08
+### Phase 1: Testing Harness
+**Goal**: Plugin authors can unit test their plugins in isolation without running the workbench, using mock and spy contexts that faithfully implement the PluginContext interface
+**Depends on**: Nothing (first phase; builds on existing `makeMockContext()` in SDK test file)
+**Requirements**: TEST-01, TEST-02, TEST-03, TEST-04, TEST-05, TEST-06
 **Success Criteria** (what must be TRUE):
-  1. A test plugin implementing `ThreatIntelSource` can register with `ThreatIntelSourceRegistry`, and `getForIndicator("ip")` returns it when it declares IP support
-  2. The `EnrichmentOrchestrator` queues enrichment requests and respects per-source rate limits -- a source declaring 4 req/min does not receive a 5th request within 60 seconds
-  3. A plugin can call `context.secrets.get("api_key")` to retrieve a stored API key, and the key is stored via the existing secure store with proper `plugin:{id}:` namespacing
-  4. `extractIndicators()` given a finding with egress guard violations returns `Indicator` objects with type "ip" and the violating IP addresses as values
-  5. `PluginLoader.routeContributions()` routes a manifest with `threatIntelSources` entries to the `ThreatIntelSourceRegistry`
-**Plans:** 3 plans
-Plans:
-- [x] 01-01-PLAN.md -- Types, ThreatIntelSourceRegistry, and SecretsApi
-- [x] 01-02-PLAN.md -- EnrichmentOrchestrator and indicator extraction
-- [x] 01-03-PLAN.md -- Plugin loader routing for threatIntelSources
+  1. A plugin author can `import { createSpyContext } from "@clawdstrike/plugin-sdk/testing"` in a vitest file, call `plugin.activate(ctx)`, and assert that `ctx.guards.registered` contains the expected guard contributions
+  2. `createMockContext()` returns a fully-stubbed PluginContext that satisfies the type checker and does not throw on any API call
+  3. `assertContributions(plugin, { guards: 1, commands: 2 })` throws a readable vitest assertion error when the plugin's manifest declares a different contribution count
+  4. The `/testing` sub-path import does not pull in main SDK code (tree-shaking verified by bundle size check)
+**Plans**: TBD
 
-### Phase 2: First Plugins
-**Goal**: Operators can enrich findings with VirusTotal file hash reputation and GreyNoise IP classification, proving the enrichment pipeline works end-to-end from button click to rendered results
-**Depends on**: Phase 1
-**Requirements**: PLUG-01, PLUG-02, PLUG-03, PLUG-04
+### Phase 2: CLI Scaffolding
+**Goal**: A plugin author can run one command and get a working, buildable, testable plugin project with type-safe boilerplate for their chosen contribution points
+**Depends on**: Phase 1 (generated test files import from `plugin-sdk/testing`)
+**Requirements**: SCAF-01, SCAF-02, SCAF-03, SCAF-04, SCAF-05, SCAF-06, SCAF-07
 **Success Criteria** (what must be TRUE):
-  1. With a VirusTotal API key configured, clicking "Run Enrichment" on a finding with a SHA-256 hash indicator returns detection ratio, AV engine results, and a malicious/benign/unknown verdict displayed in the enrichment sidebar
-  2. With a GreyNoise API key configured, clicking "Run Enrichment" on a finding with an IP indicator returns the GreyNoise classification and RIOT status displayed in the enrichment sidebar
-  3. Enrichment results stream into the sidebar as each source responds -- the GreyNoise result appears immediately even if VirusTotal is still loading
-  4. A failed API call to one source shows an error badge for that source without blocking results from the other source
-**Plans:** 2 plans
-Plans:
-- [x] 02-01-PLAN.md -- VirusTotal and GreyNoise ThreatIntelSource plugin implementations
-- [x] 02-02-PLAN.md -- Enrichment bridge hook and streaming sidebar UI wiring
+  1. Running `npm create @clawdstrike/plugin my-guard --type guard --non-interactive` produces a directory with `package.json`, `src/index.ts`, `tests/plugin.test.ts`, and config files that all pass `npm run build && npm test` without modification
+  2. Interactive mode presents prompts for name, display name, publisher, type, and contribution points, then generates a project matching those selections
+  3. Each of the 6 template types (guard, detection, ui, intel, compliance, full) generates a project that compiles under TypeScript strict mode and whose tests pass
+  4. The generated `src/index.ts` uses `createPlugin()` from the SDK with a properly typed manifest and contribution stubs for the selected plugin type
+**Plans**: TBD
 
-### Phase 3: Operational Readiness
-**Goal**: Operators can configure API keys through the settings UI, all six planned threat intel sources are available, and the workbench surfaces enrichment status at the finding list level with optional auto-enrichment
-**Depends on**: Phase 2
-**Requirements**: OPS-01, OPS-02, OPS-03, OPS-04, OPS-05, OPS-06, OPS-07
+### Phase 3: Dev Server
+**Goal**: Plugin authors get instant feedback when editing plugin source files -- changes appear in the running workbench within 200ms without losing plugin state or workbench layout
+**Depends on**: Phase 2 (dev server loads scaffolded plugin projects)
+**Requirements**: DEVS-01, DEVS-02, DEVS-03, DEVS-04, DEVS-05, DEVS-06
 **Success Criteria** (what must be TRUE):
-  1. Each threat intel plugin's settings page shows an API key input field derived from its manifest `requiredSecrets`, and entering a key persists it to the secure store
-  2. The MISP plugin accepts a configurable base URL (since MISP is self-hosted) and enriches indicators by searching the instance's attribute database
-  3. Finding list rows display source badges (e.g., [VT] [GN] [SH]) indicating which sources have enriched each finding, using source brand colors
-  4. Auto-enrichment can be enabled so that new findings above a confidence threshold are automatically queued for enrichment without manual button clicks
-  5. All six plugins (VirusTotal, GreyNoise, Shodan, AbuseIPDB, OTX, MISP) return normalized `ThreatVerdict` with classification and confidence, despite their different API response formats
-**Plans:** 4 plans
-Plans:
-- [x] 03-01-PLAN.md -- Shodan and AbuseIPDB threat intel source plugins
-- [x] 03-02-PLAN.md -- AlienVault OTX and MISP threat intel source plugins
-- [ ] 03-03-PLAN.md -- Plugin secrets settings UI and enrichment badges
-- [ ] 03-04-PLAN.md -- Auto-enrichment manager and finding store wiring
+  1. With the workbench running in dev mode and `vite-plugin-clawdstrike` active, saving a change to a plugin's `src/index.ts` triggers a reload cycle and the updated contributions appear in the workbench without a full page refresh
+  2. Plugin storage state set via `context.storage.set()` before a hot reload is still readable via `context.storage.get()` after the reload completes
+  3. The dev console bottom panel shows timestamped lifecycle events (activated, deactivated, error) and console output from the active dev plugin
+  4. Changing a shared utility imported by one plugin only reloads that plugin, leaving other loaded plugins untouched
+**Plans**: TBD
 
-### Phase 4: Intelligence Participation
-**Goal**: ClawdStrike moves from passive consumption to active participation in the threat intel ecosystem -- discovering related threats via pivot enrichment, reporting confirmed threats back to community databases, and providing operators with an aggregate intelligence view
-**Depends on**: Phase 3
-**Requirements**: ADV-01, ADV-02, ADV-03, ADV-04
+### Phase 4: Documentation
+**Goal**: Plugin authors can learn the entire plugin development lifecycle -- from scaffolding to publishing -- through structured guides and auto-generated API reference
+**Depends on**: Phase 1 (testing API must be stable to document), can run in parallel with Phase 3
+**Requirements**: DOCS-01, DOCS-02, DOCS-03, DOCS-04, DOCS-05
 **Success Criteria** (what must be TRUE):
-  1. When a source returns related indicators (e.g., VirusTotal returns domains associated with a malicious hash), those indicators appear in a "Related Indicators" section with one-click enrichment
-  2. An operator can report a confirmed-malicious IP to AbuseIPDB directly from the finding detail view, and the report is submitted via the AbuseIPDB `/report` endpoint
-  3. A threat intel plugin can register a custom React renderer for its enrichment data, and the enrichment sidebar uses that renderer instead of the generic key-value fallback
-  4. The enrichment aggregation dashboard shows which indicators appear across multiple findings and the current health/quota status of each configured source
-**Plans:** 3 plans
-Plans:
-- [ ] 04-01-PLAN.md -- EnrichmentTypeRegistry, pivot enrichment, and custom renderer wiring
-- [ ] 04-02-PLAN.md -- Bidirectional reporting to AbuseIPDB and MISP
-- [ ] 04-03-PLAN.md -- Enrichment aggregation dashboard
+  1. `mdbook build docs` succeeds and the "Plugin Development" section renders with all listed pages (Getting Started, Manifest, Contribution Points, Testing, Dev Server, Playground, Publishing)
+  2. The "Getting Started" guide walks a reader from `npm create @clawdstrike/plugin` through building and loading the plugin in the workbench -- every command in the guide is copy-pasteable and works
+  3. `mise run docs:plugin-api` generates TypeDoc output into `docs/book/api/` and the mdBook links to it
+  4. CI fails if TypeDoc generation breaks (catches stale JSDoc or missing exports)
+**Plans**: TBD
 
-### Phase 5: Gap Closure
-**Goal**: Wire the enrichment pipeline end-to-end — bootstrap plugin registration at app startup and mount orphaned components
-**Depends on**: Phases 1-4
-**Gap Closure**: Closes plugin bootstrap gap (PLUG-01/02, OPS-02-05) and component mounting gap (ADV-02, ADV-04)
+### Phase 5: Plugin Playground
+**Goal**: A plugin author can write, run, and debug a plugin entirely within the workbench -- seeing contributions register in real time, errors with source-mapped line numbers, and a tree view of all registered contributions
+**Depends on**: Phase 3 (uses same HMR patterns and dev console), Phase 1 (playground needs same mock context patterns for preview isolation)
+**Requirements**: PLAY-01, PLAY-02, PLAY-03, PLAY-04, PLAY-05, PLAY-06, PLAY-07
 **Success Criteria** (what must be TRUE):
-  1. At app startup, all 6 threat intel plugin manifests are registered and sources are available in ThreatIntelSourceRegistry
-  2. FindingDetailActions is imported and rendered in finding-detail.tsx with "Report to..." button
-  3. EnrichmentDashboard is mounted via a route or tab accessible from the workbench
-**Plans:** 1 plan
-Plans:
-- [x] 05-01-PLAN.md -- Plugin bootstrap, mount FindingDetailActions and EnrichmentDashboard
+  1. Opening the "Plugin Dev" activity bar item shows a CodeMirror editor pre-loaded with a `createPlugin()` template, and clicking "Run" causes the plugin's contributions to appear in the workbench
+  2. The contribution inspector in the right sidebar shows a tree of all registered contributions (guards, commands, fileTypes) from the playground plugin, updating on each run
+  3. When the playground plugin throws during activation, the error boundary displays the stack trace with line numbers that match the CodeMirror editor, and the workbench remains functional
+  4. Console output from the playground plugin appears in the bottom panel plugin console with severity icons, and does not leak into the global browser console
+  5. Plugin evaluation works in Tauri dev mode without CSP violations (code served from `/__plugin-eval/` route, not blob URLs)
+**Plans**: TBD
 
 ## Progress
 
@@ -101,8 +83,8 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Enrichment Infrastructure | 3/3 | Complete | 2026-03-22 |
-| 2. First Plugins | 2/2 | Complete | 2026-03-22 |
-| 3. Operational Readiness | 4/4 | Complete | 2026-03-22 |
-| 4. Intelligence Participation | 3/3 | Complete | 2026-03-22 |
-| 5. Gap Closure | 1/1 | Complete | 2026-03-23 |
+| 1. Testing Harness | 0/TBD | Not started | - |
+| 2. CLI Scaffolding | 0/TBD | Not started | - |
+| 3. Dev Server | 0/TBD | Not started | - |
+| 4. Documentation | 0/TBD | Not started | - |
+| 5. Plugin Playground | 0/TBD | Not started | - |

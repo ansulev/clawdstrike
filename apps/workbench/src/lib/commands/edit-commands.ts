@@ -1,24 +1,20 @@
 import type React from "react";
 import { commandRegistry } from "@/lib/command-registry";
 import type { Command } from "@/lib/command-registry";
-import type { WorkbenchAction } from "@/features/policy/stores/policy-store";
-import type { MultiPolicyAction } from "@/features/policy/stores/multi-policy-store";
-import type { PolicyTab } from "@/features/policy/stores/multi-policy-store";
+import type { TabMeta } from "@/features/policy/stores/policy-tabs-store";
 import { openSearchPanel, searchKeymap, gotoLine } from "@codemirror/search";
 import { getActiveEditorView } from "@/components/ui/yaml-editor";
 import { usePolicyTabsStore } from "@/features/policy/stores/policy-tabs-store";
 import { usePaneStore } from "@/features/panes/pane-store";
 
 export interface EditCommandDeps {
-  dispatch: React.Dispatch<WorkbenchAction>;
-  multiDispatch: React.Dispatch<MultiPolicyAction>;
   undo: () => void;
   redo: () => void;
-  getActiveTab: () => PolicyTab | undefined;
+  getActiveTab: () => TabMeta | undefined;
 }
 
 export function registerEditCommands(deps: EditCommandDeps): void {
-  const { dispatch, multiDispatch, undo, redo, getActiveTab } = deps;
+  const { undo, redo, getActiveTab } = deps;
 
   const commands: Command[] = [
     {
@@ -64,7 +60,7 @@ export function registerEditCommands(deps: EditCommandDeps): void {
           );
           if (!confirmed) return;
         }
-        multiDispatch({ type: "CLOSE_TAB", tabId: tab.id });
+        usePolicyTabsStore.getState().closeTab(tab.id);
       },
     },
     {

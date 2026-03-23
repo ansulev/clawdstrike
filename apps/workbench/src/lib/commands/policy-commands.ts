@@ -1,9 +1,8 @@
-import type React from "react";
 import { commandRegistry } from "@/lib/command-registry";
 import type { Command } from "@/lib/command-registry";
-import type { WorkbenchAction } from "@/features/policy/stores/policy-store";
 import type { WorkbenchPolicy } from "@/lib/workbench/types";
-import type { PolicyTab } from "@/features/policy/stores/multi-policy-store";
+import type { TabMeta } from "@/features/policy/stores/policy-tabs-store";
+import { usePolicyEditStore } from "@/features/policy/stores/policy-edit-store";
 import { isDesktop } from "@/lib/tauri-bridge";
 import { isPolicyFileType } from "@/lib/workbench/file-type-registry";
 import { policyToYaml } from "@/features/policy/yaml-utils";
@@ -11,15 +10,14 @@ import { triggerNativeValidation } from "@/features/policy/use-native-validation
 import { usePaneStore } from "@/features/panes/pane-store";
 
 export interface PolicyCommandDeps {
-  dispatch: React.Dispatch<WorkbenchAction>;
-  getActiveTab: () => PolicyTab | undefined;
+  getActiveTab: () => TabMeta | undefined;
   getActivePolicy: () => WorkbenchPolicy;
   getYaml: () => string;
   getDirty: () => boolean;
 }
 
 export function registerPolicyCommands(deps: PolicyCommandDeps): void {
-  const { dispatch, getActiveTab, getActivePolicy, getYaml, getDirty } = deps;
+  const { getActiveTab, getActivePolicy, getYaml, getDirty } = deps;
 
   const commands: Command[] = [
     {
@@ -40,14 +38,17 @@ export function registerPolicyCommands(deps: PolicyCommandDeps): void {
           isPolicyFileType(tab.fileType) && (getDirty() || source !== getYaml());
 
         if (shouldSyncYaml) {
-          dispatch({ type: "SET_YAML", yaml: source });
+          const editStore = usePolicyEditStore.getState();
+          editStore.setYaml(tab.id, source, tab.fileType, tab.filePath, tab.name);
         }
 
         if (isDesktop()) {
-          void triggerNativeValidation(tab.fileType, source, dispatch);
+          void triggerNativeValidation(tab.fileType, source, (action) => {
+            usePolicyEditStore.getState().setNativeValidation(tab.id, action.payload);
+          });
         }
 
-        // Validation runs in-place — no navigation needed (user is already viewing the file)
+        // Validation runs in-place -- no navigation needed (user is already viewing the file)
       },
     },
     {

@@ -16,7 +16,9 @@ import { SigmaVisualPanel } from "@/components/workbench/editor/sigma-visual-pan
 import { OcsfVisualPanel } from "@/components/workbench/editor/ocsf-visual-panel";
 import { YaraVisualPanel } from "@/components/workbench/editor/yara-visual-panel";
 import { YamlPreviewPanel } from "@/components/workbench/editor/yaml-preview-panel";
-import { useMultiPolicy, useWorkbench, type SplitMode } from "@/features/policy/stores/multi-policy-store";
+import { usePolicyTabsStore, type SplitMode } from "@/features/policy/stores/policy-tabs-store";
+import { usePolicyEditStore } from "@/features/policy/stores/policy-edit-store";
+import { useWorkbenchUIStore } from "@/features/policy/stores/workbench-ui-store";
 import { useNativeValidation } from "@/features/policy/use-native-validation";
 import { cn } from "@/lib/utils";
 import {
@@ -27,15 +29,15 @@ import {
 
 
 export function SplitModeToggle() {
-  const { multiState, multiDispatch, tabs } = useMultiPolicy();
-  const { splitMode } = multiState;
+  const tabs = usePolicyTabsStore(s => s.tabs);
+  const splitMode = usePolicyTabsStore(s => s.splitMode);
 
   const cycleMode = useCallback(() => {
     const modes: SplitMode[] = ["none", "vertical", "horizontal"];
     const currentIdx = modes.indexOf(splitMode);
     const next = modes[(currentIdx + 1) % modes.length];
-    multiDispatch({ type: "SET_SPLIT_MODE", mode: next });
-  }, [splitMode, multiDispatch]);
+    usePolicyTabsStore.getState().setSplitMode(next);
+  }, [splitMode]);
 
   // Only show if there are 2+ tabs
   if (tabs.length < 2) return null;
@@ -82,7 +84,7 @@ function PaneTabSelector({
   excludeTabId?: string;
   onSelect: (tabId: string) => void;
 }) {
-  const { tabs } = useMultiPolicy();
+  const tabs = usePolicyTabsStore(s => s.tabs);
   const available = excludeTabId
     ? tabs.filter((t) => t.id !== excludeTabId)
     : tabs;
@@ -117,37 +119,55 @@ function PaneTabSelector({
 
 
 function EditorPane() {
-  const { activeTab, multiDispatch } = useMultiPolicy();
-  const { dispatch } = useWorkbench();
+  const activeTabId = usePolicyTabsStore(s => s.activeTabId);
+  const activeTab = usePolicyTabsStore(s => s.tabs.find(t => t.id === s.activeTabId));
+  const editState = usePolicyEditStore(s => s.editStates.get(activeTabId));
   const fileType = activeTab?.fileType;
+  const yaml = editState?.yaml ?? "";
 
+  // Native validation uses a dispatch-shaped callback for SET_NATIVE_VALIDATION
   useNativeValidation(
-    activeTab?.yaml ?? "",
+    yaml,
     activeTab?.fileType ?? "clawdstrike_policy",
-    dispatch,
+    (action) => {
+      usePolicyEditStore.getState().setNativeValidation(activeTabId, action.payload);
+    },
   );
+
+  const handleYamlChange = useCallback((newYaml: string) => {
+    if (!activeTab) return;
+    usePolicyEditStore.getState().setYaml(
+      activeTabId,
+      newYaml,
+      activeTab.fileType,
+      activeTab.filePath,
+      activeTab.name,
+    );
+    usePolicyTabsStore.getState().setDirty(activeTabId, true);
+    useWorkbenchUIStore.getState().setEditorSyncDirection("yaml");
+  }, [activeTabId, activeTab]);
 
   const renderVisualPanel = () => {
     switch (fileType) {
       case "sigma_rule":
         return (
           <SigmaVisualPanel
-            yaml={activeTab!.yaml}
-            onYamlChange={(yaml) => multiDispatch({ type: "SET_YAML", yaml })}
+            yaml={yaml}
+            onYamlChange={handleYamlChange}
           />
         );
       case "ocsf_event":
         return (
           <OcsfVisualPanel
-            json={activeTab!.yaml}
-            onJsonChange={(json) => multiDispatch({ type: "SET_YAML", yaml: json })}
+            json={yaml}
+            onJsonChange={handleYamlChange}
           />
         );
       case "yara_rule":
         return (
           <YaraVisualPanel
-            source={activeTab!.yaml}
-            onSourceChange={(source) => multiDispatch({ type: "SET_YAML", yaml: source })}
+            source={yaml}
+            onSourceChange={handleYamlChange}
           />
         );
       default:
@@ -173,8 +193,8 @@ function EditorPane() {
 
 
 function SecondaryPanePreview({ tabId }: { tabId: string }) {
-  const { tabs } = useMultiPolicy();
-  const tab = tabs.find((t) => t.id === tabId);
+  const tab = usePolicyTabsStore(s => s.tabs.find(t => t.id === tabId));
+  const editState = usePolicyEditStore(s => s.editStates.get(tabId));
 
   if (!tab) {
     return (
@@ -193,7 +213,7 @@ function SecondaryPanePreview({ tabId }: { tabId: string }) {
       </div>
       <div className="flex-1 overflow-auto">
         <pre className="p-4 text-[11px] font-mono text-[#ece7dc]/80 whitespace-pre-wrap leading-relaxed">
-          {tab.yaml}
+          {editState?.yaml ?? ""}
         </pre>
       </div>
     </div>
@@ -202,17 +222,18 @@ function SecondaryPanePreview({ tabId }: { tabId: string }) {
 
 
 export function SplitEditor() {
-  const { multiState, multiDispatch } = useMultiPolicy();
-  const { splitMode, splitTabId, activeTabId } = multiState;
+  const splitMode = usePolicyTabsStore(s => s.splitMode);
+  const splitTabId = usePolicyTabsStore(s => s.splitTabId);
+  const activeTabId = usePolicyTabsStore(s => s.activeTabId);
 
   const handleSetSplitTab = useCallback(
     (tabId: string) => {
-      multiDispatch({ type: "SET_SPLIT_TAB", tabId });
+      usePolicyTabsStore.getState().setSplitTab(tabId);
     },
-    [multiDispatch],
+    [],
   );
 
-  // No split — just render the normal editor
+  // No split -- just render the normal editor
   if (splitMode === "none") {
     return (
       <div className="h-full w-full">
@@ -226,7 +247,7 @@ export function SplitEditor() {
   return (
     <div className="h-full w-full">
       <ResizablePanelGroup direction={direction} className="h-full">
-        {/* Primary pane — active tab's full editor */}
+        {/* Primary pane -- active tab's full editor */}
         <ResizablePanel defaultSize={50} minSize={25}>
           <div className="h-full flex flex-col">
             <div className="px-3 py-1 bg-[#0b0d13] border-b border-[#2d3240] text-[10px] font-mono text-[#d4a84b]/70">
@@ -243,7 +264,7 @@ export function SplitEditor() {
           withHandle
         />
 
-        {/* Secondary pane — shows selected split tab as read-only YAML */}
+        {/* Secondary pane -- shows selected split tab as read-only YAML */}
         <ResizablePanel defaultSize={50} minSize={25}>
           <div className="h-full flex flex-col">
             <PaneTabSelector

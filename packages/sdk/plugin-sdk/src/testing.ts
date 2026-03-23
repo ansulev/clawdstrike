@@ -22,6 +22,7 @@
 import type {
   Disposable,
   ComponentType,
+  PluginContributions,
   CommandContribution,
   GuardContribution,
   FileTypeContribution,
@@ -38,6 +39,19 @@ import type {
   StorageApi,
   SecretsApi,
 } from "./context";
+
+import type { PluginDefinition } from "./create-plugin";
+
+import {
+  validateManifest,
+  createTestManifest,
+  type ManifestValidationError,
+  type ManifestValidationResult,
+} from "./manifest-validation";
+
+// ---- Re-exports from manifest-validation ----
+
+export { createTestManifest, type ManifestValidationError, type ManifestValidationResult };
 
 // ---- MockStorageApi ----
 
@@ -295,4 +309,63 @@ export function createSpyContext(overrides?: Partial<PluginContext>): SpyContext
   };
 
   return { ctx, spy };
+}
+
+// ---- Assertion Helpers ----
+
+/**
+ * Assert that a plugin's manifest declares the expected number of contribution
+ * points for each specified key. Checks every key in `expected` and reports
+ * all mismatches in a single error.
+ *
+ * @param plugin - A PluginDefinition (from createPlugin)
+ * @param expected - Map of contribution key to expected count
+ * @throws Error with "Contribution count mismatch" and per-key details
+ *
+ * @example
+ * ```typescript
+ * assertContributions(myPlugin, { guards: 1, commands: 2 });
+ * ```
+ */
+export function assertContributions(
+  plugin: PluginDefinition,
+  expected: Partial<Record<keyof PluginContributions, number>>,
+): void {
+  const contributions = plugin.manifest.contributions;
+  const mismatches: string[] = [];
+
+  for (const [key, expectedCount] of Object.entries(expected)) {
+    const actual = (contributions?.[key as keyof PluginContributions] as unknown[] | undefined) ?? [];
+    const actualCount = actual.length;
+    if (actualCount !== expectedCount) {
+      mismatches.push(`${key}: expected ${expectedCount}, got ${actualCount}`);
+    }
+  }
+
+  if (mismatches.length > 0) {
+    throw new Error("Contribution count mismatch:\n" + mismatches.join("\n"));
+  }
+}
+
+/**
+ * Assert that a manifest passes validation. Wraps `validateManifest()` and
+ * throws a detailed assertion error listing all field-level validation errors.
+ *
+ * @param manifest - The value to validate (any shape)
+ * @throws Error with "Invalid manifest (N error(s))" and per-field details
+ *
+ * @example
+ * ```typescript
+ * assertManifestValid(createTestManifest({ id: "" })); // throws
+ * assertManifestValid(createTestManifest());            // passes
+ * ```
+ */
+export function assertManifestValid(manifest: unknown): void {
+  const result = validateManifest(manifest);
+  if (!result.valid) {
+    throw new Error(
+      `Invalid manifest (${result.errors.length} error(s)):\n` +
+        result.errors.map((e) => `  - ${e.field}: ${e.message}`).join("\n"),
+    );
+  }
 }

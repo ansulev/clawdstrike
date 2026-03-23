@@ -541,13 +541,12 @@ function getInitialState(): SwarmBoardState {
     };
   }
 
-  // Seed with mock data on first visit
-  const mock = createMockBoard();
+  // Start with an empty board — users create real sessions via "Launch Swarm"
   return {
     boardId: generateBoardId(),
     repoRoot: "",
-    nodes: mock.nodes,
-    edges: mock.edges,
+    nodes: [],
+    edges: [],
     selectedNodeId: null,
     inspectorOpen: false,
     bundlePath: "",

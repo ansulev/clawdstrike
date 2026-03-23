@@ -327,4 +327,147 @@ describe("useEnrichmentBridge", () => {
       resolveEnrich([]);
     });
   });
+
+  // ---- v5.0 Promise.allSettled tests ----
+
+  describe("Promise.allSettled behavior", () => {
+    it("when one source rejects and another resolves, the resolved result appears and the rejected source shows error status", async () => {
+      const finding = makeFinding();
+      const gnResult = makeEnrichmentResult("greynoise", "GreyNoise");
+
+      // Two indicators: first will reject, second will resolve
+      mockExtractIndicators.mockReturnValue([
+        { type: "ip", value: "1.2.3.4" },
+        { type: "domain", value: "evil.com" },
+      ]);
+
+      let callIdx = 0;
+      orchestrator.enrich.mockImplementation(async (_indicator, options) => {
+        callIdx++;
+        if (callIdx === 1) {
+          // First indicator enrichment rejects
+          throw new Error("VirusTotal API timeout");
+        }
+        // Second indicator enrichment resolves and fires onResult
+        options?.onResult?.(gnResult);
+        return [gnResult];
+      });
+
+      const { result } = renderHook(() => useEnrichmentBridge(orchestrator));
+
+      await act(async () => {
+        result.current.runEnrichment(finding);
+      });
+
+      // isEnriching should be false -- both settled
+      expect(result.current.isEnriching).toBe(false);
+
+      // The resolved result should appear in results
+      expect(result.current.results).toHaveLength(1);
+      expect(result.current.results[0].sourceId).toBe("greynoise");
+
+      // Any source still in "loading" after allSettled should transition to "error"
+      // because there was at least one rejection
+      const stillLoading = result.current.sourceStatuses.filter(
+        (s) => s.status === "loading",
+      );
+      expect(stillLoading).toHaveLength(0);
+
+      // The greynoise source that got onResult should be "done"
+      const gnStatus = result.current.sourceStatuses.find(
+        (s) => s.sourceId === "greynoise",
+      );
+      expect(gnStatus?.status).toBe("done");
+    });
+
+    it("when all sources reject, all sources show error status and isEnriching becomes false", async () => {
+      const finding = makeFinding();
+
+      mockExtractIndicators.mockReturnValue([
+        { type: "ip", value: "1.2.3.4" },
+      ]);
+
+      orchestrator.enrich.mockRejectedValue(new Error("Service unavailable"));
+
+      const { result } = renderHook(() => useEnrichmentBridge(orchestrator));
+
+      await act(async () => {
+        result.current.runEnrichment(finding);
+      });
+
+      // isEnriching must be false
+      expect(result.current.isEnriching).toBe(false);
+
+      // No results collected
+      expect(result.current.results).toHaveLength(0);
+
+      // All sources that were still loading should now be "error"
+      for (const s of result.current.sourceStatuses) {
+        expect(s.status).toBe("error");
+        expect(s.error).toBe("Service unavailable");
+      }
+    });
+
+    it("cancellation via AbortController still works with Promise.allSettled", async () => {
+      const finding = makeFinding();
+      let capturedSignal: AbortSignal | undefined;
+
+      mockExtractIndicators.mockReturnValue([
+        { type: "ip", value: "1.2.3.4" },
+      ]);
+
+      orchestrator.enrich.mockImplementation(async (_indicator, options) => {
+        capturedSignal = options?.signal as AbortSignal | undefined;
+        // Hang until aborted
+        return new Promise<EnrichmentResult[]>((resolve) => {
+          if (capturedSignal) {
+            capturedSignal.addEventListener("abort", () => resolve([]), {
+              once: true,
+            });
+          }
+        });
+      });
+
+      const { result } = renderHook(() => useEnrichmentBridge(orchestrator));
+
+      act(() => {
+        result.current.runEnrichment(finding);
+      });
+
+      expect(result.current.isEnriching).toBe(true);
+
+      // Cancel mid-flight
+      await act(async () => {
+        result.current.cancel();
+      });
+
+      // Signal was aborted
+      expect(capturedSignal?.aborted).toBe(true);
+      // isEnriching should be false after cancel
+      expect(result.current.isEnriching).toBe(false);
+    });
+  });
+
+  describe("structural: no manual counter variable", () => {
+    it("enrichment-bridge.ts does not contain a manual counter variable", async () => {
+      // This is a structural assertion: the source should use Promise.allSettled
+      // rather than a manual counter (completed++, remaining--, etc.)
+      const fs = await import("fs");
+      const path = await import("path");
+      const source = fs.readFileSync(
+        path.resolve(import.meta.dirname, "../enrichment-bridge.ts"),
+        "utf-8",
+      );
+
+      // Should NOT have manual counter patterns
+      expect(source).not.toMatch(/let\s+(completed|remaining|count|counter|pending)\b/);
+      expect(source).not.toMatch(/\+\+\s*(completed|remaining|count|counter|pending)/);
+      expect(source).not.toMatch(/(completed|remaining|count|counter|pending)\s*\+\+/);
+      expect(source).not.toMatch(/(completed|remaining|count|counter|pending)\s*--/);
+      expect(source).not.toMatch(/--\s*(completed|remaining|count|counter|pending)/);
+
+      // Should use Promise.allSettled
+      expect(source).toMatch(/Promise\.allSettled/);
+    });
+  });
 });

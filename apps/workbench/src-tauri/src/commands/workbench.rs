@@ -2806,6 +2806,16 @@ guards: {}
         assert_eq!(first_match.match_end, 5);
     }
 
+    #[test]
+    fn build_search_regex_wraps_whole_word_regex_queries_in_non_capturing_group() {
+        let regex = build_search_regex("foo|bar", true, true, true).unwrap();
+
+        assert!(regex.is_match("foo"));
+        assert!(regex.is_match("bar"));
+        assert!(!regex.is_match("foobar"));
+        assert!(!regex.is_match("barista"));
+    }
+
     #[tokio::test]
     async fn search_in_project_truncates_multibyte_lines_without_panic() {
         let dir = tempfile::tempdir().unwrap();

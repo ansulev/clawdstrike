@@ -7,7 +7,7 @@
 
 import { memo } from "react";
 import { Handle, Position, NodeResizer, type NodeProps } from "@xyflow/react";
-import { IconCheck, IconX, IconAlertTriangle } from "@tabler/icons-react";
+import { IconCheck, IconX, IconAlertTriangle, IconShieldCheck, IconShieldOff, IconShieldQuestion } from "@tabler/icons-react";
 import { cn } from "@/lib/utils";
 import type { SwarmBoardNodeData } from "@/features/swarm/swarm-board-types";
 
@@ -160,16 +160,32 @@ function ReceiptNodeInner({ data, selected }: NodeProps) {
 
       {/* Signature footer — like a stamp seal */}
       <div
-        className="flex items-center px-3 py-1.5 mt-auto"
+        className="flex items-center gap-1.5 px-3 py-1.5 mt-auto"
         style={{ borderTop: '1px solid #1a1e2820' }}
       >
         <span
-          className="text-[7px] text-[#2a2f3a] font-mono truncate"
+          className="text-[7px] text-[#2a2f3a] font-mono truncate flex-1"
           style={{ fontVariantNumeric: 'tabular-nums' }}
           title={sigHash}
         >
           sig {sigHash.slice(0, 18)}...
         </span>
+        {d.signatureVerified === true ? (
+          <span className="flex items-center gap-0.5 shrink-0" title="Signature verified">
+            <IconShieldCheck size={10} stroke={2} style={{ color: '#38a876' }} />
+            <span className="text-[7px] font-mono" style={{ color: '#38a876' }}>Verified</span>
+          </span>
+        ) : d.signatureVerified === false ? (
+          <span className="flex items-center gap-0.5 shrink-0" title="Signature verification failed">
+            <IconShieldOff size={10} stroke={2} style={{ color: '#b85450' }} />
+            <span className="text-[7px] font-mono" style={{ color: '#b85450' }}>Unverified</span>
+          </span>
+        ) : d.signature && d.publicKey ? (
+          <span className="flex items-center gap-0.5 shrink-0" title="Verification pending">
+            <IconShieldQuestion size={10} stroke={2} style={{ color: '#4a5568' }} />
+            <span className="text-[7px] font-mono" style={{ color: '#4a5568' }}>Pending</span>
+          </span>
+        ) : null}
       </div>
 
       <Handle

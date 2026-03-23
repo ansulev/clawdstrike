@@ -12,7 +12,7 @@
 import { useParams } from "react-router-dom";
 import { useSwarmBoardStore } from "@/features/swarm/stores/swarm-board-store";
 import type { SwarmBoardNodeData } from "@/features/swarm/swarm-board-types";
-import { IconCheck, IconX, IconAlertTriangle } from "@tabler/icons-react";
+import { IconCheck, IconX, IconAlertTriangle, IconShieldCheck, IconShieldOff, IconShieldQuestion } from "@tabler/icons-react";
 
 // ---------------------------------------------------------------------------
 // Verdict styling — matches receipt-node.tsx colors
@@ -187,12 +187,22 @@ export function ReceiptDetailPage() {
 
         {/* Section: Signature */}
         <Section title="Signature">
-          <code
-            className="text-xs font-mono break-all"
-            style={{ color: "#6f7f9a", fontVariantNumeric: "tabular-nums" }}
-          >
-            {sigHash}
-          </code>
+          <div className="flex items-start gap-3">
+            <code
+              className="text-xs font-mono break-all flex-1"
+              style={{ color: "#6f7f9a", fontVariantNumeric: "tabular-nums" }}
+            >
+              {d.signature ?? sigHash}
+            </code>
+          </div>
+        </Section>
+
+        {/* Section: Verification */}
+        <Section title="Verification">
+          <SignatureVerificationBadge
+            verified={d.signatureVerified}
+            hasSignature={Boolean(d.signature && d.publicKey)}
+          />
         </Section>
 
         {/* Section: Timestamp */}
@@ -206,6 +216,55 @@ export function ReceiptDetailPage() {
         </Section>
       </div>
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Signature verification badge
+// ---------------------------------------------------------------------------
+
+function SignatureVerificationBadge({
+  verified,
+  hasSignature,
+}: {
+  verified?: boolean;
+  hasSignature: boolean;
+}) {
+  if (verified === true) {
+    return (
+      <span className="inline-flex items-center gap-1.5 px-2 py-1 text-[10px] font-mono uppercase rounded-md bg-[#38a876]/10 text-[#38a876] border border-[#38a876]/20">
+        <IconShieldCheck size={12} stroke={2} />
+        Signature Verified
+      </span>
+    );
+  }
+
+  if (verified === false) {
+    return (
+      <span className="inline-flex items-center gap-1.5 px-2 py-1 text-[10px] font-mono uppercase rounded-md bg-[#b85450]/10 text-[#b85450] border border-[#b85450]/20">
+        <IconShieldOff size={12} stroke={2} />
+        Signature Invalid
+      </span>
+    );
+  }
+
+  if (hasSignature) {
+    // TODO: When @clawdstrike/hush-wasm is available in the workbench, call
+    // verifyDetachedPayload() from signature-adapter.ts to perform real Ed25519
+    // verification in the browser. For now, show a pending state.
+    return (
+      <span className="inline-flex items-center gap-1.5 px-2 py-1 text-[10px] font-mono uppercase rounded-md bg-[#6f7f9a]/10 text-[#6f7f9a] border border-[#6f7f9a]/20">
+        <IconShieldQuestion size={12} stroke={2} />
+        Verification Pending
+      </span>
+    );
+  }
+
+  return (
+    <span className="inline-flex items-center gap-1.5 px-2 py-1 text-[10px] font-mono uppercase rounded-md bg-[#2a2f3a]/20 text-[#4a5568] border border-[#2a2f3a]/30">
+      <IconShieldQuestion size={12} stroke={2} />
+      No Signature Data
+    </span>
   );
 }
 

@@ -4,7 +4,7 @@
 
 import { Instance, Instances } from "@react-three/drei";
 import { useFrame } from "@react-three/fiber";
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 import * as THREE from "three";
 import type { MissionInteractionSource } from "../flow-runtime/grounding";
 import type { ObservatoryHeroPropRecipe } from "../../world/deriveObservatoryWorld";
@@ -137,9 +137,28 @@ export function StationInteriorScene({
   const config = STATION_INTERIOR_CONFIGS[stationId];
   const [wx, wy, wz] = stationWorldPosition;
   const darkerWall = config.wallColor;
+  const groupRef = useRef<THREE.Group>(null);
+
+  useEffect(() => {
+    return () => {
+      groupRef.current?.traverse((obj) => {
+        if ((obj as THREE.Mesh).isMesh) {
+          const mesh = obj as THREE.Mesh;
+          mesh.geometry?.dispose();
+          if (mesh.material) {
+            if (Array.isArray(mesh.material)) {
+              mesh.material.forEach((m) => m.dispose());
+            } else {
+              mesh.material.dispose();
+            }
+          }
+        }
+      });
+    };
+  }, []);
 
   return (
-    <group position={[wx, wy, wz]}>
+    <group ref={groupRef} position={[wx, wy, wz]}>
       {/* Interior Lighting */}
       <ambientLight intensity={0.3} />
       <pointLight
@@ -168,7 +187,7 @@ export function StationInteriorScene({
         <meshStandardMaterial color={config.wallColor} metalness={0.1} roughness={0.85} />
       </mesh>
       {/* Back wall accent stripe */}
-      <mesh position={[0, 1.6, -9.95]}>
+      <mesh position={[0, 1.6, -9.9]}>
         <boxGeometry args={[20, 0.12, 0.04]} />
         <meshStandardMaterial
           color={config.accentColor}
@@ -184,7 +203,7 @@ export function StationInteriorScene({
         <meshStandardMaterial color={config.wallColor} metalness={0.1} roughness={0.85} />
       </mesh>
       {/* Front wall accent stripe */}
-      <mesh position={[0, 1.6, 9.95]}>
+      <mesh position={[0, 1.6, 9.9]}>
         <boxGeometry args={[20, 0.12, 0.04]} />
         <meshStandardMaterial
           color={config.accentColor}
@@ -200,7 +219,7 @@ export function StationInteriorScene({
         <meshStandardMaterial color={config.wallColor} metalness={0.1} roughness={0.85} />
       </mesh>
       {/* Left wall accent stripe */}
-      <mesh position={[-9.95, 1.6, 0]}>
+      <mesh position={[-9.9, 1.6, 0]}>
         <boxGeometry args={[0.04, 0.12, 20]} />
         <meshStandardMaterial
           color={config.accentColor}
@@ -216,7 +235,7 @@ export function StationInteriorScene({
         <meshStandardMaterial color={config.wallColor} metalness={0.1} roughness={0.85} />
       </mesh>
       {/* Right wall accent stripe */}
-      <mesh position={[9.95, 1.6, 0]}>
+      <mesh position={[9.9, 1.6, 0]}>
         <boxGeometry args={[0.04, 0.12, 20]} />
         <meshStandardMaterial
           color={config.accentColor}

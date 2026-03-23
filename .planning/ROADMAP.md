@@ -32,7 +32,7 @@ Add real-time analyst presence and awareness to the workbench. Four phases build
 **Plans:** 1/1 plans complete
 
 Plans:
-- [ ] 18-01-PLAN.md — PresenceHub struct, DashMap room state, broadcast fan-out, heartbeat timeout, WS endpoint with auth
+- [x] 18-01-PLAN.md — PresenceHub struct, DashMap room state, broadcast fan-out, heartbeat timeout, WS endpoint with auth
 
 ### Phase 19: Client Connection & Store
 **Goal**: The workbench maintains a persistent WebSocket connection to hushd and exposes all presence data through a Zustand store that the rest of the app reads from
@@ -43,11 +43,11 @@ Plans:
   2. When hushd goes down and comes back, the workbench automatically reconnects within a bounded time (exponential backoff with jitter) without user intervention
   3. When hushd is unavailable, the workbench functions normally with all features except presence (no errors, no spinners, empty presence state)
   4. When a second analyst connects from another workbench, both clients see each other in the presence roster within one heartbeat interval
-**Plans**: TBD
+**Plans:** 2 plans
 
 Plans:
-- [ ] 19-01: PresenceSocket class (WS lifecycle, reconnect with jittered backoff, heartbeat timer, message routing)
-- [ ] 19-02: presence-store Zustand store (analysts Map, viewersByFile index, selectors, offline defaults)
+- [ ] 19-01-PLAN.md — Wire protocol types + PresenceSocket class (WS lifecycle, jittered backoff reconnect, heartbeat, message routing)
+- [ ] 19-02-PLAN.md — presence-store Zustand store (analysts Map, viewersByFile index, selectors, offline defaults) + bootstrap hook
 
 ### Phase 20: UI Presence Indicators
 **Goal**: Analysts can see at a glance who is online, which files colleagues are viewing, and how many people are looking at their current file
@@ -88,6 +88,6 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 18. Server Foundation | 1/1 | Complete    | 2026-03-23 |
-| 19. Client Connection & Store | 0/2 | Not started | - |
+| 19. Client Connection & Store | 0/2 | Planning complete | - |
 | 20. UI Presence Indicators | 0/3 | Not started | - |
 | 21. CodeMirror Cursor Extension | 0/1 | Not started | - |

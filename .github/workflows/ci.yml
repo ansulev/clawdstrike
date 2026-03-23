@@ -443,6 +443,9 @@ jobs:
       - name: Install protoc
         run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
 
+      - name: Install Z3 toolchain for all-features docs
+        run: sudo apt-get update && sudo apt-get install -y z3 libz3-dev clang libclang-dev
+
       - name: Build documentation
         run: cargo doc --no-deps --all-features
         env:

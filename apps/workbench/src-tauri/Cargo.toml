@@ -48,3 +48,6 @@ tempfile = "3"
 [features]
 default = ["custom-protocol"]
 custom-protocol = ["tauri/custom-protocol"]
+
+[patch.crates-io]
+async-nats = { path = "../../../infra/vendor/async-nats" }

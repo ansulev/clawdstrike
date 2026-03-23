@@ -917,7 +917,7 @@ function syncSwarmFeedStoreWithStorage(options?: {
 
   const restored = loadPersistedSwarmFeed() ?? INITIAL_SWARM_FEED_STATE;
   lastSwarmFeedStorageSnapshot = snapshot;
-  useSwarmFeedStoreBase.setState(restored);
+  replaceSwarmFeedStoreState(restored);
   for (const record of restored.findingEnvelopes) {
     queueFindingDigestHydration(record);
   }
@@ -1671,19 +1671,32 @@ if (typeof window !== "undefined") {
 // Digest hydration tracker (module-level, replaces useRef-based tracking)
 // ---------------------------------------------------------------------------
 
-const _digestHydrationPending = new Set<string>();
+let _digestHydrationGeneration = 0;
+const _digestHydrationPending = new Map<string, number>();
+
+function replaceSwarmFeedStoreState(state: SwarmFeedState): void {
+  _digestHydrationGeneration += 1;
+  useSwarmFeedStoreBase.setState(state);
+}
 
 function queueFindingDigestHydration(record: SwarmFindingEnvelopeRecord): void {
   if (record.digest !== undefined) {
     return;
   }
   const replayKey = findingEnvelopeReplayKey(record);
-  if (_digestHydrationPending.has(replayKey)) {
+  if (_digestHydrationPending.get(replayKey) === _digestHydrationGeneration) {
     return;
   }
-  _digestHydrationPending.add(replayKey);
+  const generation = _digestHydrationGeneration;
+  _digestHydrationPending.set(replayKey, generation);
   void hydrateFindingEnvelopeRecordDigest(record)
     .then((hydratedRecord) => {
+      if (
+        _digestHydrationPending.get(replayKey) !== generation ||
+        _digestHydrationGeneration !== generation
+      ) {
+        return;
+      }
       const currentState = useSwarmFeedStoreBase.getState();
       const nextState = applyIngestFindingEnvelope(currentState, hydratedRecord);
       useSwarmFeedStoreBase.setState(nextState);
@@ -1693,7 +1706,9 @@ function queueFindingDigestHydration(record: SwarmFindingEnvelopeRecord): void {
       console.warn("[swarm-feed-store] finding digest hydration failed:", error);
     })
     .finally(() => {
-      _digestHydrationPending.delete(replayKey);
+      if (_digestHydrationPending.get(replayKey) === generation) {
+        _digestHydrationPending.delete(replayKey);
+      }
     });
 }
 
@@ -2063,7 +2078,7 @@ export function SwarmFeedProvider({ children }: { children: ReactNode }) {
     initialized.current = true;
     const restored = loadPersistedSwarmFeed() ?? INITIAL_SWARM_FEED_STATE;
     lastSwarmFeedStorageSnapshot = readSwarmFeedStorageSnapshot();
-    useSwarmFeedStoreBase.setState(restored);
+    replaceSwarmFeedStoreState(restored);
     for (const record of restored.findingEnvelopes) {
       queueFindingDigestHydration(record);
     }

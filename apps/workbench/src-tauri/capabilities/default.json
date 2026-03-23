@@ -27,6 +27,21 @@
         "$DOWNLOAD/**",
         "$DOCUMENT/**",
         "$DESKTOP/**"
+      ],
+      "deny": [
+        "$HOME/.ssh/**",
+        "$HOME/.gnupg/**",
+        "$HOME/.aws/**",
+        "$HOME/.config/gcloud/**",
+        "$HOME/.azure/**",
+        "$HOME/.password-store/**",
+        "$HOME/.kube/**",
+        "$HOME/.docker/**",
+        "$HOME/.netrc",
+        "$HOME/.git-credentials",
+        "$HOME/.npmrc",
+        "$HOME/.pypirc",
+        "$HOME/Library/Keychains/**"
       ]
     },
     "fs:allow-read-text-file",

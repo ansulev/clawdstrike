@@ -10,6 +10,7 @@ import type {
 } from "@/features/search/stores/search-store";
 import { useProjectStore } from "@/features/project/stores/project-store";
 import { usePaneStore } from "@/features/panes/pane-store";
+import { joinWorkspacePath } from "@/lib/workbench/path-utils";
 
 function sliceByCharacterRange(
   value: string,
@@ -347,7 +348,7 @@ export function SearchPanelConnected() {
       onOptionToggle={(key) => actions.setOption(key, !options[key])}
       onSearch={() => actions.performSearch(projectRoots)}
       onResultClick={(match) => {
-        const absolutePath = `${match.rootPath.replace(/\/+$/, "")}/${match.filePath.replace(/^\/+/, "")}`;
+        const absolutePath = joinWorkspacePath(match.rootPath, match.filePath);
         usePaneStore
           .getState()
           .openFile(absolutePath, match.filePath.split("/").pop() ?? match.filePath);

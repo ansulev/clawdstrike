@@ -26,6 +26,7 @@ import { usePolicyEditStore } from "@/features/policy/stores/policy-edit-store";
 import { useNativeValidation } from "@/features/policy/use-native-validation";
 import { useAutoVersion } from "@/features/policy/use-auto-version";
 import { isPolicyFileType } from "@/lib/workbench/file-type-registry";
+import { restoreFileRoutePath } from "@/lib/workbench/path-utils";
 import { generateScenariosFromPolicy } from "@/lib/workbench/scenario-generator";
 import { useToast } from "@/components/ui/toast";
 import type { SuiteScenario } from "@/lib/workbench/suite-parser";
@@ -135,21 +136,8 @@ function GuardTestYamlEditor({
 export function FileEditorShell() {
   const params = useParams();
   const rawParam = params["*"] ?? "";
-
-  // Decode URI-encoded characters (spaces, special chars) and restore the
-  // leading "/" that React Router strips from the wildcard match.  Routes
-  // are constructed as `/file/${absolutePath}` (see pane-store.ts openFile)
-  // which produces `/file//Users/...`.  React Router returns the `*` param
-  // without the leading slash, so an absolute path like
-  // "/Users/connor/.clawdstrike/workspace/sigma1.yaml" arrives as
-  // "Users/connor/...".  We detect this (not a __new__ route, doesn't
-  // start with "/") and prepend "/" to reconstruct the real path.
-  const decoded = decodeURIComponent(rawParam);
-  const isNewFile = decoded.startsWith("__new__/");
-  const filePath =
-    !isNewFile && decoded.length > 0 && !decoded.startsWith("/")
-      ? `/${decoded}`
-      : decoded;
+  const filePath = restoreFileRoutePath(rawParam);
+  const isNewFile = filePath.startsWith("__new__/");
 
   // Per-file local state for panel toggles
   const [testRunnerOpen, setTestRunnerOpen] = useState(false);

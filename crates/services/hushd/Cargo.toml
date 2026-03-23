@@ -34,7 +34,7 @@ clawdstrike-ocsf.workspace = true
 clawdstrike-policy-event = { workspace = true, features = ["simulate"] }
 hush-certification.workspace = true
 spine.workspace = true
-async-nats = "0.39"
+async-nats = "0.40"
 clap.workspace = true
 tokio.workspace = true
 async-trait.workspace = true

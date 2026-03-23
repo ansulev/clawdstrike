@@ -138,7 +138,7 @@ pub enum ClientMessage {
 pub struct PresenceHub {
     /// Connected analysts: fingerprint -> AnalystInfo
     analysts: DashMap<String, AnalystInfo>,
-    /// Per-file rooms: normalized_path -> Set<fingerprint>
+    /// Per-file rooms: `normalized_path -> Set<fingerprint>`
     rooms: DashMap<String, HashSet<String>>,
     /// Last heartbeat timestamp: fingerprint -> Instant
     last_seen: DashMap<String, tokio::time::Instant>,
@@ -333,6 +333,7 @@ fn derive_presence_sigil(display_name: &str) -> String {
 
 fn resolve_presence_identity(
     authenticated_key: Option<&ApiKey>,
+    connection_id: &str,
     fingerprint: &str,
     display_name: &str,
     sigil: &str,
@@ -345,7 +346,7 @@ fn resolve_presence_identity(
         };
 
         return (
-            format!("api_key:{}", key.id),
+            format!("api_key:{}:{connection_id}", key.id),
             resolved_display_name.clone(),
             derive_presence_sigil(&resolved_display_name),
         );
@@ -438,6 +439,7 @@ async fn handle_ws(socket: WebSocket, state: AppState, authenticated_key: Option
     let hub = &state.presence_hub;
     let mut rx = hub.subscribe();
     let mut analyst_fingerprint: Option<String> = None;
+    let connection_id = uuid::Uuid::new_v4().simple().to_string();
 
     // Channel to forward messages to the WS sender task
     let (internal_tx, mut internal_rx) = tokio::sync::mpsc::channel::<ServerMessage>(64);
@@ -480,6 +482,7 @@ async fn handle_ws(socket: WebSocket, state: AppState, authenticated_key: Option
                         let (resolved_fingerprint, resolved_display_name, resolved_sigil) =
                             resolve_presence_identity(
                                 authenticated_key.as_ref(),
+                                &connection_id,
                                 &fingerprint,
                                 &display_name,
                                 &sigil,
@@ -700,17 +703,37 @@ mod tests {
         };
 
         let (fingerprint, display_name, sigil) =
-            resolve_presence_identity(Some(&key), "spoofed", "Mallory", "M");
+            resolve_presence_identity(Some(&key), "conn-1", "spoofed", "Mallory", "M");
 
-        assert_eq!(fingerprint, "api_key:key-123");
+        assert_eq!(fingerprint, "api_key:key-123:conn-1");
         assert_eq!(display_name, "Blue Team");
         assert_eq!(sigil, "BT");
     }
 
     #[test]
+    fn resolve_presence_identity_keeps_authenticated_connections_unique() {
+        let key = ApiKey {
+            id: "key-123".to_string(),
+            key_hash: "hash".to_string(),
+            name: "Blue Team".to_string(),
+            tier: None,
+            scopes: std::collections::HashSet::new(),
+            created_at: chrono::Utc::now(),
+            expires_at: None,
+        };
+
+        let (first, _, _) =
+            resolve_presence_identity(Some(&key), "conn-1", "spoofed", "Mallory", "M");
+        let (second, _, _) =
+            resolve_presence_identity(Some(&key), "conn-2", "spoofed", "Mallory", "M");
+
+        assert_ne!(first, second);
+    }
+
+    #[test]
     fn resolve_presence_identity_preserves_client_values_without_auth() {
         let (fingerprint, display_name, sigil) =
-            resolve_presence_identity(None, "fp-1", "Alice", "A");
+            resolve_presence_identity(None, "conn-1", "fp-1", "Alice", "A");
 
         assert_eq!(fingerprint, "fp-1");
         assert_eq!(display_name, "Alice");

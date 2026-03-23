@@ -1645,7 +1645,7 @@ pub async fn search_in_project(
         // Build the regex or prepare the literal query.
         let compiled_regex = if use_regex {
             let pattern = if whole_word {
-                format!(r"\b{}\b", query_clone)
+                format!(r"\b(?:{})\b", query_clone)
             } else {
                 query_clone.clone()
             };
@@ -1802,6 +1802,30 @@ guards:
         assert_eq!(first_match.line_content.chars().count(), MAX_LINE_CONTENT_LEN);
         assert_eq!(first_match.match_start, MAX_LINE_CONTENT_LEN);
         assert_eq!(first_match.match_end, MAX_LINE_CONTENT_LEN);
+    }
+
+    #[tokio::test]
+    async fn search_in_project_groups_regex_before_applying_whole_word_bounds() {
+        let root = tempdir().unwrap();
+        std::fs::write(root.path().join("search.txt"), "foo\nfoobar\nbar\n").unwrap();
+
+        let result = search_in_project(
+            root.path().to_string_lossy().to_string(),
+            "foo|bar".to_string(),
+            false,
+            true,
+            true,
+        )
+        .await
+        .unwrap();
+
+        let matched_lines: Vec<_> = result
+            .matches
+            .iter()
+            .map(|entry| entry.line_content.as_str())
+            .collect();
+
+        assert_eq!(matched_lines, vec!["foo", "bar"]);
     }
 
     // =======================================================================

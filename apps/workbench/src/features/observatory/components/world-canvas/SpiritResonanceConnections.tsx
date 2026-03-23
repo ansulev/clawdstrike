@@ -12,7 +12,7 @@
  * Visual: dashed luminous lines at Y=8, animated dash-offset flow.
  */
 
-import { useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import { Line } from "@react-three/drei";
 import * as THREE from "three";
@@ -42,8 +42,17 @@ export function SpiritResonanceConnections({
   // We store line material refs to mutate dashOffset each frame
   const lineRefs = useRef<(THREE.LineSegments | null)[]>([]);
 
+  useEffect(() => {
+    lineRefs.current = [];
+  }, [connections.length]);
+
   useFrame((_state, delta) => {
     dashOffsetRef.current += delta * 0.5;
+    lineRefs.current.forEach((line) => {
+      if (line && line.material) {
+        (line.material as any).dashOffset = dashOffsetRef.current;
+      }
+    });
   });
 
   if (connections.length === 0) return null;

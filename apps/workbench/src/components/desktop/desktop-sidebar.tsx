@@ -22,7 +22,6 @@ import {
   SigilSettings,
   type SigilProps,
 } from "./sidebar-icons";
-import { useWorkbench } from "@/features/policy/stores/multi-policy-store";
 import { useOperator } from "@/features/operator/stores/operator-store";
 import { useFleetConnection } from "@/features/fleet/use-fleet-connection";
 import { useSentinels } from "@/features/sentinels/stores/sentinel-store";
@@ -32,6 +31,7 @@ import { fleetClient } from "@/features/fleet/fleet-client";
 import { DEMO_APPROVAL_REQUESTS } from "@/lib/workbench/approval-demo-data";
 import { SIGIL_SYMBOLS } from "@/components/workbench/settings/identity-settings";
 import type { SigilType } from "@/lib/workbench/sentinel-manager";
+import { useWorkbenchUIStore } from "@/features/policy/stores/workbench-ui-store";
 
 // ---- Data ----
 
@@ -369,8 +369,8 @@ export function SystemHeartbeat({
 
 export function DesktopSidebar() {
   const pathname = useLocation().pathname;
-  const { state, dispatch } = useWorkbench();
-  const collapsed = state.ui.sidebarCollapsed;
+  
+  const collapsed = useWorkbenchUIStore.getState().sidebarCollapsed;
   const { currentOperator } = useOperator();
   const { connection } = useFleetConnection();
   const fleetConnected = connection.connected;
@@ -656,7 +656,7 @@ export function DesktopSidebar() {
       <button
         aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
         onClick={() =>
-          dispatch({ type: "SET_SIDEBAR_COLLAPSED", collapsed: !collapsed })
+          useWorkbenchUIStore.getState().setSidebarCollapsed(!collapsed)
         }
         className="absolute top-1/2 -translate-y-1/2 -right-3 z-40 flex items-center justify-center w-3 h-8 rounded-r bg-[#131721] border border-l-0 border-[#1a1d28]/60 text-[#6f7f9a]/40 hover:text-[#ece7dc]/60 hover:bg-[#1a1d28] transition-all duration-150 opacity-0 hover:opacity-100 group-hover/sidebar:opacity-60"
       >

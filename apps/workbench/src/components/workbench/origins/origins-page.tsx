@@ -1,5 +1,4 @@
 import { useState, useCallback, useMemo, useEffect, useRef } from "react";
-import { useWorkbench } from "@/features/policy/stores/multi-policy-store";
 import { useToast } from "@/components/ui/toast";
 import {
   renameOriginProfileIdInPolicy,
@@ -72,6 +71,8 @@ import {
   IconDownload,
   IconCode,
 } from "@tabler/icons-react";
+import { usePolicyTabsStore } from "@/features/policy/stores/policy-tabs-store";
+import { usePolicyEditStore } from "@/features/policy/stores/policy-edit-store";
 
 
 const STORAGE_KEY = "clawdstrike:origin-profile-library";
@@ -2163,7 +2164,9 @@ function OriginsIntro() {
 
 
 export function OriginsPage() {
-  const { state, dispatch } = useWorkbench();
+  const activeTabId = usePolicyTabsStore(s => s.activeTabId);
+  const activeTab = usePolicyTabsStore(s => s.tabs.find(t => t.id === s.activeTabId));
+  const editState = usePolicyEditStore(s => s.editStates.get(activeTabId));
   const { toast } = useToast();
   const library = useProfileLibrary();
 
@@ -2277,17 +2280,17 @@ export function OriginsPage() {
   const getReferencingPolicies = useCallback(
     (profileId: string) => {
       const names: string[] = [];
-      for (const sp of state.savedPolicies) {
+      for (const sp of usePolicyTabsStore.getState().savedPolicies) {
         if (sp.policy.origins?.profiles?.some((p) => p.id === profileId)) {
           names.push(sp.policy.name || sp.id);
         }
       }
-      if (state.activePolicy.origins?.profiles?.some((p) => p.id === profileId)) {
-        names.push(`${state.activePolicy.name || "Active Policy"} (active)`);
+      if ((editState?.policy ?? { version: "1.1.0", name: "", description: "", guards: {}, settings: {} }).origins?.profiles?.some((p) => p.id === profileId)) {
+        names.push(`${(editState?.policy ?? { version: "1.1.0", name: "", description: "", guards: {}, settings: {} }).name || "Active Policy"} (active)`);
       }
       return names;
     },
-    [state.savedPolicies, state.activePolicy],
+    [usePolicyTabsStore.getState().savedPolicies, (editState?.policy ?? { version: "1.1.0", name: "", description: "", guards: {}, settings: {} })],
   );
 
   // State to track whether we're showing a "referenced in policies" warning
@@ -2363,7 +2366,7 @@ export function OriginsPage() {
         setSelectedProfileId(newId);
 
         // B1+B3: Cascade the ID rename to any saved or active policy that references the old ID
-        for (const sp of state.savedPolicies) {
+        for (const sp of usePolicyTabsStore.getState().savedPolicies) {
           const updatedSavedPolicy = renameOriginProfileIdInSavedPolicy(
             sp,
             oldId,
@@ -2371,32 +2374,30 @@ export function OriginsPage() {
             updatedAt,
           );
           if (updatedSavedPolicy) {
-            dispatch({ type: "SAVE_POLICY", savedPolicy: updatedSavedPolicy });
+            usePolicyTabsStore.getState().savePolicyToLibrary(updatedSavedPolicy);
           }
         }
 
         // Also update the active policy if it references the old ID
         const updatedActivePolicy = renameOriginProfileIdInPolicy(
-          state.activePolicy,
+          (editState?.policy ?? { version: "1.1.0", name: "", description: "", guards: {}, settings: {} }),
           oldId,
           newId,
         );
         if (updatedActivePolicy?.origins) {
-          dispatch({
-            type: "UPDATE_ORIGINS",
-            origins: updatedActivePolicy.origins,
-          });
+          usePolicyEditStore.getState().updateOrigins(activeTabId, updatedActivePolicy.origins, activeTab?.fileType ?? "clawdstrike_policy");
+          usePolicyTabsStore.getState().setDirty(activeTabId, true);
         }
       }
     },
-    [selectedProfileId, library, toast, state.savedPolicies, state.activePolicy, dispatch],
+    [selectedProfileId, library, toast, usePolicyTabsStore.getState().savedPolicies, (editState?.policy ?? { version: "1.1.0", name: "", description: "", guards: {}, settings: {} }), activeTabId, activeTab?.fileType],
   );
 
   // Apply to active policy
   const handleApplyToActive = useCallback(() => {
     if (!selectedProfile) return;
 
-    const currentOrigins = state.activePolicy.origins;
+    const currentOrigins = (editState?.policy ?? { version: "1.1.0", name: "", description: "", guards: {}, settings: {} }).origins;
     const currentProfiles = currentOrigins?.profiles ?? [];
 
     if (currentProfiles.some((p) => p.id === selectedProfile.id)) {
@@ -2412,13 +2413,14 @@ export function OriginsPage() {
       default_behavior: currentOrigins?.default_behavior ?? "deny",
       profiles: [...currentProfiles, structuredClone(selectedProfile)],
     };
-    dispatch({ type: "UPDATE_ORIGINS", origins: updated });
+    usePolicyEditStore.getState().updateOrigins(activeTabId, updated, activeTab?.fileType ?? "clawdstrike_policy");
+      usePolicyTabsStore.getState().setDirty(activeTabId, true);
     toast({
       type: "success",
       title: "Applied to active policy",
       description: `Profile "${selectedProfile.id}" added to the active policy.`,
     });
-  }, [selectedProfile, state.activePolicy.origins, dispatch, toast]);
+  }, [selectedProfile, editState?.policy?.origins, activeTabId, activeTab?.fileType, toast]);
 
   return (
     <div className="h-full bg-[#05060a] relative">
@@ -2450,17 +2452,15 @@ export function OriginsPage() {
             <div className="flex items-center gap-2">
               <span className="text-[9px] text-[#6f7f9a] shrink-0">Default:</span>
               <Select
-                value={state.activePolicy.origins?.default_behavior ?? "deny"}
+                value={(editState?.policy ?? { version: "1.1.0", name: "", description: "", guards: {}, settings: {} }).origins?.default_behavior ?? "deny"}
                 onValueChange={(val: string | null) => {
                   if (!val) return;
-                  const currentOrigins = state.activePolicy.origins;
-                  dispatch({
-                    type: "UPDATE_ORIGINS",
-                    origins: {
+                  const currentOrigins = (editState?.policy ?? { version: "1.1.0", name: "", description: "", guards: {}, settings: {} }).origins;
+                  usePolicyEditStore.getState().updateOrigins(activeTabId, {
                       default_behavior: val as OriginDefaultBehavior,
                       profiles: currentOrigins?.profiles ?? [],
-                    },
-                  });
+                    }, activeTab?.fileType ?? "clawdstrike_policy");
+                  usePolicyTabsStore.getState().setDirty(activeTabId, true);
                 }}
               >
                 <SelectTrigger className="bg-[#131721] border-[#2d3240] text-[#ece7dc] text-[10px] font-mono h-6 flex-1">
@@ -2599,10 +2599,10 @@ export function OriginsPage() {
               <ProfileDetail
                 key={stableKeyRef.current}
                 profile={selectedProfile}
-                savedPolicies={state.savedPolicies}
+                savedPolicies={usePolicyTabsStore.getState().savedPolicies}
                 activePolicy={{
-                  name: state.activePolicy.name,
-                  origins: state.activePolicy.origins,
+                  name: (editState?.policy ?? { version: "1.1.0", name: "", description: "", guards: {}, settings: {} }).name,
+                  origins: (editState?.policy ?? { version: "1.1.0", name: "", description: "", guards: {}, settings: {} }).origins,
                 }}
                 onApplyToActive={handleApplyToActive}
                 onClone={handleClone}

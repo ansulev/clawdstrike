@@ -13,7 +13,6 @@ import {
   SelectContent,
   SelectItem,
 } from "@/components/ui/select";
-import { useWorkbench } from "@/features/policy/stores/multi-policy-store";
 import {
   ORIGIN_ACTOR_TYPE_OPTIONS as ACTOR_TYPE_OPTIONS,
   ORIGIN_DEFAULT_BEHAVIOR_OPTIONS as DEFAULT_BEHAVIOR_OPTIONS,
@@ -47,6 +46,8 @@ import {
   IconWorld,
   IconFingerprint,
 } from "@tabler/icons-react";
+import { usePolicyTabsStore } from "@/features/policy/stores/policy-tabs-store";
+import { usePolicyEditStore } from "@/features/policy/stores/policy-edit-store";
 
 function createEmptyProfile(): OriginProfile {
   return {
@@ -68,29 +69,31 @@ function createEmptyOriginsConfig(): OriginsConfig {
 // ---------------------------------------------------------------------------
 
 export function OriginEditor() {
-  const { state, dispatch } = useWorkbench();
-  const origins = state.activePolicy.origins;
-  const isV14 = state.activePolicy.version === "1.4.0";
+  const activeTabId = usePolicyTabsStore(s => s.activeTabId);
+  const activeTab = usePolicyTabsStore(s => s.tabs.find(t => t.id === s.activeTabId));
+  const editState = usePolicyEditStore(s => s.editStates.get(activeTabId));
+  const origins = (editState?.policy ?? { version: "1.1.0", name: "", description: "", guards: {}, settings: {} }).origins;
+  const isV14 = (editState?.policy ?? { version: "1.1.0", name: "", description: "", guards: {}, settings: {} }).version === "1.4.0";
 
   const handleToggleOrigins = useCallback(
     (checked: boolean) => {
       if (checked) {
-        dispatch({
-          type: "UPDATE_ORIGINS",
-          origins: origins ?? createEmptyOriginsConfig(),
-        });
+        usePolicyEditStore.getState().updateOrigins(activeTabId, origins ?? createEmptyOriginsConfig(), activeTab?.fileType ?? "clawdstrike_policy");
+        usePolicyTabsStore.getState().setDirty(activeTabId, true);
       } else {
-        dispatch({ type: "UPDATE_ORIGINS", origins: undefined });
+        usePolicyEditStore.getState().updateOrigins(activeTabId, undefined, activeTab?.fileType ?? "clawdstrike_policy");
+      usePolicyTabsStore.getState().setDirty(activeTabId, true);
       }
     },
-    [dispatch, origins],
+    [activeTabId, activeTab?.fileType, origins],
   );
 
   const updateOrigins = useCallback(
     (updated: OriginsConfig) => {
-      dispatch({ type: "UPDATE_ORIGINS", origins: updated });
+      usePolicyEditStore.getState().updateOrigins(activeTabId, updated, activeTab?.fileType ?? "clawdstrike_policy");
+      usePolicyTabsStore.getState().setDirty(activeTabId, true);
     },
-    [dispatch],
+    [activeTabId, activeTab?.fileType],
   );
 
   const handleDefaultBehaviorChange = useCallback(

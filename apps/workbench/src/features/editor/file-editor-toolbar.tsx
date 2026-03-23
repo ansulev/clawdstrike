@@ -22,7 +22,6 @@ import {
 import { cn } from "@/lib/utils";
 import { isPolicyFileType } from "@/lib/workbench/file-type-registry";
 import { simulatePolicy } from "@/lib/workbench/simulation-engine";
-import { useWorkbench } from "@/features/policy/stores/multi-policy-store";
 import { useToast } from "@/components/ui/toast";
 import { usePaneStore } from "@/features/panes/pane-store";
 import { useSentinelStore } from "@/features/sentinels/stores/sentinel-store";
@@ -31,6 +30,8 @@ import type { RightSidebarPanel } from "@/features/right-sidebar/types";
 import type { TestScenario } from "@/lib/workbench/types";
 import type { TabMeta } from "@/features/policy/stores/policy-tabs-store";
 import type { TabEditState } from "@/features/policy/stores/policy-edit-store";
+import { usePolicyTabsStore } from "@/features/policy/stores/policy-tabs-store";
+import { usePolicyEditStore } from "@/features/policy/stores/policy-edit-store";
 
 // ---- Props ----
 
@@ -122,7 +123,8 @@ const QUICK_TESTS: readonly TestScenario[] = [
 // ---- Run button with quick test dropdown ----
 
 function RunButtonGroup() {
-  const { state } = useWorkbench();
+  const _activeTabId = usePolicyTabsStore(s => s.activeTabId);
+  const _editState = usePolicyEditStore(s => s.editStates.get(_activeTabId));
   const { toast } = useToast();
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -143,7 +145,7 @@ function RunButtonGroup() {
     (test: TestScenario) => {
       setDropdownOpen(false);
       try {
-        const result = simulatePolicy(state.activePolicy, test);
+        const result = simulatePolicy((_editState?.policy ?? { version: "1.1.0", name: "", description: "", guards: {}, settings: {} }), test);
         const verdict = result.overallVerdict;
         toast({
           type: verdict === "deny" ? "success" : "warning",
@@ -158,7 +160,7 @@ function RunButtonGroup() {
         });
       }
     },
-    [state.activePolicy, toast],
+    [(_editState?.policy ?? { version: "1.1.0", name: "", description: "", guards: {}, settings: {} }), toast],
   );
 
   return (
@@ -242,13 +244,14 @@ export function FileEditorToolbar({
   splitActive,
 }: FileEditorToolbarProps) {
   const isPolicy = isPolicyFileType(tabMeta.fileType);
-  const { state } = useWorkbench();
+  const _activeTabId = usePolicyTabsStore(s => s.activeTabId);
+  const _editState = usePolicyEditStore(s => s.editStates.get(_activeTabId));
   const { toast } = useToast();
 
   const runQuickTest = useCallback(() => {
     const test = QUICK_TESTS[0];
     try {
-      const result = simulatePolicy(state.activePolicy, test);
+      const result = simulatePolicy((_editState?.policy ?? { version: "1.1.0", name: "", description: "", guards: {}, settings: {} }), test);
       const verdict = result.overallVerdict;
       toast({
         type: verdict === "deny" ? "success" : "warning",
@@ -262,7 +265,7 @@ export function FileEditorToolbar({
         description: err instanceof Error ? err.message : "Simulation error",
       });
     }
-  }, [state.activePolicy, toast]);
+  }, [(_editState?.policy ?? { version: "1.1.0", name: "", description: "", guards: {}, settings: {} }), toast]);
 
   const handleLaunchSwarm = useCallback(async () => {
     const { isDesktop, createSwarmBundleFromPolicy } = await import("@/lib/tauri-bridge");

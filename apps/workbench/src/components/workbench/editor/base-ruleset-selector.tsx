@@ -1,4 +1,3 @@
-import { useWorkbench } from "@/features/policy/stores/multi-policy-store";
 import {
   Select,
   SelectContent,
@@ -6,6 +5,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { usePolicyTabsStore } from "@/features/policy/stores/policy-tabs-store";
+import { usePolicyEditStore } from "@/features/policy/stores/policy-edit-store";
 
 const RULESETS = [
   { value: "__none__", label: "None (from scratch)" },
@@ -22,8 +23,10 @@ const RULESETS = [
 ] as const;
 
 export function BaseRulesetSelector() {
-  const { state, dispatch } = useWorkbench();
-  const currentExtends = state.activePolicy.extends ?? "__none__";
+  const activeTabId = usePolicyTabsStore(s => s.activeTabId);
+  const activeTab = usePolicyTabsStore(s => s.tabs.find(t => t.id === s.activeTabId));
+  const editState = usePolicyEditStore(s => s.editStates.get(activeTabId));
+  const currentExtends = (editState?.policy ?? { version: "1.1.0", name: "", description: "", guards: {}, settings: {} }).extends ?? "__none__";
 
   return (
     <div className="flex flex-col gap-2 p-4 border-b border-[#2d3240]">
@@ -33,10 +36,10 @@ export function BaseRulesetSelector() {
       <Select
         value={currentExtends}
         onValueChange={(val) => {
-          dispatch({
-            type: "UPDATE_META",
+          usePolicyEditStore.getState().updateMeta(activeTabId, {
             extends: val === "__none__" ? "" : (val as string),
-          });
+          }, activeTab?.fileType ?? "clawdstrike_policy");
+          usePolicyTabsStore.getState().setDirty(activeTabId, true);
         }}
       >
         <SelectTrigger className="w-full bg-[#131721] border-[#2d3240] text-[#ece7dc] text-xs font-mono">

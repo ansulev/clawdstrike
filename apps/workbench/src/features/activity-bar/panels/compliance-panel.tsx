@@ -6,8 +6,9 @@ import {
   scoreFramework,
 } from "@/lib/workbench/compliance-requirements";
 import { MiniScoreRing } from "@/components/workbench/compliance/framework-selector";
-import { useWorkbench } from "@/features/policy/stores/multi-policy-store";
 import { usePaneStore } from "@/features/panes/pane-store";
+import { usePolicyTabsStore } from "@/features/policy/stores/policy-tabs-store";
+import { usePolicyEditStore } from "@/features/policy/stores/policy-edit-store";
 
 // ---------------------------------------------------------------------------
 // CompliancePanel -- framework selector with score rings and score bars.
@@ -28,9 +29,11 @@ function getScoreColor(score: number): string {
 // ---------------------------------------------------------------------------
 
 export function CompliancePanel() {
-  const { state } = useWorkbench();
-  const guards = state.activePolicy.guards;
-  const settings = state.activePolicy.settings;
+  const activeTabId = usePolicyTabsStore(s => s.activeTabId);
+  const activeTab = usePolicyTabsStore(s => s.tabs.find(t => t.id === s.activeTabId));
+  const editState = usePolicyEditStore(s => s.editStates.get(activeTabId));
+  const guards = (editState?.policy ?? { version: "1.1.0", name: "", description: "", guards: {}, settings: {} }).guards;
+  const settings = (editState?.policy ?? { version: "1.1.0", name: "", description: "", guards: {}, settings: {} }).settings;
 
   const [selectedFrameworkId, setSelectedFrameworkId] = useState<string>(
     COMPLIANCE_FRAMEWORKS[0]?.id ?? "",

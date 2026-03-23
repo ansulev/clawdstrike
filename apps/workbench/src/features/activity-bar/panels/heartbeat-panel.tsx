@@ -4,11 +4,12 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { useSentinelStore } from "@/features/sentinels/stores/sentinel-store";
 import { useFindingStore } from "@/features/findings/stores/finding-store";
 import { useFleetConnectionStore } from "@/features/fleet/use-fleet-connection";
-import { useWorkbench } from "@/features/policy/stores/multi-policy-store";
 import { usePaneStore } from "@/features/panes/pane-store";
 import { derivePosture, POSTURE_CONFIG } from "@/features/shared/posture-utils";
 import { GUARD_REGISTRY } from "@/lib/workbench/guard-registry";
 import type { GuardId } from "@/lib/workbench/types";
+import { usePolicyTabsStore } from "@/features/policy/stores/policy-tabs-store";
+import { usePolicyEditStore } from "@/features/policy/stores/policy-edit-store";
 
 // ---------------------------------------------------------------------------
 // HeartbeatPanel — compact system status overview for the sidebar.
@@ -18,8 +19,10 @@ import type { GuardId } from "@/lib/workbench/types";
 
 /** Read enabled guard count from the active policy (mirrors home-page.tsx logic). */
 function useEnabledGuardCount(): number {
-  const { state } = useWorkbench();
-  const { activePolicy } = state;
+  const activeTabId = usePolicyTabsStore(s => s.activeTabId);
+  const activeTab = usePolicyTabsStore(s => s.tabs.find(t => t.id === s.activeTabId));
+  const editState = usePolicyEditStore(s => s.editStates.get(activeTabId));
+  const activePolicy = editState?.policy ?? { version: "1.1.0", name: "", description: "", guards: {}, settings: {} };
 
   return useMemo(() => {
     let count = 0;

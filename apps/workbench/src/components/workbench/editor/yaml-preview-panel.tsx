@@ -1,5 +1,4 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from "react";
-import { useWorkbench } from "@/features/policy/stores/multi-policy-store";
 import { useToast } from "@/components/ui/toast";
 import { YamlEditor, type YamlEditorError } from "@/components/ui/yaml-editor";
 import { cn } from "@/lib/utils";
@@ -8,6 +7,9 @@ import { generateScenariosFromPolicy } from "@/lib/workbench/scenario-generator"
 import { useTestRunnerOptional } from "@/lib/workbench/test-store";
 import type { SuiteScenario } from "@/lib/workbench/suite-parser";
 import type { TestScenario } from "@/lib/workbench/types";
+import { usePolicyTabsStore } from "@/features/policy/stores/policy-tabs-store";
+import { usePolicyEditStore } from "@/features/policy/stores/policy-edit-store";
+import { useWorkbenchUIStore } from "@/features/policy/stores/workbench-ui-store";
 
 type Tab = "preview" | "edit";
 
@@ -41,19 +43,21 @@ interface YamlPreviewPanelProps {
 }
 
 export function YamlPreviewPanel({ fileType }: YamlPreviewPanelProps) {
-  const { state, dispatch } = useWorkbench();
+  const activeTabId = usePolicyTabsStore(s => s.activeTabId);
+  const storeTab = usePolicyTabsStore(s => s.tabs.find(t => t.id === s.activeTabId));
+  const editState = usePolicyEditStore(s => s.editStates.get(activeTabId));
   const { toast } = useToast();
   const testRunner = useTestRunnerOptional();
   const [activeTab, setActiveTab] = useState<Tab>("preview");
-  const [localYaml, setLocalYaml] = useState(state.yaml);
+  const [localYaml, setLocalYaml] = useState((editState?.yaml ?? ""));
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Sync local yaml when state changes from visual panel edits
   useEffect(() => {
-    if (state.ui.editorSyncDirection !== "yaml") {
-      setLocalYaml(state.yaml);
+    if (useWorkbenchUIStore.getState().editorSyncDirection !== "yaml") {
+      setLocalYaml((editState?.yaml ?? ""));
     }
-  }, [state.yaml, state.ui.editorSyncDirection]);
+  }, [(editState?.yaml ?? ""), useWorkbenchUIStore.getState().editorSyncDirection]);
 
   const handleYamlChange = useCallback(
     (value: string) => {
@@ -63,10 +67,11 @@ export function YamlPreviewPanel({ fileType }: YamlPreviewPanelProps) {
         clearTimeout(debounceRef.current);
       }
       debounceRef.current = setTimeout(() => {
-        dispatch({ type: "SET_YAML", yaml: value });
+        usePolicyEditStore.getState().setYaml(activeTabId, value, storeTab?.fileType ?? "clawdstrike_policy", storeTab?.filePath ?? null, storeTab?.name ?? "Untitled");
+      usePolicyTabsStore.getState().setDirty(activeTabId, true);
       }, 500);
     },
-    [dispatch]
+    [activeTabId, storeTab?.fileType]
   );
 
   // Cleanup debounce on unmount
@@ -81,7 +86,7 @@ export function YamlPreviewPanel({ fileType }: YamlPreviewPanelProps) {
   // Gutter "Run Test" callback: generates scenarios for the clicked guard and imports into test runner
   const handleRunGuardTest = useCallback(
     (guardId: string) => {
-      const result = generateScenariosFromPolicy(state.activePolicy);
+      const result = generateScenariosFromPolicy((editState?.policy ?? { version: "1.1.0", name: "", description: "", guards: {}, settings: {} }));
       const prefix = `auto-${guardId}-`;
       const guardScenarios = result.scenarios.filter((s) => s.id.startsWith(prefix));
 
@@ -110,12 +115,12 @@ export function YamlPreviewPanel({ fileType }: YamlPreviewPanelProps) {
         });
       }
     },
-    [state.activePolicy, testRunner, toast],
+    [(editState?.policy ?? { version: "1.1.0", name: "", description: "", guards: {}, settings: {} }), testRunner, toast],
   );
 
   const isPolicyFile = fileType === "clawdstrike_policy";
 
-  const { errors, warnings } = state.validation;
+  const { errors, warnings } = (editState?.validation ?? { valid: true, errors: [], warnings: [] });
   const editLabel = fileType === "yara_rule"
     ? "Edit Source"
     : fileType === "ocsf_event"
@@ -146,7 +151,7 @@ export function YamlPreviewPanel({ fileType }: YamlPreviewPanelProps) {
 
   // Merge native validation errors (from Rust engine via the store's useNativeValidation hook)
   // with client-side issues. Native errors are authoritative.
-  const nv = state.nativeValidation;
+  const nv = (editState?.nativeValidation ?? { guardErrors: {}, topLevelErrors: [], topLevelWarnings: [], loading: false, valid: null });
   const nativeIssues = useMemo(() => {
     if (nv.valid === null && !nv.loading) return [];
 
@@ -213,7 +218,7 @@ export function YamlPreviewPanel({ fileType }: YamlPreviewPanelProps) {
       <div className="flex-1 overflow-hidden">
         {activeTab === "preview" ? (
           <YamlEditor
-            value={state.yaml}
+            value={(editState?.yaml ?? "")}
             onChange={() => {}}
             readOnly
             fileType={fileType}

@@ -1,7 +1,6 @@
 import { useState, useMemo, useCallback } from "react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { VerdictBadge } from "@/components/workbench/shared/verdict-badge";
-import { useWorkbench } from "@/features/policy/stores/multi-policy-store";
 import { cn } from "@/lib/utils";
 import {
   computeThreatMatrix,
@@ -23,6 +22,8 @@ import {
   IconArrowRight,
   IconBulb,
 } from "@tabler/icons-react";
+import { usePolicyTabsStore } from "@/features/policy/stores/policy-tabs-store";
+import { usePolicyEditStore } from "@/features/policy/stores/policy-edit-store";
 
 
 const COVERAGE_COLORS: Record<CoverageLevel, { bg: string; text: string; border: string }> = {
@@ -335,13 +336,15 @@ interface ThreatMatrixProps {
 }
 
 export function ThreatMatrix({ scenarios, results }: ThreatMatrixProps) {
-  const { state } = useWorkbench();
+  const activeTabId = usePolicyTabsStore(s => s.activeTabId);
+  const activeTab = usePolicyTabsStore(s => s.tabs.find(t => t.id === s.activeTabId));
+  const editState = usePolicyEditStore(s => s.editStates.get(activeTabId));
   const [selectedCell, setSelectedCell] = useState<{ guardId: GuardId; category: AttackCategory } | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<AttackCategory | null>(null);
 
   const matrix = useMemo(
-    () => computeThreatMatrix(state.activePolicy),
-    [state.activePolicy],
+    () => computeThreatMatrix((editState?.policy ?? { version: "1.1.0", name: "", description: "", guards: {}, settings: {} })),
+    [(editState?.policy ?? { version: "1.1.0", name: "", description: "", guards: {}, settings: {} })],
   );
 
   const handleCellClick = useCallback((guardId: GuardId, category: AttackCategory) => {

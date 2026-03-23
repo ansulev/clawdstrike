@@ -17,7 +17,6 @@ import {
   computeCoverageStats,
 } from "@/lib/workbench/trustprint-patterns";
 import { useGuardProvenance } from "@/components/workbench/editor/inheritance-chain";
-import { useWorkbench } from "@/features/policy/stores/multi-policy-store";
 import { GUARD_REGISTRY } from "@/lib/workbench/guard-registry";
 import { useGuardTestStatus, useTestRunnerOptional } from "@/lib/workbench/test-store";
 import { generateScenariosFromPolicy } from "@/lib/workbench/scenario-generator";
@@ -46,6 +45,8 @@ import {
   IconDatabase,
   IconCircleCheck,
 } from "@tabler/icons-react";
+import { usePolicyTabsStore } from "@/features/policy/stores/policy-tabs-store";
+import { usePolicyEditStore } from "@/features/policy/stores/policy-edit-store";
 
 /** Keys handled by custom spider_sense UI — excluded from the generic Advanced section. */
 const SPIDER_SENSE_HANDLED_KEYS = new Set([
@@ -265,7 +266,9 @@ export function GuardCard({
   dropIndicator,
   executionOrder,
 }: GuardCardProps) {
-  const { state, dispatch } = useWorkbench();
+  const activeTabId = usePolicyTabsStore(s => s.activeTabId);
+  const activeTab = usePolicyTabsStore(s => s.tabs.find(t => t.id === s.activeTabId));
+  const editState = usePolicyEditStore(s => s.editStates.get(activeTabId));
   const [open, setOpen] = useState(false);
   const provenanceInfo = useGuardProvenance(guardId);
 
@@ -305,13 +308,13 @@ export function GuardCard({
   const meta = GUARD_REGISTRY.find((g) => g.id === guardId);
   if (!meta) return null;
 
-  const guardConfig = (state.activePolicy.guards[guardId] ?? {}) as Record<string, unknown>;
+  const guardConfig = ((editState?.policy ?? { version: "1.1.0", name: "", description: "", guards: {}, settings: {} }).guards[guardId] ?? {}) as Record<string, unknown>;
   const enabled = (guardConfig.enabled as boolean | undefined) ?? false;
 
   const Icon = ICON_MAP[meta.icon] ?? IconLock;
 
   // Per-guard native validation errors from the Rust engine
-  const nativeErrors = state.nativeValidation.guardErrors[guardId] ?? [];
+  const nativeErrors = (editState?.nativeValidation ?? { guardErrors: {}, topLevelErrors: [], topLevelWarnings: [], loading: false, valid: null }).guardErrors[guardId] ?? [];
   const hasNativeErrors = nativeErrors.length > 0;
 
   const summary = useMemo(
@@ -322,9 +325,10 @@ export function GuardCard({
   const handleToggle = useCallback(
     (checked: boolean | React.FormEvent<HTMLButtonElement>) => {
       const isEnabled = typeof checked === "boolean" ? checked : !enabled;
-      dispatch({ type: "TOGGLE_GUARD", guardId, enabled: isEnabled });
+      usePolicyEditStore.getState().toggleGuard(activeTabId, guardId, isEnabled || enabled, activeTab?.fileType ?? "clawdstrike_policy");
+      usePolicyTabsStore.getState().setDirty(activeTabId, true);
     },
-    [dispatch, guardId, enabled]
+    [activeTabId, activeTab?.fileType, guardId, enabled]
   );
 
   const handleConfigChange = useCallback(
@@ -332,11 +336,8 @@ export function GuardCard({
       // Handle nested keys like "detector.block_threshold" or "detector.layers.heuristic"
       const parts = key.split(".");
       if (parts.length === 1) {
-        dispatch({
-          type: "UPDATE_GUARD",
-          guardId,
-          config: { [key]: value } as Partial<GuardConfigMap[GuardId]>,
-        });
+        usePolicyEditStore.getState().updateGuard(activeTabId, guardId, { [key]: value } as Partial<GuardConfigMap[GuardId]>, activeTab?.fileType ?? "clawdstrike_policy");
+        usePolicyTabsStore.getState().setDirty(activeTabId, true);
       } else {
         // Build nested update — supports 2 or 3 levels of nesting
         const [topKey, ...rest] = parts;
@@ -350,19 +351,16 @@ export function GuardCard({
             (nested[rest[0]] as Record<string, unknown> | undefined) ?? {};
           nested[rest[0]] = { ...subExisting, [rest[1]]: value };
         }
-        dispatch({
-          type: "UPDATE_GUARD",
-          guardId,
-          config: { [topKey]: nested } as Partial<GuardConfigMap[GuardId]>,
-        });
+        usePolicyEditStore.getState().updateGuard(activeTabId, guardId, { [topKey]: nested } as Partial<GuardConfigMap[GuardId]>, activeTab?.fileType ?? "clawdstrike_policy");
+        usePolicyTabsStore.getState().setDirty(activeTabId, true);
       }
     },
-    [dispatch, guardId, guardConfig]
+    [activeTabId, activeTab?.fileType, guardId, guardConfig]
   );
 
   const handleGenerateTests = useCallback(() => {
     if (!testRunner) return;
-    const result = generateScenariosFromPolicy(state.activePolicy);
+    const result = generateScenariosFromPolicy((editState?.policy ?? { version: "1.1.0", name: "", description: "", guards: {}, settings: {} }));
     // Filter to only scenarios for this guard (scenario IDs start with "auto-{guardId}-")
     const prefix = `auto-${guardId}-`;
     const guardScenarios = result.scenarios.filter((s) => s.id.startsWith(prefix));
@@ -371,7 +369,7 @@ export function GuardCard({
     const suiteScenarios: SuiteScenario[] = guardScenarios.map(testScenarioToSuite);
     testRunner.dispatch({ type: "IMPORT_SCENARIOS", scenarios: suiteScenarios });
     setContextMenu(null);
-  }, [testRunner, state.activePolicy, guardId]);
+  }, [testRunner, (editState?.policy ?? { version: "1.1.0", name: "", description: "", guards: {}, settings: {} }), guardId]);
 
   const handleViewResults = useCallback(() => {
     // Scroll to any test result element that references this guard

@@ -23,7 +23,6 @@ import { TestRunnerPanel } from "@/components/workbench/editor/test-runner-panel
 import { TestRunnerProvider, useTestRunnerOptional } from "@/lib/workbench/test-store";
 import { usePolicyTabsStore } from "@/features/policy/stores/policy-tabs-store";
 import { usePolicyEditStore } from "@/features/policy/stores/policy-edit-store";
-import { useWorkbench } from "@/features/policy/stores/multi-policy-store";
 import { useNativeValidation } from "@/features/policy/use-native-validation";
 import { useAutoVersion } from "@/features/policy/use-auto-version";
 import { isPolicyFileType } from "@/lib/workbench/file-type-registry";
@@ -78,7 +77,7 @@ function GuardTestYamlEditor({
   fileType?: FileType;
   errors?: YamlEditorError[];
   showDetectionGutters?: boolean;
-  activePolicy: ReturnType<typeof useWorkbench>["state"]["activePolicy"];
+  activePolicy: import("@/lib/workbench/types").WorkbenchPolicy;
 }) {
   const { toast } = useToast();
   const testRunner = useTestRunnerOptional();
@@ -291,7 +290,12 @@ export function FileEditorShell() {
   // Both hooks must be called unconditionally before early returns (React rules of hooks).
   // They are safe with empty/undefined values: useNativeValidation is a no-op outside
   // Tauri, and useAutoVersion only acts when policyId is defined and dirty transitions.
-  const { state: workbenchState, dispatch: workbenchDispatch } = useWorkbench();
+  const workbenchActivePolicy = editState?.policy ?? { version: "1.1.0", name: "", description: "", guards: {}, settings: {} };
+  const workbenchDispatch = (action: { type: "SET_NATIVE_VALIDATION"; payload: import("@/features/policy/stores/policy-store").NativeValidationState }) => {
+    if (action.type === "SET_NATIVE_VALIDATION" && tabMeta) {
+      usePolicyEditStore.getState().setNativeValidation(tabMeta.id, action.payload);
+    }
+  };
 
   useNativeValidation(
     editState?.yaml ?? "",
@@ -302,7 +306,7 @@ export function FileEditorShell() {
   useAutoVersion(
     tabMeta?.documentId,
     editState?.yaml ?? "",
-    workbenchState.activePolicy,
+    workbenchActivePolicy,
     tabMeta?.dirty ?? false,
   );
 
@@ -342,7 +346,7 @@ export function FileEditorShell() {
             fileType={tabMeta.fileType}
             errors={editorErrors}
             showDetectionGutters={tabMeta.fileType === "clawdstrike_policy"}
-            activePolicy={workbenchState.activePolicy}
+            activePolicy={workbenchActivePolicy}
           />
         </ResizablePanel>
       </ResizablePanelGroup>
@@ -353,7 +357,7 @@ export function FileEditorShell() {
         fileType={tabMeta.fileType}
         errors={editorErrors}
         showDetectionGutters={tabMeta.fileType === "clawdstrike_policy"}
-        activePolicy={workbenchState.activePolicy}
+        activePolicy={workbenchActivePolicy}
       />
     );
 

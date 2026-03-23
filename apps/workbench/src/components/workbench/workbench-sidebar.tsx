@@ -18,8 +18,8 @@ import {
   IconSitemap,
 } from "@tabler/icons-react";
 import { ClawLogo } from "@/components/brand/claw-logo";
-import { useWorkbench } from "@/features/policy/stores/multi-policy-store";
 import { cn } from "@/lib/utils";
+import { useWorkbenchUIStore } from "@/features/policy/stores/workbench-ui-store";
 
 interface NavItem {
   readonly label: string;
@@ -69,8 +69,7 @@ const navSections: readonly NavSection[] = [
 
 export function WorkbenchSidebar() {
   const pathname = useLocation().pathname;
-  const { state, dispatch } = useWorkbench();
-  const collapsed = state.ui.sidebarCollapsed;
+  const collapsed = useWorkbenchUIStore(s => s.sidebarCollapsed);
 
   return (
     <aside
@@ -152,7 +151,7 @@ export function WorkbenchSidebar() {
       <div className="shrink-0 border-t border-[#2d3240] p-2">
         <button
           onClick={() =>
-            dispatch({ type: "SET_SIDEBAR_COLLAPSED", collapsed: !collapsed })
+            useWorkbenchUIStore.getState().setSidebarCollapsed(!collapsed)
           }
           className={cn(
             "flex items-center justify-center w-full rounded-md py-2 text-[#6f7f9a] hover:text-[#ece7dc] hover:bg-[#131721]/50 transition-colors active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d4a84b]/40 focus-visible:ring-offset-1 focus-visible:ring-offset-[#05060a]",

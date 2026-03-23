@@ -1,23 +1,8 @@
-/**
- * Enrichment Orchestrator
- *
- * Coordinates async enrichment across registered ThreatIntelSources with:
- * - Per-source token bucket rate limiting (maxPerMinute enforcement)
- * - Result caching by (sourceId, indicatorType, indicatorValue) with configurable TTL
- * - AbortSignal-based cancellation
- * - Streaming callbacks via onResult
- *
- * The orchestrator queries the ThreatIntelSourceRegistry to discover sources,
- * then fans out indicator lookups with rate limiting and caching.
- */
-
 import type { Indicator, EnrichmentResult, ThreatIntelSource } from "@clawdstrike/plugin-sdk";
 import {
   getThreatIntelSource,
   getThreatIntelSourcesForIndicator,
 } from "./threat-intel-registry";
-
-// ---- Token Bucket (internal) ----
 
 class TokenBucket {
   private tokens: number;
@@ -57,8 +42,6 @@ class TokenBucket {
   }
 }
 
-// ---- Cache (internal) ----
-
 interface CacheEntry {
   result: EnrichmentResult;
   expiresAt: number;
@@ -71,8 +54,6 @@ function cacheKey(sourceId: string, indicator: Indicator): string {
 const MAX_CACHE_SIZE = 10_000;
 const CACHE_CLEANUP_INTERVAL_MS = 300_000; // 5 minutes
 
-// ---- Enrichment Options ----
-
 export interface EnrichOptions {
   /** Restrict enrichment to specific source IDs. */
   sourceIds?: string[];
@@ -81,8 +62,6 @@ export interface EnrichOptions {
   /** Callback invoked for each result as it arrives. */
   onResult?: (result: EnrichmentResult) => void;
 }
-
-// ---- Orchestrator ----
 
 export class EnrichmentOrchestrator {
   private readonly rateLimiters = new Map<string, TokenBucket>();
@@ -116,17 +95,14 @@ export class EnrichmentOrchestrator {
   ): Promise<EnrichmentResult[]> {
     const { sourceIds, signal, onResult } = options;
 
-    // Resolve applicable sources
     const sources = this.resolveSources(indicator, sourceIds);
 
-    // Dispatch concurrently with rate limiting
     const settled = await Promise.allSettled(
       sources.map((source) =>
         this.enrichFromSource(source, indicator, signal, onResult),
       ),
     );
 
-    // Collect successful results
     const results: EnrichmentResult[] = [];
     for (const outcome of settled) {
       if (outcome.status === "fulfilled" && outcome.value != null) {
@@ -152,8 +128,6 @@ export class EnrichmentOrchestrator {
     }
   }
 
-  // ---- Private helpers ----
-
   private resolveSources(
     indicator: Indicator,
     sourceIds?: string[],
@@ -177,12 +151,10 @@ export class EnrichmentOrchestrator {
     signal?: AbortSignal,
     onResult?: (result: EnrichmentResult) => void,
   ): Promise<EnrichmentResult | null> {
-    // Check abort before starting
     if (signal?.aborted) {
       return null;
     }
 
-    // Check cache
     const key = cacheKey(source.id, indicator);
     const cached = this.cache.get(key);
     if (cached && Date.now() < cached.expiresAt) {
@@ -190,30 +162,25 @@ export class EnrichmentOrchestrator {
       return cached.result;
     }
 
-    // Get or create rate limiter
     let bucket = this.rateLimiters.get(source.id);
     if (!bucket) {
       bucket = new TokenBucket(source.rateLimit.maxPerMinute);
       this.rateLimiters.set(source.id, bucket);
     }
 
-    // Wait for rate limit token
     if (!bucket.tryConsume()) {
       const waitMs = bucket.msUntilToken();
       if (waitMs > 0) {
-        // Wait for token, checking abort periodically
         await this.waitWithAbort(waitMs, signal);
         if (signal?.aborted) {
           return null;
         }
-        // After waiting, try to consume again (refill should have happened)
         if (!bucket.tryConsume()) {
           return null; // Still no token available
         }
       }
     }
 
-    // Check abort before calling source
     if (signal?.aborted) {
       return null;
     }
@@ -221,13 +188,11 @@ export class EnrichmentOrchestrator {
     try {
       const result = await source.enrich(indicator);
 
-      // Store in cache
       this.cache.set(key, {
         result,
         expiresAt: Date.now() + result.cacheTtlMs,
       });
 
-      // LRU eviction: if cache exceeds max size, remove oldest entries
       if (this.cache.size > MAX_CACHE_SIZE) {
         this.evictOldestEntries(this.cache.size - MAX_CACHE_SIZE);
       }

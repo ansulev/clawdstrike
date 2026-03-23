@@ -1,22 +1,3 @@
-/**
- * Shodan Threat Intel Source Plugin
- *
- * Implements ThreatIntelSource for the Shodan REST API. Supports IP and
- * domain indicator types. For domains, resolves via Shodan DNS first,
- * then enriches the resolved IP.
- *
- * Normalizes Shodan host data (open ports, vulnerabilities, geolocation)
- * into ThreatVerdict (classification + confidence + summary).
- *
- * Rate limit: 60 requests/minute (1 req/sec).
- * Cache TTL: 1 hour (Shodan data changes slowly).
- *
- * Auth pattern: Shodan uses `key` as a query parameter (NOT a header).
- *
- * Never throws -- all error paths return EnrichmentResult with
- * classification "unknown" and confidence 0.
- */
-
 import type {
   PluginManifest,
   ThreatIntelSource,
@@ -26,13 +7,9 @@ import type {
 } from "@clawdstrike/plugin-sdk";
 import { sanitizeErrorMessage } from "./sanitize-error";
 
-// ---- Constants ----
-
 const SHODAN_API_BASE = "https://api.shodan.io";
 const CACHE_TTL_MS = 3_600_000; // 1 hour
 const RATE_LIMIT_MAX_PER_MINUTE = 60; // 1 req/sec
-
-// ---- Manifest ----
 
 export const SHODAN_MANIFEST: PluginManifest = {
   id: "clawdstrike.shodan",
@@ -66,9 +43,6 @@ export const SHODAN_MANIFEST: PluginManifest = {
   ],
 };
 
-// ---- Types ----
-
-/** Shodan host API response shape. */
 interface ShodanHostResponse {
   ip_str: string;
   ports?: number[];
@@ -81,9 +55,6 @@ interface ShodanHostResponse {
   [key: string]: unknown;
 }
 
-// ---- Helpers ----
-
-/** Check if an IP address is private or reserved (SSRF prevention). */
 function isPrivateOrReservedIP(ip: string): boolean {
   const parts = ip.split(".").map(Number);
   if (parts.length !== 4 || parts.some((p) => isNaN(p) || p < 0 || p > 255))
@@ -98,18 +69,15 @@ function isPrivateOrReservedIP(ip: string): boolean {
   );
 }
 
-/** Normalize Shodan host data into a ThreatVerdict. */
 function normalizeVerdict(data: ShodanHostResponse): ThreatVerdict {
   const ports = data.ports ?? [];
   const vulns = data.vulns ?? [];
   const vulnCount = vulns.length;
   const portCount = ports.length;
 
-  // Build summary
   const vulnWord = vulnCount === 1 ? "vulnerability" : "vulnerabilities";
   const summary = `${portCount} open ports, ${vulnCount} known ${vulnWord}`;
 
-  // Classification based on vuln count
   if (vulnCount > 0) {
     // Confidence scales with vuln count: 1-5 = 0.5, 6+ = 0.7
     const confidence = vulnCount >= 6 ? 0.7 : 0.5;
@@ -127,7 +95,6 @@ function normalizeVerdict(data: ShodanHostResponse): ThreatVerdict {
   };
 }
 
-/** Create an error EnrichmentResult with classification "unknown". */
 function errorResult(summaryText: string): EnrichmentResult {
   return {
     sourceId: "shodan",
@@ -143,14 +110,6 @@ function errorResult(summaryText: string): EnrichmentResult {
   };
 }
 
-// ---- Factory ----
-
-/**
- * Create a Shodan ThreatIntelSource instance.
- *
- * @param apiKey - Shodan API key (passed as query parameter `key`)
- * @returns A ThreatIntelSource that enriches IP/domain indicators via Shodan REST API
- */
 export function createShodanSource(apiKey: string): ThreatIntelSource {
   return {
     id: "shodan",
@@ -159,7 +118,6 @@ export function createShodanSource(apiKey: string): ThreatIntelSource {
     rateLimit: { maxPerMinute: RATE_LIMIT_MAX_PER_MINUTE },
 
     async enrich(indicator: Indicator): Promise<EnrichmentResult> {
-      // SSRF prevention: reject private/reserved IPs
       if (indicator.type === "ip" && isPrivateOrReservedIP(indicator.value)) {
         return errorResult(
           "Refused to query private or reserved IP address",
@@ -169,7 +127,6 @@ export function createShodanSource(apiKey: string): ThreatIntelSource {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 30_000);
       try {
-        // For domain indicators, first resolve to IP via Shodan DNS
         let targetIp: string;
         let relatedIndicators: Indicator[] | undefined;
 
@@ -195,7 +152,6 @@ export function createShodanSource(apiKey: string): ThreatIntelSource {
             );
           }
 
-          // Also check resolved IP for SSRF
           if (isPrivateOrReservedIP(resolvedIp)) {
             return errorResult(
               "Refused to query private or reserved IP address (resolved from domain)",
@@ -212,7 +168,6 @@ export function createShodanSource(apiKey: string): ThreatIntelSource {
           );
         }
 
-        // Fetch host information
         const hostUrl = `${SHODAN_API_BASE}/shodan/host/${targetIp}?key=${apiKey}`;
         const response = await fetch(hostUrl, {
           method: "GET",
@@ -237,7 +192,6 @@ export function createShodanSource(apiKey: string): ThreatIntelSource {
 
         const data = (await response.json()) as ShodanHostResponse;
 
-        // Validate response shape
         if (!data || typeof data !== "object" || !("ip_str" in data)) {
           return errorResult("Unexpected API response format");
         }

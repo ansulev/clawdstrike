@@ -1,14 +1,5 @@
-/**
- * Secrets API Factory
- *
- * Creates a plugin-scoped SecretsApi that automatically prefixes all keys
- * with `plugin:{pluginId}:` and delegates to the workbench secureStore.
- * This ensures plugins cannot read/write each other's credentials.
- */
-
 import { secureStore } from "@/lib/workbench/secure-store";
 
-/** Plugin-scoped secret storage API. */
 export interface SecretsApi {
   get(key: string): Promise<string | null>;
   set(key: string, value: string): Promise<void>;

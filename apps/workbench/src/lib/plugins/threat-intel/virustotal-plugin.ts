@@ -1,17 +1,3 @@
-/**
- * VirusTotal Threat Intel Source Plugin
- *
- * Implements ThreatIntelSource for VirusTotal v3 REST API. Supports hash,
- * domain, IP, and URL indicator types. Normalizes VT last_analysis_stats
- * into ThreatVerdict (classification + confidence + summary).
- *
- * Rate limit: 4 requests/minute (VT free tier).
- * Cache TTL: 5 minutes.
- *
- * Never throws -- all error paths return EnrichmentResult with
- * classification "unknown" and confidence 0.
- */
-
 import type {
   PluginManifest,
   ThreatIntelSource,
@@ -21,14 +7,10 @@ import type {
 } from "@clawdstrike/plugin-sdk";
 import { sanitizeErrorMessage } from "./sanitize-error";
 
-// ---- Constants ----
-
 const VT_API_BASE = "https://www.virustotal.com/api/v3";
 const VT_GUI_BASE = "https://www.virustotal.com/gui";
 const CACHE_TTL_MS = 300_000; // 5 minutes
 const RATE_LIMIT_MAX_PER_MINUTE = 4; // VT free tier
-
-// ---- Manifest ----
 
 export const VIRUSTOTAL_MANIFEST: PluginManifest = {
   id: "clawdstrike.virustotal",
@@ -55,9 +37,6 @@ export const VIRUSTOTAL_MANIFEST: PluginManifest = {
   },
 };
 
-// ---- Helpers ----
-
-/** Base64url-encode a string (no padding). */
 function base64UrlEncode(input: string): string {
   const bytes = new TextEncoder().encode(input);
   let binary = "";
@@ -67,7 +46,6 @@ function base64UrlEncode(input: string): string {
   return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
-/** Map indicator type to VT v3 API endpoint URL. */
 function buildApiUrl(indicator: Indicator): string {
   switch (indicator.type) {
     case "hash":
@@ -83,7 +61,6 @@ function buildApiUrl(indicator: Indicator): string {
   }
 }
 
-/** Map indicator type to VT GUI permalink. */
 function buildPermalink(indicator: Indicator): string {
   switch (indicator.type) {
     case "hash":
@@ -99,7 +76,6 @@ function buildPermalink(indicator: Indicator): string {
   }
 }
 
-/** VT v3 analysis stats shape. */
 interface VtAnalysisStats {
   malicious: number;
   suspicious: number;
@@ -109,7 +85,6 @@ interface VtAnalysisStats {
   [key: string]: number;
 }
 
-/** Normalize VT analysis stats into a ThreatVerdict. */
 function normalizeVerdict(stats: VtAnalysisStats): ThreatVerdict {
   const total =
     stats.malicious +
@@ -151,7 +126,6 @@ function normalizeVerdict(stats: VtAnalysisStats): ThreatVerdict {
   };
 }
 
-/** Create an error EnrichmentResult with classification "unknown". */
 function errorResult(summaryText: string): EnrichmentResult {
   return {
     sourceId: "virustotal",
@@ -167,14 +141,6 @@ function errorResult(summaryText: string): EnrichmentResult {
   };
 }
 
-// ---- Factory ----
-
-/**
- * Create a VirusTotal ThreatIntelSource instance.
- *
- * @param apiKey - VirusTotal API key (passed in x-apikey header)
- * @returns A ThreatIntelSource that enriches indicators via VT v3 REST API
- */
 export function createVirusTotalSource(apiKey: string): ThreatIntelSource {
   return {
     id: "virustotal",
@@ -221,7 +187,6 @@ export function createVirusTotalSource(apiKey: string): ThreatIntelSource {
           };
         };
 
-        // Validate response shape
         if (!data || typeof data !== "object" || !("data" in data)) {
           return errorResult("Unexpected API response format");
         }

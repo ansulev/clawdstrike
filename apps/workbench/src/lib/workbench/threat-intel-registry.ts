@@ -1,21 +1,6 @@
-/**
- * Threat Intel Source Registry
- *
- * Module-level Map-backed registry for runtime ThreatIntelSource instances.
- * Follows the same pattern as guard-registry.ts: module-level Map,
- * register/unregister/get/getAll functions, register returns dispose.
- *
- * Sources are registered by plugins at activation time and queried by the
- * enrichment orchestrator to fan-out indicator lookups.
- */
-
 import type { ThreatIntelSource, IndicatorType } from "@clawdstrike/plugin-sdk";
 
-// ---- Internal storage ----
-
 const sourceMap = new Map<string, ThreatIntelSource>();
-
-// ---- Registration API ----
 
 /**
  * Register a threat intelligence source. Returns a dispose function to unregister.
@@ -31,12 +16,9 @@ export function registerThreatIntelSource(source: ThreatIntelSource): () => void
   };
 }
 
-/** Unregister a threat intel source by ID. No-op if not found. */
 export function unregisterThreatIntelSource(id: string): void {
   sourceMap.delete(id);
 }
-
-// ---- Query API ----
 
 /** Returns a registered source by ID, or undefined if not registered. */
 export function getThreatIntelSource(id: string): ThreatIntelSource | undefined {
@@ -57,8 +39,6 @@ export function getThreatIntelSourcesForIndicator(type: IndicatorType): ThreatIn
     source.supportedIndicatorTypes.includes(type),
   );
 }
-
-// ---- Test utility ----
 
 /** Reset the registry. Only exported for test teardown. */
 export function _resetForTesting(): void {

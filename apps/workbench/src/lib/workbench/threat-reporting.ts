@@ -1,15 +1,4 @@
-/**
- * Threat Reporting Service
- *
- * Bidirectional threat intel reporting to AbuseIPDB and MISP.
- * Transforms ClawdStrike from a passive consumer of threat intel
- * into an active participant by allowing operators to report
- * confirmed-malicious indicators back to community databases.
- */
-
 import { sanitizeErrorMessage } from "@/lib/plugins/threat-intel/sanitize-error";
-
-// ---- Types ----
 
 export interface AbuseIPDBReportPayload {
   ip: string;
@@ -27,8 +16,6 @@ export interface MispEventPayload {
 export type ReportResult =
   | { success: true; data?: unknown; eventId?: string }
   | { success: false; error: string };
-
-// ---- IOC Type Mapping ----
 
 const IOC_TO_MISP_ATTR: Record<string, string> = {
   ip: "ip-dst",
@@ -48,8 +35,6 @@ export function mapIocTypeToMispAttrType(iocType: string): string {
   return IOC_TO_MISP_ATTR[iocType] ?? "text";
 }
 
-// ---- Severity Mapping ----
-
 function severityToMispThreatLevel(
   severity: MispEventPayload["severity"],
 ): number {
@@ -63,8 +48,6 @@ function severityToMispThreatLevel(
       return 3; // Low
   }
 }
-
-// ---- AbuseIPDB Reporting ----
 
 const ABUSEIPDB_REPORT_URL = "https://api.abuseipdb.com/api/v2/report";
 
@@ -116,8 +99,6 @@ export async function reportToAbuseIPDB(
     clearTimeout(timeout);
   }
 }
-
-// ---- MISP Reporting ----
 
 /**
  * Report a malicious indicator to a MISP instance by creating an event.
@@ -181,8 +162,6 @@ export async function reportToMisp(
     clearTimeout(timeout);
   }
 }
-
-// ---- Helpers ----
 
 /**
  * Maps an IOC type to a MISP attribute category.

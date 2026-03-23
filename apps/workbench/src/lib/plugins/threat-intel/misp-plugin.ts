@@ -1,24 +1,3 @@
-/**
- * MISP Threat Intel Source Plugin
- *
- * Implements ThreatIntelSource for the MISP (Malware Information Sharing
- * Platform) REST API. Supports all indicator types (IP, domain, URL, hash,
- * email). MISP is self-hosted, so the base URL is configurable per deployment.
- *
- * Rate limit: 30 requests/minute (conservative for self-hosted instances).
- * Cache TTL: 15 minutes (MISP data can update frequently).
- *
- * Classification thresholds (by distinct event count):
- *   > 3 events  => malicious
- *   1-3 events  => suspicious
- *   0 events    => unknown
- *
- * Extracts MITRE ATT&CK technique IDs from Galaxy tags on MISP events.
- *
- * Never throws -- all error paths return EnrichmentResult with
- * classification "unknown" and confidence 0.
- */
-
 import type {
   PluginManifest,
   ThreatIntelSource,
@@ -28,12 +7,8 @@ import type {
 } from "@clawdstrike/plugin-sdk";
 import { sanitizeErrorMessage } from "./sanitize-error";
 
-// ---- Constants ----
-
 const CACHE_TTL_MS = 900_000; // 15 minutes
 const RATE_LIMIT_MAX_PER_MINUTE = 30; // Conservative for self-hosted
-
-// ---- Manifest ----
 
 export const MISP_MANIFEST: PluginManifest & {
   requiredSecrets: Array<{ key: string; label: string; description: string }>;
@@ -75,9 +50,6 @@ export const MISP_MANIFEST: PluginManifest & {
   ],
 };
 
-// ---- Types ----
-
-/** MISP attribute shape (partial, from /attributes/restSearch response). */
 interface MispAttribute {
   id: string;
   event_id: string;
@@ -93,16 +65,12 @@ interface MispAttribute {
   };
 }
 
-/** Parsed MISP restSearch response. */
 interface MispSearchResponse {
   response?: {
     Attribute?: MispAttribute[];
   };
 }
 
-// ---- Helpers ----
-
-/** Strip trailing slash from a URL. */
 function normalizeBaseUrl(url: string): string {
   return url.replace(/\/+$/, "");
 }
@@ -158,7 +126,6 @@ function extractMitreTechniques(
   return techniques.length > 0 ? techniques : undefined;
 }
 
-/** Count distinct event IDs across attributes. */
 function countDistinctEvents(attributes: MispAttribute[]): number {
   const eventIds = new Set<string>();
   for (const attr of attributes) {
@@ -167,7 +134,6 @@ function countDistinctEvents(attributes: MispAttribute[]): number {
   return eventIds.size;
 }
 
-/** Find the highest (most severe) threat level across events. */
 function highestThreatLevel(attributes: MispAttribute[]): string {
   let highest = "4"; // undefined in MISP
   for (const attr of attributes) {
@@ -180,7 +146,6 @@ function highestThreatLevel(attributes: MispAttribute[]): string {
   return highest;
 }
 
-/** Collect unique attribute categories. */
 function collectCategories(attributes: MispAttribute[]): string[] {
   const categories = new Set<string>();
   for (const attr of attributes) {
@@ -191,7 +156,6 @@ function collectCategories(attributes: MispAttribute[]): string[] {
   return Array.from(categories);
 }
 
-/** Map MISP attribute type to our indicator type. */
 function mispTypeToIndicatorType(mispType: string): string | null {
   if (mispType.includes("ip") || mispType === "ip-src" || mispType === "ip-dst") {
     return "ip";
@@ -218,7 +182,6 @@ function mispTypeToIndicatorType(mispType: string): string | null {
   return null;
 }
 
-/** Extract related indicators from other attributes in matching events. */
 function extractRelatedIndicators(
   attributes: MispAttribute[],
   queryValue: string,
@@ -249,7 +212,6 @@ function extractRelatedIndicators(
   return related.length > 0 ? related : undefined;
 }
 
-/** Normalize MISP event data into a ThreatVerdict. */
 function normalizeVerdict(
   eventCount: number,
   attributeCount: number,
@@ -277,7 +239,6 @@ function normalizeVerdict(
   };
 }
 
-/** Create an error EnrichmentResult with classification "unknown". */
 function errorResult(summaryText: string): EnrichmentResult {
   return {
     sourceId: "misp",
@@ -293,15 +254,6 @@ function errorResult(summaryText: string): EnrichmentResult {
   };
 }
 
-// ---- Factory ----
-
-/**
- * Create a MISP ThreatIntelSource instance.
- *
- * @param apiKey - MISP API key (passed in Authorization header)
- * @param baseUrl - Base URL of the MISP instance (e.g., "https://misp.example.com")
- * @returns A ThreatIntelSource that enriches indicators via MISP REST API
- */
 export function createMispSource(
   apiKey: string,
   baseUrl: string,
@@ -346,7 +298,6 @@ export function createMispSource(
 
         const data = (await response.json()) as MispSearchResponse;
 
-        // Validate response shape
         if (!data || typeof data !== "object" || !("response" in data)) {
           return errorResult("Unexpected API response format");
         }

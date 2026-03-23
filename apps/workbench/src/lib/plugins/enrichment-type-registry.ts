@@ -1,51 +1,25 @@
-/**
- * EnrichmentTypeRegistry - Central registry for plugin-contributed enrichment renderers.
- *
- * Allows plugins to register custom React components that render specific
- * enrichment types in the enrichment sidebar, overriding the built-in
- * GenericContent fallback.
- *
- * Uses the Map + snapshot + listeners pattern matching view-registry.ts.
- * React integration via useSyncExternalStore for tear-free reads.
- */
 import { useSyncExternalStore } from "react";
 import type { ComponentType } from "react";
 import type { Enrichment } from "../workbench/finding-engine";
 
-// ---------------------------------------------------------------------------
 // Types
-// ---------------------------------------------------------------------------
-
-/** Props passed to custom enrichment renderer components. */
 export interface EnrichmentRendererProps {
-  /** The full enrichment object. */
   enrichment: Enrichment;
-  /** The enrichment's data payload (convenience alias for enrichment.data). */
   data: Record<string, unknown>;
 }
 
-/** A registration entry in the EnrichmentTypeRegistry. */
 export interface EnrichmentRendererRegistration {
-  /** The enrichment type this renderer handles (e.g. "virustotal"). */
   type: string;
-  /** The React component to render for this enrichment type. */
   component: ComponentType<EnrichmentRendererProps>;
 }
 
-// ---------------------------------------------------------------------------
 // Module-level state (not a class, matching view-registry pattern)
-// ---------------------------------------------------------------------------
-
 const rendererMap = new Map<string, EnrichmentRendererRegistration>();
 const listeners = new Set<() => void>();
 
-/** Snapshot cache keyed by type. Rebuilt on every mutation. */
 let snapshot = new Map<string, ComponentType<EnrichmentRendererProps>>();
 
-// ---------------------------------------------------------------------------
 // Internal helpers
-// ---------------------------------------------------------------------------
-
 function rebuildSnapshot(): void {
   const next = new Map<string, ComponentType<EnrichmentRendererProps>>();
   for (const [type, reg] of rendererMap) {
@@ -61,10 +35,7 @@ function notify(): void {
   }
 }
 
-// ---------------------------------------------------------------------------
 // Public API
-// ---------------------------------------------------------------------------
-
 /**
  * Register a custom renderer for an enrichment type.
  * Returns a dispose function that removes the renderer and notifies listeners.
@@ -122,11 +93,7 @@ export function useEnrichmentRenderer(
   );
 }
 
-// ---------------------------------------------------------------------------
 // Convenience object
-// ---------------------------------------------------------------------------
-
-/** Convenience object for import ergonomics. */
 export const enrichmentTypeRegistry = {
   register: registerEnrichmentRenderer,
   get: getEnrichmentRenderer,

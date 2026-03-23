@@ -1,22 +1,3 @@
-/**
- * AlienVault OTX Threat Intel Source Plugin
- *
- * Implements ThreatIntelSource for the AlienVault OTX DirectConnect API v2.
- * Supports IP, domain, URL, and hash indicator types. Normalizes OTX pulse
- * data into ThreatVerdict (classification + confidence + summary).
- *
- * Rate limit: 100 requests/minute (OTX generous free tier: 10K/day).
- * Cache TTL: 30 minutes.
- *
- * Classification thresholds (by pulse count):
- *   > 5 pulses  => malicious
- *   1-5 pulses  => suspicious
- *   0 pulses    => benign
- *
- * Never throws -- all error paths return EnrichmentResult with
- * classification "unknown" and confidence 0.
- */
-
 import type {
   PluginManifest,
   ThreatIntelSource,
@@ -26,13 +7,9 @@ import type {
 } from "@clawdstrike/plugin-sdk";
 import { sanitizeErrorMessage } from "./sanitize-error";
 
-// ---- Constants ----
-
 const OTX_API_BASE = "https://otx.alienvault.com/api/v1";
 const CACHE_TTL_MS = 1_800_000; // 30 minutes
 const RATE_LIMIT_MAX_PER_MINUTE = 100; // OTX generous free tier
-
-// ---- Manifest ----
 
 export const OTX_MANIFEST: PluginManifest & {
   requiredSecrets: Array<{ key: string; label: string; description: string }>;
@@ -68,9 +45,6 @@ export const OTX_MANIFEST: PluginManifest & {
   ],
 };
 
-// ---- Helpers ----
-
-/** Map indicator type to OTX API path segment. */
 function otxTypePath(type: string): string {
   switch (type) {
     case "ip":
@@ -86,7 +60,6 @@ function otxTypePath(type: string): string {
   }
 }
 
-/** Map indicator type to OTX indicator page type for permalinks. */
 function otxPermalinkType(type: string): string {
   switch (type) {
     case "ip":
@@ -102,7 +75,6 @@ function otxPermalinkType(type: string): string {
   }
 }
 
-/** OTX general endpoint response shape (partial). */
 interface OtxGeneralResponse {
   pulse_info?: {
     count: number;
@@ -119,7 +91,6 @@ interface OtxGeneralResponse {
   type_title?: string;
 }
 
-/** Normalize OTX pulse data into a ThreatVerdict. */
 function normalizeVerdict(pulseCount: number): ThreatVerdict {
   if (pulseCount > 5) {
     return {
@@ -144,7 +115,6 @@ function normalizeVerdict(pulseCount: number): ThreatVerdict {
   };
 }
 
-/** Extract related indicators from pulse references. */
 function extractRelatedIndicators(
   pulses: OtxGeneralResponse["pulse_info"],
 ): EnrichmentResult["relatedIndicators"] {
@@ -166,7 +136,6 @@ function extractRelatedIndicators(
   return related.length > 0 ? related : undefined;
 }
 
-/** Create an error EnrichmentResult with classification "unknown". */
 function errorResult(summaryText: string): EnrichmentResult {
   return {
     sourceId: "otx",
@@ -182,14 +151,6 @@ function errorResult(summaryText: string): EnrichmentResult {
   };
 }
 
-// ---- Factory ----
-
-/**
- * Create an AlienVault OTX ThreatIntelSource instance.
- *
- * @param apiKey - OTX API key (passed in X-OTX-API-KEY header)
- * @returns A ThreatIntelSource that enriches indicators via OTX DirectConnect API v2
- */
 export function createOtxSource(apiKey: string): ThreatIntelSource {
   return {
     id: "otx",
@@ -229,7 +190,6 @@ export function createOtxSource(apiKey: string): ThreatIntelSource {
 
         const data = (await response.json()) as OtxGeneralResponse;
 
-        // Validate response shape
         if (!data || typeof data !== "object") {
           return errorResult("Unexpected API response format");
         }

@@ -1,20 +1,5 @@
-/**
- * Auto-Enrichment Manager
- *
- * Automatically queues new findings for enrichment when they exceed a
- * configurable confidence threshold. Supports per-sentinel and per-source
- * filtering, deduplicates against already-enriched sources, and debounces
- * rapid duplicate calls.
- *
- * Integration hook: The finding store should call
- * `autoEnrichmentManager.processNewFinding(finding)` when a new finding is
- * added (via a useEffect or store subscription, NOT in the reducer).
- */
-
 import type { Finding } from "./finding-engine";
 import type { Indicator } from "@clawdstrike/plugin-sdk";
-
-// ---- Configuration ----
 
 export interface AutoEnrichmentConfig {
   /** Whether auto-enrichment is enabled. Default: false. */
@@ -37,16 +22,12 @@ const DEFAULT_CONFIG: AutoEnrichmentConfig = {
 const STORAGE_KEY = "clawdstrike:auto-enrichment-config";
 const DEBOUNCE_MS = 100;
 
-// ---- Orchestrator interface (duck-typed to avoid hard coupling) ----
-
 export interface EnrichmentOrchestratorLike {
   enrich(
     indicator: Indicator,
     options?: { sourceIds?: string[] },
   ): Promise<unknown>;
 }
-
-// ---- Manager ----
 
 interface AutoEnrichmentManagerOptions {
   orchestrator: EnrichmentOrchestratorLike;
@@ -82,18 +63,14 @@ export class AutoEnrichmentManager {
    * Fire-and-forget: enrichment results flow back via store dispatch.
    */
   processNewFinding(finding: Finding): void {
-    // Guard: disabled
     if (!this.config.enabled) return;
 
-    // Guard: below confidence threshold
     if (finding.confidence < this.config.confidenceThreshold) return;
 
-    // Guard: sentinel filter
     if (this.config.enabledSentinels !== "all") {
       if (!this.config.enabledSentinels.includes(finding.createdBy)) return;
     }
 
-    // Guard: debounce (100ms window per finding ID)
     const now = Date.now();
     const lastProcessed = this.recentlyProcessed.get(finding.id);
     if (lastProcessed !== undefined && now - lastProcessed < DEBOUNCE_MS) {
@@ -101,14 +78,12 @@ export class AutoEnrichmentManager {
     }
     this.recentlyProcessed.set(finding.id, now);
 
-    // Determine which sources to use
     const alreadyEnrichedSources = new Set(
       finding.enrichments.map((e) => e.source),
     );
 
     let sourceIds: string[] | undefined;
     if (this.config.enabledSources.length > 0) {
-      // Filter out sources that already enriched this finding
       const remaining = this.config.enabledSources.filter(
         (s) => !alreadyEnrichedSources.has(s),
       );
@@ -116,11 +91,9 @@ export class AutoEnrichmentManager {
       sourceIds = remaining;
     }
 
-    // Extract indicators from finding
     const indicators = this.extractIndicators(finding);
     if (indicators.length === 0) return;
 
-    // Fire-and-forget enrichment for each indicator
     const enrichOptions = sourceIds ? { sourceIds } : {};
     for (const indicator of indicators) {
       // Intentionally not awaited -- results flow back via store dispatch
@@ -148,8 +121,6 @@ export class AutoEnrichmentManager {
   destroy(): void {
     this.recentlyProcessed.clear();
   }
-
-  // ---- Private helpers ----
 
   private loadFromStorage(): AutoEnrichmentConfig | null {
     try {

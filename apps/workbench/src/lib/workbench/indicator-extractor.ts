@@ -1,18 +1,5 @@
-/**
- * Indicator Extractor
- *
- * Parses IOCs (Indicators of Compromise) from Findings and their contributing
- * Signals. Extracts IPs from egress guard violations, domains from DNS signals,
- * hashes from file access signals, and passes through SignalDataIndicator values.
- *
- * Results are deduplicated by (type, value) and include context linking back to
- * the originating finding and contributing signals.
- */
-
 import type { Finding, Signal } from "./sentinel-types";
 import type { Indicator, IndicatorType } from "@clawdstrike/plugin-sdk";
-
-// ---- Regex patterns for IOC detection ----
 
 const IPV4_RE =
   /\b(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\b/g;
@@ -31,8 +18,6 @@ const DOMAIN_FALSE_POSITIVES = new Set([
   "test.local",
 ]);
 
-// ---- Hash algorithm detection ----
-
 function hashAlgorithmFromLength(
   length: number,
 ): "md5" | "sha1" | "sha256" | null {
@@ -47,8 +32,6 @@ function hashAlgorithmFromLength(
       return null;
   }
 }
-
-// ---- String extraction helpers ----
 
 function extractIpsFromString(text: string): string[] {
   return Array.from(text.matchAll(IPV4_RE), (m) => m[0]);
@@ -103,7 +86,6 @@ function extractHashesFromString(
   return results;
 }
 
-/** Check if a candidate hash is a substring of any existing longer hash. */
 function isSubstringOfExisting(candidate: string, existing: Set<string>): boolean {
   for (const val of existing) {
     if (val.length > candidate.length && val.includes(candidate)) {
@@ -113,8 +95,6 @@ function isSubstringOfExisting(candidate: string, existing: Set<string>): boolea
   return false;
 }
 
-// ---- Internal accumulator ----
-
 interface IndicatorAccumulator {
   key: string; // "${type}:${value}"
   type: IndicatorType;
@@ -122,8 +102,6 @@ interface IndicatorAccumulator {
   hashAlgorithm?: "md5" | "sha1" | "sha256";
   signalIds: Set<string>;
 }
-
-// ---- Main function ----
 
 /**
  * Extract indicators (IOCs) from a finding and its contributing signals.
@@ -144,7 +122,6 @@ export function extractIndicators(finding: Finding, signals: Signal[]): Indicato
 
     switch (data.kind) {
       case "indicator":
-        // Direct passthrough from indicator signals (skip "other" type)
         if (data.indicatorType !== "other") {
           addIndicator(accumulators, signal.id, data.indicatorType as IndicatorType, data.value);
         }
@@ -162,17 +139,14 @@ export function extractIndicators(finding: Finding, signals: Signal[]): Indicato
         for (const gr of data.guardResults) {
           extractFromGuardResult(accumulators, signal.id, gr);
         }
-        // Also extract from the target field
         extractFromText(accumulators, signal.id, data.target);
         break;
 
-      // anomaly and behavioral signals don't carry IOC-relevant data
       default:
         break;
     }
   }
 
-  // Convert accumulators to Indicator array
   return Array.from(accumulators.values()).map((acc) => {
     const indicator: Indicator = {
       type: acc.type,
@@ -188,8 +162,6 @@ export function extractIndicators(finding: Finding, signals: Signal[]): Indicato
     return indicator;
   });
 }
-
-// ---- Internal helpers ----
 
 function addIndicator(
   accumulators: Map<string, IndicatorAccumulator>,
@@ -218,14 +190,11 @@ function extractFromGuardResult(
   signalId: string,
   gr: { guardId: string; message: string; evidence?: Record<string, unknown> },
 ): void {
-  // Extract from message
   extractFromText(accumulators, signalId, gr.message);
 
-  // Extract from evidence values
   if (gr.evidence) {
     for (const [key, value] of Object.entries(gr.evidence)) {
       if (typeof value === "string") {
-        // Check specific keys for typed extraction
         if (isIpKey(key)) {
           const ips = extractIpsFromString(value);
           for (const ip of ips) {
@@ -244,7 +213,6 @@ function extractFromGuardResult(
             addIndicator(accumulators, signalId, "hash", h.value, h.algorithm);
           }
         }
-        // General text scan
         extractFromText(accumulators, signalId, value);
       }
     }
@@ -256,19 +224,16 @@ function extractFromText(
   signalId: string,
   text: string,
 ): void {
-  // Extract IPs
   const ips = extractIpsFromString(text);
   for (const ip of ips) {
     addIndicator(accumulators, signalId, "ip", ip);
   }
 
-  // Extract hashes (scan for hex patterns)
   const hashes = extractHashesFromString(text);
   for (const h of hashes) {
     addIndicator(accumulators, signalId, "hash", h.value, h.algorithm);
   }
 
-  // Extract domains from egress-related context
   // Note: We avoid extracting domains from general text to reduce false positives.
   // Domain extraction is handled via evidence keys.
 }

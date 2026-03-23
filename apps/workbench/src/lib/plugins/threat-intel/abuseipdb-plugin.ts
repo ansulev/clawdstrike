@@ -1,19 +1,3 @@
-/**
- * AbuseIPDB Threat Intel Source Plugin
- *
- * Implements ThreatIntelSource for the AbuseIPDB v2 REST API. Supports IP
- * indicator type only. Normalizes AbuseIPDB's abuseConfidenceScore (0-100)
- * into ThreatVerdict classification and confidence.
- *
- * Rate limit: 17 requests/minute (1000/day conservative estimate).
- * Cache TTL: 30 minutes (abuse data changes more frequently).
- *
- * Auth pattern: AbuseIPDB uses `Key` header (capital K).
- *
- * Never throws -- all error paths return EnrichmentResult with
- * classification "unknown" and confidence 0.
- */
-
 import type {
   PluginManifest,
   ThreatIntelSource,
@@ -23,13 +7,9 @@ import type {
 } from "@clawdstrike/plugin-sdk";
 import { sanitizeErrorMessage } from "./sanitize-error";
 
-// ---- Constants ----
-
 const ABUSEIPDB_API_BASE = "https://api.abuseipdb.com/api/v2";
 const CACHE_TTL_MS = 1_800_000; // 30 minutes
 const RATE_LIMIT_MAX_PER_MINUTE = 17; // ~1000/day conservative
-
-// ---- Manifest ----
 
 export const ABUSEIPDB_MANIFEST: PluginManifest = {
   id: "clawdstrike.abuseipdb",
@@ -63,9 +43,6 @@ export const ABUSEIPDB_MANIFEST: PluginManifest = {
   ],
 };
 
-// ---- Types ----
-
-/** AbuseIPDB v2 check response data shape. */
 interface AbuseIPDBCheckData {
   ipAddress: string;
   isPublic: boolean;
@@ -80,17 +57,12 @@ interface AbuseIPDBCheckData {
   [key: string]: unknown;
 }
 
-// ---- Helpers ----
-
-/** Normalize AbuseIPDB check data into a ThreatVerdict. */
 function normalizeVerdict(data: AbuseIPDBCheckData): ThreatVerdict {
   const score = data.abuseConfidenceScore;
   const totalReports = data.totalReports;
 
-  // Build summary
   const summary = `Abuse confidence: ${score}%, ${totalReports} reports in last 90 days`;
 
-  // Special case: 0 score and 0 reports = unknown
   if (score === 0 && totalReports === 0) {
     return {
       classification: "unknown",
@@ -99,7 +71,6 @@ function normalizeVerdict(data: AbuseIPDBCheckData): ThreatVerdict {
     };
   }
 
-  // Classification based on score ranges
   if (score >= 76) {
     return {
       classification: "malicious",
@@ -123,7 +94,6 @@ function normalizeVerdict(data: AbuseIPDBCheckData): ThreatVerdict {
   };
 }
 
-/** Create an error EnrichmentResult with classification "unknown". */
 function errorResult(summaryText: string): EnrichmentResult {
   return {
     sourceId: "abuseipdb",
@@ -139,14 +109,6 @@ function errorResult(summaryText: string): EnrichmentResult {
   };
 }
 
-// ---- Factory ----
-
-/**
- * Create an AbuseIPDB ThreatIntelSource instance.
- *
- * @param apiKey - AbuseIPDB API key (passed in `Key` header)
- * @returns A ThreatIntelSource that enriches IP indicators via AbuseIPDB v2 API
- */
 export function createAbuseIPDBSource(apiKey: string): ThreatIntelSource {
   return {
     id: "abuseipdb",
@@ -155,7 +117,6 @@ export function createAbuseIPDBSource(apiKey: string): ThreatIntelSource {
     rateLimit: { maxPerMinute: RATE_LIMIT_MAX_PER_MINUTE },
 
     async enrich(indicator: Indicator): Promise<EnrichmentResult> {
-      // Only supports IP indicators
       if (indicator.type !== "ip") {
         return errorResult(
           `Unsupported indicator type: ${indicator.type}. AbuseIPDB only supports IP indicators.`,
@@ -191,7 +152,6 @@ export function createAbuseIPDBSource(apiKey: string): ThreatIntelSource {
           data: AbuseIPDBCheckData;
         };
 
-        // Validate response shape
         if (!responseData || typeof responseData !== "object" || !("data" in responseData) || typeof responseData.data?.abuseConfidenceScore !== "number") {
           return errorResult("Unexpected API response format");
         }

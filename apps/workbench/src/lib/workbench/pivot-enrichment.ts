@@ -1,17 +1,6 @@
-/**
- * Pivot Enrichment - Related indicator extraction and follow-on enrichment.
- *
- * Enables recursive threat graph exploration by surfacing related indicators
- * from enrichment results and triggering follow-on enrichment for them.
- */
-
 import type { Enrichment } from "./finding-engine";
 
-// ---------------------------------------------------------------------------
 // Types
-// ---------------------------------------------------------------------------
-
-/** A related indicator extracted from an enrichment result. */
 export interface RelatedIndicator {
   /** Indicator type (e.g. "ip", "domain", "sha256"). */
   type: string;
@@ -23,10 +12,7 @@ export interface RelatedIndicator {
   sourceEnrichmentId: string;
 }
 
-// ---------------------------------------------------------------------------
 // Public API
-// ---------------------------------------------------------------------------
-
 /**
  * Extract related indicators from a list of enrichments.
  *

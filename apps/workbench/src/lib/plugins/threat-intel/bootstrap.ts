@@ -1,15 +1,3 @@
-/**
- * Threat Intel Plugin Bootstrap
- *
- * Registers all 6 built-in threat intel sources with the
- * ThreatIntelSourceRegistry at app startup. For each plugin, reads
- * the operator's API key from secureStore. Sources without a
- * configured key are skipped (logged as info, not errors).
- *
- * This module is imported from App.tsx during initialization, after
- * secureStore.init() completes.
- */
-
 import { secureStore } from "@/features/settings/secure-store";
 import { registerThreatIntelSource } from "@/lib/workbench/threat-intel-registry";
 
@@ -29,10 +17,7 @@ import { createAbuseIPDBSource } from "./abuseipdb-plugin";
 import { createOtxSource } from "./otx-plugin";
 import { createMispSource } from "./misp-plugin";
 
-// ---------------------------------------------------------------------------
 // Plugin descriptors
-// ---------------------------------------------------------------------------
-
 interface PluginDescriptor {
   pluginId: string;
   displayName: string;
@@ -42,7 +27,6 @@ interface PluginDescriptor {
   create: (secrets: (string | null)[]) => ReturnType<typeof createVirusTotalSource>;
 }
 
-/** Validate primary secret is present; throws if missing (caller should have checked). */
 function requireSecret(secrets: (string | null)[], index: number, name: string): string {
   const val = secrets[index];
   if (!val) throw new Error(`Missing required secret: ${name}`);
@@ -89,10 +73,7 @@ const PLUGINS: PluginDescriptor[] = [
   },
 ];
 
-// ---------------------------------------------------------------------------
 // Bootstrap
-// ---------------------------------------------------------------------------
-
 /**
  * Register all built-in threat intel sources whose API keys are
  * already configured in secureStore.
@@ -104,14 +85,12 @@ export async function bootstrapThreatIntelPlugins(): Promise<number> {
 
   for (const plugin of PLUGINS) {
     try {
-      // Read all required secrets
       const secrets = await Promise.all(
         plugin.secretKeys.map((key) =>
           secureStore.get(`plugin:${plugin.pluginId}:${key}`),
         ),
       );
 
-      // The first secret (api_key) is always required
       const primarySecret = secrets[0];
       if (!primarySecret) {
         console.info(
@@ -120,7 +99,6 @@ export async function bootstrapThreatIntelPlugins(): Promise<number> {
         continue;
       }
 
-      // Validate MISP base_url if required
       if (plugin.pluginId === MISP_MANIFEST.id) {
         const baseUrl = secrets[1];
         if (!baseUrl || !/^https?:\/\/.+/.test(baseUrl)) {

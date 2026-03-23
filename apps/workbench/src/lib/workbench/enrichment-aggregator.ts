@@ -1,20 +1,6 @@
-/**
- * Enrichment Aggregator -- cross-finding intelligence aggregation.
- *
- * Provides three aggregation views:
- * 1. Cross-finding indicators: which IOCs appear in multiple findings
- * 2. Verdict summaries by source: malicious/benign/unknown/suspicious per source
- * 3. Source health: quota usage and error tracking per threat intel source
- *
- * All functions are pure -- no side effects, no mutations.
- */
-
 import type { Finding, Enrichment } from "./finding-engine";
 
-// ---------------------------------------------------------------------------
 // Types
-// ---------------------------------------------------------------------------
-
 /** An indicator that appears across one or more findings. */
 export interface IndicatorAggregation {
   /** The indicator value (e.g. "1.2.3.4", "evil.com"). */
@@ -49,7 +35,6 @@ export interface VerdictSummary {
   suspicious: number;
 }
 
-/** Input for computing source health status. */
 export interface SourceHealthInput {
   id: string;
   name: string;
@@ -61,7 +46,6 @@ export interface SourceHealthInput {
   lastErrorMessage?: string;
 }
 
-/** Computed health status for a threat intel source. */
 export interface SourceHealthStatus {
   id: string;
   name: string;
@@ -75,17 +59,13 @@ export interface SourceHealthStatus {
   lastErrorMessage?: string;
 }
 
-// ---------------------------------------------------------------------------
 // Public API
-// ---------------------------------------------------------------------------
-
 /**
  * Aggregate indicators across all findings, identifying IOCs that appear
  * in multiple findings. Results are sorted by count descending (most
  * cross-referenced first).
  */
 export function aggregateIndicators(findings: Finding[]): IndicatorAggregation[] {
-  // Map keyed by "iocType:indicator" -> accumulator
   const map = new Map<
     string,
     {
@@ -128,7 +108,6 @@ export function aggregateIndicators(findings: Finding[]): IndicatorAggregation[]
     }
   }
 
-  // Convert to array and sort by count desc
   const result: IndicatorAggregation[] = [];
   for (const entry of map.values()) {
     result.push({
@@ -235,11 +214,7 @@ export function getSourceHealthSummary(sources: SourceHealthInput[]): SourceHeal
   });
 }
 
-// ---------------------------------------------------------------------------
 // Internals
-// ---------------------------------------------------------------------------
-
-/** Classify an enrichment's verdict from its data fields. */
 function classifyVerdict(
   enrichment: Enrichment,
 ): "malicious" | "benign" | "unknown" | "suspicious" {

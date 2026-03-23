@@ -132,19 +132,19 @@ export function DesktopLayout() {
     navigate(activePaneRoute);
   }, [activePaneRoute, currentRoute, rawRoute, navigate]);
 
-  // When a plugin view is active, render it in a full-screen overlay
-  // instead of the normal pane content.
+  // Render either the plugin view or the normal pane content.
+  // Bottom pane is preserved in both cases so dev console stays visible.
   const renderMainContent = () => {
-    if (activePluginViewId && activePluginRegistration) {
-      return (
-        <div className="h-full overflow-auto">
-          <ActivityBarPluginView
-            registration={activePluginRegistration}
-            isCollapsed={isCollapsed}
-          />
-        </div>
-      );
-    }
+    const mainPanel = activePluginViewId && activePluginRegistration ? (
+      <div className="h-full overflow-auto">
+        <ActivityBarPluginView
+          registration={activePluginRegistration}
+          isCollapsed={isCollapsed}
+        />
+      </div>
+    ) : (
+      <PaneRoot />
+    );
 
     if (bottomPaneOpen) {
       return (
@@ -158,7 +158,7 @@ export function DesktopLayout() {
           }}
         >
           <ResizablePanel defaultSize={100 - bottomPaneSize} minSize={30}>
-            <PaneRoot />
+            {mainPanel}
           </ResizablePanel>
           <ResizableHandle withHandle />
           <ResizablePanel defaultSize={bottomPaneSize} minSize={16}>
@@ -168,7 +168,7 @@ export function DesktopLayout() {
       );
     }
 
-    return <PaneRoot />;
+    return mainPanel;
   };
 
   return (

@@ -23,10 +23,7 @@ const listeners = new Set<() => void>();
 // Snapshot cache for useSyncExternalStore
 let snapshotLeft: StatusBarItem[] = [];
 let snapshotRight: StatusBarItem[] = [];
-let snapshotVersion = 0;
-
 function rebuildSnapshots(): void {
-  snapshotVersion++;
   snapshotLeft = Array.from(itemMap.values())
     .filter((item) => item.side === "left")
     .sort((a, b) => a.priority - b.priority);

@@ -127,8 +127,12 @@ export function registerPluginIcon(
 export const PLUGIN_ICONS: Record<string, string> = new Proxy(
   {} as Record<string, string>,
   {
-    get(_target, prop: string) {
-      if (typeof prop === "symbol") return undefined;
+    get(target, prop: string, receiver: unknown) {
+      if (typeof prop === "symbol") return Reflect.get(target, prop, receiver);
+      // Fall through to Object.prototype for inherited methods (toString, valueOf, etc.)
+      if (!pluginIconMap.has(prop) && prop in Object.prototype) {
+        return Reflect.get(target, prop, receiver);
+      }
       return pluginIconMap.get(prop);
     },
     ownKeys() {

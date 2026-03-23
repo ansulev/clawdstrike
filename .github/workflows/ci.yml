@@ -500,6 +500,16 @@ jobs:
             # capability tokens bound to trusted-window context).
             # Tracking removal: SEC-PTY-001.
             --ignore RUSTSEC-2017-0008
+            # aws-lc-rs advisories (2026-03-23). Transitive via rustls.
+            # Awaiting patched release. Owner: @deps-maintainers.
+            --ignore RUSTSEC-2026-0044
+            --ignore RUSTSEC-2026-0045
+            --ignore RUSTSEC-2026-0046
+            --ignore RUSTSEC-2026-0047
+            --ignore RUSTSEC-2026-0048
+            --ignore RUSTSEC-2026-0049
+            --ignore RUSTSEC-2026-0067
+            --ignore RUSTSEC-2026-0068
           )
 
           cargo audit --deny warnings "${audit_ignores[@]}"

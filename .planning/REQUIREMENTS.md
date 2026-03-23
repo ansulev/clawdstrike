@@ -28,7 +28,7 @@ Requirements for the Presence & Awareness milestone. Each maps to roadmap phases
 - [x] **UI-02**: Colored dots on pane tabs showing which files other analysts are viewing
 - [x] **UI-03**: Activity bar analyst pills (colored sigil dots for online analysts)
 - [x] **UI-04**: Analyst roster panel in sidebar showing name, sigil, current file, and connection status
-- [ ] **UI-05**: Speakeasy chat panel shows presence context ("3 analysts viewing this file")
+- [x] **UI-05**: Speakeasy chat panel shows presence context ("3 analysts viewing this file")
 
 ### CodeMirror Awareness
 

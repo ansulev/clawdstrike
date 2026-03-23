@@ -29,7 +29,10 @@ Decimal phases appear between their surrounding integers in numeric order.
   2. `createMockContext()` returns a fully-stubbed PluginContext that satisfies the type checker and does not throw on any API call
   3. `assertContributions(plugin, { guards: 1, commands: 2 })` throws a readable vitest assertion error when the plugin's manifest declares a different contribution count
   4. The `/testing` sub-path import does not pull in main SDK code (tree-shaking verified by bundle size check)
-**Plans**: TBD
+**Plans:** 2 plans
+Plans:
+- [ ] 01-01-PLAN.md — Core testing module: MockStorageApi, createMockContext, createSpyContext, /testing sub-path export
+- [ ] 01-02-PLAN.md — Assertion helpers: assertContributions, assertManifestValid, self-contained manifest validation
 
 ### Phase 2: CLI Scaffolding
 **Goal**: A plugin author can run one command and get a working, buildable, testable plugin project with type-safe boilerplate for their chosen contribution points
@@ -83,7 +86,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Testing Harness | 0/TBD | Not started | - |
+| 1. Testing Harness | 0/2 | Planning complete | - |
 | 2. CLI Scaffolding | 0/TBD | Not started | - |
 | 3. Dev Server | 0/TBD | Not started | - |
 | 4. Documentation | 0/TBD | Not started | - |

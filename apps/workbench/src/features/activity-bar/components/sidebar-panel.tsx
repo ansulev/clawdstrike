@@ -206,6 +206,8 @@ function renderPanel(activeItem: ActivityBarItemId) {
   switch (activeItem) {
     case "heartbeat":
       return <HeartbeatPanel />;
+    case "hunt":
+      return <FindingsPanel />;
     case "sentinels":
       return <SentinelPanel />;
     case "findings":

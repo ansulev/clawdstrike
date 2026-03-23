@@ -89,6 +89,10 @@ vi.mock("@/components/workbench/explorer/explorer-panel", () => ({
   ),
 }));
 
+vi.mock("../panels/findings-panel", () => ({
+  FindingsPanel: () => <div>Findings Panel</div>,
+}));
+
 describe("SidebarPanel explorer wiring", () => {
   beforeEach(() => {
     openFileByPath.mockReset();
@@ -169,5 +173,21 @@ describe("SidebarPanel explorer wiring", () => {
       "renamed.yml",
     );
     expect(deleteFile).toHaveBeenCalledWith("/workspace/project/policies/example.yml");
+  });
+
+  it("renders the findings panel for the hunt activity-bar entry", () => {
+    useActivityBarStore.setState({
+      activeItem: "hunt",
+      sidebarVisible: true,
+      sidebarWidth: 320,
+    });
+
+    render(
+      <MemoryRouter>
+        <SidebarPanel />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText("Findings Panel")).toBeInTheDocument();
   });
 });

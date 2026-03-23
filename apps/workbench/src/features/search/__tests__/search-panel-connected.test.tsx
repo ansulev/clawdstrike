@@ -157,4 +157,24 @@ describe("SearchPanelConnected", () => {
       );
     });
   });
+
+  it("reruns the active search when options change", async () => {
+    render(
+      <MemoryRouter>
+        <SearchPanelConnected />
+      </MemoryRouter>,
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "Aa" }));
+
+    await waitFor(() => {
+      expect(searchInProjectNative).toHaveBeenCalledWith(
+        "/workspace/project",
+        "needle",
+        true,
+        false,
+        false,
+      );
+    });
+  });
 });

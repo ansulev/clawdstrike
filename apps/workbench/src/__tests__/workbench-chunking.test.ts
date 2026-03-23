@@ -32,6 +32,14 @@ describe("workbench chunking", () => {
     ).toBeUndefined();
   });
 
+  it("keeps zustand out of the heavy react-three-fiber chunk", () => {
+    expect(
+      resolveWorkbenchManualChunk(
+        "/repo/apps/workbench/node_modules/zustand/esm/index.mjs",
+      ),
+    ).toBe("vendor-state");
+  });
+
   it("does not let package prefixes override more specific chunk groups", () => {
     expect(
       resolveWorkbenchManualChunk(

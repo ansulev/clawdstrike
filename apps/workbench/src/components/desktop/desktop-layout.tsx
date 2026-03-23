@@ -88,6 +88,28 @@ function ActivityBarPluginView({
   );
 }
 
+export function shouldSyncLocationToActivePane(
+  previousRawRoute: string | null,
+  rawRoute: string,
+  currentRoute: string,
+  activePaneRoute: string | null,
+) {
+  if (previousRawRoute === null) {
+    return true;
+  }
+
+  if (previousRawRoute === rawRoute) {
+    return false;
+  }
+
+  if (!activePaneRoute) {
+    return true;
+  }
+
+  const previousPaneRoute = normalizeWorkbenchRoute(previousRawRoute);
+  return activePaneRoute === previousPaneRoute || activePaneRoute === currentRoute;
+}
+
 export function DesktopLayout() {
   const tabs = usePolicyTabsStore((state) => state.tabs);
   const isCollapsed = useWorkbenchUIStore((state) => state.sidebarCollapsed);
@@ -103,6 +125,7 @@ export function DesktopLayout() {
   const hasDirtyTabs = tabs.some((tab) => tab.dirty);
   const rawRoute = `${location.pathname}${location.search}` || "/";
   const currentRoute = normalizeWorkbenchRoute(rawRoute);
+  const previousRawRouteRef = useRef<string | null>(null);
 
   const activePluginViewId = useActivePluginView();
   const previousRouteRef = useRef(rawRoute);
@@ -154,8 +177,18 @@ export function DesktopLayout() {
   }, []);
 
   useLayoutEffect(() => {
+    const previousRawRoute = previousRawRouteRef.current;
+    previousRawRouteRef.current = rawRoute;
+    if (!shouldSyncLocationToActivePane(
+      previousRawRoute,
+      rawRoute,
+      currentRoute,
+      activePaneRoute,
+    )) {
+      return;
+    }
     usePaneStore.getState().syncRoute(currentRoute);
-  }, [currentRoute]);
+  }, [activePaneRoute, currentRoute, rawRoute]);
 
   useEffect(() => {
     if (rawRoute === currentRoute) return;

@@ -32,11 +32,14 @@ export function resolveWorkbenchManualChunk(id: string) {
     return "vendor-three";
   }
 
+  if (matchesNodeModulePackage(id, "zustand")) {
+    return "vendor-state";
+  }
+
   if (
     matchesNodeModulePackage(id, "@react-three/fiber") ||
     matchesNodeModulePackage(id, "@react-three/drei") ||
     matchesNodeModulePackage(id, "suspend-react") ||
-    matchesNodeModulePackage(id, "zustand") ||
     matchesNodeModulePackage(id, "camera-controls") ||
     matchesNodeModulePackage(id, "maath") ||
     matchesNodeModulePackage(id, "meshline") ||

@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
   deriveSearchRootPath,
+  getProjectPathBasename,
   getProjectPathDirname,
+  isValidProjectBasename,
   replaceProjectPathBasename,
   resolveProjectPath,
   stripProjectRoot,
-} from "./resolve-project-path";
+} from "../resolve-project-path";
 
 describe("resolve-project-path", () => {
   it("derives a real search root from absolute workspace file paths", () => {
@@ -28,6 +30,11 @@ describe("resolve-project-path", () => {
     expect(getProjectPathDirname("C:\\repo\\rules\\example.yml")).toBe("C:\\repo\\rules");
   });
 
+  it("extracts basenames across path styles", () => {
+    expect(getProjectPathBasename("rules/example.yml")).toBe("example.yml");
+    expect(getProjectPathBasename("C:\\repo\\rules\\example.yml")).toBe("example.yml");
+  });
+
   it("normalizes relative paths when stripping the project root", () => {
     expect(
       stripProjectRoot("C:\\repo", "C:\\repo\\rules\\example.yml"),
@@ -38,5 +45,16 @@ describe("resolve-project-path", () => {
     expect(
       resolveProjectPath("C:\\repo", "rules/example.yml"),
     ).toBe("C:\\repo\\rules\\example.yml");
+  });
+
+  it("rejects rename basenames that include path traversal or separators", () => {
+    expect(isValidProjectBasename("renamed.yml")).toBe(true);
+    expect(isValidProjectBasename(" nested name.yml ")).toBe(true);
+    expect(isValidProjectBasename("")).toBe(false);
+    expect(isValidProjectBasename(".")).toBe(false);
+    expect(isValidProjectBasename("..")).toBe(false);
+    expect(isValidProjectBasename("../outside.yml")).toBe(false);
+    expect(isValidProjectBasename("subdir/rule.yml")).toBe(false);
+    expect(isValidProjectBasename("subdir\\rule.yml")).toBe(false);
   });
 });

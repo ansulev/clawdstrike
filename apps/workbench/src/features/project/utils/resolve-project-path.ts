@@ -4,6 +4,21 @@ function normalizeProjectPath(path: string): string {
   return path.replace(/\\/g, "/").replace(/\/+/g, "/").replace(/\/+$/, "");
 }
 
+export function getProjectPathBasename(filePath: string): string {
+  const normalized = filePath.replace(/[\\/]+$/, "");
+  const lastSeparator = Math.max(normalized.lastIndexOf("/"), normalized.lastIndexOf("\\"));
+  return lastSeparator >= 0 ? normalized.slice(lastSeparator + 1) : normalized;
+}
+
+export function isValidProjectBasename(name: string): boolean {
+  const trimmed = name.trim();
+  if (!trimmed || trimmed === "." || trimmed === "..") {
+    return false;
+  }
+
+  return !/[\\/]/.test(trimmed);
+}
+
 export function isAbsoluteProjectPath(path: string | null | undefined): boolean {
   return typeof path === "string"
     && (path.startsWith("/") || WINDOWS_ABSOLUTE_PATH.test(path));

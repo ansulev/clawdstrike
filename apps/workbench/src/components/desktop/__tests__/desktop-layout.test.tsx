@@ -3,7 +3,10 @@ import "@testing-library/jest-dom/vitest";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, useNavigate } from "react-router-dom";
-import { DesktopLayout } from "../desktop-layout";
+import {
+  DesktopLayout,
+  shouldSyncLocationToActivePane,
+} from "../desktop-layout";
 import { usePolicyTabsStore } from "@/features/policy/stores/policy-tabs-store";
 import { setActivePluginView } from "../active-plugin-view";
 import { registerView } from "@/lib/plugins/view-registry";
@@ -279,5 +282,19 @@ describe("DesktopLayout", () => {
     expect(screen.getByTestId("pane-root")).toBeInTheDocument();
 
     disposeView();
+  });
+
+  it("skips syncing a stale browser route into a pane that already switched views", () => {
+    expect(
+      shouldSyncLocationToActivePane("/overview", "/home", "/home", "/editor"),
+    ).toBe(false);
+    expect(
+      shouldSyncLocationToActivePane(
+        "/editor",
+        "/lab?tab=simulate",
+        "/lab?tab=simulate",
+        "/editor",
+      ),
+    ).toBe(true);
   });
 });

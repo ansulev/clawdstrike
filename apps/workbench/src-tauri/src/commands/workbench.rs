@@ -1776,7 +1776,6 @@ pub async fn search_in_project(
             if is_search_cancelled(cancellation_flag.as_deref()) {
                 return Err("Search canceled".into());
             }
-
             let content = match std::fs::read_to_string(file_path) {
                 Ok(c) => c,
                 Err(_) => continue, // skip binary/unreadable files

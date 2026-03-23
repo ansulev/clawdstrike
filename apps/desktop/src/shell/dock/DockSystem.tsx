@@ -948,7 +948,7 @@ registerCapsuleRenderer("season_pass", SeasonPassContent);
 function getCapsuleContent(capsule: DockCapsuleState): ReactNode {
   const Renderer = getCapsuleRenderer(capsule.kind);
   if (Renderer) {
-    return <Renderer capsule={capsule} isExpanded={false} />;
+    return <Renderer capsule={capsule} isExpanded={capsule.viewMode === "expanded" || capsule.viewMode === "fullView"} />;
   }
   // Fallback for unregistered kinds (e.g. kernel_agent or future plugin kinds
   // that haven't registered yet)

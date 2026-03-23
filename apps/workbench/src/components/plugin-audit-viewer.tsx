@@ -102,7 +102,7 @@ export function PluginAuditViewer() {
           }
           className="h-7 rounded-md border border-[#2d3240] bg-[#0b0d13] px-2 text-[11px] text-[#ece7dc] focus:border-[#d4a84b]/40 focus:outline-none"
         >
-          <option value="all">All Results</option>
+          <option value="">All Results</option>
           <option value="allowed">Allowed</option>
           <option value="denied">Denied</option>
           <option value="error">Error</option>

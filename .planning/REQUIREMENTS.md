@@ -11,7 +11,7 @@ Requirements for the Presence & Awareness milestone. Each maps to roadmap phases
 
 - [x] **CONN-01**: Workbench connects to hushd via WebSocket at `/api/v1/presence` with Bearer auth
 - [x] **CONN-02**: Connection auto-reconnects with exponential backoff and random jitter on disconnect
-- [ ] **CONN-03**: Connection status indicator in status bar (green/amber/red dot)
+- [x] **CONN-03**: Connection status indicator in status bar (green/amber/red dot)
 - [x] **CONN-04**: Workbench functions fully when hushd is unavailable (graceful offline degradation)
 
 ### Presence Protocol
@@ -24,10 +24,10 @@ Requirements for the Presence & Awareness milestone. Each maps to roadmap phases
 
 ### UI Indicators
 
-- [ ] **UI-01**: Online analyst count displayed in status bar
-- [ ] **UI-02**: Colored dots on pane tabs showing which files other analysts are viewing
-- [ ] **UI-03**: Activity bar analyst pills (colored sigil dots for online analysts)
-- [ ] **UI-04**: Analyst roster panel in sidebar showing name, sigil, current file, and connection status
+- [x] **UI-01**: Online analyst count displayed in status bar
+- [x] **UI-02**: Colored dots on pane tabs showing which files other analysts are viewing
+- [x] **UI-03**: Activity bar analyst pills (colored sigil dots for online analysts)
+- [x] **UI-04**: Analyst roster panel in sidebar showing name, sigil, current file, and connection status
 - [ ] **UI-05**: Speakeasy chat panel shows presence context ("3 analysts viewing this file")
 
 ### CodeMirror Awareness
@@ -79,17 +79,17 @@ Which phases cover which requirements. Updated during roadmap creation.
 |-------------|-------|--------|
 | CONN-01 | Phase 19 | Complete |
 | CONN-02 | Phase 19 | Complete |
-| CONN-03 | Phase 20 | Pending |
+| CONN-03 | Phase 20 | Complete |
 | CONN-04 | Phase 19 | Complete |
 | PRES-01 | Phase 19 | Complete |
 | PRES-02 | Phase 18 | Complete |
 | PRES-03 | Phase 18 | Complete |
 | PRES-04 | Phase 18 | Complete |
 | PRES-05 | Phase 18 | Complete |
-| UI-01 | Phase 20 | Pending |
-| UI-02 | Phase 20 | Pending |
-| UI-03 | Phase 20 | Pending |
-| UI-04 | Phase 20 | Pending |
+| UI-01 | Phase 20 | Complete |
+| UI-02 | Phase 20 | Complete |
+| UI-03 | Phase 20 | Complete |
+| UI-04 | Phase 20 | Complete |
 | UI-05 | Phase 20 | Pending |
 | CM-01 | Phase 21 | Pending |
 | CM-02 | Phase 21 | Pending |

@@ -59,7 +59,7 @@ Plans:
   3. The activity bar shows colored analyst pills indicating who is online
   4. A sidebar roster panel lists each online analyst with their name, sigil color, currently-viewed file, and connection status
   5. The Speakeasy chat panel shows presence context (e.g., "3 analysts viewing this file") when a file-scoped conversation is active
-**Plans:** 3 plans
+**Plans:** 2/3 plans executed
 
 Plans:
 - [ ] 20-01-PLAN.md — Status bar PresenceStatusIndicator (green/amber/red dot + online count) + People panel registration + AnalystRosterPanel sidebar
@@ -89,5 +89,5 @@ Plans:
 |-------|----------------|--------|-----------|
 | 18. Server Foundation | 1/1 | Complete    | 2026-03-23 |
 | 19. Client Connection & Store | 2/2 | Complete    | 2026-03-23 |
-| 20. UI Presence Indicators | 0/3 | Not started | - |
+| 20. UI Presence Indicators | 2/3 | In Progress|  |
 | 21. CodeMirror Cursor Extension | 0/1 | Not started | - |

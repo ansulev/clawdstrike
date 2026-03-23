@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: milestone
 status: completed
-stopped_at: Completed 19-02-PLAN.md (Phase 19 complete)
-last_updated: "2026-03-23T16:20:54.911Z"
-last_activity: 2026-03-23 — Completed 19-02 Presence store & bootstrap hook
+stopped_at: Completed 20-01-PLAN.md
+last_updated: "2026-03-23T16:46:58.134Z"
+last_activity: 2026-03-23 — Completed 20-02 Pane tab dots & activity bar pills
 progress:
   total_phases: 4
   completed_phases: 2
-  total_plans: 3
-  completed_plans: 3
-  percent: 100
+  total_plans: 6
+  completed_plans: 5
+  percent: 67
 ---
 
 # Project State
@@ -20,16 +20,16 @@ progress:
 
 See: .planning/PROJECT.md (updated 2026-03-23)
 **Core value:** Security operators work across multiple views simultaneously with IDE-grade workflows
-**Current focus:** v2.0 Presence & Awareness — Phase 19: Client Connection & Store
+**Current focus:** v2.0 Presence & Awareness — Phase 20: UI Presence Indicators
 
 ## Current Position
 
-Phase: 19 of 21 (Client Connection & Store) — second of 4 phases in v2.0
-Plan: 2 of 2 in current phase (COMPLETE — phase finished)
-Status: Phase 19 complete, ready for Phase 20
-Last activity: 2026-03-23 — Completed 19-02 Presence store & bootstrap hook
+Phase: 20 of 21 (UI Presence Indicators) — third of 4 phases in v2.0
+Plan: 2 of 3 in current phase
+Status: Plan 20-02 complete, ready for Plan 20-03
+Last activity: 2026-03-23 — Completed 20-02 Pane tab dots & activity bar pills
 
-Progress: [██████████] 100%
+Progress: [███████░░░] 67%
 
 ## Performance Metrics
 
@@ -45,6 +45,9 @@ Progress: [██████████] 100%
 | 18-server-foundation | 1 | 33min | 33min |
 | Phase 19-client-connection-store P01 | 3min | 2 tasks | 2 files |
 | Phase 19-client-connection-store P02 | 4min | 3 tasks | 3 files |
+| Phase 20-ui-presence-indicators P02 | 2min | 2 tasks | 4 files |
+| Phase 20 P02 | 2min | 2 tasks | 4 files |
+| Phase 20-ui-presence-indicators P01 | 3min | 2 tasks | 5 files |
 
 ## Previous Milestones
 
@@ -70,6 +73,10 @@ Progress: [██████████] 100%
 - [Phase 19]: enableMapSet() from immer required for Map/Set mutations in Zustand presence store
 - [Phase 19]: Module-level PresenceSocket singleton (same pattern as fleetEventStream)
 - [Phase 19]: getPresenceSocket() exported for Phase 21 CM6 ViewPlugin (non-React consumer)
+- [Phase 20]: PresenceTabDots uses button elements for accessibility; dot click navigates via usePaneStore.getState().openFile
+- [Phase 20]: Activity bar pills placed below icon group with subtle gradient divider matching existing pattern
+- [Phase 20]: Granular selectors for PresenceStatusIndicator: connectionState and analysts.size read separately to avoid re-render storms
+- [Phase 20]: Local analyst filtered from roster: 'you' should not appear in 'who else is here' People panel
 
 ### Blockers/Concerns
 
@@ -77,6 +84,6 @@ Progress: [██████████] 100%
 
 ## Session Continuity
 
-Last session: 2026-03-23T16:15:44Z
-Stopped at: Completed 19-02-PLAN.md (Phase 19 complete)
+Last session: 2026-03-23T16:46:53.821Z
+Stopped at: Completed 20-01-PLAN.md
 Resume file: None

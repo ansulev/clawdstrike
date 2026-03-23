@@ -15,6 +15,9 @@ import type {
 } from "@/lib/workbench/sentinel-types";
 import { RoomHeader, CLASSIFICATION_CONFIG } from "./room-header";
 import { MessageList, type SpeakeasyDisplayMessage } from "./message-list";
+import { usePresenceStore } from "@/features/presence/stores/presence-store";
+import { usePaneStore, getActivePane } from "@/features/panes/pane-store";
+import { getPaneActiveView } from "@/features/panes/pane-tree";
 
 
 interface SpeakeasyPanelProps {
@@ -218,6 +221,26 @@ export function SpeakeasyPanel({
   const composeRef = useRef<HTMLTextAreaElement>(null);
   const backdropRef = useRef<HTMLDivElement>(null);
 
+  // Presence context: how many analysts are viewing the currently active file
+  const paneRoot = usePaneStore((s) => s.root);
+  const activePaneId = usePaneStore((s) => s.activePaneId);
+  const activeFileRoute = useMemo(() => {
+    const pane = getActivePane(paneRoot, activePaneId);
+    const view = pane ? getPaneActiveView(pane) : null;
+    return view?.route?.startsWith("/file/") ? view.route.slice("/file/".length) : null;
+  }, [paneRoot, activePaneId]);
+
+  const fileViewerCount = usePresenceStore((s) => {
+    if (!activeFileRoute) return 0;
+    const viewers = s.viewersByFile.get(activeFileRoute);
+    if (!viewers) return 0;
+    // Exclude local analyst
+    const localId = s.localAnalystId;
+    let count = viewers.size;
+    if (localId && viewers.has(localId)) count--;
+    return count;
+  });
+
   // Build member lookup map
   const membersByPublicKey = useMemo(() => {
     const map = new Map<string, SpeakeasyMember>();
@@ -411,6 +434,14 @@ export function SpeakeasyPanel({
             ) : (
               /* Compose area */
               <div className="shrink-0 border-t border-[#2d3240] bg-zinc-950 px-3 py-2.5">
+                {fileViewerCount > 0 && (
+                  <div className="flex items-center gap-1.5 mb-1.5">
+                    <span className="inline-block w-[5px] h-[5px] rounded-full bg-[#3dbf84]/60" />
+                    <span className="text-[10px] font-mono text-[#6f7f9a]/50">
+                      {fileViewerCount} analyst{fileViewerCount !== 1 ? "s" : ""} viewing this file
+                    </span>
+                  </div>
+                )}
                 <div className="flex items-end gap-2">
                   <textarea
                     ref={composeRef}

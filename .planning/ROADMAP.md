@@ -15,7 +15,8 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 1: Enrichment Infrastructure** - ThreatIntelSource registry, EnrichmentOrchestrator with rate limiting/caching, SecretsApi, loader routing, indicator extraction
 - [ ] **Phase 2: First Plugins** - VirusTotal and GreyNoise plugins proving the pipeline end-to-end with streaming enrichment UI
 - [ ] **Phase 3: Operational Readiness** - API key settings UI, four remaining plugins (Shodan, AbuseIPDB, OTX, MISP), enrichment badges, auto-enrichment
-- [ ] **Phase 4: Intelligence Participation** - Pivot enrichment, bidirectional reporting, custom renderers, aggregation dashboard
+- [x] **Phase 4: Intelligence Participation** - Pivot enrichment, bidirectional reporting, custom renderers, aggregation dashboard
+- [ ] **Phase 5: Gap Closure** - Bootstrap plugin registration, mount FindingDetailActions and EnrichmentDashboard
 
 ## Phase Details
 
@@ -81,14 +82,27 @@ Plans:
 - [ ] 04-02-PLAN.md -- Bidirectional reporting to AbuseIPDB and MISP
 - [ ] 04-03-PLAN.md -- Enrichment aggregation dashboard
 
+### Phase 5: Gap Closure
+**Goal**: Wire the enrichment pipeline end-to-end — bootstrap plugin registration at app startup and mount orphaned components
+**Depends on**: Phases 1-4
+**Gap Closure**: Closes plugin bootstrap gap (PLUG-01/02, OPS-02-05) and component mounting gap (ADV-02, ADV-04)
+**Success Criteria** (what must be TRUE):
+  1. At app startup, all 6 threat intel plugin manifests are registered and sources are available in ThreatIntelSourceRegistry
+  2. FindingDetailActions is imported and rendered in finding-detail.tsx with "Report to..." button
+  3. EnrichmentDashboard is mounted via a route or tab accessible from the workbench
+**Plans:** 1 plan
+Plans:
+- [x] 05-01-PLAN.md -- Plugin bootstrap, mount FindingDetailActions and EnrichmentDashboard
+
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 -> 2 -> 3 -> 4
+Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Enrichment Infrastructure | 3/3 | Complete | 2026-03-22 |
 | 2. First Plugins | 2/2 | Complete | 2026-03-22 |
-| 3. Operational Readiness | 2/4 | In progress | - |
-| 4. Intelligence Participation | 0/3 | Planning complete | - |
+| 3. Operational Readiness | 4/4 | Complete | 2026-03-22 |
+| 4. Intelligence Participation | 3/3 | Complete | 2026-03-22 |
+| 5. Gap Closure | 1/1 | Complete | 2026-03-23 |

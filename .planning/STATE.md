@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v5.0
 milestone_name: milestone
-status: executing
-stopped_at: Completed 04-03-PLAN.md
-last_updated: "2026-03-22T23:58:02.243Z"
+status: complete
+stopped_at: Completed 05-01-PLAN.md
+last_updated: "2026-03-23T00:07:48Z"
 progress:
-  total_phases: 4
-  completed_phases: 4
-  total_plans: 12
-  completed_plans: 12
+  total_phases: 5
+  completed_phases: 5
+  total_plans: 13
+  completed_plans: 13
   percent: 100
 ---
 
@@ -20,13 +20,13 @@ progress:
 See: .planning/PROJECT.md
 
 **Core value:** Plugin-based threat intelligence enrichment for security findings
-**Current focus:** v5.0 Threat Intel Source Plugins — Phase 3 Operational Readiness
+**Current focus:** v5.0 Threat Intel Source Plugins — Complete
 
 ## Current Position
 
-Phase: 4 of 4 (Intelligence Participation)
-Plan: 3 of 3
-Status: Executing
+Phase: 5 of 5 (Gap Closure)
+Plan: 1 of 1
+Status: Complete
 
 Progress: [██████████] 100%
 
@@ -101,6 +101,10 @@ Progress: [██████████] 100%
 - (04-03) Health thresholds: unhealthy >95% quota or error+no-success, degraded >80% or recent error, else healthy
 - (04-03) Indicators keyed by iocType:indicator tuple for cross-finding deduplication
 - (04-03) Dashboard uses responsive grid-cols-1/2/3 breakpoints
+- (05-01) Bootstrap registers sources directly with ThreatIntelSourceRegistry (simpler than pluginRegistry+pluginLoader for built-in sources)
+- (05-01) getApiKey in FindingDetailActions wired to secureStore with plugin:clawdstrike.{service}:api_key pattern
+- (05-01) EnrichmentDashboard mounted as third tab in FindingsIntelPage (not separate route)
+- (05-01) MISP base_url defaults to https://localhost when not configured
 
 ### Pending Todos
 None.
@@ -110,6 +114,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-22T23:58:02.241Z
-Stopped at: Completed 04-03-PLAN.md
+Last session: 2026-03-23T00:07:48Z
+Stopped at: Completed 05-01-PLAN.md (milestone complete)
 Resume file: None

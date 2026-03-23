@@ -16,6 +16,7 @@ vi.mock("three", () => {
   class MeshBasicMaterial {
     visible = false;
     side = 0;
+    dispose = vi.fn();
     constructor(_opts?: { visible?: boolean; side?: number }) {
       if (_opts) {
         if (_opts.visible !== undefined) this.visible = _opts.visible;

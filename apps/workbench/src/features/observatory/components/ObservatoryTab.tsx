@@ -203,7 +203,6 @@ export function ObservatoryTab() {
   const [flyByActive, setFlyByActive] = useState(true);
   // flyByDoneRef stays true once the fly-by completes; prevents replay on re-mount
   const flyByDoneRef = useRef(false);
-  // Phase 43 INTR: double-click detection ref for ATLAS mode interior entry (400ms window)
   const lastClickedStationRef = useRef<{ id: HuntStationId; time: number } | null>(null);
 
   // CAM-01: Called when WorldCameraRig finishes all waypoints or user skips
@@ -230,7 +229,6 @@ export function ObservatoryTab() {
   const selectedStationId = useObservatoryStore.use.selectedStationId();
   const observatoryActions = useObservatoryStore.use.actions();
   const connected = useObservatoryStore.use.connected();
-  // Phase 43 INTR: interior zone state + docking state for Enter key trigger
   const interiorState = useObservatoryStore.use.interiorState();
   const dockingState = useObservatoryStore.use.dockingState();
   const huntEvents = useHuntStore.use.events();
@@ -263,7 +261,6 @@ export function ObservatoryTab() {
   const previousLikelyStationIdRef = useRef<HuntStationId | null>(null);
   const previousProbeStatusRef = useRef<typeof probeState.status | null>(probeState.status);
   const dismissedCueKeyRef = useRef<string | null>(null);
-  // CNST-01: Track previous mission status to detect completion transitions
   const prevMissionStatusRef = useRef<string | null>(null);
   const [activeSpikeCue, setActiveSpikeCue] = useState<ObservatorySpikeCue | null>(null);
 
@@ -616,7 +613,6 @@ export function ObservatoryTab() {
     );
   }, [effectiveTelemetry, likelyStationId, missionObjectiveStationId, observatoryActions, replay.enabled, selectedStationId]);
 
-  // Phase 43 INTR: enter interior — set interiorState to entering
   const handleEnterInterior = useCallback(
     (stationId: HuntStationId) => {
       observatoryActions.setInteriorState({
@@ -628,7 +624,6 @@ export function ObservatoryTab() {
     [observatoryActions],
   );
 
-  // Phase 43 INTR: exit interior — start exit transition
   const handleExitInterior = useCallback(() => {
     if (!interiorState.active) return;
     observatoryActions.setInteriorState({ transitionPhase: "exiting" });
@@ -636,7 +631,6 @@ export function ObservatoryTab() {
 
   const handleSelectStation = useCallback(
     (stationId: HuntStationId) => {
-      // Phase 43 INTR: double-click detection in ATLAS mode — enter interior on second click within 400ms
       const now = Date.now();
       const last = lastClickedStationRef.current;
       if (mode === "atlas" && last && last.id === stationId && now - last.time < 400) {
@@ -657,11 +651,9 @@ export function ObservatoryTab() {
     },
     [handleEnterInterior, mode, observatoryActions, selectedStationId],
   );
-  // CAM-01: Escape key skips fly-by; Phase 43 INTR: also exits interior when active
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
-      // Phase 43 INTR: interior exit takes priority over fly-by skip
       if (interiorState.active) {
         handleExitInterior();
         return;
@@ -672,7 +664,6 @@ export function ObservatoryTab() {
     return () => window.removeEventListener("keydown", handler);
   }, [flyByActive, handleExitInterior, handleSkipFlyBy, interiorState.active]);
 
-  // Phase 43 INTR: Enter key entry in FLOW mode when ship is docked
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key !== "Enter") return;
@@ -904,12 +895,10 @@ export function ObservatoryTab() {
   useEffect(() => {
     const persisted = loadPersistedObservatoryReplayArtifacts();
     observatoryActions.hydrateReplayArtifacts(persisted);
-    // CNST-03: Hydrate constellations from v2 schema on mount
     const persistedV2 = loadPersistedObservatoryReplayArtifactsV2();
     for (const constellation of persistedV2.constellations) {
       observatoryActions.addConstellation(constellation);
     }
-    // ANNO-03: Hydrate annotation pins from v2 schema on mount
     for (const pin of persistedV2.annotationPins) {
       observatoryActions.addAnnotationPin(pin);
     }
@@ -924,19 +913,16 @@ export function ObservatoryTab() {
       bookmarks: replayBookmarks,
     });
   }, [replayAnnotations, replayArtifactsHydrated, replayBookmarks]);
-  // CNST-01: Auto-derive constellation when mission completes
   useEffect(() => {
     const status = mission?.status ?? null;
     if (prevMissionStatusRef.current !== "completed" && status === "completed" && mission) {
       const constellation = deriveConstellationFromMission(mission);
       if (constellation) {
-        // Override name from first objective title + station (per CONTEXT.md specific idea)
         if (mission.objectives.length > 0) {
           const firstObj = mission.objectives[0];
           constellation.name = `${firstObj.title} at ${firstObj.stationId.charAt(0).toUpperCase() + firstObj.stationId.slice(1)}`;
         }
         observatoryActions.addConstellation(constellation);
-        // CNST-04: Enforce 12 constellation cap — evict oldest if over limit
         if (constellations.length >= 12) {
           const oldest = constellations[0];
           if (oldest) {
@@ -947,7 +933,6 @@ export function ObservatoryTab() {
     }
     prevMissionStatusRef.current = status;
   }, [mission, observatoryActions, constellations]);
-  // CNST-03: Auto-save constellations to localStorage v2 on change
   useEffect(() => {
     if (!replayArtifactsHydrated) return;
     const current = loadPersistedObservatoryReplayArtifactsV2();
@@ -956,7 +941,6 @@ export function ObservatoryTab() {
       constellations,
     });
   }, [constellations, replayArtifactsHydrated]);
-  // ANNO-03: Auto-save annotation pins to localStorage v2 on change
   useEffect(() => {
     if (!replayArtifactsHydrated) return;
     const current = loadPersistedObservatoryReplayArtifactsV2();

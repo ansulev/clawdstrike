@@ -41,11 +41,6 @@ import { OBSERVATORY_STATION_POSITIONS } from "../../world/observatory-world-tem
 import { StationInteriorScene } from "./StationInteriorScene";
 import { useInteriorCameraTransition } from "./useInteriorCameraTransition";
 
-// ---------------------------------------------------------------------------
-// ExteriorDimmer — dims exterior scene layers to 0.2 opacity when interior active
-// Stays mounted for smooth reverse transition; interior lerps material opacity
-// ---------------------------------------------------------------------------
-
 const EXTERIOR_DIM_SPEED = 4;
 
 function ExteriorDimmer({
@@ -89,8 +84,6 @@ function ExteriorDimmer({
   });
   return <group ref={groupRef}>{children}</group>;
 }
-
-// ---------------------------------------------------------------------------
 
 function buildDistrictLodTiers(
   world: DerivedObservatoryWorld,
@@ -159,8 +152,6 @@ export function ObservatoryWorldScene({
   const controlsRef = useRef<THREE.EventDispatcher | null>(null);
   const shakeRef = useRef<{ setIntensity: (intensity: number) => void } | null>(null);
 
-  // ANNO-05: Camera focus on annotation pin — snap orbit controls target to pin position
-  // OrbitControls dampingFactor provides natural smooth feel without explicit lerp
   useEffect(() => {
     function handleCameraFocus(e: Event) {
       const detail = (e as CustomEvent).detail as
@@ -180,7 +171,6 @@ export function ObservatoryWorldScene({
     [missionTargetStationId, playerFocusRef, world],
   );
 
-  // Phase 43 INTR: compute interior target position from station world position
   const interiorTargetPosition = useMemo(
     () =>
       interiorStationId
@@ -189,7 +179,6 @@ export function ObservatoryWorldScene({
     [interiorStationId],
   );
 
-  // Phase 43 INTR: camera transition hook — smooth lerp with FOV narrowing and near-plane adjustment
   useInteriorCameraTransition({
     interiorState: {
       active: interiorActive,
@@ -201,7 +190,6 @@ export function ObservatoryWorldScene({
     onTransitionComplete: onInteriorTransitionComplete ?? (() => {}),
   });
 
-  // Phase 43 INTR: exterior dimmer opacity — 0.2 when fully inside, 1.0 otherwise
   const exteriorDimOpacity =
     interiorActive && interiorTransitionPhase === "inside" ? 0.2 : 1.0;
 
@@ -210,7 +198,6 @@ export function ObservatoryWorldScene({
       <color attach="background" args={["#04080f"]} />
       <ObservatoryStarfield />
       <fogExp2 attach="fog" args={["#060a14", 0.0008]} />
-      {/* APR-04: GHOST preset dims ambient by 40% + adds cool desaturation tint */}
       {analystPresetId === "ghost" ? (
         <GhostPresetOverlay
           baseIntensity={world.environment.ambientIntensity}
@@ -267,8 +254,6 @@ export function ObservatoryWorldScene({
         rollFrequency={0.4}
       />
 
-      {/* Phase 43 INTR: ExteriorDimmer — dims exterior scene to 0.2 opacity when interior active.
-          Stays mounted at all times to allow smooth reverse transition back to exterior. */}
       <ExteriorDimmer targetOpacity={exteriorDimOpacity}>
         <ThesisCore core={world.core} />
         <OperatorProbe
@@ -304,7 +289,6 @@ export function ObservatoryWorldScene({
           world={world}
         />
         <GhostTraceLayer traces={ghostTraces} opacityScale={ghostOpacityScale} />
-        {/* HEAT-01 through HEAT-05: Threat topology heatmap — ground-plane pressure gradient */}
         {heatmapVisible && heatmapPressureData ? (
           <ThreatTopologyHeatmap
             pressureData={heatmapPressureData}
@@ -312,31 +296,25 @@ export function ObservatoryWorldScene({
             presetOpacityMultiplier={heatmapPresetMultiplier}
           />
         ) : null}
-        {/* APR-01: THREAT preset — red wash + danger motes at high-pressure districts */}
         {analystPresetId === "threat" ? (
           <ThreatPresetOverlay districts={world.districts} />
         ) : null}
-        {/* APR-02: EVIDENCE preset — gold emissive halos at stations with receipt traces */}
         {analystPresetId === "evidence" ? (
           <EvidencePresetOverlay traces={ghostTraces} />
         ) : null}
-        {/* APR-03: RECEIPTS preset — verdict badge markers at stations with receipt history */}
         {analystPresetId === "receipts" ? (
           <ReceiptsPresetOverlay traces={ghostTraces} />
         ) : null}
-        {/* PRBI-01 through PRBI-06: Probe delta cards — floating feedback after probe discharge */}
         <ProbeDeltaLayer
           probeGuidance={probeGuidance}
           stationPositions={OBSERVATORY_STATION_POSITIONS}
         />
-        {/* CNST-01 through CNST-05: Constellation routes — investigation history in starfield */}
         {constellations.length > 0 ? (
           <ConstellationRoutesLayer
             constellations={constellations}
             spiritAccentColor={spiritAccentColor}
           />
         ) : null}
-        {/* SPRT-01 through SPRT-03, SPRT-05: Spirit movement trail — mood + level driven */}
         {spiritAccentColor && spiritMood && spiritMood !== "dormant" ? (
           <SpiritTrailsLayer
             spiritAccentColor={spiritAccentColor}
@@ -345,14 +323,12 @@ export function ObservatoryWorldScene({
             playerFocusRef={playerFocusRef}
           />
         ) : null}
-        {/* SPRT-04: Hidden resonance connections — revealed at spirit level 5 */}
         {spiritAccentColor && (spiritLevel ?? 1) >= 5 ? (
           <SpiritResonanceConnections
             spiritLevel={spiritLevel ?? 1}
             spiritAccentColor={spiritAccentColor}
           />
         ) : null}
-        {/* ANNO-01 through ANNO-06: Replay annotation pins — click-to-drop in 3D space */}
         <ReplayAnnotationLayer
           annotationPins={annotationPins}
           replayEnabled={replayEnabled}
@@ -363,7 +339,6 @@ export function ObservatoryWorldScene({
         />
       </ExteriorDimmer>
 
-      {/* Phase 43 INTR-02/INTR-03: Station interior scene — conditionally mounted when analyst enters */}
       {interiorActive && interiorStationId && interiorTargetPosition ? (
         <StationInteriorScene
           stationId={interiorStationId}

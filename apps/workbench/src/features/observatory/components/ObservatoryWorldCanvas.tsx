@@ -138,7 +138,6 @@ export interface ObservatoryWorldCanvasProps {
   flyByActive?: boolean;
   /** CAM-01: called when the fly-by sequence finishes all waypoints */
   onFlyByComplete?: () => void;
-  /** Phase 40 PRBI: Probe guidance for delta card rendering. */
   probeGuidance?: ObservatoryProbeGuidance | null;
 }
 // PP-04: Maps ObservatorySpiritVisual.kind back to SpiritKind for LUT lookup.
@@ -4164,24 +4163,16 @@ export function ObservatoryWorldCanvas({
   const analystPresetIdOuter = useObservatoryStore((s) => s.analystPresetId);
   // GHO-03: full opacity when GHOST preset active, 20% when any other preset or none
   const ghostOpacityScale = analystPresetIdOuter === "ghost" ? 1.0 : 0.2;
-  // CNST-01: constellation routes from observatory store
   const constellations = useObservatoryStore((state) => state.constellations);
-  // ANNO-01: annotation pins from observatory store
   const annotationPins = useObservatoryStore((state) => state.annotationPins);
-  // ANNO-01: replay state for pin drop gating
   const replayState = useObservatoryStore((state) => state.replay);
-  // Phase 43 INTR: interior zone state machine
   const interiorState = useObservatoryStore.use.interiorState();
-  // SPRT-02: spirit mood for trail rendering — read directly from spirit store
   const spiritMoodFromStore = useSpiritStore.use.mood();
   const spiritKindFromStore = useSpiritStore.use.kind();
-  // SPRT-03: spirit level from evolution store for trail intensity + resonance unlock
   const spiritLevel = useSpiritEvolutionStore(
     (state) => spiritKindFromStore ? (state.evolution[spiritKindFromStore]?.level ?? 1) : 1,
   );
-  // Pass mood only when spirit is bound (kind !== null), otherwise null suppresses trails
   const spiritMood = spiritKindFromStore ? spiritMoodFromStore : null;
-  // ANNO-01: drop a new annotation pin at the clicked world position during replay
   const handleAnnotationDrop = useCallback((worldPosition: [number, number, number]) => {
     const state = useObservatoryStore.getState();
     const replay = state.replay;

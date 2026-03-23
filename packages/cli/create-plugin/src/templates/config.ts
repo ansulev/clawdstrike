@@ -1,4 +1,4 @@
-import type { ContributionPoint, ScaffoldOptions } from "../types";
+import type { ScaffoldOptions } from "../types";
 
 function getEntrypointModules(options: ScaffoldOptions): string[] {
   const modules = new Set<string>(["index"]);

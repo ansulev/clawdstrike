@@ -18,6 +18,7 @@ import {
 } from "../../workbench/status-bar-registry";
 import { getView, getViewsBySlot } from "../view-registry";
 import { getThreatIntelSource, _resetForTesting as resetThreatIntelRegistry } from "../../workbench/threat-intel-registry";
+import { commandRegistry } from "../../command-registry";
 import type { PluginManifest, GuardContribution, NetworkPermission } from "../types";
 import { PluginLoader } from "../plugin-loader";
 import type { PluginModule, PluginActivationContext } from "../plugin-loader";
@@ -88,6 +89,7 @@ describe("PluginLoader", () => {
 
   // Track guard IDs registered during tests for cleanup
   const registeredGuardIds: string[] = [];
+  const registeredCommandIds: string[] = [];
 
   beforeEach(() => {
     registry = new PluginRegistry();
@@ -99,6 +101,10 @@ describe("PluginLoader", () => {
       unregisterGuard(id);
     }
     registeredGuardIds.length = 0;
+    for (const id of registeredCommandIds) {
+      commandRegistry.unregister(id);
+    }
+    registeredCommandIds.length = 0;
   });
 
   // Test 1: loadPlugin() with guard contribution routes to guard registry
@@ -140,6 +146,83 @@ describe("PluginLoader", () => {
     const ctx = activateFn.mock.calls[0][0];
     expect(ctx.pluginId).toBe("cmd-test");
     expect(ctx.subscriptions).toBeInstanceOf(Array);
+  });
+
+  it("loadPlugin() provides the full SDK activation context shape for internal plugins", async () => {
+    const manifest = createTestManifest({
+      id: "sdk-context-test",
+      trust: "internal",
+      activationEvents: ["onStartup"],
+      main: "./index.ts",
+    });
+    registry.register(manifest);
+
+    const activateFn = vi.fn((ctx: PluginActivationContext) => {
+      ctx.storage.set("lastRun", 1);
+      expect(ctx.storage.get("lastRun")).toBe(1);
+      return [];
+    });
+
+    loader = new PluginLoader({
+      registry,
+      resolveModule: async () => createMockModule({ activate: activateFn }),
+    });
+
+    await loader.loadPlugin("sdk-context-test");
+
+    const ctx = activateFn.mock.calls[0][0];
+    expect(ctx.commands.register).toBeTypeOf("function");
+    expect(ctx.guards.register).toBeTypeOf("function");
+    expect(ctx.fileTypes.register).toBeTypeOf("function");
+    expect(ctx.statusBar.register).toBeTypeOf("function");
+    expect(ctx.sidebar.register).toBeTypeOf("function");
+    expect(ctx.storage.get).toBeTypeOf("function");
+    expect(ctx.storage.set).toBeTypeOf("function");
+    expect(ctx.secrets.get).toBeTypeOf("function");
+    expect(ctx.enrichmentRenderers.register).toBeTypeOf("function");
+    expect(ctx.views.registerEditorTab).toBeTypeOf("function");
+  });
+
+  it("internal plugins can register commands through ctx.commands.register and clean them up on deactivate", async () => {
+    const manifest = createTestManifest({
+      id: "ctx-command-plugin",
+      trust: "internal",
+      activationEvents: ["onStartup"],
+      main: "./index.ts",
+    });
+    registry.register(manifest);
+
+    const execute = vi.fn();
+    const commandId = "ctx-command-plugin.run";
+    registeredCommandIds.push(commandId);
+
+    loader = new PluginLoader({
+      registry,
+      resolveModule: async () =>
+        createMockModule({
+          activate: (ctx) => {
+            const dispose = ctx.commands.register(
+              { id: commandId, title: "Run Context Command", category: "View" },
+              execute,
+            );
+            ctx.subscriptions.push(dispose);
+            return [];
+          },
+        }),
+    });
+
+    await loader.loadPlugin("ctx-command-plugin");
+
+    const registeredCommand = commandRegistry.getById(commandId);
+    expect(registeredCommand).toBeDefined();
+    await registeredCommand?.execute();
+    expect(execute).toHaveBeenCalledOnce();
+
+    await loader.deactivatePlugin("ctx-command-plugin");
+    expect(commandRegistry.getById(commandId)).toBeUndefined();
+
+    const idx = registeredCommandIds.indexOf(commandId);
+    if (idx !== -1) registeredCommandIds.splice(idx, 1);
   });
 
   // Test 3: loadPlugin() transitions registry state: installed -> activating -> activated

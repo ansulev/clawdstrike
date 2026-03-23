@@ -26,6 +26,8 @@ import type {
   GuardContribution,
   FileTypeContribution,
   StatusBarItemContribution,
+  CommandContribution,
+  ActivityBarItemContribution,
   NetworkPermission,
   PluginPermission,
 } from "./types";
@@ -44,6 +46,7 @@ import { registerView } from "./view-registry";
 import { registerGutterExtension } from "./gutter-extension-registry";
 import { registerContextMenuItem } from "./context-menu-registry";
 import { registerEnrichmentRenderer } from "./enrichment-type-registry";
+import { commandRegistry, type CommandCategory } from "../command-registry";
 import { createSecretsApi } from "./secrets-api";
 import type { SecretsApi } from "./secrets-api";
 import type { GutterConfig } from "./types";
@@ -58,6 +61,29 @@ import {
 
 /** Time in ms to wait for in-flight bridge calls to complete before removing iframe. */
 const REVOKE_DRAIN_TIMEOUT_MS = 5000;
+
+const COMMAND_CATEGORIES: ReadonlySet<CommandCategory> = new Set([
+  "Navigate",
+  "File",
+  "Edit",
+  "Policy",
+  "Guard",
+  "Fleet",
+  "Test",
+  "Sentinel",
+  "Receipt",
+  "Swarm",
+  "View",
+  "Sidebar",
+  "Help",
+]);
+
+function normalizeCommandCategory(category: unknown): CommandCategory {
+  return typeof category === "string" &&
+    COMMAND_CATEGORIES.has(category as CommandCategory)
+    ? (category as CommandCategory)
+    : "View";
+}
 
 // ---- Types ----
 
@@ -81,8 +107,37 @@ export interface PluginActivationContext {
   pluginId: string;
   /** Subscriptions array -- push disposables here for automatic cleanup. */
   subscriptions: Disposable[];
+  /** Command palette registration API. */
+  commands: {
+    register(command: CommandContribution, handler: () => void | Promise<void>): Disposable;
+  };
+  /** Guard pipeline registration API. */
+  guards: {
+    register(guard: GuardContribution): Disposable;
+  };
+  /** Detection file type registration API. */
+  fileTypes: {
+    register(fileType: FileTypeContribution): Disposable;
+  };
+  /** Status bar registration API. */
+  statusBar: {
+    register(item: StatusBarItemContribution): Disposable;
+  };
+  /** Activity bar/sidebar registration API. */
+  sidebar: {
+    register(item: ActivityBarItemContribution): Disposable;
+  };
+  /** Plugin-scoped key/value storage API. */
+  storage: {
+    get(key: string): unknown;
+    set(key: string, value: unknown): void;
+  };
   /** Plugin-scoped secrets API for credential storage (keys auto-prefixed with plugin ID). */
   secrets: SecretsApi;
+  /** Custom enrichment renderer registration API. */
+  enrichmentRenderers: {
+    register(type: string, component: ComponentType<any>): Disposable;
+  };
   /** Views API for registering plugin-contributed views in workbench UI slots. */
   views: {
     registerEditorTab(contribution: {
@@ -178,6 +233,7 @@ export class PluginLoader {
   private iframeContainer?: HTMLElement;
   private resolvePluginCode?: PluginCodeResolver;
   private revocationStore: PluginRevocationStore;
+  private pluginStorage = new Map<string, Map<string, unknown>>();
 
   /** Plugins that have been loaded and activated. */
   private loadedPlugins = new Map<string, LoadedPlugin>();
@@ -307,12 +363,7 @@ export class PluginLoader {
       }
 
       // 6. Create activation context and call activate()
-      const context: PluginActivationContext = {
-        pluginId,
-        subscriptions: [],
-        secrets: createSecretsApi(pluginId),
-        views: this.buildViewsApi(pluginId, disposables),
-      };
+      const context = this.buildActivationContext(manifest, disposables);
 
       const activateResult = pluginModule.activate(context);
 
@@ -581,6 +632,98 @@ export class PluginLoader {
       const message = err instanceof Error ? err.message : String(err);
       this.registry.setState(pluginId, "error", message);
     }
+  }
+
+  private buildActivationContext(
+    manifest: PluginManifest,
+    disposables: Disposable[],
+  ): PluginActivationContext {
+    const pluginId = manifest.id;
+    const storage = this.getPluginStorage(pluginId);
+
+    return {
+      pluginId,
+      subscriptions: [],
+      commands: {
+        register: (command, handler) => {
+          const dispose = () => {
+            commandRegistry.unregister(command.id);
+          };
+          commandRegistry.register({
+            id: command.id,
+            title: command.title,
+            category: normalizeCommandCategory(command.category),
+            keybinding: command.shortcut,
+            execute: handler,
+          });
+          disposables.push(dispose);
+          return dispose;
+        },
+      },
+      guards: {
+        register: (guard) => {
+          const dispose = this.routeGuardContribution(guard);
+          disposables.push(dispose);
+          return dispose;
+        },
+      },
+      fileTypes: {
+        register: (fileType) => {
+          const dispose = this.routeFileTypeContribution(fileType);
+          disposables.push(dispose);
+          return dispose;
+        },
+      },
+      statusBar: {
+        register: (item) => {
+          const dispose = this.routeStatusBarItemContribution(item, manifest);
+          disposables.push(dispose);
+          return dispose;
+        },
+      },
+      sidebar: {
+        register: (item) => {
+          const viewId = `${pluginId}.${item.id}`;
+          const dispose = registerView({
+            id: viewId,
+            slot: "activityBarPanel",
+            label: item.label,
+            icon: item.icon,
+            component: item.entrypoint
+              ? lazy(() => this.resolveViewEntrypoint(item.entrypoint!, manifest))
+              : (() => null) as ComponentType<any>,
+            priority: item.order,
+            meta: { section: item.section, href: item.href, entrypoint: item.entrypoint },
+          });
+          disposables.push(dispose);
+          return dispose;
+        },
+      },
+      storage: {
+        get: (key) => storage.get(key),
+        set: (key, value) => {
+          storage.set(key, value);
+        },
+      },
+      secrets: createSecretsApi(pluginId),
+      enrichmentRenderers: {
+        register: (type, component) => {
+          const dispose = registerEnrichmentRenderer(type, component);
+          disposables.push(dispose);
+          return dispose;
+        },
+      },
+      views: this.buildViewsApi(pluginId, disposables),
+    };
+  }
+
+  private getPluginStorage(pluginId: string): Map<string, unknown> {
+    let storage = this.pluginStorage.get(pluginId);
+    if (!storage) {
+      storage = new Map<string, unknown>();
+      this.pluginStorage.set(pluginId, storage);
+    }
+    return storage;
   }
 
   /**

@@ -113,6 +113,17 @@ export async function bootstrapThreatIntelPlugins(): Promise<number> {
         continue;
       }
 
+      // Validate MISP base_url if required
+      if (plugin.pluginId === MISP_MANIFEST.id) {
+        const baseUrl = secrets[1];
+        if (!baseUrl || !/^https?:\/\/.+/.test(baseUrl)) {
+          console.warn(
+            `[threat-intel-bootstrap] Skipping ${plugin.displayName} -- base_url not configured or invalid`,
+          );
+          continue;
+        }
+      }
+
       const source = plugin.create(secrets);
       registerThreatIntelSource(source);
       registered++;

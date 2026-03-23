@@ -87,7 +87,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 18. Server Foundation | 1/1 | Complete   | 2026-03-23 |
+| 18. Server Foundation | 1/1 | Complete    | 2026-03-23 |
 | 19. Client Connection & Store | 0/2 | Not started | - |
 | 20. UI Presence Indicators | 0/3 | Not started | - |
 | 21. CodeMirror Cursor Extension | 0/1 | Not started | - |

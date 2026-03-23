@@ -19,6 +19,7 @@ import {
   reportToMisp,
 } from "@/lib/workbench/threat-reporting";
 import type { ReportResult } from "@/lib/workbench/threat-reporting";
+import { IOC_TYPE_COLORS } from "@/lib/workbench/ioc-constants";
 
 // ---- Types ----
 
@@ -42,19 +43,6 @@ const ABUSEIPDB_CATEGORIES = [
   { id: 21, label: "Exploited Host" },
   { id: 22, label: "SSH Brute Force" },
 ] as const;
-
-// ---- IOC Type Colors (consistent with enrichment-sidebar) ----
-
-const IOC_TYPE_COLORS: Record<string, string> = {
-  sha256: "#c45c5c",
-  sha1: "#c45c5c",
-  md5: "#c45c5c",
-  domain: "#6ea8d9",
-  ip: "#d4784b",
-  url: "#d4a84b",
-  email: "#a78bfa",
-  filepath: "#6b9b8b",
-};
 
 // ---- Component ----
 
@@ -236,7 +224,7 @@ export function ReportThreatDialog({
                   const isSelected = idx === selectedIndicatorIdx;
                   return (
                     <button
-                      key={`${ioc.indicator}-${idx}`}
+                      key={`${ioc.iocType}:${ioc.indicator}`}
                       onClick={() => setSelectedIndicatorIdx(idx)}
                       className="flex items-center gap-2 rounded-md border px-3 py-2 text-left transition-colors"
                       style={{

@@ -8,21 +8,7 @@
  */
 
 import type { IndicatorAggregation, VerdictSummary, SourceHealthStatus } from "@/lib/workbench/enrichment-aggregator";
-
-// ---------------------------------------------------------------------------
-// Color maps (matching enrichment-sidebar conventions)
-// ---------------------------------------------------------------------------
-
-const IOC_TYPE_COLORS: Record<string, string> = {
-  sha256: "#c45c5c",
-  sha1: "#c45c5c",
-  md5: "#c45c5c",
-  domain: "#6ea8d9",
-  ip: "#d4784b",
-  url: "#d4a84b",
-  email: "#a78bfa",
-  filepath: "#6b9b8b",
-};
+import { IOC_TYPE_COLORS } from "@/lib/workbench/ioc-constants";
 
 const VERDICT_COLORS = {
   malicious: "#c45c5c",

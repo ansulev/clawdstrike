@@ -21,6 +21,7 @@ import type { Enrichment } from "@/lib/workbench/finding-engine";
 import type { EnrichmentSourceStatus } from "@/lib/plugins/threat-intel/enrichment-bridge";
 import { useEnrichmentRenderer } from "@/lib/plugins/enrichment-type-registry";
 import { extractRelatedIndicators } from "@/lib/workbench/pivot-enrichment";
+import { IOC_TYPE_COLORS } from "@/lib/workbench/ioc-constants";
 import { RelatedIndicatorsSection } from "./related-indicators-section";
 
 interface EnrichmentSidebarProps {
@@ -47,17 +48,6 @@ const ENRICHMENT_TYPE_CONFIG: Record<
   whois: { icon: IconWorld, color: "#8b9dc3", label: "WHOIS" },
   threat_intel: { icon: IconShieldCheck, color: "#d4a84b", label: "Threat Intel" },
   custom: { icon: IconInfoCircle, color: "#6f7f9a", label: "Custom" },
-};
-
-const IOC_TYPE_COLORS: Record<string, string> = {
-  sha256: "#c45c5c",
-  sha1: "#c45c5c",
-  md5: "#c45c5c",
-  domain: "#6ea8d9",
-  ip: "#d4784b",
-  url: "#d4a84b",
-  email: "#a78bfa",
-  filepath: "#6b9b8b",
 };
 
 const SPIDER_SENSE_VERDICT_CONFIG: Record<
@@ -530,11 +520,11 @@ function IocExtractionContent({ data }: { data: Record<string, unknown> }) {
   return (
     <div className="rounded-lg border border-[#2d3240]/40 bg-[#131721] p-3">
       <div className="flex flex-col gap-1.5">
-        {indicators.map((ioc, idx) => {
+        {indicators.map((ioc) => {
           const typeColor = IOC_TYPE_COLORS[ioc.iocType] ?? "#6f7f9a";
           return (
             <div
-              key={`${ioc.indicator}-${idx}`}
+              key={`${ioc.iocType}:${ioc.indicator}`}
               className="flex items-center gap-2"
             >
               <span

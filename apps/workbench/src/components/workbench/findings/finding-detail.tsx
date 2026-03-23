@@ -2,9 +2,7 @@ import { useState, useMemo, useCallback } from "react";
 import { formatRelativeTime } from "@/lib/workbench/format-utils";
 import {
   IconCheck,
-  IconBan,
   IconArrowUpRight,
-  IconX,
   IconChevronDown,
   IconChevronRight,
   IconUser,
@@ -19,8 +17,10 @@ import {
 } from "@tabler/icons-react";
 import { cn } from "@/lib/utils";
 import { EnrichmentSidebar } from "./enrichment-sidebar";
+import { FindingDetailActions } from "./finding-detail-actions";
 import { useEnrichmentBridge } from "@/lib/plugins/threat-intel/enrichment-bridge";
 import { enrichmentOrchestrator } from "@/lib/workbench/enrichment-orchestrator";
+import { secureStore } from "@/lib/workbench/secure-store";
 import type {
   Finding,
   TimelineEntry,
@@ -204,39 +204,17 @@ export function FindingDetail({
               </div>
             </div>
 
-            <div className="flex items-center gap-1.5 shrink-0">
-              {finding.status === "emerging" && (
-                <>
-                  <ActionButton
-                    label="Confirm"
-                    icon={<IconCheck size={12} stroke={2} />}
-                    color="#d4a84b"
-                    onClick={() => onConfirm(finding.id)}
-                  />
-                  <ActionButton
-                    label="Dismiss"
-                    icon={<IconBan size={12} stroke={1.5} />}
-                    color="#6f7f9a"
-                    onClick={() => onDismiss(finding.id)}
-                  />
-                </>
-              )}
-              {finding.status === "confirmed" && (
-                <>
-                  <ActionButton
-                    label="Promote to Intel"
-                    icon={<IconArrowUpRight size={12} stroke={2} />}
-                    color="#3dbf84"
-                    onClick={() => onPromote(finding.id)}
-                  />
-                  <ActionButton
-                    label="Mark FP"
-                    icon={<IconX size={12} stroke={1.5} />}
-                    color="#6f7f9a"
-                    onClick={() => onMarkFalsePositive(finding.id)}
-                  />
-                </>
-              )}
+            <div className="shrink-0">
+              <FindingDetailActions
+                finding={finding}
+                onConfirm={onConfirm}
+                onDismiss={onDismiss}
+                onPromote={onPromote}
+                onMarkFalsePositive={onMarkFalsePositive}
+                getApiKey={(service) =>
+                  secureStore.get(`plugin:clawdstrike.${service}:api_key`)
+                }
+              />
             </div>
           </div>
         </div>
@@ -510,39 +488,6 @@ function SectionHeader({
         </span>
       )}
     </div>
-  );
-}
-
-function ActionButton({
-  label,
-  icon,
-  color,
-  onClick,
-}: {
-  label: string;
-  icon: React.ReactNode;
-  color: string;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[11px] font-medium transition-colors border"
-      style={{
-        color,
-        borderColor: color + "25",
-        backgroundColor: color + "10",
-      }}
-      onMouseEnter={(e) => {
-        e.currentTarget.style.backgroundColor = color + "20";
-      }}
-      onMouseLeave={(e) => {
-        e.currentTarget.style.backgroundColor = color + "10";
-      }}
-    >
-      {icon}
-      {label}
-    </button>
   );
 }
 

@@ -1,3 +1,4 @@
+import React from "react";
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { App } from "../App";
@@ -25,10 +26,6 @@ vi.mock("@/components/workbench/compare/compare-layout", () => ({
   CompareLayout: () => <div data-testid="page-compare">CompareLayout</div>,
 }));
 
-vi.mock("@/components/workbench/topology/topology-layout", () => ({
-  TopologyLayout: () => <div data-testid="page-topology">TopologyLayout</div>,
-}));
-
 vi.mock("@/components/workbench/compliance/compliance-dashboard", () => ({
   ComplianceDashboard: () => <div data-testid="page-compliance">ComplianceDashboard</div>,
 }));
@@ -41,28 +38,91 @@ vi.mock("@/components/workbench/library/library-gallery", () => ({
   LibraryGallery: () => <div data-testid="page-library">LibraryGallery</div>,
 }));
 
-vi.mock("@/components/workbench/settings/settings-page", () => ({
-  SettingsPage: () => <div data-testid="page-settings">SettingsPage</div>,
-}));
-
-vi.mock("@/components/workbench/approvals/approval-queue", () => ({
-  ApprovalQueue: () => <div data-testid="page-approvals">ApprovalQueue</div>,
-}));
-
-vi.mock("@/components/workbench/fleet/fleet-dashboard", () => ({
-  FleetDashboard: () => <div data-testid="page-fleet">FleetDashboard</div>,
-}));
-
-vi.mock("@/components/workbench/audit/audit-log", () => ({
-  AuditLog: () => <div data-testid="page-audit">AuditLog</div>,
-}));
-
 vi.mock("@/components/workbench/missions/mission-control-page", () => ({
   MissionControlPage: () => <div data-testid="page-missions">MissionControlPage</div>,
 }));
 
 vi.mock("@/components/workbench/identity/identity-prompt", () => ({
   IdentityPrompt: () => null,
+}));
+
+// Mock DesktopLayout to avoid deep dependency chains while providing route-based rendering.
+// The real DesktopLayout renders routes through PaneRoot -> PaneRouteRenderer -> useRoutes.
+// We replace it with a simple shell that renders routes directly using the same route definitions.
+vi.mock("@/components/desktop/desktop-layout", async () => {
+  const { useRoutes, Navigate } = await import("react-router-dom");
+  const { HomePage } = await import("@/components/workbench/home/home-page");
+  const { LabLayout } = await import("@/components/workbench/lab/lab-layout");
+  const { CompareLayout } = await import("@/components/workbench/compare/compare-layout");
+  const { ComplianceDashboard } = await import("@/components/workbench/compliance/compliance-dashboard");
+  const { ReceiptInspector } = await import("@/components/workbench/receipts/receipt-inspector");
+  const { LibraryGallery } = await import("@/components/workbench/library/library-gallery");
+  const { MissionControlPage } = await import("@/components/workbench/missions/mission-control-page");
+
+  return {
+    DesktopLayout: () => {
+      const element = useRoutes([
+        { index: true, element: <Navigate to="/home" replace /> },
+        { path: "home", element: <HomePage /> },
+        { path: "editor", element: <Navigate to="/home" replace /> },
+        { path: "lab", element: <LabLayout /> },
+        { path: "simulator", element: <Navigate to="/lab?tab=simulate" replace /> },
+        { path: "compare", element: <CompareLayout /> },
+        { path: "compliance", element: <ComplianceDashboard /> },
+        { path: "receipts", element: <ReceiptInspector /> },
+        { path: "library", element: <LibraryGallery /> },
+        { path: "missions", element: <MissionControlPage /> },
+        { path: "*", element: <Navigate to="/home" replace /> },
+      ]);
+      return (
+        <div className="flex flex-col h-screen w-screen">
+          <header>
+            <span>Clawdstrike</span>
+            <span>Workbench</span>
+          </header>
+          <div className="flex flex-1 min-h-0">
+            <aside role="complementary">
+              <span>Editor</span>
+              <span>Lab</span>
+              <span>Mission Control</span>
+            </aside>
+            <main>{element}</main>
+          </div>
+        </div>
+      );
+    },
+  };
+});
+
+// Mock WorkbenchBootstraps transitive deps
+vi.mock("@/features/operator/stores/operator-store", () => ({
+  useOperator: () => ({ currentOperator: null, setOperator: vi.fn() }),
+}));
+
+vi.mock("@/features/fleet/use-fleet-connection", () => ({
+  useFleetConnection: () => ({ connection: { connected: false }, connect: vi.fn(), disconnect: vi.fn() }),
+}));
+
+vi.mock("@/features/settings/use-hint-settings", () => ({
+  useHintSettingsSafe: () => ({}),
+}));
+
+vi.mock("@/features/settings/secure-store", () => ({
+  secureStore: { init: () => Promise.resolve() },
+  migrateCredentialsToStronghold: () => Promise.resolve(),
+}));
+
+vi.mock("@/features/findings/hooks/use-signal-correlator", () => ({
+  useSignalCorrelator: () => {},
+}));
+
+vi.mock("@/features/policy/stores/multi-policy-store", () => ({
+  useMultiPolicyBootstrap: () => {},
+}));
+
+vi.mock("@/features/panes/pane-session", () => ({
+  savePaneSession: vi.fn(),
+  loadPaneSession: () => null,
 }));
 
 afterEach(() => {

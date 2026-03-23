@@ -1,6 +1,16 @@
 import "@testing-library/jest-dom/vitest";
 import { beforeEach } from "vitest";
 
+// ResizeObserver polyfill for jsdom — prevents "ResizeObserver is not defined"
+// crashes in any test that renders components using ResizablePanelGroup.
+if (typeof globalThis.ResizeObserver === "undefined") {
+  globalThis.ResizeObserver = class ResizeObserver {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  } as unknown as typeof globalThis.ResizeObserver;
+}
+
 function createStorageMock(): Storage {
   let store: Record<string, string> = {};
 

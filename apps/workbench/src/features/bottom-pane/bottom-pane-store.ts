@@ -200,9 +200,9 @@ export const useBottomPaneStore = create<BottomPaneStore>((set, get) => ({
     set((state) => ({
       outputEntries: [
         {
+          ...entry,
           id: crypto.randomUUID(),
           timestamp: entry.timestamp ?? Date.now(),
-          ...entry,
         },
         ...state.outputEntries,
       ].slice(0, MAX_OUTPUT_ENTRIES),

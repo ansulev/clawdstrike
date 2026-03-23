@@ -16,10 +16,7 @@ import type {
   EdgeKind,
   Capability,
 } from "@/lib/workbench/delegation-types";
-import {
-  isPrivateOrLoopbackFleetHostname,
-  validateFleetUrl,
-} from "@/features/fleet/fleet-url-policy";
+import { validateFleetUrl } from "@/features/fleet/fleet-url-policy";
 import { httpFetch } from "@/lib/workbench/http-transport";
 import {
   isHeadAnnouncement,

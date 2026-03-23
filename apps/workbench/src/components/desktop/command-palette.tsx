@@ -36,21 +36,7 @@ function pushRecent(id: string): void {
 
 // ---- Keybinding display ----
 
-const isMac =
-  typeof navigator !== "undefined" && /Mac|iPod|iPhone|iPad/.test(navigator.platform);
-
-function formatKeybinding(binding: string): string {
-  // binding format: "Meta+Shift+S"
-  return binding
-    .replace(/Meta/g, isMac ? "\u2318" : "Ctrl")
-    .replace(/Shift/g, isMac ? "\u21e7" : "Shift")
-    .replace(/Alt/g, isMac ? "\u2325" : "Alt")
-    .replace(/ArrowLeft/g, isMac ? "\u2190" : "Left")
-    .replace(/ArrowRight/g, isMac ? "\u2192" : "Right")
-    .replace(/ArrowUp/g, isMac ? "\u2191" : "Up")
-    .replace(/ArrowDown/g, isMac ? "\u2193" : "Down")
-    .replace(/\+/g, isMac ? "" : "+");
-}
+import { formatKeybinding } from "@/lib/format-keybinding";
 
 // ---- Category ordering for grouped display ----
 

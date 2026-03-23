@@ -113,12 +113,8 @@ export function getShortcutDefinitions(): ShortcutDefinition[] {
     });
 }
 
-/**
- * Static fallback for the named export consumed by shortcut-help-dialog.
- * Components that import SHORTCUT_DEFINITIONS get a snapshot; the live
- * version is provided by getShortcutDefinitions().
- */
-export const SHORTCUT_DEFINITIONS = getShortcutDefinitions();
+// SHORTCUT_DEFINITIONS removed — was always empty at module load time
+// (registry not populated yet). Use getShortcutDefinitions() for live data.
 
 // ---- Component ----
 

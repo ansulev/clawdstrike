@@ -12,7 +12,7 @@ import {
   IconXboxX,
 } from "@tabler/icons-react";
 import { usePaneStore } from "./pane-store";
-import { findPaneGroup } from "./pane-tree";
+import { findPaneGroup, getAllPaneGroups } from "./pane-tree";
 import { PaneTab } from "./pane-tab";
 import { usePolicyTabsStore } from "@/features/policy/stores/policy-tabs-store";
 import type { PaneGroup } from "./pane-types";
@@ -132,7 +132,7 @@ export function PaneTabBar({
   pane: PaneGroup;
   active: boolean;
 }) {
-  const paneCount = usePaneStore((state) => state.paneCount());
+  const paneCount = usePaneStore((state) => getAllPaneGroups(state.root).length);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(false);

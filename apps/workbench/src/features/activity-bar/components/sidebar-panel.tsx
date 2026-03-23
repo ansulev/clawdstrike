@@ -11,6 +11,7 @@ import { LibraryPanel } from "../panels/library-panel";
 import { FleetPanel } from "../panels/fleet-panel";
 import { CompliancePanel } from "../panels/compliance-panel";
 import { SearchPanelConnected } from "@/features/search/components/search-panel";
+import { AnalystRosterPanel } from "@/features/presence/components/analyst-roster-panel";
 import type { ActivityBarItemId } from "../types";
 import { useMemo } from "react";
 
@@ -239,6 +240,8 @@ function renderPanel(activeItem: ActivityBarItemId) {
       return <FleetPanel />;
     case "compliance":
       return <CompliancePanel />;
+    case "people":
+      return <AnalystRosterPanel />;
   }
 }
 

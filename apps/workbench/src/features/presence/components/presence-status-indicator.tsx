@@ -73,7 +73,7 @@ export function PresenceStatusIndicator() {
       onClick={() =>
         useActivityBarStore
           .getState()
-          .actions.toggleItem("people" as any)
+          .actions.toggleItem("people")
       }
     >
       <span

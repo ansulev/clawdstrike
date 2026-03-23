@@ -46,8 +46,8 @@ Plans:
 **Plans:** 3 plans
 Plans:
 - [x] 02-01-PLAN.md — Package structure, CLI entry with @clack/prompts, flag parsing, template engine, config file generators
-- [ ] 02-02-PLAN.md — Six plugin type templates (guard, detection, ui, intel, compliance, full) and test template with createSpyContext
-- [ ] 02-03-PLAN.md — Unit tests for flag parsing and templates, integration test scaffolding all 6 types
+- [x] 02-02-PLAN.md — Six plugin type templates (guard, detection, ui, intel, compliance, full) and test template with createSpyContext
+- [x] 02-03-PLAN.md — Unit tests for flag parsing and templates, integration test scaffolding all 6 types
 
 ### Phase 3: Dev Server
 **Goal**: Plugin authors get instant feedback when editing plugin source files -- changes appear in the running workbench within 200ms without losing plugin state or workbench layout
@@ -101,7 +101,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Testing Harness | 1/2 | Executing | - |
-| 2. CLI Scaffolding | 1/3 | Executing | - |
+| 2. CLI Scaffolding | 3/3 | Complete | 2026-03-23 |
 | 3. Dev Server | 2/3 | Executing | - |
 | 4. Documentation | 2/2 | Complete | 2026-03-23 |
 | 5. Plugin Playground | 0/2 | Planning complete | - |

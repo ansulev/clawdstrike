@@ -193,9 +193,13 @@ vi.mock("@/features/fleet/use-fleet-connection", () => ({
   ),
 }));
 
-vi.mock("@/features/settings/use-hint-settings", () => ({
-  useHintSettingsSafe: () => ({}),
-}));
+vi.mock("@/features/settings/use-hint-settings", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/features/settings/use-hint-settings")>();
+  return {
+    ...actual,
+    useHintSettingsSafe: () => ({}),
+  };
+});
 
 vi.mock("@/features/settings/secure-store", () => ({
   secureStore: { init: () => Promise.resolve() },

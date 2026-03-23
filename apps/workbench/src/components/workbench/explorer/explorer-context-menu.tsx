@@ -14,6 +14,7 @@ import {
   IconFile,
 } from "@tabler/icons-react";
 import type { ProjectFile } from "@/features/project/stores/project-store";
+import { joinWorkspacePath } from "@/lib/workbench/path-utils";
 
 // ---------------------------------------------------------------------------
 // Discriminated union for context menu targets
@@ -233,7 +234,7 @@ function buildFileItems(
     onRevealInFinder?: (absolutePath: string) => void;
   },
 ): MenuItem[] {
-  const absPath = target.rootPath + "/" + target.file.path;
+  const absPath = joinWorkspacePath(target.rootPath, target.file.path);
   return [
     {
       label: "Open",
@@ -286,7 +287,7 @@ function buildFolderItems(
     onRevealInFinder?: (absolutePath: string) => void;
   },
 ): MenuItem[] {
-  const absPath = target.rootPath + "/" + target.file.path;
+  const absPath = joinWorkspacePath(target.rootPath, target.file.path);
   return [
     {
       label: "New File",

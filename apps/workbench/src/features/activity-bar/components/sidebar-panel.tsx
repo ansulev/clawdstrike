@@ -15,6 +15,11 @@ import { SearchPanelConnected } from "@/features/search/components/search-panel"
 import { AnalystRosterPanel } from "@/features/presence/components/analyst-roster-panel";
 import type { ActivityBarItemId } from "../types";
 import { useMemo } from "react";
+import {
+  joinWorkspacePath,
+  relativeWorkspacePath,
+  resolveWorkspaceRootPath,
+} from "@/lib/workbench/path-utils";
 
 // ---------------------------------------------------------------------------
 // SidebarPanel -- Container that renders active panel content.
@@ -51,15 +56,10 @@ function ExplorerPanelConnected() {
     const route = getActivePaneRoute(paneRoot, activePaneId);
     if (!route.startsWith("/file/")) return null;
     const absPath = route.slice("/file/".length);
-    for (const rootPath of [...projectRoots].sort((a, b) => b.length - a.length)) {
-      if (absPath === rootPath || absPath.startsWith(rootPath + "/")) {
-        return getProjectFileStatusKey(
-          rootPath,
-          absPath.slice(rootPath.length).replace(/^\//, ""),
-        );
-      }
-    }
-    return null;
+    const rootPath = resolveWorkspaceRootPath(projectRoots, absPath);
+    return rootPath
+      ? getProjectFileStatusKey(rootPath, relativeWorkspacePath(rootPath, absPath))
+      : null;
   }, [paneRoot, activePaneId, projectRoots]);
 
   // Show loading indicator briefly while bootstrap scans directories.
@@ -97,7 +97,7 @@ function ExplorerPanelConnected() {
         actions.toggleDirForRoot(rootPath, dirPath);
       }}
       onOpenFile={(rootPath, file) => {
-        const absPath = `${rootPath}/${file.path}`;
+        const absPath = joinWorkspacePath(rootPath, file.path);
         if (file.fileType === "swarm_bundle") {
           usePaneStore.getState().openApp(
             `/swarm-board/${encodeURIComponent(absPath)}`,
@@ -141,10 +141,10 @@ function ExplorerPanelConnected() {
         }
       }}
       onRenameFile={async (rootPath, file, newName) => {
-        await actions.renameFile(`${rootPath}/${file.path}`, newName);
+        await actions.renameFile(joinWorkspacePath(rootPath, file.path), newName);
       }}
       onDeleteFile={async (rootPath, file) => {
-        await actions.deleteFile(`${rootPath}/${file.path}`);
+        await actions.deleteFile(joinWorkspacePath(rootPath, file.path));
       }}
       onRevealInFinder={async (absPath) => {
         const { revealInFinder } = await import("@/lib/tauri-bridge");
@@ -152,11 +152,11 @@ function ExplorerPanelConnected() {
       }}
       onCreateFolder={async (parentPath, folderName) => {
         const { createDirectory } = await import("@/lib/tauri-bridge");
-        const fullPath = `${parentPath}/${folderName}`;
+        const fullPath = joinWorkspacePath(parentPath, folderName);
         const ok = await createDirectory(fullPath);
         if (ok) {
           // Re-scan the root that contains this folder
-          const root = projectRoots.find((r) => parentPath.startsWith(r));
+          const root = resolveWorkspaceRootPath(projectRoots, parentPath);
           if (root) await actions.loadRoot(root);
         }
       }}

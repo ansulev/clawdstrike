@@ -2,6 +2,7 @@ import { IconChevronRight } from "@tabler/icons-react";
 import { usePolicyTabsStore } from "@/features/policy/stores/policy-tabs-store";
 import { useProjectStore } from "@/features/project/stores/project-store";
 import { useActivityBarStore } from "@/features/activity-bar/stores/activity-bar-store";
+import { relativeWorkspacePath } from "@/lib/workbench/path-utils";
 
 /**
  * BreadcrumbBar -- compact path-segment navigation rendered above the editor.
@@ -40,22 +41,14 @@ export function BreadcrumbBar({ route }: { route: string }) {
   // becomes "policies/strict.yaml" when rootPath is "/Users/connor/.clawdstrike/workspace".
   let relPath = filePath;
   for (const root of projectRoots) {
-    if (filePath.startsWith(root + "/")) {
-      relPath = filePath.slice(root.length + 1);
-      break;
-    }
-    if (filePath.startsWith(root)) {
-      relPath = filePath.slice(root.length).replace(/^\//, "");
+    const candidate = relativeWorkspacePath(root, filePath);
+    if (candidate !== filePath) {
+      relPath = candidate;
       break;
     }
   }
-  // Also try the single project rootPath for backward compat.
   if (relPath === filePath && project?.rootPath) {
-    if (filePath.startsWith(project.rootPath + "/")) {
-      relPath = filePath.slice(project.rootPath.length + 1);
-    } else if (filePath.startsWith(project.rootPath)) {
-      relPath = filePath.slice(project.rootPath.length).replace(/^\//, "");
-    }
+    relPath = relativeWorkspacePath(project.rootPath, filePath);
   }
 
   const segments = relPath.split("/").filter(Boolean);

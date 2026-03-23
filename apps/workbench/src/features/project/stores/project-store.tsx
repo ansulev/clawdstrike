@@ -2,6 +2,13 @@ import { create } from "zustand";
 import { createSelectors } from "@/lib/create-selectors";
 import type { FileType } from "@/lib/workbench/file-type-registry";
 import { getFileTypeByExtension } from "@/lib/workbench/file-type-registry";
+import {
+  isAbsoluteWorkspacePath,
+  joinWorkspacePath,
+  normalizeWorkspacePath,
+  relativeWorkspacePath,
+  resolveWorkspaceRootPath,
+} from "@/lib/workbench/path-utils";
 
 // ---- Types ----
 
@@ -82,18 +89,12 @@ function buildProjectSelectionPatch(
 }
 
 function resolveOwningRootPath(state: ProjectState, path: string): string | null {
-  if (!path.startsWith("/")) {
+  const normalizedPath = normalizeWorkspacePath(path);
+  if (!isAbsoluteWorkspacePath(normalizedPath)) {
     return state.project?.rootPath ?? state.projectRoots[0] ?? null;
   }
 
-  const orderedRoots = [...state.projectRoots].sort((a, b) => b.length - a.length);
-  return (
-    orderedRoots.find(
-      (rootPath) => path === rootPath || path.startsWith(`${rootPath}/`),
-    ) ??
-    state.project?.rootPath ??
-    null
-  );
+  return resolveWorkspaceRootPath(state.projectRoots, normalizedPath) ?? state.project?.rootPath ?? null;
 }
 
 function getProjectForRoot(
@@ -105,13 +106,7 @@ function getProjectForRoot(
 }
 
 function relativePathWithinRoot(rootPath: string, path: string): string {
-  if (!path.startsWith("/")) {
-    return path.replace(/^\/+/, "");
-  }
-  if (!path.startsWith(rootPath)) {
-    return path.replace(/^\/+/, "");
-  }
-  return path.slice(rootPath.length).replace(/^\//, "");
+  return relativeWorkspacePath(rootPath, path);
 }
 
 function getFileStatusKeyForPath(state: ProjectState, filePath: string): string | null {
@@ -555,15 +550,15 @@ const useProjectStoreBase = create<ProjectStoreState>()((set, get) => ({
       if (!project || !rootPath) return false;
 
       // oldPath may be relative; resolve to absolute for Tauri APIs.
-      const oldAbsPath = oldPath.startsWith("/")
-        ? oldPath
-        : `${rootPath}/${oldPath}`;
+      const oldAbsPath = isAbsoluteWorkspacePath(oldPath)
+        ? normalizeWorkspacePath(oldPath)
+        : joinWorkspacePath(rootPath, oldPath);
 
       // Compute new absolute path by replacing the last segment.
       const lastSlash = oldAbsPath.lastIndexOf("/");
       const newAbsPath = lastSlash >= 0
         ? oldAbsPath.substring(0, lastSlash + 1) + newName
-        : `${rootPath}/${newName}`;
+        : joinWorkspacePath(rootPath, newName);
 
       const { renameDetectionFile } = await import("@/lib/tauri-bridge");
       const ok = await renameDetectionFile(oldAbsPath, newAbsPath);
@@ -608,9 +603,9 @@ const useProjectStoreBase = create<ProjectStoreState>()((set, get) => ({
       if (!project || !rootPath) return false;
 
       // filePath may be relative; resolve to absolute for Tauri APIs.
-      const absPath = filePath.startsWith("/")
-        ? filePath
-        : `${rootPath}/${filePath}`;
+      const absPath = isAbsoluteWorkspacePath(filePath)
+        ? normalizeWorkspacePath(filePath)
+        : joinWorkspacePath(rootPath, filePath);
 
       const { deleteDetectionFile } = await import("@/lib/tauri-bridge");
       const ok = await deleteDetectionFile(absPath);
@@ -678,7 +673,8 @@ const useProjectStoreBase = create<ProjectStoreState>()((set, get) => ({
       try {
         const paths = await scanDir(rootPath, rootPath);
         const files = buildFileTree(rootPath, paths);
-        const name = rootPath.split("/").filter(Boolean).pop() ?? "workspace";
+        const normalizedRootPath = normalizeWorkspacePath(rootPath);
+        const name = normalizedRootPath.split("/").filter(Boolean).pop() ?? "workspace";
         const allDirs = collectDirPaths(files);
 
         const dp: DetectionProject = {

@@ -8,7 +8,7 @@ import { useOperator } from "@/features/operator/stores/operator-store";
 import { useFleetConnection } from "@/features/fleet/use-fleet-connection";
 import { usePresenceConnection } from "@/features/presence/use-presence-connection";
 import { usePresenceFileTracking } from "@/features/presence/use-presence-file-tracking";
-import { useHintSettingsSafe } from "@/features/settings/use-hint-settings";
+import { HintSettingsProvider, useHintSettingsSafe } from "@/features/settings/use-hint-settings";
 import { usePolicyBootstrap } from "@/features/policy/hooks/use-policy-bootstrap";
 import { secureStore, migrateCredentialsToStronghold } from "@/features/settings/secure-store";
 import { useProjectStore } from "@/features/project/stores/project-store";
@@ -268,7 +268,11 @@ class ErrorBoundary extends Component<{ children: ReactNode }, ErrorBoundaryStat
 }
 
 function AppProviders({ children }: { children: ReactNode }) {
-  return <ToastProvider>{children}</ToastProvider>;
+  return (
+    <ToastProvider>
+      <HintSettingsProvider>{children}</HintSettingsProvider>
+    </ToastProvider>
+  );
 }
 
 /**

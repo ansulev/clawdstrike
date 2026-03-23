@@ -36,7 +36,6 @@ import {
   IconSearch,
   IconCopy,
   IconTrash,
-  IconLink,
   IconCommand,
 } from "@tabler/icons-react";
 
@@ -485,13 +484,6 @@ function SwarmBoardCanvas() {
     }
   }, [contextMenu, removeNode, killSession]);
 
-  const handleContextConnect = useCallback(() => {
-    if (contextMenu) {
-      // Connection picker not yet implemented (tracked in swarm-board backlog)
-      setContextMenu(null);
-    }
-  }, [contextMenu]);
-
   // Memoize the type maps (must be stable references)
   const nodeTypes = useMemo(() => swarmBoardNodeTypes, []);
   const edgeTypes = useMemo(() => swarmBoardEdgeTypes, []);
@@ -676,7 +668,6 @@ function SwarmBoardCanvas() {
                 onInspect={handleContextInspect}
                 onDuplicate={handleContextDuplicate}
                 onDelete={handleContextDelete}
-                onConnect={handleContextConnect}
               />
             )}
           </div>
@@ -710,15 +701,12 @@ const NodeContextMenu = forwardRef<
     onInspect: () => void;
     onDuplicate: () => void;
     onDelete: () => void;
-    onConnect: () => void;
   }
->(({ menu, onInspect, onDuplicate, onDelete, onConnect }, ref) => {
+>(({ menu, onInspect, onDuplicate, onDelete }, ref) => {
   const items = [
     { label: "Inspect", icon: IconSearch, action: onInspect },
     { label: "Duplicate", icon: IconCopy, action: onDuplicate },
     { label: "Delete", icon: IconTrash, action: onDelete, danger: true },
-    { type: "separator" as const },
-    { label: "Connect to...", icon: IconLink, action: onConnect, disabled: true },
   ];
 
   return (

@@ -31,6 +31,16 @@ import {
   IconLoader2,
 } from "@tabler/icons-react";
 
+function useActivePaneContext() {
+  const paneRoot = usePaneStore((store) => store.root);
+  const activePaneId = usePaneStore((store) => store.activePaneId);
+  const activePane = getActivePane(paneRoot, activePaneId);
+  const activePaneView = activePane ? getPaneActiveView(activePane) : null;
+  const isFileRoute = activePaneView?.route?.startsWith("/file/") ?? false;
+
+  return { activePaneView, isFileRoute };
+}
+
 function ValidationSegment() {
   const { state } = useWorkbenchState();
   const { activeTab: currentTab } = usePolicyTabs();
@@ -196,14 +206,10 @@ function EvalCountSegment() {
 
 function ActivePaneContextSegment() {
   const { state } = useWorkbenchState();
-  const paneRoot = usePaneStore((store) => store.root);
-  const activePaneId = usePaneStore((store) => store.activePaneId);
-  const activePane = getActivePane(paneRoot, activePaneId);
-  const activePaneView = activePane ? getPaneActiveView(activePane) : null;
+  const { activePaneView, isFileRoute } = useActivePaneContext();
   const paneFileName = activePaneView?.label ?? null;
   const paneFileDirty = activePaneView?.dirty ?? false;
   const paneFileType = activePaneView?.fileType ?? null;
-  const isFileRoute = activePaneView?.route?.startsWith("/file/") ?? false;
 
   if (!activePaneView || !paneFileName) {
     return null;
@@ -251,6 +257,7 @@ function ActivePolicySegment() {
 
 function FilePathSegment() {
   const { state } = useWorkbenchState();
+  const { isFileRoute } = useActivePaneContext();
   if (state.filePath) {
     return (
       <span
@@ -260,6 +267,9 @@ function FilePathSegment() {
         {state.filePath}
       </span>
     );
+  }
+  if (isFileRoute) {
+    return null;
   }
   return <span className="italic text-[#6f7f9a]/30">unsaved</span>;
 }

@@ -688,6 +688,65 @@ describe("PluginLoader", () => {
       iframeContainer.remove();
     });
 
+    it("community plugins do not route host-executed entrypoint contributions", async () => {
+      const manifest = createTestManifest({
+        id: "community-host-entrypoint-skip",
+        trust: "community",
+        activationEvents: ["onStartup"],
+        main: "./index.ts",
+        contributions: {
+          statusBarItems: [
+            {
+              id: "community-host-status",
+              side: "right" as const,
+              priority: 20,
+              entrypoint: "data:text/javascript,export default function CommunityStatus(){ return null; }",
+            },
+          ],
+          editorTabs: [
+            {
+              id: "editor",
+              label: "Community Editor",
+              entrypoint: "data:text/javascript,export default function CommunityEditor(){ return null; }",
+            },
+          ],
+          threatIntelSources: [
+            {
+              id: "intel",
+              name: "Community Intel",
+              description: "Should stay sandboxed",
+              entrypoint: "data:text/javascript,export default { enrich() {} }",
+            },
+          ],
+        },
+      });
+      registry.register(manifest);
+
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const iframeContainer = document.createElement("div");
+      document.body.appendChild(iframeContainer);
+
+      loader = new PluginLoader({
+        registry,
+        trustOptions: { allowUnsigned: true },
+        iframeContainer,
+        resolvePluginCode: resolveCommunityPluginCode,
+      });
+
+      await loader.loadPlugin("community-host-entrypoint-skip");
+
+      expect(
+        getStatusBarItems("right").find((item) => item.id === "community-host-status"),
+      ).toBeUndefined();
+      expect(getView("community-host-entrypoint-skip.editor")).toBeUndefined();
+      expect(getThreatIntelSource("community-host-entrypoint-skip.intel")).toBeUndefined();
+      expect(registry.get("community-host-entrypoint-skip")!.state).toBe("activated");
+
+      warnSpy.mockRestore();
+      await loader.deactivatePlugin("community-host-entrypoint-skip");
+      iframeContainer.remove();
+    });
+
     // Test 18: Existing internal plugin tests continue to pass (verified by the tests above)
     it("internal plugin loading path is unchanged after adding community fork", async () => {
       const manifest = createGuardPluginManifest("internal-unchanged");
@@ -1051,6 +1110,52 @@ describe("PluginLoader", () => {
 
       unsubscribe();
       await loader.deactivatePlugin("status-bar-async-test");
+    });
+
+    it("does not re-register async status bar items after the plugin is deactivated", async () => {
+      let releaseComponentLoad: (() => void) | undefined;
+      const globalForTest = globalThis as typeof globalThis & {
+        __statusBarItemLoad?: Promise<void>;
+      };
+      globalForTest.__statusBarItemLoad = new Promise<void>((resolve) => {
+        releaseComponentLoad = resolve;
+      });
+
+      const entrypoint = `data:text/javascript,${encodeURIComponent(
+        "await globalThis.__statusBarItemLoad; export default function PluginStatusWidget(){ return null; }",
+      )}`;
+      const manifest = createTestManifest({
+        id: "status-bar-async-cancel-test",
+        trust: "internal",
+        activationEvents: ["onStartup"],
+        contributions: {
+          statusBarItems: [
+            { id: "async-status-cancel", side: "right" as const, priority: 26, entrypoint },
+          ],
+        },
+      });
+      registry.register(manifest);
+
+      loader = new PluginLoader({
+        registry,
+        resolveModule: async () => createMockModule(),
+      });
+
+      await loader.loadPlugin("status-bar-async-cancel-test");
+      expect(
+        getStatusBarItems("right").find((item) => item.id === "async-status-cancel"),
+      ).toBeDefined();
+
+      await loader.deactivatePlugin("status-bar-async-cancel-test");
+      releaseComponentLoad?.();
+      await Promise.resolve();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(
+        getStatusBarItems("right").find((item) => item.id === "async-status-cancel"),
+      ).toBeUndefined();
+
+      delete globalForTest.__statusBarItemLoad;
     });
 
     // Test 28: loadPlugin() with activityBarItems routes to ViewRegistry with slot 'activityBarPanel'

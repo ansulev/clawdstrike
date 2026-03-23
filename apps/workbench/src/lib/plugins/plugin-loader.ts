@@ -868,6 +868,12 @@ export class PluginLoader {
     const contributions = manifest.contributions;
     if (!contributions) return;
     const asyncRegistrations: Promise<void>[] = [];
+    const allowHostExecutableContributions = manifest.trust !== "community";
+    const warnSkippedCommunityContribution = (kind: string): void => {
+      console.warn(
+        `[PluginLoader] Community plugin "${manifest.id}" declared "${kind}", but host-side executable contributions are disabled for sandboxed plugins. Skipping.`,
+      );
+    };
 
     // Route guard contributions
     if (contributions.guards) {
@@ -887,98 +893,122 @@ export class PluginLoader {
 
     // Route status bar item contributions
     if (contributions.statusBarItems) {
-      for (const item of contributions.statusBarItems) {
-        const dispose = this.routeStatusBarItemContribution(item, manifest);
-        disposables.push(dispose);
+      if (!allowHostExecutableContributions) {
+        warnSkippedCommunityContribution("statusBarItems");
+      } else {
+        for (const item of contributions.statusBarItems) {
+          const dispose = this.routeStatusBarItemContribution(item, manifest);
+          disposables.push(dispose);
+        }
       }
     }
 
     // Route editor tab contributions to ViewRegistry
     if (contributions.editorTabs) {
-      for (const tab of contributions.editorTabs) {
-        const viewId = `${manifest.id}.${tab.id}`;
-        const dispose = registerView({
-          id: viewId,
-          slot: "editorTab",
-          label: tab.label,
-          icon: tab.icon,
-          component: lazy(() => this.resolveViewEntrypoint(tab.entrypoint, manifest)),
-        });
-        disposables.push(dispose);
+      if (!allowHostExecutableContributions) {
+        warnSkippedCommunityContribution("editorTabs");
+      } else {
+        for (const tab of contributions.editorTabs) {
+          const viewId = `${manifest.id}.${tab.id}`;
+          const dispose = registerView({
+            id: viewId,
+            slot: "editorTab",
+            label: tab.label,
+            icon: tab.icon,
+            component: lazy(() => this.resolveViewEntrypoint(tab.entrypoint, manifest)),
+          });
+          disposables.push(dispose);
+        }
       }
     }
 
     // Route bottom panel tab contributions to ViewRegistry
     if (contributions.bottomPanelTabs) {
-      for (const tab of contributions.bottomPanelTabs) {
-        const viewId = `${manifest.id}.${tab.id}`;
-        const dispose = registerView({
-          id: viewId,
-          slot: "bottomPanelTab",
-          label: tab.label,
-          icon: tab.icon,
-          component: lazy(() => this.resolveViewEntrypoint(tab.entrypoint, manifest)),
-        });
-        disposables.push(dispose);
+      if (!allowHostExecutableContributions) {
+        warnSkippedCommunityContribution("bottomPanelTabs");
+      } else {
+        for (const tab of contributions.bottomPanelTabs) {
+          const viewId = `${manifest.id}.${tab.id}`;
+          const dispose = registerView({
+            id: viewId,
+            slot: "bottomPanelTab",
+            label: tab.label,
+            icon: tab.icon,
+            component: lazy(() => this.resolveViewEntrypoint(tab.entrypoint, manifest)),
+          });
+          disposables.push(dispose);
+        }
       }
     }
 
     // Route right sidebar panel contributions to ViewRegistry
     if (contributions.rightSidebarPanels) {
-      for (const panel of contributions.rightSidebarPanels) {
-        const viewId = `${manifest.id}.${panel.id}`;
-        const dispose = registerView({
-          id: viewId,
-          slot: "rightSidebarPanel",
-          label: panel.label,
-          icon: panel.icon,
-          component: lazy(() => this.resolveViewEntrypoint(panel.entrypoint, manifest)),
-        });
-        disposables.push(dispose);
+      if (!allowHostExecutableContributions) {
+        warnSkippedCommunityContribution("rightSidebarPanels");
+      } else {
+        for (const panel of contributions.rightSidebarPanels) {
+          const viewId = `${manifest.id}.${panel.id}`;
+          const dispose = registerView({
+            id: viewId,
+            slot: "rightSidebarPanel",
+            label: panel.label,
+            icon: panel.icon,
+            component: lazy(() => this.resolveViewEntrypoint(panel.entrypoint, manifest)),
+          });
+          disposables.push(dispose);
+        }
       }
     }
 
     // Route activity bar item contributions to ViewRegistry
     if (contributions.activityBarItems) {
-      for (const item of contributions.activityBarItems) {
-        const viewId = `${manifest.id}.${item.id}`;
-        const dispose = registerView({
-          id: viewId,
-          slot: "activityBarPanel",
-          label: item.label,
-          icon: item.icon,
-          component: item.entrypoint
-            ? lazy(() => this.resolveViewEntrypoint(item.entrypoint!, manifest))
-            : (() => null) as ComponentType<any>,
-          priority: item.order,
-          meta: { section: item.section, href: item.href, entrypoint: item.entrypoint },
-        });
-        disposables.push(dispose);
+      if (!allowHostExecutableContributions) {
+        warnSkippedCommunityContribution("activityBarItems");
+      } else {
+        for (const item of contributions.activityBarItems) {
+          const viewId = `${manifest.id}.${item.id}`;
+          const dispose = registerView({
+            id: viewId,
+            slot: "activityBarPanel",
+            label: item.label,
+            icon: item.icon,
+            component: item.entrypoint
+              ? lazy(() => this.resolveViewEntrypoint(item.entrypoint!, manifest))
+              : (() => null) as ComponentType<any>,
+            priority: item.order,
+            meta: { section: item.section, href: item.href, entrypoint: item.entrypoint },
+          });
+          disposables.push(dispose);
+        }
       }
     }
 
     // Route gutter decoration contributions to GutterExtensionRegistry
     if (contributions.gutterDecorations) {
-      for (const deco of contributions.gutterDecorations) {
-        const decoId = `${manifest.id}.${deco.id}`;
-        const resolvedDecoEntrypoint = this.resolveEntrypointUrl(deco.entrypoint, manifest);
-        asyncRegistrations.push((async () => {
-          try {
-            const mod = await import(/* @vite-ignore */ resolvedDecoEntrypoint);
-            if (loadToken && this.shouldAbortLoad(manifest.id, loadToken)) {
-              return;
+      if (!allowHostExecutableContributions) {
+        warnSkippedCommunityContribution("gutterDecorations");
+      } else {
+        for (const deco of contributions.gutterDecorations) {
+          const decoId = `${manifest.id}.${deco.id}`;
+          const resolvedDecoEntrypoint = this.resolveEntrypointUrl(deco.entrypoint, manifest);
+          asyncRegistrations.push((async () => {
+            try {
+              const mod = await import(/* @vite-ignore */ resolvedDecoEntrypoint);
+              if (loadToken && this.shouldAbortLoad(manifest.id, loadToken)) {
+                return;
+              }
+              const factory = mod.createGutterExtension ?? mod.default;
+              if (typeof factory === "function") {
+                const config: GutterConfig = { pluginId: manifest.id, decorationId: decoId };
+                const extension = factory(config);
+                const dispose = registerGutterExtension({ id: decoId, extension });
+                disposables.push(dispose);
+              }
+            } catch (err) {
+              console.warn(`[PluginLoader] Failed to load gutter extension "${decoId}":`, err);
             }
-            const factory = mod.createGutterExtension ?? mod.default;
-            if (typeof factory === "function") {
-              const config: GutterConfig = { pluginId: manifest.id, decorationId: decoId };
-              const extension = factory(config);
-              const dispose = registerGutterExtension({ id: decoId, extension });
-              disposables.push(dispose);
-            }
-          } catch (err) {
-            console.warn(`[PluginLoader] Failed to load gutter extension "${decoId}":`, err);
-          }
-        })());
+          })());
+        }
       }
     }
 
@@ -995,34 +1025,38 @@ export class PluginLoader {
 
     // Route threat intel source contributions to ThreatIntelSourceRegistry
     if (contributions.threatIntelSources) {
-      for (const source of contributions.threatIntelSources) {
-        const sourceId = `${manifest.id}.${source.id}`;
-        const resolvedSourceEntrypoint = this.resolveEntrypointUrl(
-          source.entrypoint,
-          manifest,
-        );
-        asyncRegistrations.push((async () => {
-          try {
-            const mod = await this.resolveEntrypoint(resolvedSourceEntrypoint);
-            if (loadToken && this.shouldAbortLoad(manifest.id, loadToken)) {
-              return;
+      if (!allowHostExecutableContributions) {
+        warnSkippedCommunityContribution("threatIntelSources");
+      } else {
+        for (const source of contributions.threatIntelSources) {
+          const sourceId = `${manifest.id}.${source.id}`;
+          const resolvedSourceEntrypoint = this.resolveEntrypointUrl(
+            source.entrypoint,
+            manifest,
+          );
+          asyncRegistrations.push((async () => {
+            try {
+              const mod = await this.resolveEntrypoint(resolvedSourceEntrypoint);
+              if (loadToken && this.shouldAbortLoad(manifest.id, loadToken)) {
+                return;
+              }
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              const sourceImpl = (mod.default ?? mod) as Record<string, any>;
+              if (sourceImpl && typeof sourceImpl.enrich === "function") {
+                // Ensure the source ID is namespaced to the plugin
+                const registeredSource = { ...sourceImpl, id: sourceId };
+                const dispose = registerThreatIntelSource(registeredSource as any);
+                disposables.push(dispose);
+              } else {
+                console.warn(
+                  `[PluginLoader] Threat intel source "${sourceId}" entrypoint does not export a valid ThreatIntelSource (missing enrich method)`,
+                );
+              }
+            } catch (err) {
+              console.warn(`[PluginLoader] Failed to load threat intel source "${sourceId}":`, err);
             }
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const sourceImpl = (mod.default ?? mod) as Record<string, any>;
-            if (sourceImpl && typeof sourceImpl.enrich === "function") {
-              // Ensure the source ID is namespaced to the plugin
-              const registeredSource = { ...sourceImpl, id: sourceId };
-              const dispose = registerThreatIntelSource(registeredSource as any);
-              disposables.push(dispose);
-            } else {
-              console.warn(
-                `[PluginLoader] Threat intel source "${sourceId}" entrypoint does not export a valid ThreatIntelSource (missing enrich method)`,
-              );
-            }
-          } catch (err) {
-            console.warn(`[PluginLoader] Failed to load threat intel source "${sourceId}":`, err);
-          }
-        })());
+          })());
+        }
       }
     }
 
@@ -1044,10 +1078,14 @@ export class PluginLoader {
 
     // Route enrichment renderer contributions to EnrichmentTypeRegistry
     if (contributions.enrichmentRenderers) {
-      for (const renderer of contributions.enrichmentRenderers) {
-        const LazyComponent = lazy(() => this.resolveViewEntrypoint(renderer.entrypoint, manifest));
-        const dispose = registerEnrichmentRenderer(renderer.type, LazyComponent);
-        disposables.push(dispose);
+      if (!allowHostExecutableContributions) {
+        warnSkippedCommunityContribution("enrichmentRenderers");
+      } else {
+        for (const renderer of contributions.enrichmentRenderers) {
+          const LazyComponent = lazy(() => this.resolveViewEntrypoint(renderer.entrypoint, manifest));
+          const dispose = registerEnrichmentRenderer(renderer.type, LazyComponent);
+          disposables.push(dispose);
+        }
       }
     }
 
@@ -1139,6 +1177,24 @@ export class PluginLoader {
     manifest?: PluginManifest,
   ): Disposable {
     let resolvedComponent: ComponentType<unknown> | null = null;
+    let disposed = false;
+
+    const renderItem = () => {
+      if (resolvedComponent) {
+        return createElement(
+          resolvedComponent as ComponentType<{ viewId: string }>,
+          { viewId: item.id },
+        );
+      }
+      return null;
+    };
+
+    let unregister = statusBarRegistry.register({
+      id: item.id,
+      side: item.side,
+      priority: item.priority,
+      render: renderItem,
+    });
 
     // Resolve entrypoint relative to the plugin's root, not plugin-loader.ts
     const resolvedEntrypoint = this.resolveEntrypointUrl(item.entrypoint, manifest);
@@ -1148,40 +1204,29 @@ export class PluginLoader {
     void (async () => {
       try {
         const mod = await import(/* @vite-ignore */ resolvedEntrypoint);
+        if (disposed) {
+          return;
+        }
         resolvedComponent = mod.default ?? mod;
-        // Re-register the item to trigger a status bar notification.
-        // unregister is a no-op if not found, register will rebuild snapshots
-        // and notify useSyncExternalStore subscribers.
-        statusBarRegistry.unregister(item.id);
-        statusBarRegistry.register({
+        unregister();
+        if (disposed) {
+          return;
+        }
+        unregister = statusBarRegistry.register({
           id: item.id,
           side: item.side,
           priority: item.priority,
-          render: () =>
-            createElement(
-              resolvedComponent as ComponentType<{ viewId: string }>,
-              { viewId: item.id },
-            ),
+          render: renderItem,
         });
       } catch {
         // Entrypoint resolution failed -- render stays null gracefully
       }
     })();
 
-    return statusBarRegistry.register({
-      id: item.id,
-      side: item.side,
-      priority: item.priority,
-      render: () => {
-        if (resolvedComponent) {
-          return createElement(
-            resolvedComponent as ComponentType<{ viewId: string }>,
-            { viewId: item.id },
-          );
-        }
-        return null;
-      },
-    });
+    return () => {
+      disposed = true;
+      unregister();
+    };
   }
 
   /**

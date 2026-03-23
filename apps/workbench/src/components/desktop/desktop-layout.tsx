@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -99,9 +100,15 @@ export function DesktopLayout() {
   const currentRoute = normalizeWorkbenchRoute(rawRoute);
 
   const activePluginViewId = useActivePluginView();
+  const previousRouteRef = useRef(rawRoute);
+  const getActivePluginRegistrationSnapshot = useCallback(
+    () => (activePluginViewId ? getView(activePluginViewId) : undefined),
+    [activePluginViewId],
+  );
   const activePluginRegistration = useSyncExternalStore(
     onViewRegistryChange,
-    () => (activePluginViewId ? getView(activePluginViewId) : undefined),
+    getActivePluginRegistrationSnapshot,
+    getActivePluginRegistrationSnapshot,
   );
 
   useEffect(() => {
@@ -109,6 +116,13 @@ export function DesktopLayout() {
       setActivePluginView(null);
     }
   }, [activePluginRegistration, activePluginViewId]);
+
+  useEffect(() => {
+    if (activePluginViewId && previousRouteRef.current !== rawRoute) {
+      setActivePluginView(null);
+    }
+    previousRouteRef.current = rawRoute;
+  }, [activePluginViewId, rawRoute]);
 
   useEffect(() => {
     const handler = (event: BeforeUnloadEvent) => {

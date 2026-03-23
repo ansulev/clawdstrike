@@ -1,71 +1,107 @@
-# Requirements: ClawdStrike Workbench v1.4 — Cleanup & Store Migration
+# Requirements: ClawdStrike Workbench v2.0 — Presence & Awareness
 
-**Defined:** 2026-03-22
-**Core Value:** Eliminate tech debt and complete store decomposition for a clean, maintainable codebase
+**Defined:** 2026-03-23
+**Core Value:** Security operators see who else is online, what files colleagues are viewing, and where remote cursors sit — turning the solo IDE into a team-aware workspace.
 
-## v1.4 Requirements
+## v2.0 Requirements
 
-### Test Fixes
+Requirements for the Presence & Awareness milestone. Each maps to roadmap phases.
 
-- [x] **TEST-01**: App.test.tsx passes — ActivityBar properly mocked or test updated for current component tree
-- [x] **TEST-02**: desktop-layout.test.tsx passes — stale DesktopSidebar mock replaced with current ActivityBar/SidebarPanel mocks
-- [x] **TEST-03**: shortcut-provider.test.tsx passes — transitive dependencies properly handled
+### Connection & Transport
 
-### Search & Input
+- [ ] **CONN-01**: Workbench connects to hushd via WebSocket at `/api/v1/presence` with Bearer auth
+- [ ] **CONN-02**: Connection auto-reconnects with exponential backoff and random jitter on disconnect
+- [ ] **CONN-03**: Connection status indicator in status bar (green/amber/red dot)
+- [ ] **CONN-04**: Workbench functions fully when hushd is unavailable (graceful offline degradation)
 
-- [x] **SRCH-06**: Search store uses AbortController to cancel in-flight searches when query changes
-- [x] **SRCH-07**: Stale search results are discarded (query-at-dispatch compared to query-at-resolve)
+### Presence Protocol
 
-### Terminal
+- [ ] **PRES-01**: Analyst presence is broadcast to all connected clients (join/leave/heartbeat)
+- [ ] **PRES-02**: Server detects stale analysts via heartbeat timeout (15s interval, 45s TTL)
+- [ ] **PRES-03**: Presence is scoped to file rooms (only receive cursor updates for files you have open)
+- [ ] **PRES-04**: File paths are normalized to workspace-relative before transmission
+- [ ] **PRES-05**: hushd PresenceHub manages per-file rooms with DashMap and broadcast fan-out
 
-- [x] **TERM-03**: Terminal dimensions derived from container size via ResizeObserver (not hardcoded 800x240)
+### UI Indicators
 
-### Keybindings
+- [ ] **UI-01**: Online analyst count displayed in status bar
+- [ ] **UI-02**: Colored dots on pane tabs showing which files other analysts are viewing
+- [ ] **UI-03**: Activity bar analyst pills (colored sigil dots for online analysts)
+- [ ] **UI-04**: Analyst roster panel in sidebar showing name, sigil, current file, and connection status
+- [ ] **UI-05**: Speakeasy chat panel shows presence context ("3 analysts viewing this file")
 
-- [x] **KEY-01**: Meta+W conflict resolved — single unambiguous close behavior across editor and pane contexts
+### CodeMirror Awareness
 
-### Command Modernization
+- [ ] **CM-01**: Remote analyst cursors shown as colored carets in CodeMirror editors
+- [ ] **CM-02**: Remote analyst selections shown as colored highlights in CodeMirror editors
+- [ ] **CM-03**: Cursor name labels appear on hover over remote cursors
+- [ ] **CM-04**: Cursor positions use line:column coordinates (stable across independent edits)
+- [ ] **CM-05**: Cursor updates throttled to 50ms and delivered via Facet + StateEffect (no extension rebuild)
 
-- [x] **CMD-01**: file.new uses direct usePolicyTabsStore.newTab() call (no legacy newPolicy injection)
-- [x] **CMD-02**: FileCommandDeps interface no longer requires newPolicy callback
+## v2.1+ Requirements
 
-### Store Migration
+Deferred to future milestones (Tracks B-D). Tracked but not in current roadmap.
 
-- [x] **STORE-01**: split-editor.tsx migrated from useMultiPolicy() to direct store calls
-- [x] **STORE-02**: editor-home-tab.tsx migrated from useMultiPolicy() to direct store calls
-- [x] **STORE-03**: All remaining ~18 components migrated off useMultiPolicy()/useWorkbench() bridge hooks
-- [x] **STORE-04**: multi-policy-store.tsx bridge layer deleted (975 lines removed)
-- [x] **STORE-05**: MultiPolicyProvider removed from component tree (currently empty fragment)
+### Shared Investigation Sessions (Track B)
+- **INVEST-01**: Investigation = swarm session with analyst nodes on swarm board
+- **INVEST-02**: Shared findings feed with intel objects at shareability "swarm"
+- **INVEST-03**: Investigation timeline as shared annotation stream
+- **INVEST-04**: Task assignment (analyst → finding → "investigate this")
+
+### Co-Editing (Track C)
+- **CRDT-01**: CRDT layer for policy YAML (Yjs or Automerge)
+- **CRDT-02**: Conflict-free concurrent edits with undo
+- **CRDT-03**: Edit receipts (signed diffs for audit trail)
+
+### Investigation Orchestration (Track D)
+- **ORCH-01**: Shared runbook templates
+- **ORCH-02**: Role-based views (lead vs junior analyst)
+- **ORCH-03**: Investigation status board (Kanban-style)
+- **ORCH-04**: Export investigation report with receipt chain
 
 ## Out of Scope
 
 | Feature | Reason |
 |---------|--------|
-| New features or UI changes | This is purely cleanup — no new user-facing capabilities |
-| Test coverage expansion | Only fix broken tests, don't add new test suites |
-| Performance optimization | Separate concern, not part of debt cleanup |
-| Explorer v1.2 checkbox updates | Already implemented, just needs REQUIREMENTS.md update (trivial) |
+| Collaborative document editing (CRDT/OT) | Ed25519 signed receipts require single-author provenance; CRDT undermines receipt chain of trust |
+| Follow mode (follow colleague's cursor across panes) | Niche use case, complex pane-navigation state; defer to v2.1+ |
+| Typing indicator in editor | Cursor movement is sufficient signal; typing indicator floods the wire protocol |
+| Minimap presence indicators | No minimap exists in current workbench |
+| Analyst permission to hide presence | Security teams are collaborative by nature; unnecessary for SOC workflows |
+| tauri-plugin-websocket | Routes through Rust IPC adding latency; native browser WebSocket is sufficient for same-origin |
+| Yjs/y-codemirror.next dependency | Awareness-only feature doesn't need ~45KB CRDT framework; custom ViewPlugin suffices |
 
 ## Traceability
 
+Which phases cover which requirements. Updated during roadmap creation.
+
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| TEST-01 | Phase 15 | Complete |
-| TEST-02 | Phase 15 | Complete |
-| TEST-03 | Phase 15 | Complete |
-| SRCH-06 | Phase 16 | Complete |
-| SRCH-07 | Phase 16 | Complete |
-| TERM-03 | Phase 16 | Complete |
-| KEY-01 | Phase 16 | Complete |
-| CMD-01 | Phase 17 | Complete |
-| CMD-02 | Phase 17 | Complete |
-| STORE-01 | Phase 17 | Complete |
-| STORE-02 | Phase 17 | Complete |
-| STORE-03 | Phase 17 | Complete |
-| STORE-04 | Phase 17 | Complete |
-| STORE-05 | Phase 17 | Complete |
+| CONN-01 | — | Pending |
+| CONN-02 | — | Pending |
+| CONN-03 | — | Pending |
+| CONN-04 | — | Pending |
+| PRES-01 | — | Pending |
+| PRES-02 | — | Pending |
+| PRES-03 | — | Pending |
+| PRES-04 | — | Pending |
+| PRES-05 | — | Pending |
+| UI-01 | — | Pending |
+| UI-02 | — | Pending |
+| UI-03 | — | Pending |
+| UI-04 | — | Pending |
+| UI-05 | — | Pending |
+| CM-01 | — | Pending |
+| CM-02 | — | Pending |
+| CM-03 | — | Pending |
+| CM-04 | — | Pending |
+| CM-05 | — | Pending |
 
 **Coverage:**
-- v1.4 requirements: 14 total
-- Mapped to phases: 14
-- Unmapped: 0
+- v2.0 requirements: 19 total
+- Mapped to phases: 0
+- Unmapped: 19 ⚠️
+
+---
+*Requirements defined: 2026-03-23*
+*Last updated: 2026-03-23 after initial definition*

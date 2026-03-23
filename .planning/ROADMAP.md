@@ -63,9 +63,9 @@ Plans:
 **Plans:** 3/3 plans complete
 
 Plans:
-- [ ] 20-01-PLAN.md — Status bar PresenceStatusIndicator (green/amber/red dot + online count) + People panel registration + AnalystRosterPanel sidebar
-- [ ] 20-02-PLAN.md — Pane tab PresenceTabDots (colored dots per file viewer) + Activity bar PresenceActivityPills (analyst color pills)
-- [ ] 20-03-PLAN.md — Speakeasy presence context ("N analysts viewing this file") + cross-plan type cleanup + visual verification checkpoint
+- [x] 20-01-PLAN.md — Status bar PresenceStatusIndicator (green/amber/red dot + online count) + People panel registration + AnalystRosterPanel sidebar
+- [x] 20-02-PLAN.md — Pane tab PresenceTabDots (colored dots per file viewer) + Activity bar PresenceActivityPills (analyst color pills)
+- [x] 20-03-PLAN.md — Speakeasy presence context ("N analysts viewing this file") + cross-plan type cleanup + visual verification checkpoint
 
 ### Phase 21: CodeMirror Cursor Extension
 **Goal**: Analysts see exactly where colleagues' cursors and selections are in shared policy files, with colored carets, highlighted selections, and name labels
@@ -80,7 +80,7 @@ Plans:
 **Plans:** 1/1 plans complete
 
 Plans:
-- [ ] 21-01-PLAN.md — PresenceCursorExtension ViewPlugin + yaml-editor integration (Facet+StateEffect data injection, cursor carets, selection highlights, name labels, 50ms throttle, store subscription, outbound broadcasting, cleanup)
+- [x] 21-01-PLAN.md — PresenceCursorExtension ViewPlugin + yaml-editor integration (Facet+StateEffect data injection, cursor carets, selection highlights, name labels, 50ms throttle, store subscription, outbound broadcasting, cleanup)
 
 ### Phase 22: File Room Membership Wiring
 **Goal**: Client sends view_file/leave_file messages when files are opened/closed so the server populates rooms, broadcasts file-scoped presence, and enables tab dots, Speakeasy counts, and remote cursors for files opened post-connection
@@ -93,10 +93,10 @@ Plans:
   3. After two analysts open the same file, each sees colored dots on their pane tab for that file (viewersByFile populated)
   4. The Speakeasy panel shows the correct file-viewer count when other analysts are viewing the same file
   5. Remote cursors and selections render correctly for files opened after the initial connection (not just welcome roster)
-**Plans**: TBD
+**Plans:** 1 plan
 
 Plans:
-- [ ] 22-01: Send view_file/leave_file from client, normalize paths, verify E2E flow
+- [ ] 22-01-PLAN.md — Path normalization utility, file tracking hook with view_file/leave_file sends, viewersByFile lookup alignment across tab dots, Speakeasy, and CM6 extension
 
 ## Progress
 

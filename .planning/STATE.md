@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.4
 milestone_name: Cleanup & Store Migration
 status: executing
-stopped_at: Completed 17-01-PLAN.md
-last_updated: "2026-03-23T00:24:19Z"
-last_activity: 2026-03-23 -- Executed 17-01 (migration hooks + 6 files migrated off bridge hooks)
+stopped_at: Completed 17-02-PLAN.md
+last_updated: "2026-03-23T00:33:39Z"
+last_activity: 2026-03-23 -- Executed 17-02 (31 files migrated off bridge hooks to direct stores)
 progress:
   total_phases: 3
   completed_phases: 2
   total_plans: 5
-  completed_plans: 3
-  percent: 60
+  completed_plans: 4
+  percent: 80
 ---
 
 # Project State
@@ -25,11 +25,11 @@ See: .planning/PROJECT.md (updated 2026-03-22)
 ## Current Position
 
 Phase: 17 (Command Modernization & Store Migration)
-Plan: 01/03 -- done
-Status: Phase 17 in progress, Plan 02 ready
-Last activity: 2026-03-23 -- Executed 17-01 (migration hooks + 6 files migrated off bridge hooks)
+Plan: 02/03 -- done
+Status: Phase 17 in progress, Plan 03 ready
+Last activity: 2026-03-23 -- Executed 17-02 (31 files migrated off bridge hooks to direct stores)
 
-Progress: [██████░░░░] 60%
+Progress: [████████░░] 80%
 
 ## Previous Milestones
 
@@ -69,10 +69,14 @@ Progress: [██████░░░░] 60%
 - EditCommandDeps simplified: removed dispatch/multiDispatch, edit.closeTab uses direct store call
 - ~15 pre-existing partially-migrated files found in working directory (from previous session); reverted to HEAD for clean compile
 
+- 31 production files migrated from useWorkbench/useMultiPolicy to direct store calls (Plan 02)
+- 15 complex helper-method consumer files remain (loadPolicy, saveFile, exportYaml patterns)
+- Direct store pattern: usePolicyTabsStore(s => s.activeTabId) + usePolicyEditStore(s => s.editStates.get(id))
+
 ### Blockers/Concerns
-- ~15 files have uncommitted partial migrations from a previous session; Plan 02 must handle these
+- 15 remaining files use useWorkbench() helper methods that need careful inline reimplementation with Tauri bridge calls
 
 ## Session Continuity
 
-Last session: 2026-03-23T00:24:19Z
-Stopped at: Completed 17-01-PLAN.md
+Last session: 2026-03-23T00:33:39Z
+Stopped at: Completed 17-02-PLAN.md

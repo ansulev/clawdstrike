@@ -33,7 +33,7 @@
 
 - [x] **STORE-01**: split-editor.tsx migrated from useMultiPolicy() to direct store calls
 - [x] **STORE-02**: editor-home-tab.tsx migrated from useMultiPolicy() to direct store calls
-- [ ] **STORE-03**: All remaining ~18 components migrated off useMultiPolicy()/useWorkbench() bridge hooks
+- [x] **STORE-03**: All remaining ~18 components migrated off useMultiPolicy()/useWorkbench() bridge hooks
 - [ ] **STORE-04**: multi-policy-store.tsx bridge layer deleted (975 lines removed)
 - [ ] **STORE-05**: MultiPolicyProvider removed from component tree (currently empty fragment)
 
@@ -61,7 +61,7 @@
 | CMD-02 | Phase 17 | Complete |
 | STORE-01 | Phase 17 | Complete |
 | STORE-02 | Phase 17 | Complete |
-| STORE-03 | Phase 17 | Pending |
+| STORE-03 | Phase 17 | Complete |
 | STORE-04 | Phase 17 | Pending |
 | STORE-05 | Phase 17 | Pending |
 

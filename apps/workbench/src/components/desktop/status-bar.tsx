@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useSyncExternalStore } from "react";
+import { useState, useRef, useEffect, useSyncExternalStore, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useWorkbench, useMultiPolicy } from "@/features/policy/stores/multi-policy-store";
 import { useFleetConnection } from "@/features/fleet/use-fleet-connection";
@@ -362,10 +362,28 @@ function StatusBarSegmentWithSeparator({
   item: StatusBarItem;
   showSeparator: boolean;
 }) {
+  const contentRef = useRef<HTMLSpanElement>(null);
+  const [hasContent, setHasContent] = useState(true);
+
+  const checkContent = useCallback(() => {
+    if (contentRef.current) {
+      // A segment that returns null renders an empty wrapper span
+      const empty = contentRef.current.childNodes.length === 0;
+      setHasContent(!empty);
+    }
+  }, []);
+
+  // Re-check after every render (content may toggle based on hooks)
+  useEffect(() => {
+    checkContent();
+  });
+
   return (
     <>
-      {showSeparator && <Separator />}
-      <StatusBarSegment item={item} />
+      {showSeparator && hasContent && <Separator />}
+      <span ref={contentRef} className={hasContent ? undefined : "hidden"}>
+        <StatusBarSegment item={item} />
+      </span>
     </>
   );
 }

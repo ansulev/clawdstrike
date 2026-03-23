@@ -171,13 +171,36 @@ export function PluginsBrowser() {
   );
 
   // ---- Install/Uninstall callbacks ----
-  const handleInstall = useCallback(async (manifest: PluginManifest) => {
-    try {
-      await installPlugin(manifest);
-    } catch (err) {
-      console.error(`Failed to install plugin ${manifest.id}:`, err);
-    }
-  }, []);
+
+  /**
+   * Fetch the full manifest from the registry before installing.
+   * The stub from asManifest() only has name/version/description; the real
+   * package info (with accurate version, checksums) is resolved here so
+   * the loader can fetch the actual package tarball containing the full
+   * manifest (main, permissions, contributions).
+   */
+  const handleInstallFromRegistry = useCallback(
+    async (stub: RegistrySearchResult) => {
+      try {
+        // Fetch full package info from the registry to get accurate metadata
+        const info = await registryClient.getPackageInfo(stub.name);
+        const latestVersion = info.versions.find((v) => !v.yanked);
+        const version = latestVersion?.version ?? stub.latest_version ?? "0.0.0";
+
+        // Build the manifest with registry-resolved fields
+        const manifest: PluginManifest = {
+          ...asManifest(stub),
+          version,
+          description: info.description ?? stub.description ?? "",
+        };
+
+        await installPlugin(manifest);
+      } catch (err) {
+        console.error(`Failed to install plugin ${stub.name}:`, err);
+      }
+    },
+    [],
+  );
 
   const handleUninstall = useCallback(async (pluginId: string) => {
     try {
@@ -288,7 +311,7 @@ export function PluginsBrowser() {
                 key={p.name}
                 manifest={asManifest(p)}
                 state="not-installed"
-                onInstall={() => handleInstall(asManifest(p))}
+                onInstall={() => handleInstallFromRegistry(p)}
               />
             ))}
           </div>

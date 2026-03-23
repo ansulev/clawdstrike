@@ -377,9 +377,13 @@ export class PluginLoader {
    * Deactivate a loaded plugin.
    *
    * Calls module.deactivate() if defined, then disposes all contribution
-   * registrations and subscriptions. Sets state to "deactivated".
+   * registrations and subscriptions. Sets state to "deactivated" unless
+   * `preserveState` is true (used by revokePlugin to keep "revoked" state).
    */
-  async deactivatePlugin(pluginId: string): Promise<void> {
+  async deactivatePlugin(
+    pluginId: string,
+    options?: { preserveState?: boolean },
+  ): Promise<void> {
     const loaded = this.loadedPlugins.get(pluginId);
     if (!loaded) {
       return;
@@ -413,8 +417,12 @@ export class PluginLoader {
     // Remove from loaded plugins
     this.loadedPlugins.delete(pluginId);
 
-    // Update registry state
-    this.registry.setState(pluginId, "deactivated");
+    // Update registry state (skip if caller wants to preserve current state,
+    // e.g., revokePlugin needs to keep "revoked" rather than overwriting
+    // with "deactivated")
+    if (!options?.preserveState) {
+      this.registry.setState(pluginId, "deactivated");
+    }
   }
 
   /**
@@ -441,8 +449,9 @@ export class PluginLoader {
       setTimeout(resolve, REVOKE_DRAIN_TIMEOUT_MS),
     );
 
-    // 4. Deactivate: dispose contributions, remove iframe, destroy bridge
-    await this.deactivatePlugin(pluginId);
+    // 4. Deactivate: dispose contributions, remove iframe, destroy bridge.
+    //    Preserve the "revoked" state -- don't let deactivatePlugin overwrite it.
+    await this.deactivatePlugin(pluginId, { preserveState: true });
   }
 
   // ---- Private helpers ----
@@ -699,7 +708,7 @@ export class PluginLoader {
     // Route status bar item contributions
     if (contributions.statusBarItems) {
       for (const item of contributions.statusBarItems) {
-        const dispose = this.routeStatusBarItemContribution(item);
+        const dispose = this.routeStatusBarItemContribution(item, manifest);
         disposables.push(dispose);
       }
     }
@@ -713,7 +722,7 @@ export class PluginLoader {
           slot: "editorTab",
           label: tab.label,
           icon: tab.icon,
-          component: lazy(() => this.resolveViewEntrypoint(tab.entrypoint)),
+          component: lazy(() => this.resolveViewEntrypoint(tab.entrypoint, manifest)),
         });
         disposables.push(dispose);
       }
@@ -728,7 +737,7 @@ export class PluginLoader {
           slot: "bottomPanelTab",
           label: tab.label,
           icon: tab.icon,
-          component: lazy(() => this.resolveViewEntrypoint(tab.entrypoint)),
+          component: lazy(() => this.resolveViewEntrypoint(tab.entrypoint, manifest)),
         });
         disposables.push(dispose);
       }
@@ -743,7 +752,7 @@ export class PluginLoader {
           slot: "rightSidebarPanel",
           label: panel.label,
           icon: panel.icon,
-          component: lazy(() => this.resolveViewEntrypoint(panel.entrypoint)),
+          component: lazy(() => this.resolveViewEntrypoint(panel.entrypoint, manifest)),
         });
         disposables.push(dispose);
       }
@@ -759,7 +768,7 @@ export class PluginLoader {
           label: item.label,
           icon: item.icon,
           component: item.entrypoint
-            ? lazy(() => this.resolveViewEntrypoint(item.entrypoint!))
+            ? lazy(() => this.resolveViewEntrypoint(item.entrypoint!, manifest))
             : (() => null) as ComponentType<any>,
           priority: item.order,
           meta: { section: item.section, href: item.href, entrypoint: item.entrypoint },
@@ -772,9 +781,10 @@ export class PluginLoader {
     if (contributions.gutterDecorations) {
       for (const deco of contributions.gutterDecorations) {
         const decoId = `${manifest.id}.${deco.id}`;
+        const resolvedDecoEntrypoint = this.resolveEntrypointUrl(deco.entrypoint, manifest);
         void (async () => {
           try {
-            const mod = await import(/* @vite-ignore */ deco.entrypoint);
+            const mod = await import(/* @vite-ignore */ resolvedDecoEntrypoint);
             const factory = mod.createGutterExtension ?? mod.default;
             if (typeof factory === "function") {
               const config: GutterConfig = { pluginId: manifest.id, decorationId: decoId };
@@ -846,7 +856,7 @@ export class PluginLoader {
     // Route enrichment renderer contributions to EnrichmentTypeRegistry
     if (contributions.enrichmentRenderers) {
       for (const renderer of contributions.enrichmentRenderers) {
-        const LazyComponent = lazy(() => this.resolveViewEntrypoint(renderer.entrypoint));
+        const LazyComponent = lazy(() => this.resolveViewEntrypoint(renderer.entrypoint, manifest));
         const dispose = registerEnrichmentRenderer(renderer.type, LazyComponent);
         disposables.push(dispose);
       }
@@ -891,17 +901,35 @@ export class PluginLoader {
    * Route a status bar item contribution to the status bar registry.
    * Resolves the entrypoint module asynchronously and uses the exported
    * component as the render function. Falls back to null if resolution fails.
+   *
+   * After the async import resolves, the item is re-registered to notify
+   * the status bar that new content is available.
    */
   private routeStatusBarItemContribution(
     item: StatusBarItemContribution,
+    manifest?: PluginManifest,
   ): Disposable {
     let resolvedComponent: ComponentType<unknown> | null = null;
 
-    // Kick off async resolution -- update the render once resolved
+    // Resolve entrypoint relative to the plugin's root, not plugin-loader.ts
+    const resolvedEntrypoint = this.resolveEntrypointUrl(item.entrypoint, manifest);
+
+    // Kick off async resolution -- update the render once resolved and
+    // re-register the item so the status bar is notified of the change.
     void (async () => {
       try {
-        const mod = await import(/* @vite-ignore */ item.entrypoint);
+        const mod = await import(/* @vite-ignore */ resolvedEntrypoint);
         resolvedComponent = mod.default ?? mod;
+        // Re-register the item to trigger a status bar notification.
+        // unregister is a no-op if not found, register will rebuild snapshots
+        // and notify useSyncExternalStore subscribers.
+        statusBarRegistry.unregister(item.id);
+        statusBarRegistry.register({
+          id: item.id,
+          side: item.side,
+          priority: item.priority,
+          render: () => createElement(resolvedComponent!, { viewId: item.id }),
+        });
       } catch {
         // Entrypoint resolution failed -- render stays null gracefully
       }
@@ -921,13 +949,43 @@ export class PluginLoader {
   }
 
   /**
+   * Resolve a contribution entrypoint path relative to the plugin's root.
+   *
+   * Bare paths from a plugin manifest are relative to the plugin's
+   * installation directory, not to plugin-loader.ts. In the browser,
+   * we resolve them by constructing a full URL using the plugin's main
+   * entry as the base. Falls back to using the entrypoint as-is if no
+   * manifest context is available (e.g., built-in plugins).
+   */
+  private resolveEntrypointUrl(entrypoint: string, manifest?: PluginManifest): string {
+    // Already an absolute URL -- use as-is
+    if (entrypoint.startsWith("http://") || entrypoint.startsWith("https://") || entrypoint.startsWith("/")) {
+      return entrypoint;
+    }
+
+    // If the plugin has a main entry, resolve relative to its directory
+    if (manifest?.main) {
+      try {
+        const baseUrl = new URL(manifest.main, window.location.href);
+        return new URL(entrypoint, baseUrl).href;
+      } catch {
+        // URL construction failed -- fall through to raw entrypoint
+      }
+    }
+
+    return entrypoint;
+  }
+
+  /**
    * Resolve a view entrypoint to a module with a default export.
    * Used by React.lazy() for deferred component loading.
    */
   private async resolveViewEntrypoint(
     entrypoint: string,
+    manifest?: PluginManifest,
   ): Promise<{ default: ComponentType<unknown> }> {
-    const mod = await import(/* @vite-ignore */ entrypoint);
+    const resolved = this.resolveEntrypointUrl(entrypoint, manifest);
+    const mod = await import(/* @vite-ignore */ resolved);
     return { default: mod.default ?? mod };
   }
 }

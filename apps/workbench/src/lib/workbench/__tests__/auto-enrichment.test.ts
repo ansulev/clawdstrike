@@ -445,4 +445,63 @@ describe("AutoEnrichmentManager", () => {
 
     manager.destroy();
   });
+
+  // ---- Error handling: orchestrator.enrich() rejection ----
+
+  it("when orchestrator.enrich() rejects, console.error is called and manager continues processing subsequent findings", async () => {
+    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const orch = {
+      enrich: vi.fn()
+        // First call rejects
+        .mockRejectedValueOnce(new Error("API unavailable"))
+        // Second call succeeds
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([]),
+    };
+
+    // Extract single indicator to keep call counts predictable
+    const extract = vi.fn().mockReturnValue([
+      { type: "ip" as const, value: "1.2.3.4" },
+    ]);
+
+    const manager = new AutoEnrichmentManager({
+      orchestrator: orch,
+      extractIndicators: extract,
+      config: {
+        enabled: true,
+        confidenceThreshold: 0.5,
+        enabledSources: [],
+        enabledSentinels: "all",
+      },
+    });
+
+    // Process first finding -- orchestrator will reject
+    const finding1 = makeFinding({ id: "fnd_fail", confidence: 0.9 });
+    manager.processNewFinding(finding1);
+
+    // Allow the promise rejection to propagate through the .catch()
+    await vi.advanceTimersByTimeAsync(0);
+    // Flush microtasks
+    await Promise.resolve();
+
+    // console.error should have been called by the .catch() handler
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      expect.stringContaining("[AutoEnrichment]"),
+      expect.stringContaining("API unavailable"),
+    );
+
+    // Process second finding -- should still work
+    vi.advanceTimersByTime(200); // Past debounce window
+    const finding2 = makeFinding({ id: "fnd_ok", confidence: 0.9 });
+    manager.processNewFinding(finding2);
+
+    // Orchestrator should have been called for the second finding too
+    expect(orch.enrich).toHaveBeenCalledTimes(2);
+
+    consoleErrorSpy.mockRestore();
+    manager.destroy();
+  });
 });

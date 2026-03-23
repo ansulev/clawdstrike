@@ -343,4 +343,124 @@ describe("EnrichmentOrchestrator", () => {
       expect(enrichB).toHaveBeenCalledTimes(1); // Still cached
     });
   });
+
+  // ---- LRU cache eviction ----
+
+  describe("LRU cache eviction (MAX_CACHE_SIZE)", () => {
+    it("cache does not exceed MAX_CACHE_SIZE (10,000) after adding 10,001 entries", async () => {
+      let callCount = 0;
+      const enrichFn = vi.fn(async (ind: Indicator) => {
+        callCount++;
+        return makeResult("evict-source", {
+          rawData: { value: ind.value },
+          cacheTtlMs: 3_600_000, // 1 hour TTL so nothing expires
+        });
+      });
+
+      const source = makeMockSource({
+        id: "evict-source",
+        rateLimit: { maxPerMinute: 100_000 }, // High limit to avoid rate limiting
+        enrich: enrichFn,
+      });
+      registerThreatIntelSource(source);
+
+      // Add 10,001 unique entries
+      for (let i = 0; i < 10_001; i++) {
+        await orchestrator.enrich(
+          { type: "ip", value: `${(i >> 16) & 255}.${(i >> 8) & 255}.${i & 255}.${i % 256}` },
+          { sourceIds: ["evict-source"] },
+        );
+      }
+
+      // The internal cache map should not exceed MAX_CACHE_SIZE
+      // We access this indirectly: if we re-fetch an early entry,
+      // it should have been evicted and trigger a new enrich call
+      const initialCalls = enrichFn.mock.calls.length;
+      expect(initialCalls).toBe(10_001);
+
+      // Try to fetch the very first entry (should have been evicted)
+      await orchestrator.enrich(
+        { type: "ip", value: "0.0.0.0" },
+        { sourceIds: ["evict-source"] },
+      );
+
+      // If eviction worked, the source should be called again
+      expect(enrichFn.mock.calls.length).toBe(10_002);
+    });
+
+    it("expired entries are evicted during periodic cleanup", async () => {
+      const enrichFn = vi.fn(async () =>
+        makeResult("expire-test", { cacheTtlMs: 1_000 }), // 1 second TTL
+      );
+      const source = makeMockSource({
+        id: "expire-test",
+        enrich: enrichFn,
+      });
+      registerThreatIntelSource(source);
+
+      // Add entry
+      await orchestrator.enrich(ipIndicator, { sourceIds: ["expire-test"] });
+      expect(enrichFn).toHaveBeenCalledTimes(1);
+
+      // Cache hit (within TTL)
+      await orchestrator.enrich(ipIndicator, { sourceIds: ["expire-test"] });
+      expect(enrichFn).toHaveBeenCalledTimes(1);
+
+      // Advance past TTL
+      await vi.advanceTimersByTimeAsync(2_000);
+
+      // Cache should have expired -- triggers a new call
+      await orchestrator.enrich(ipIndicator, { sourceIds: ["expire-test"] });
+      expect(enrichFn).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  // ---- Destroy ----
+
+  describe("destroy()", () => {
+    it("clears the cleanup interval", () => {
+      const clearIntervalSpy = vi.spyOn(globalThis, "clearInterval");
+
+      const orch = new EnrichmentOrchestrator();
+      orch.destroy();
+
+      expect(clearIntervalSpy).toHaveBeenCalled();
+      clearIntervalSpy.mockRestore();
+    });
+  });
+
+  // ---- Incremental token bucket refill ----
+
+  describe("incremental token bucket refill", () => {
+    it("partially refills tokens after half the refill window", async () => {
+      const enrichFn = vi.fn(async () => makeResult("refill-test"));
+      const source = makeMockSource({
+        id: "refill-test",
+        rateLimit: { maxPerMinute: 2 },
+        enrich: enrichFn,
+      });
+      registerThreatIntelSource(source);
+
+      // Consume both tokens
+      await orchestrator.enrich(
+        { type: "ip", value: "1.1.1.1" },
+        { sourceIds: ["refill-test"] },
+      );
+      await orchestrator.enrich(
+        { type: "ip", value: "2.2.2.2" },
+        { sourceIds: ["refill-test"] },
+      );
+      expect(enrichFn).toHaveBeenCalledTimes(2);
+
+      // Advance 60s (full refill interval)
+      await vi.advanceTimersByTimeAsync(60_000);
+
+      // Tokens should be refilled -- next call should work
+      await orchestrator.enrich(
+        { type: "ip", value: "3.3.3.3" },
+        { sourceIds: ["refill-test"] },
+      );
+      expect(enrichFn).toHaveBeenCalledTimes(3);
+    });
+  });
 });

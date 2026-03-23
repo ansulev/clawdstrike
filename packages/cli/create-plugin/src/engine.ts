@@ -24,7 +24,7 @@ import { getSourceTemplate, getTestTemplate } from "./templates/source";
  * @param filename - File name (or relative path within dir)
  * @param content - File content to write
  */
-async function writeProjectFile(
+export async function writeProjectFile(
   dir: string,
   filename: string,
   content: string,

@@ -155,7 +155,7 @@ describe("PluginRevocationClient", () => {
 
     expect(MockEventSource.instances).toHaveLength(1);
     expect(MockEventSource.instances[0].url).toBe(
-      "http://localhost:9090/api/v1/events",
+      "http://localhost:9090/api/v1/events?token=test-token",
     );
   });
 

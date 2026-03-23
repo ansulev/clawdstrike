@@ -132,8 +132,8 @@ describe("PluginRevocationStore", () => {
     expect(all[0].reason).toBe("Persisted reason");
   });
 
-  // Test 7: sync merges remote revocations
-  it("sync(entries) merges remote revocations: adds new, removes expired", () => {
+  // Test 7: sync treats the remote list as a full snapshot
+  it("sync(entries) adds remote revocations and removes local entries missing from the remote snapshot", () => {
     vi.useFakeTimers();
     const now = Date.now();
 
@@ -165,8 +165,9 @@ describe("PluginRevocationStore", () => {
     // "remote-expired" should not be added (expired)
     expect(store.isRevoked("remote-expired")).toBe(false);
 
-    // "local-only" should still be present
-    expect(store.isRevoked("local-only")).toBe(true);
+    // "local-only" disappeared from the remote snapshot, so it should be lifted
+    expect(diff.removed).toContain("local-only");
+    expect(store.isRevoked("local-only")).toBe(false);
 
     vi.useRealTimers();
   });

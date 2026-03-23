@@ -75,6 +75,15 @@ describe("status-bar-registry", () => {
     expect(() => unregisterStatusBarItem("nonexistent")).not.toThrow();
   });
 
+  it("returns a new snapshot reference when the registry changes", () => {
+    const before = getStatusBarItems("left");
+
+    disposers.push(registerStatusBarItem(makeItem({ id: "snapshot-change" })));
+
+    const after = getStatusBarItems("left");
+    expect(after).not.toBe(before);
+  });
+
   it("notifies listeners on register", () => {
     const listener = vi.fn();
     const unsub = onStatusBarChange(listener);

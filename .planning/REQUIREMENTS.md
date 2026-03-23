@@ -7,9 +7,9 @@
 
 ### Test Fixes
 
-- [ ] **TEST-01**: App.test.tsx passes — ActivityBar properly mocked or test updated for current component tree
-- [ ] **TEST-02**: desktop-layout.test.tsx passes — stale DesktopSidebar mock replaced with current ActivityBar/SidebarPanel mocks
-- [ ] **TEST-03**: shortcut-provider.test.tsx passes — transitive dependencies properly handled
+- [x] **TEST-01**: App.test.tsx passes — ActivityBar properly mocked or test updated for current component tree
+- [x] **TEST-02**: desktop-layout.test.tsx passes — stale DesktopSidebar mock replaced with current ActivityBar/SidebarPanel mocks
+- [x] **TEST-03**: shortcut-provider.test.tsx passes — transitive dependencies properly handled
 
 ### Search & Input
 
@@ -50,9 +50,9 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| TEST-01 | Phase 15 | Pending |
-| TEST-02 | Phase 15 | Pending |
-| TEST-03 | Phase 15 | Pending |
+| TEST-01 | Phase 15 | Complete |
+| TEST-02 | Phase 15 | Complete |
+| TEST-03 | Phase 15 | Complete |
 | SRCH-06 | Phase 16 | Complete |
 | SRCH-07 | Phase 16 | Complete |
 | TERM-03 | Phase 16 | Complete |

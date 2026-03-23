@@ -12,7 +12,7 @@ Eliminate tech debt accumulated during v1.0-v1.3 rapid development. Fix broken t
 
 ## Phases
 
-- [ ] **Phase 15: Test Fixes** - Fix 3 broken test suites (App, desktop-layout, shortcut-provider)
+- [x] **Phase 15: Test Fixes** - Fix 3 broken test suites (App, desktop-layout, shortcut-provider)
 - [x] **Phase 16: Search, Terminal & Keybinding Fixes** - AbortController for search, dynamic terminal sizing, Meta+W conflict resolution (completed 2026-03-22)
 - [ ] **Phase 17: Command Modernization & Store Migration** - Modernize file.new, migrate ~20 components off bridge hooks, delete multi-policy-store
 
@@ -28,7 +28,7 @@ Eliminate tech debt accumulated during v1.0-v1.3 rapid development. Fix broken t
   3. desktop-layout.test.tsx assertions match the current component tree (ActivityBar + SidebarPanel, not stale DesktopSidebar)
 **Plans:** 1 plan
 Plans:
-- [ ] 15-01-PLAN.md — Fix test mocks for App, desktop-layout, and shortcut-provider test suites
+- [x] 15-01-PLAN.md — Fix test mocks for App, desktop-layout, and shortcut-provider test suites
 
 ### Phase 16: Search, Terminal & Keybinding Fixes
 **Goal**: Search, terminal, and keyboard shortcuts behave correctly under real usage conditions
@@ -63,6 +63,6 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 15. Test Fixes | 0/1 | Planned | - |
+| 15. Test Fixes | 1/1 | Complete | 2026-03-23 |
 | 16. Search, Terminal & Keybinding Fixes | 1/1 | Complete   | 2026-03-22 |
 | 17. Command Modernization & Store Migration | 0/3 | Planned | - |

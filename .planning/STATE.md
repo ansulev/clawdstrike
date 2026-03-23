@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.4
 milestone_name: Cleanup & Store Migration
 status: executing
-stopped_at: Completed 16-01-PLAN.md
-last_updated: "2026-03-22T23:58:53.872Z"
-last_activity: 2026-03-22 -- Executed 16-01 (search AbortController, terminal sizing, Meta+W fix)
+stopped_at: Completed 15-01-PLAN.md
+last_updated: "2026-03-23T00:07:11Z"
+last_activity: 2026-03-23 -- Executed 15-01 (test fixes: App, desktop-layout, shortcut-provider)
 progress:
   total_phases: 3
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 5
-  completed_plans: 1
-  percent: 20
+  completed_plans: 2
+  percent: 40
 ---
 
 # Project State
@@ -20,16 +20,16 @@ progress:
 
 See: .planning/PROJECT.md (updated 2026-03-22)
 **Core value:** Security operators work across multiple views simultaneously with IDE-grade workflows
-**Current focus:** v1.4 Cleanup & Store Migration -- Phase 16 complete, Phase 15 and 17 remaining
+**Current focus:** v1.4 Cleanup & Store Migration -- Phase 15 and 16 complete, Phase 17 remaining
 
 ## Current Position
 
-Phase: 16 (Search, Terminal & Keybinding Fixes) -- COMPLETE
+Phase: 15 (Test Fixes) -- COMPLETE
 Plan: 01/01 -- done
-Status: Phase 16 complete
-Last activity: 2026-03-22 -- Executed 16-01 (search AbortController, terminal sizing, Meta+W fix)
+Status: Phase 15 complete, Phase 17 ready
+Last activity: 2026-03-23 -- Executed 15-01 (test fixes: App, desktop-layout, shortcut-provider)
 
-Progress: [██░░░░░░░░] 20%
+Progress: [████░░░░░░] 40%
 
 ## Previous Milestones
 
@@ -44,8 +44,8 @@ Progress: [██░░░░░░░░] 20%
 - `apps/workbench/src/features/policy/stores/multi-policy-store.tsx` -- 975-line bridge layer to delete
 - `apps/workbench/src/features/policy/stores/policy-tabs-store.ts` -- canonical tab store (target)
 - `apps/workbench/src/features/policy/stores/policy-edit-store.ts` -- canonical edit store (target)
-- `apps/workbench/src/__tests__/App.test.tsx` -- failing (unmocked ActivityBar)
-- `apps/workbench/src/components/desktop/__tests__/desktop-layout.test.tsx` -- stale mock
+- `apps/workbench/src/__tests__/App.test.tsx` -- FIXED: DesktopLayout mocked with route-aware shell
+- `apps/workbench/src/components/desktop/__tests__/desktop-layout.test.tsx` -- FIXED: stale desktop-sidebar mock replaced
 - `apps/workbench/src/features/search/stores/search-store.ts` -- FIXED: AbortController + staleness guard added
 - `apps/workbench/src/features/bottom-pane/terminal-panel.tsx` -- FIXED: hardcoded 800x240 removed
 - `apps/workbench/src/lib/commands/file-commands.ts` -- legacy newPolicy injection
@@ -58,11 +58,14 @@ Progress: [██░░░░░░░░] 20%
 - AbortController cancels at consumer level (ignore stale result) since Tauri IPC does not accept AbortSignal
 - Removed width/height props from TerminalRenderer -- internal ResizeObserver handles sizing
 - edit.closeTab keybinding removed (not the command) to resolve Meta+W conflict with tab.close
+- App.test.tsx: mock DesktopLayout entirely (route-aware shell) rather than per-component mocks to avoid cascading chains
+- Test route for editor context: use /editor/visual (bare /editor redirects to /home, breaking editor shortcut context)
+- ResizeObserver polyfill in test/setup.ts is a global no-op stub for all tests
 
 ### Blockers/Concerns
 None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-22T23:58:53.870Z
-Stopped at: Completed 16-01-PLAN.md
+Last session: 2026-03-23T00:07:11Z
+Stopped at: Completed 15-01-PLAN.md

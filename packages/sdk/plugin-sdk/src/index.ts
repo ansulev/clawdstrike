@@ -47,6 +47,7 @@ export type {
   GutterDecorationContribution,
   GutterConfig,
   ContextMenuContribution,
+  EnrichmentRendererContribution,
   // Contributions Container
   PluginContributions,
   // Installation & Manifest
@@ -77,6 +78,7 @@ export type {
   StorageApi,
   ViewsApi,
   SecretsApi,
+  EnrichmentRenderersApi,
   PluginContext,
 } from "./context";
 

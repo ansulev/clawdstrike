@@ -152,6 +152,7 @@
 - [Dev Server](plugins/dev-server.md)
 - [Plugin Playground](plugins/playground.md)
 - [Publishing](plugins/publishing.md)
+- [API Reference](plugins/api-reference.md)
 
 # Recipes
 

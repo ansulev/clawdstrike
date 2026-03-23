@@ -90,7 +90,7 @@ Plans:
   5. Plugin evaluation works in Tauri dev mode without CSP violations (code served from `/__plugin-eval/` route, not blob URLs)
 **Plans:** 2 plans
 Plans:
-- [ ] 05-01-PLAN.md — Core playground infrastructure: store, transpiler, eval server, CodeMirror editor, toolbar, plugin registration
+- [x] 05-01-PLAN.md — Core playground infrastructure: store, transpiler, eval server, CodeMirror editor, toolbar, plugin registration
 - [ ] 05-02-PLAN.md — Contribution inspector, plugin console panel, error boundary with source-mapped traces
 
 ## Progress
@@ -104,4 +104,4 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 | 2. CLI Scaffolding | 3/3 | Complete | 2026-03-23 |
 | 3. Dev Server | 2/3 | Executing | - |
 | 4. Documentation | 2/2 | Complete | 2026-03-23 |
-| 5. Plugin Playground | 0/2 | Planning complete | - |
+| 5. Plugin Playground | 1/2 | Executing | - |

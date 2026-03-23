@@ -1,5 +1,6 @@
 import { lazy, Suspense } from "react";
 import { Navigate, type RouteObject } from "react-router-dom";
+import { FeatureErrorBoundary } from "@/components/ui/feature-error-boundary";
 
 const LabLayout = lazy(() =>
   import("@/components/workbench/lab/lab-layout").then((m) => ({
@@ -337,20 +338,20 @@ export const WORKBENCH_ROUTE_OBJECTS: RouteObject[] = [
   { path: "library", element: <LibraryGallery /> },
   { path: "settings", element: <SettingsPage /> },
   { path: "approvals", element: <ApprovalQueue /> },
-  { path: "fleet/:id", element: <FleetAgentDetail /> },
-  { path: "fleet", element: <FleetDashboard /> },
+  { path: "fleet/:id", element: <FeatureErrorBoundary feature="Fleet Agent"><FleetAgentDetail /></FeatureErrorBoundary> },
+  { path: "fleet", element: <FeatureErrorBoundary feature="Fleet Dashboard"><FleetDashboard /></FeatureErrorBoundary> },
   { path: "audit", element: <AuditLog /> },
   { path: "sentinels", element: <SentinelsPage /> },
   { path: "sentinels/create", element: <SentinelCreatePage /> },
   { path: "sentinels/:id", element: <SentinelDetailPage /> },
-  { path: "findings", element: <FindingsPage /> },
-  { path: "findings/:id", element: <FindingDetailPage /> },
-  { path: "intel/:id", element: <IntelDetailPage /> },
+  { path: "findings", element: <FeatureErrorBoundary feature="Findings"><FindingsPage /></FeatureErrorBoundary> },
+  { path: "findings/:id", element: <FeatureErrorBoundary feature="Finding Detail"><FindingDetailPage /></FeatureErrorBoundary> },
+  { path: "intel/:id", element: <FeatureErrorBoundary feature="Intel Detail"><IntelDetailPage /></FeatureErrorBoundary> },
   { path: "missions", element: <MissionControlPage /> },
   { path: "swarms", element: <SwarmPage /> },
   { path: "swarms/:id", element: <SwarmDetail /> },
-  { path: "swarm-board/*", element: <Suspense fallback={<div className="flex-1" />}><SwarmBoardPage /></Suspense> },
-  { path: "swarm-board", element: <Suspense fallback={<div className="flex-1" />}><SwarmBoardPage /></Suspense> },
+  { path: "swarm-board/*", element: <FeatureErrorBoundary feature="Swarm Board"><Suspense fallback={<div className="flex-1" />}><SwarmBoardPage /></Suspense></FeatureErrorBoundary> },
+  { path: "swarm-board", element: <FeatureErrorBoundary feature="Swarm Board"><Suspense fallback={<div className="flex-1" />}><SwarmBoardPage /></Suspense></FeatureErrorBoundary> },
   { path: "lab", element: <LabLayout /> },
   { path: "topology", element: <TopologyLayout /> },
   {
@@ -394,6 +395,6 @@ export const WORKBENCH_ROUTE_OBJECTS: RouteObject[] = [
   { path: "trustprint/providers", element: <TrustprintProvidersPage /> },
   { path: "trustprint/thresholds", element: <TrustprintThresholdsPage /> },
   { path: "overview", element: <Navigate to="/home" replace /> },
-  { path: "file/*", element: <FileEditorShell /> },
+  { path: "file/*", element: <FeatureErrorBoundary feature="Editor"><FileEditorShell /></FeatureErrorBoundary> },
   { path: "*", element: <Navigate to="/home" replace /> },
 ];

@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { IconRefresh, IconRadar } from "@tabler/icons-react";
+import { IconRadar } from "@tabler/icons-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useSentinelStore } from "@/features/sentinels/stores/sentinel-store";
 import { useFindingStore } from "@/features/findings/stores/finding-store";
@@ -191,15 +191,6 @@ export function HeartbeatPanel() {
         <span className="font-display font-semibold text-sm text-[#ece7dc]">
           System Status
         </span>
-        <div className="ml-auto">
-          <button
-            type="button"
-            title="Refresh"
-            className="p-1 rounded text-[#6f7f9a]/60 hover:text-[#ece7dc] hover:bg-[#131721]/40 transition-colors"
-          >
-            <IconRefresh size={12} stroke={1.5} />
-          </button>
-        </div>
       </div>
 
       <ScrollArea className="flex-1">

@@ -1,6 +1,5 @@
 import { useMemo, useState } from "react";
 import {
-  IconRefresh,
   IconPlus,
   IconSearch,
   IconChevronRight,
@@ -99,13 +98,6 @@ export function SentinelPanel() {
             className="p-1 rounded text-[#6f7f9a]/60 hover:text-[#ece7dc] hover:bg-[#131721]/40 transition-colors"
           >
             <IconPlus size={12} stroke={1.5} />
-          </button>
-          <button
-            type="button"
-            title="Refresh"
-            className="p-1 rounded text-[#6f7f9a]/60 hover:text-[#ece7dc] hover:bg-[#131721]/40 transition-colors"
-          >
-            <IconRefresh size={12} stroke={1.5} />
           </button>
         </div>
       </div>

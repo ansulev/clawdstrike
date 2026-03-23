@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback } from "react";
-import { useMultiPolicy } from "@/features/policy/stores/multi-policy-store";
-import type { PolicyTab } from "@/features/policy/stores/multi-policy-store";
+import { usePolicyTabs } from "@/features/policy/hooks/use-policy-actions";
+import type { PolicyTab } from "@/features/policy/types/policy-tab";
 import { GUARD_REGISTRY, GUARD_CATEGORIES } from "@/lib/workbench/guard-registry";
 import type { GuardId } from "@/lib/workbench/types";
 import { cn } from "@/lib/utils";
@@ -38,7 +38,7 @@ interface PolicyCommandCenterProps {
 
 
 export function PolicyCommandCenter({ onClose }: PolicyCommandCenterProps) {
-  const { tabs, multiDispatch } = useMultiPolicy();
+  const { tabs, multiDispatch } = usePolicyTabs();
 
   const allCategoryIds = useMemo(
     () => GUARD_CATEGORIES.map((c) => c.id),

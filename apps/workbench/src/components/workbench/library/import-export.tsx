@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from "react";
-import { useWorkbench } from "@/features/policy/stores/multi-policy-store";
+import { useWorkbenchState } from "@/features/policy/hooks/use-policy-actions";
 import { useToast } from "@/components/ui/toast";
 import { yamlToPolicy, policyToFormat, formatExtension, formatMimeType, type ExportFormat } from "@/features/policy/yaml-utils";
 import { emitAuditEvent } from "@/lib/workbench/local-audit";
@@ -31,7 +31,7 @@ const FORMAT_OPTIONS: { value: ExportFormat; label: string }[] = [
 ];
 
 export function ImportExport() {
-  const { state, loadPolicy, exportYaml } = useWorkbench();
+  const { state, loadPolicy, exportYaml } = useWorkbenchState();
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [pasteYaml, setPasteYaml] = useState("");

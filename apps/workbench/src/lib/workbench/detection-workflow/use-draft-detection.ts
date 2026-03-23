@@ -14,7 +14,7 @@
 
 import { useState, useCallback } from "react";
 import { FILE_TYPE_REGISTRY } from "../file-type-registry";
-import type { MultiPolicyAction } from "../multi-policy-store";
+import type { MultiPolicyAction } from "@/features/policy/types/policy-tab";
 import type { AgentEvent, Investigation, HuntPattern } from "../hunt-types";
 import type { Finding } from "../finding-engine";
 import type { Signal } from "../signal-pipeline";

@@ -17,7 +17,7 @@ import {
 } from "@tabler/icons-react";
 import { cn } from "@/lib/utils";
 import { ClaudeCodeHint } from "@/components/workbench/shared/claude-code-hint";
-import { useWorkbench, useMultiPolicy } from "@/features/policy/stores/multi-policy-store";
+import { useWorkbenchState, usePolicyTabs } from "@/features/policy/hooks/use-policy-actions";
 import { useFleetConnection } from "@/features/fleet/use-fleet-connection";
 import { useSentinels } from "@/features/sentinels/stores/sentinel-store";
 import { useFindings } from "@/features/findings/stores/finding-store";
@@ -480,8 +480,8 @@ function QuickStartStrip({
 // ---------------------------------------------------------------------------
 
 export function HomePage() {
-  const { state } = useWorkbench();
-  const { tabs } = useMultiPolicy();
+  const { state } = useWorkbenchState();
+  const { tabs } = usePolicyTabs();
   const { connection } = useFleetConnection();
   const { activePolicy, validation, dirty } = state;
 

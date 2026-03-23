@@ -9,7 +9,7 @@ import {
 } from "@/lib/workbench/hunt-engine";
 import { useFleetConnection } from "@/features/fleet/use-fleet-connection";
 import { fetchAuditEvents } from "@/features/fleet/fleet-client";
-import { useMultiPolicy } from "@/features/policy/stores/multi-policy-store";
+import { usePolicyTabs } from "@/features/policy/hooks/use-policy-actions";
 import { usePolicyTabsStore } from "@/features/policy/stores/policy-tabs-store";
 import { useDraftDetection } from "@/lib/workbench/detection-workflow/use-draft-detection";
 import { buildOpenDocumentCoverage } from "@/lib/workbench/detection-workflow/coverage-projection";
@@ -126,7 +126,7 @@ export function HuntLayout() {
   const publishedCoverage = usePublishedCoverage();
 
   // Draft detection hook — bridges Hunt -> Editor
-  const { multiDispatch, tabs } = useMultiPolicy();
+  const { multiDispatch, tabs } = usePolicyTabs();
   const {
     draftFromEvents,
     draftFromInvestigation,

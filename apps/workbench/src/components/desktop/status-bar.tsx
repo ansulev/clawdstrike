@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { useWorkbench, useMultiPolicy } from "@/features/policy/stores/multi-policy-store";
+import { useWorkbenchState, usePolicyTabs } from "@/features/policy/hooks/use-policy-actions";
 import { useFleetConnection } from "@/features/fleet/use-fleet-connection";
 import { useMcpStatus } from "@/lib/workbench/use-mcp-status";
 import { isDesktop } from "@/lib/tauri-bridge";
@@ -18,8 +18,8 @@ import {
 } from "@tabler/icons-react";
 
 export function StatusBar() {
-  const { state } = useWorkbench();
-  const { tabs, activeTab: currentTab } = useMultiPolicy();
+  const { state } = useWorkbenchState();
+  const { tabs, activeTab: currentTab } = usePolicyTabs();
   const { connection } = useFleetConnection();
   const navigate = useNavigate();
   const { activePolicy, validation, filePath, nativeValidation } = state;

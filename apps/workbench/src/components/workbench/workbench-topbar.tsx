@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { useWorkbench } from "@/features/policy/stores/multi-policy-store";
+import { useWorkbenchState } from "@/features/policy/hooks/use-policy-actions";
 import { useToast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
 import {
@@ -49,7 +49,7 @@ export function WorkbenchTopbar() {
     redo,
     canUndo,
     canRedo,
-  } = useWorkbench();
+  } = useWorkbenchState();
   const { toast } = useToast();
   const { activePolicy, validation } = state;
 

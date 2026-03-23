@@ -1,28 +1,16 @@
 /**
- * multi-policy-store.tsx — Backward-compatible bridge layer.
+ * Policy action hooks — compose Zustand stores into convenient interfaces.
  *
- * Phase B1: The monolithic reducer + Context Provider have been decomposed into
- * three focused Zustand stores:
- *   - policy-tabs-store.ts   (tab lifecycle, saved policies, persistence)
- *   - policy-edit-store.ts   (per-tab editing state in Maps keyed by tabId)
- *   - workbench-ui-store.ts  (sidebar, editor tab, sync direction)
+ * These replace the deprecated useWorkbench() / useMultiPolicy() bridge hooks
+ * that lived in multi-policy-store.tsx.
  *
- * This file re-exports all the public types/interfaces that consumers depend on
- * and provides deprecated bridge hooks (useWorkbench, useMultiPolicy) that
- * compose the three stores into the exact same shapes as before.
- *
- * The MultiPolicyProvider is now a thin wrapper that runs hydration side-effects.
+ * usePolicyTabs()      — replaces useMultiPolicy()
+ * useWorkbenchState()  — replaces useWorkbench()
+ * policyDispatch()     — singleton action dispatcher (replaces multiDispatch / dispatch)
  */
-import React, {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  type ReactNode,
-} from "react";
+import React, { useCallback, useMemo } from "react";
 import type {
   WorkbenchPolicy,
-  ValidationResult,
   SavedPolicy,
   GuardId,
   GuardConfigMap,
@@ -32,7 +20,6 @@ import {
   DEFAULT_POLICY,
   type WorkbenchState,
   type WorkbenchAction,
-  type PolicySnapshot,
   type NativeValidationState,
 } from "@/features/policy/stores/policy-store";
 import {
@@ -43,9 +30,7 @@ import {
   getPrimaryExtension,
   isPolicyFileType,
   sanitizeFilenameStem,
-  type FileType,
 } from "@/lib/workbench/file-type-registry";
-import { sanitizeYamlForStorageWithMetadata } from "@/lib/workbench/storage-sanitizer";
 import {
   isDesktop,
   openDetectionFile,
@@ -53,174 +38,29 @@ import {
   readDetectionFileByPath,
 } from "@/lib/tauri-bridge";
 import { getDocumentIdentityStore } from "@/lib/workbench/detection-workflow/document-identity-store";
-
-// ---- Zustand stores ----
 import {
   usePolicyTabsStore,
   pushRecentFile,
-  type TabMeta,
-  type SplitMode as _SplitMode,
 } from "@/features/policy/stores/policy-tabs-store";
 import {
   usePolicyEditStore,
   emptyNativeValidation,
   evaluateTabSource,
-  type TabEditState,
 } from "@/features/policy/stores/policy-edit-store";
 import { useWorkbenchUIStore } from "@/features/policy/stores/workbench-ui-store";
+import {
+  type PolicyTab,
+  type MultiPolicyAction,
+  type MultiPolicyState,
+  type BulkGuardUpdate,
+  reconstructPolicyTab,
+} from "@/features/policy/types/policy-tab";
 
-// ---- Re-export types for backward compatibility ----
+// ---- Singleton dispatch ----
 
-/**
- * Full PolicyTab shape — reconstructed from TabMeta + TabEditState.
- * All existing consumers see the same interface.
- */
-export interface PolicyTab {
-  id: string;
-  /** Stable document identity — survives tab close/reopen, save, rename. */
-  documentId: string;
-  name: string;
-  filePath: string | null;
-  dirty: boolean;
-  fileType: FileType;
-  policy: WorkbenchPolicy;
-  yaml: string;
-  validation: ValidationResult;
-  nativeValidation: NativeValidationState;
-  testSuiteYaml?: string;
-  _undoPast: PolicySnapshot[];
-  _undoFuture: PolicySnapshot[];
-  _cleanSnapshot: PolicySnapshot | null;
-}
+let _dispatch: React.Dispatch<MultiPolicyAction> | null = null;
 
-export type SplitMode = _SplitMode;
-
-export interface MultiPolicyState {
-  tabs: PolicyTab[];
-  activeTabId: string;
-  splitMode: SplitMode;
-  splitTabId: string | null;
-  savedPolicies: SavedPolicy[];
-  ui: {
-    sidebarCollapsed: boolean;
-    activeEditorTab: "visual" | "yaml";
-    editorSyncDirection: "visual" | "yaml" | null;
-  };
-}
-
-export interface BulkGuardUpdate {
-  tabId: string;
-  guardId: GuardId;
-  enabled: boolean;
-  config?: Record<string, unknown>;
-}
-
-export type MultiPolicyAction =
-  | {
-      type: "NEW_TAB";
-      policy?: WorkbenchPolicy;
-      filePath?: string | null;
-      fileType?: FileType;
-      yaml?: string;
-      documentId?: string;
-    }
-  | { type: "CLOSE_TAB"; tabId: string }
-  | { type: "SWITCH_TAB"; tabId: string }
-  | { type: "SET_SPLIT_MODE"; mode: SplitMode }
-  | { type: "SET_SPLIT_TAB"; tabId: string | null }
-  | { type: "RENAME_TAB"; tabId: string; name: string }
-  | { type: "REORDER_TABS"; fromIndex: number; toIndex: number }
-  | { type: "DUPLICATE_TAB"; tabId: string }
-  | { type: "BULK_UPDATE_GUARDS"; updates: BulkGuardUpdate[] }
-  | {
-      type: "OPEN_TAB_OR_SWITCH";
-      filePath: string;
-      fileType: FileType;
-      yaml: string;
-      name?: string;
-    }
-  | { type: "SET_TAB_TEST_SUITE"; tabId: string; yaml: string }
-  | {
-      type: "RESTORE_AUTOSAVE_ENTRIES";
-      entries: Array<{
-        tabId?: string;
-        yaml: string;
-        filePath: string | null;
-        timestamp: number;
-        policyName: string;
-        fileType?: FileType;
-      }>;
-    }
-  // Delegated to active tab — same as WorkbenchAction
-  | { type: "SET_POLICY"; policy: WorkbenchPolicy }
-  | { type: "SET_YAML"; yaml: string }
-  | {
-      type: "UPDATE_GUARD";
-      guardId: GuardId;
-      config: Partial<GuardConfigMap[GuardId]>;
-    }
-  | { type: "TOGGLE_GUARD"; guardId: GuardId; enabled: boolean }
-  | { type: "UPDATE_SETTINGS"; settings: Partial<WorkbenchPolicy["settings"]> }
-  | {
-      type: "UPDATE_META";
-      name?: string;
-      description?: string;
-      version?: string;
-      extends?: string;
-    }
-  | { type: "UPDATE_ORIGINS"; origins: OriginsConfig | undefined }
-  | { type: "SAVE_POLICY"; savedPolicy: SavedPolicy }
-  | { type: "DELETE_SAVED_POLICY"; id: string }
-  | { type: "LOAD_SAVED_POLICIES"; policies: SavedPolicy[] }
-  | { type: "SET_COMPARISON"; policy: WorkbenchPolicy | null; yaml?: string }
-  | { type: "SET_SIDEBAR_COLLAPSED"; collapsed: boolean }
-  | { type: "SET_EDITOR_TAB"; tab: "visual" | "yaml" }
-  | { type: "SET_FILE_PATH"; path: string | null }
-  | { type: "MARK_CLEAN" }
-  | { type: "SET_NATIVE_VALIDATION"; payload: NativeValidationState }
-  | { type: "UNDO" }
-  | { type: "REDO" };
-
-// ---- Reconstruct PolicyTab from TabMeta + TabEditState ----
-
-function reconstructPolicyTab(
-  meta: TabMeta,
-  editState: TabEditState | undefined,
-): PolicyTab {
-  const edit = editState ?? {
-    policy: DEFAULT_POLICY,
-    yaml: policyToYaml(DEFAULT_POLICY),
-    validation: validatePolicy(DEFAULT_POLICY),
-    nativeValidation: emptyNativeValidation(),
-    undoStack: { past: [], future: [] },
-    cleanSnapshot: null,
-  };
-
-  return {
-    id: meta.id,
-    documentId: meta.documentId,
-    name: meta.name,
-    filePath: meta.filePath,
-    dirty: meta.dirty,
-    fileType: meta.fileType,
-    policy: edit.policy,
-    yaml: edit.yaml,
-    validation: edit.validation,
-    nativeValidation: edit.nativeValidation,
-    testSuiteYaml: edit.testSuiteYaml,
-    _undoPast: edit.undoStack.past,
-    _undoFuture: edit.undoStack.future,
-    _cleanSnapshot: edit.cleanSnapshot,
-  };
-}
-
-// ---- Bridge dispatch ----
-
-/**
- * Create a dispatch function that routes MultiPolicyAction to the appropriate
- * Zustand store methods.
- */
-function createBridgeDispatch(): React.Dispatch<MultiPolicyAction> {
+function createDispatch(): React.Dispatch<MultiPolicyAction> {
   return (action: MultiPolicyAction) => {
     const tabsStore = usePolicyTabsStore.getState();
     const editStore = usePolicyEditStore.getState();
@@ -239,39 +79,30 @@ function createBridgeDispatch(): React.Dispatch<MultiPolicyAction> {
           documentId: action.documentId,
         });
         break;
-
       case "CLOSE_TAB":
         tabsStore.closeTab(action.tabId);
         break;
-
       case "SWITCH_TAB":
         tabsStore.switchTab(action.tabId);
         break;
-
       case "SET_SPLIT_MODE":
         tabsStore.setSplitMode(action.mode);
         break;
-
       case "SET_SPLIT_TAB":
         tabsStore.setSplitTab(action.tabId);
         break;
-
       case "RENAME_TAB":
         tabsStore.renameTab(action.tabId, action.name);
         break;
-
       case "REORDER_TABS":
         tabsStore.reorderTabs(action.fromIndex, action.toIndex);
         break;
-
       case "DUPLICATE_TAB":
         tabsStore.duplicateTab(action.tabId);
         break;
-
       case "BULK_UPDATE_GUARDS":
         tabsStore.bulkUpdateGuards(action.updates);
         break;
-
       case "OPEN_TAB_OR_SWITCH":
         tabsStore.openTabOrSwitch(
           action.filePath,
@@ -280,11 +111,9 @@ function createBridgeDispatch(): React.Dispatch<MultiPolicyAction> {
           action.name,
         );
         break;
-
       case "SET_TAB_TEST_SUITE":
         tabsStore.setTabTestSuite(action.tabId, action.yaml);
         break;
-
       case "RESTORE_AUTOSAVE_ENTRIES":
         tabsStore.restoreAutosaveEntries(action.entries);
         break;
@@ -293,11 +122,9 @@ function createBridgeDispatch(): React.Dispatch<MultiPolicyAction> {
       case "SAVE_POLICY":
         tabsStore.savePolicyToLibrary(action.savedPolicy);
         break;
-
       case "DELETE_SAVED_POLICY":
         tabsStore.deleteSavedPolicy(action.id);
         break;
-
       case "LOAD_SAVED_POLICIES":
         tabsStore.loadSavedPolicies(action.policies);
         break;
@@ -306,7 +133,6 @@ function createBridgeDispatch(): React.Dispatch<MultiPolicyAction> {
       case "SET_SIDEBAR_COLLAPSED":
         uiStore.setSidebarCollapsed(action.collapsed);
         break;
-
       case "SET_EDITOR_TAB":
         uiStore.setActiveEditorTab(action.tab);
         break;
@@ -315,14 +141,12 @@ function createBridgeDispatch(): React.Dispatch<MultiPolicyAction> {
       case "SET_POLICY":
         if (activeTab) {
           editStore.updatePolicy(activeTabId, action.policy, activeTab.fileType);
-          // Update tab name from policy
           const newName = action.policy.name || activeTab.name;
           tabsStore.renameTab(activeTabId, newName);
           tabsStore.setDirty(activeTabId, true);
           uiStore.setEditorSyncDirection("visual");
         }
         break;
-
       case "SET_YAML":
         if (activeTab) {
           editStore.setYaml(
@@ -332,7 +156,6 @@ function createBridgeDispatch(): React.Dispatch<MultiPolicyAction> {
             activeTab.filePath,
             activeTab.name,
           );
-          // Sync tab name from the content after setYaml evaluates
           const editAfterYaml = editStore.editStates.get(activeTabId);
           if (editAfterYaml) {
             const { name: derivedName } = evaluateTabSource(
@@ -348,7 +171,6 @@ function createBridgeDispatch(): React.Dispatch<MultiPolicyAction> {
           uiStore.setEditorSyncDirection("yaml");
         }
         break;
-
       case "UPDATE_GUARD":
         if (activeTab) {
           editStore.updateGuard(
@@ -360,7 +182,6 @@ function createBridgeDispatch(): React.Dispatch<MultiPolicyAction> {
           tabsStore.setDirty(activeTabId, true);
         }
         break;
-
       case "TOGGLE_GUARD":
         if (activeTab) {
           editStore.toggleGuard(
@@ -372,7 +193,6 @@ function createBridgeDispatch(): React.Dispatch<MultiPolicyAction> {
           tabsStore.setDirty(activeTabId, true);
         }
         break;
-
       case "UPDATE_SETTINGS":
         if (activeTab) {
           editStore.updateSettings(
@@ -383,7 +203,6 @@ function createBridgeDispatch(): React.Dispatch<MultiPolicyAction> {
           tabsStore.setDirty(activeTabId, true);
         }
         break;
-
       case "UPDATE_META":
         if (activeTab) {
           editStore.updateMeta(
@@ -396,14 +215,12 @@ function createBridgeDispatch(): React.Dispatch<MultiPolicyAction> {
             },
             activeTab.fileType,
           );
-          // Sync tab name if name was updated
           if (action.name !== undefined) {
             tabsStore.renameTab(activeTabId, action.name || activeTab.name);
           }
           tabsStore.setDirty(activeTabId, true);
         }
         break;
-
       case "UPDATE_ORIGINS":
         if (activeTab) {
           editStore.updateOrigins(
@@ -414,37 +231,31 @@ function createBridgeDispatch(): React.Dispatch<MultiPolicyAction> {
           tabsStore.setDirty(activeTabId, true);
         }
         break;
-
       case "SET_FILE_PATH":
         if (activeTabId) {
           tabsStore.setFilePath(activeTabId, action.path);
         }
         break;
-
       case "MARK_CLEAN":
         if (activeTabId) {
           editStore.markClean(activeTabId);
           tabsStore.setDirty(activeTabId, false);
         }
         break;
-
       case "SET_NATIVE_VALIDATION":
         if (activeTabId) {
           editStore.setNativeValidation(activeTabId, action.payload);
         }
         break;
-
       case "UNDO":
         if (activeTabId) {
           editStore.undo(activeTabId);
-          // Sync dirty flag from edit store
           const afterUndo = editStore.editStates.get(activeTabId);
           if (afterUndo) {
             tabsStore.setDirty(activeTabId, editStore.isDirty(activeTabId));
           }
         }
         break;
-
       case "REDO":
         if (activeTabId) {
           editStore.redo(activeTabId);
@@ -454,68 +265,30 @@ function createBridgeDispatch(): React.Dispatch<MultiPolicyAction> {
           }
         }
         break;
-
-      // SET_COMPARISON is a no-op in multi-policy mode
       case "SET_COMPARISON":
         break;
-
       default:
         break;
     }
   };
 }
 
-// ---- Bridge hooks ----
-
-interface MultiPolicyContextValue {
-  /** The full multi-policy state for components that need tab awareness. */
-  multiState: MultiPolicyState;
-  /** Dispatch for multi-policy actions. */
-  multiDispatch: React.Dispatch<MultiPolicyAction>;
-  /** Active tab, or undefined if no tabs exist (should never happen). */
-  activeTab: PolicyTab | undefined;
-  /** All open tabs. */
-  tabs: PolicyTab[];
-  /** Whether new tabs can be added. */
-  canAddTab: boolean;
-}
-
-interface WorkbenchContextValue {
-  state: WorkbenchState;
-  dispatch: React.Dispatch<WorkbenchAction>;
-  saveCurrentPolicy: () => void;
-  exportYaml: () => void;
-  copyYaml: () => void;
-  loadPolicy: (policy: WorkbenchPolicy) => void;
-  openFile: () => Promise<void>;
-  openFileByPath: (filePath: string) => Promise<void>;
-  saveFile: () => Promise<void>;
-  saveFileAs: () => Promise<void>;
-  newPolicy: () => void;
-  undo: () => void;
-  redo: () => void;
-  canUndo: boolean;
-  canRedo: boolean;
-}
-
-// ---- Singleton dispatch (stable reference) ----
-let _bridgeDispatch: React.Dispatch<MultiPolicyAction> | null = null;
-
-function getBridgeDispatch(): React.Dispatch<MultiPolicyAction> {
-  if (!_bridgeDispatch) {
-    _bridgeDispatch = createBridgeDispatch();
-  }
-  return _bridgeDispatch;
-}
-
 /**
- * @deprecated Use individual Zustand stores directly:
- *   - usePolicyTabsStore() for tab lifecycle
- *   - usePolicyEditStore() for per-tab editing
- *   - useWorkbenchUIStore() for UI chrome
+ * Get the singleton policy dispatch function.
+ * Stable reference — safe to use outside React components.
  */
-export function useMultiPolicy(): MultiPolicyContextValue {
-  // Read from all three stores (reactive via Zustand subscriptions)
+export function policyDispatch(): React.Dispatch<MultiPolicyAction> {
+  if (!_dispatch) {
+    _dispatch = createDispatch();
+  }
+  return _dispatch;
+}
+
+// ---------------------------------------------------------------------------
+// usePolicyTabs — replaces useMultiPolicy()
+// ---------------------------------------------------------------------------
+
+export function usePolicyTabs() {
   const tabsMeta = usePolicyTabsStore((s) => s.tabs);
   const activeTabId = usePolicyTabsStore((s) => s.activeTabId);
   const splitMode = usePolicyTabsStore((s) => s.splitMode);
@@ -524,13 +297,10 @@ export function useMultiPolicy(): MultiPolicyContextValue {
   const editStates = usePolicyEditStore((s) => s.editStates);
   const sidebarCollapsed = useWorkbenchUIStore((s) => s.sidebarCollapsed);
   const activeEditorTab = useWorkbenchUIStore((s) => s.activeEditorTab);
-  const editorSyncDirection = useWorkbenchUIStore(
-    (s) => s.editorSyncDirection,
-  );
+  const editorSyncDirection = useWorkbenchUIStore((s) => s.editorSyncDirection);
 
-  const dispatch = getBridgeDispatch();
+  const dispatch = policyDispatch();
 
-  // Reconstruct full PolicyTab objects
   const tabs = useMemo(
     () =>
       tabsMeta.map((meta) =>
@@ -581,24 +351,20 @@ export function useMultiPolicy(): MultiPolicyContextValue {
   );
 }
 
-/**
- * @deprecated Use individual Zustand stores directly.
- *
- * Backward-compatible hook — returns the active tab's state shaped as WorkbenchState.
- * Existing components that call useWorkbench() continue to work unchanged.
- */
-export function useWorkbench(): WorkbenchContextValue {
+// ---------------------------------------------------------------------------
+// useWorkbenchState — replaces useWorkbench()
+// ---------------------------------------------------------------------------
+
+export function useWorkbenchState() {
   const tabsMeta = usePolicyTabsStore((s) => s.tabs);
   const activeTabId = usePolicyTabsStore((s) => s.activeTabId);
   const savedPolicies = usePolicyTabsStore((s) => s.savedPolicies);
   const editStates = usePolicyEditStore((s) => s.editStates);
   const sidebarCollapsed = useWorkbenchUIStore((s) => s.sidebarCollapsed);
   const activeEditorTab = useWorkbenchUIStore((s) => s.activeEditorTab);
-  const editorSyncDirection = useWorkbenchUIStore(
-    (s) => s.editorSyncDirection,
-  );
+  const editorSyncDirection = useWorkbenchUIStore((s) => s.editorSyncDirection);
 
-  const dispatch = getBridgeDispatch();
+  const dispatch = policyDispatch();
 
   const activeTabMeta = useMemo(
     () => tabsMeta.find((t) => t.id === activeTabId),
@@ -610,7 +376,6 @@ export function useWorkbench(): WorkbenchContextValue {
     [editStates, activeTabId],
   );
 
-  // Reconstruct the full PolicyTab for internal use
   const currentTab = useMemo(
     () =>
       activeTabMeta
@@ -671,7 +436,6 @@ export function useWorkbench(): WorkbenchContextValue {
     editorSyncDirection,
   ]);
 
-  // Bridge dispatch: WorkbenchAction -> MultiPolicyAction
   const workbenchDispatch = useCallback(
     (action: WorkbenchAction) => {
       dispatch(action as MultiPolicyAction);
@@ -679,7 +443,7 @@ export function useWorkbench(): WorkbenchContextValue {
     [dispatch],
   );
 
-  // ---- Callback implementations (mirroring original store) ----
+  // ---- Callback implementations ----
 
   const saveCurrentPolicy = useCallback(() => {
     if (!currentTab || !isPolicyFileType(currentTab.fileType)) return;
@@ -735,7 +499,6 @@ export function useWorkbench(): WorkbenchContextValue {
     try {
       const result = await openDetectionFile();
       if (!result) return;
-
       dispatch({
         type: "OPEN_TAB_OR_SWITCH",
         filePath: result.path,
@@ -744,7 +507,7 @@ export function useWorkbench(): WorkbenchContextValue {
       });
       pushRecentFile(result.path);
     } catch (err) {
-      console.error("[multi-policy] Failed to open file:", err);
+      console.error("[workbench-state] Failed to open file:", err);
     }
   }, [dispatch]);
 
@@ -753,7 +516,6 @@ export function useWorkbench(): WorkbenchContextValue {
       try {
         const result = await readDetectionFileByPath(filePath);
         if (!result) return;
-
         dispatch({
           type: "OPEN_TAB_OR_SWITCH",
           filePath: result.path,
@@ -762,7 +524,7 @@ export function useWorkbench(): WorkbenchContextValue {
         });
         pushRecentFile(result.path);
       } catch (err) {
-        console.error("[multi-policy] Failed to open file by path:", err);
+        console.error("[workbench-state] Failed to open file by path:", err);
       }
     },
     [dispatch],
@@ -787,7 +549,7 @@ export function useWorkbench(): WorkbenchContextValue {
       dispatch({ type: "MARK_CLEAN" });
       pushRecentFile(savedPath);
     } catch (err) {
-      console.error("[multi-policy] Failed to save file:", err);
+      console.error("[workbench-state] Failed to save file:", err);
     }
   }, [currentTab, exportYaml, dispatch]);
 
@@ -810,7 +572,7 @@ export function useWorkbench(): WorkbenchContextValue {
         await saveFileAs();
       }
     } catch (err) {
-      console.error("[multi-policy] Failed to save file:", err);
+      console.error("[workbench-state] Failed to save file:", err);
     }
   }, [currentTab, saveFileAs, exportYaml, dispatch]);
 
@@ -866,110 +628,4 @@ export function useWorkbench(): WorkbenchContextValue {
       canRedo,
     ],
   );
-}
-
-// ---- Provider (thin wrapper for hydration + persistence side-effects) ----
-
-/**
- * MultiPolicyProvider — now a thin wrapper around Zustand stores.
- *
- * It only runs hydration of saved policies and debounced tab persistence.
- * The actual state lives in the three Zustand stores.
- *
- * Kept for backward compatibility with:
- *   - App.tsx
- *   - test-helpers.tsx
- *   - Various test files
- */
-export function useMultiPolicyBootstrap(): void {
-  // Reset stores on mount — ensures clean state in tests where localStorage
-  // is cleared between renders.  In production this runs once.
-  const initialized = useRef(false);
-  if (!initialized.current) {
-    initialized.current = true;
-    // Reset all three Zustand stores from current localStorage
-    useWorkbenchUIStore.getState()._reset();
-    usePolicyTabsStore.getState()._reset();
-    usePolicyTabsStore.getState().hydrateSavedPolicies();
-  }
-
-  // Persist saved policies when they change
-  const savedPolicies = usePolicyTabsStore((s) => s.savedPolicies);
-  const savedPoliciesInitialized = useRef(false);
-  useEffect(() => {
-    // Skip the initial render — hydrateSavedPolicies handles that
-    if (!savedPoliciesInitialized.current) {
-      savedPoliciesInitialized.current = true;
-      return;
-    }
-    try {
-      localStorage.setItem(
-        "clawdstrike_workbench_policies",
-        JSON.stringify(savedPolicies),
-      );
-    } catch (e) {
-      console.error(
-        "[multi-policy-store] persist saved policies failed:",
-        e,
-      );
-    }
-  }, [savedPolicies]);
-
-  // Debounced tab persistence — directly writes to localStorage after 500ms.
-  const tabs = usePolicyTabsStore((s) => s.tabs);
-  const activeTabId = usePolicyTabsStore((s) => s.activeTabId);
-  const editStates = usePolicyEditStore((s) => s.editStates);
-  const persistRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => {
-    if (persistRef.current) clearTimeout(persistRef.current);
-    persistRef.current = setTimeout(() => {
-      // Persist directly (matching original behavior), not via schedulePersist
-      // which adds an additional debounce layer.
-      try {
-        const currentTabs = usePolicyTabsStore.getState().tabs;
-        const currentActiveTabId = usePolicyTabsStore.getState().activeTabId;
-        const currentEditStates = usePolicyEditStore.getState().editStates;
-        const persisted = {
-          tabs: currentTabs.map((t) => {
-            const editState = currentEditStates.get(t.id);
-            const yaml = editState?.yaml ?? "";
-            const sanitized = sanitizeYamlForStorageWithMetadata(yaml);
-            const sensitiveFieldsStripped = sanitized.sensitiveFieldsStripped;
-            return {
-              id: t.id,
-              documentId: t.documentId,
-              name: t.name,
-              filePath: sensitiveFieldsStripped ? null : t.filePath,
-              yaml: sanitized.yaml,
-              sensitiveFieldsStripped: sensitiveFieldsStripped || undefined,
-              fileType: t.fileType,
-            };
-          }),
-          activeTabId: currentActiveTabId,
-        };
-        localStorage.setItem(
-          "clawdstrike_workbench_tabs",
-          JSON.stringify(persisted),
-        );
-      } catch (e) {
-        console.error(
-          "[multi-policy-store] persistTabs failed:",
-          e,
-        );
-      }
-    }, 500);
-    return () => {
-      if (persistRef.current) clearTimeout(persistRef.current);
-    };
-  }, [tabs, activeTabId, editStates]);
-}
-
-export function MultiPolicyProvider({
-  children,
-}: {
-  children: ReactNode;
-}) {
-  useMultiPolicyBootstrap();
-
-  return <>{children}</>;
 }

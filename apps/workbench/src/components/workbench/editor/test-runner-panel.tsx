@@ -5,7 +5,7 @@ import type {
   GuardSimResult,
   TestScenario,
 } from "@/lib/workbench/types";
-import { useWorkbench, useMultiPolicy } from "@/features/policy/stores/multi-policy-store";
+import { useWorkbenchState, usePolicyTabs } from "@/features/policy/hooks/use-policy-actions";
 import { useToast } from "@/components/ui/toast";
 import { simulatePolicy } from "@/lib/workbench/simulation-engine";
 import { policyToYaml } from "@/features/policy/yaml-utils";
@@ -251,7 +251,7 @@ scenarios:
 
 
 function QuickTestTab() {
-  const { state } = useWorkbench();
+  const { state } = useWorkbenchState();
   const { dispatch: testDispatch } = useTestRunner();
   const { toast } = useToast();
   const [entries, setEntries] = useState<QuickTestEntry[]>([
@@ -614,8 +614,8 @@ function QuickTestTab() {
 type SuiteView = "yaml" | "graph";
 
 function TestSuiteTab() {
-  const { state } = useWorkbench();
-  const { multiDispatch, activeTab: multiActiveTab } = useMultiPolicy();
+  const { state } = useWorkbenchState();
+  const { multiDispatch, activeTab: multiActiveTab } = usePolicyTabs();
   const { state: testState, dispatch: testDispatch } = useTestRunner();
   const { toast } = useToast();
   const [suiteResults, setSuiteResults] = useState<SuiteResult[]>([]);
@@ -1294,8 +1294,8 @@ function TestSuiteTab() {
 
 function HistoryTab() {
   const { state: testState, dispatch: testDispatch } = useTestRunner();
-  const { state } = useWorkbench();
-  const { activeTab } = useMultiPolicy();
+  const { state } = useWorkbenchState();
+  const { activeTab } = usePolicyTabs();
   const [storedRuns, setStoredRuns] = useState<StoredTestRun[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(true);
   const [historyLoadError, setHistoryLoadError] = useState<string | null>(null);

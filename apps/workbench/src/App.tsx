@@ -7,7 +7,7 @@ import { IdentityPrompt } from "@/components/workbench/identity/identity-prompt"
 import { useOperator } from "@/features/operator/stores/operator-store";
 import { useFleetConnection } from "@/features/fleet/use-fleet-connection";
 import { useHintSettingsSafe } from "@/features/settings/use-hint-settings";
-import { useMultiPolicyBootstrap } from "@/features/policy/stores/multi-policy-store";
+import { usePolicyBootstrap } from "@/features/policy/hooks/use-policy-bootstrap";
 import { secureStore, migrateCredentialsToStronghold } from "@/features/settings/secure-store";
 import { useProjectStore } from "@/features/project/stores/project-store";
 import { useToast } from "@/components/ui/toast";
@@ -154,7 +154,7 @@ function WorkbenchBootstraps() {
   useOperator();
   useFleetConnection();
   useHintSettingsSafe();
-  useMultiPolicyBootstrap();
+  usePolicyBootstrap();
   useSignalCorrelator();
   useWorkspaceBootstrap(toastRef);
   return null;

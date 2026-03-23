@@ -26,7 +26,7 @@ import {
   type SwarmBlobPinResponse,
 } from "@/features/swarm/swarm-blob-client";
 import { FAIL_CLOSED_HUB_TRUST_POLICY } from "@/features/swarm/swarm-trust-policy";
-import { useMultiPolicy } from "@/features/policy/stores/multi-policy-store";
+import { usePolicyTabs } from "@/features/policy/hooks/use-policy-actions";
 import { useDraftDetection } from "@/lib/workbench/detection-workflow/use-draft-detection";
 import { useSignalStore } from "@/features/findings/stores/signal-store";
 import { usePaneStore } from "@/features/panes/pane-store";
@@ -537,7 +537,7 @@ export function FindingDetailPage() {
   const finding = findings.find((f) => f.id === id);
 
   // Draft detection wiring
-  const { multiDispatch } = useMultiPolicy();
+  const { multiDispatch } = usePolicyTabs();
   const allSignals = useSignalStore.use.signals();
   const { draftFromFinding } = useDraftDetection({
     dispatch: multiDispatch,

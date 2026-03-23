@@ -140,8 +140,7 @@ jq -n \
   --argjson idMismatchWarningPresent "$ID_MISMATCH_WARNING_PRESENT" \
   --argjson missingHooks "$MISSING_HOOKS_JSON" \
   --argjson pass "$PASS" \
-  '{
-    def pluginRoot: ($pluginInfo.plugin // $pluginInfo);
+  'def pluginRoot: ($pluginInfo.plugin // $pluginInfo); {
     script: $script,
     generatedAt: $generatedAt,
     openclawVersion: $openclawVersion,

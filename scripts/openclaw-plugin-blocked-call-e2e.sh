@@ -224,8 +224,7 @@ jq -n \
   --argjson assistantBlockSignal "$ASSISTANT_BLOCK_SIGNAL" \
   --argjson targetFileAbsent "$TARGET_FILE_ABSENT" \
   --argjson pass "$PASS" \
-  '{
-    def pluginRoot: ($pluginInfo.plugin // $pluginInfo);
+  'def pluginRoot: ($pluginInfo.plugin // $pluginInfo); {
     script: $script,
     generatedAt: $generatedAt,
     openclawVersion: $openclawVersion,

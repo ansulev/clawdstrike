@@ -15,14 +15,16 @@ interface PresenceTabDotsProps {
 const MAX_VISIBLE_DOTS = 3;
 
 export function PresenceTabDots({ route }: PresenceTabDotsProps) {
-  // Presence dots only apply to file tabs.
-  if (!route.startsWith("/file/")) return null;
+  // Derive file path (null for non-file tabs).
+  const filePath = route.startsWith("/file/") ? route.slice("/file/".length) : null;
 
-  const filePath = route.slice("/file/".length);
-
-  const viewerSet = usePresenceStore((s) => s.viewersByFile.get(filePath));
+  // Hooks must be called unconditionally (React rules of hooks).
+  const viewerSet = usePresenceStore((s) => filePath ? s.viewersByFile.get(filePath) : undefined);
   const localAnalystId = usePresenceStore((s) => s.localAnalystId);
   const analysts = usePresenceStore((s) => s.analysts);
+
+  // Presence dots only apply to file tabs.
+  if (!filePath) return null;
 
   // Filter out the local analyst — only show REMOTE viewers.
   const remoteViewers: AnalystPresence[] = [];

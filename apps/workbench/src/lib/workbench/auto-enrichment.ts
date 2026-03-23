@@ -124,7 +124,12 @@ export class AutoEnrichmentManager {
     const enrichOptions = sourceIds ? { sourceIds } : {};
     for (const indicator of indicators) {
       // Intentionally not awaited -- results flow back via store dispatch
-      void this.orchestrator.enrich(indicator, enrichOptions);
+      this.orchestrator.enrich(indicator, enrichOptions).catch((err: unknown) => {
+        console.error(
+          `[AutoEnrichment] Failed to enrich ${indicator.type}:${indicator.value}:`,
+          err instanceof Error ? err.message : String(err),
+        );
+      });
     }
   }
 

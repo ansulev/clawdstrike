@@ -55,6 +55,73 @@ interface ProjectState {
   projects: Map<string, DetectionProject>;
 }
 
+const FILE_STATUS_KEY_SEPARATOR = "::";
+
+export function getProjectFileStatusKey(rootPath: string, filePath: string): string {
+  const normalizedRoot = rootPath.replace(/\/+$/, "");
+  const normalizedPath = filePath.replace(/^\/+/, "");
+  return `${normalizedRoot}${FILE_STATUS_KEY_SEPARATOR}${normalizedPath}`;
+}
+
+function getPrimaryProject(
+  projectRoots: string[],
+  projects: Map<string, DetectionProject>,
+): DetectionProject | null {
+  const firstRoot = projectRoots[0];
+  return firstRoot ? projects.get(firstRoot) ?? null : null;
+}
+
+function buildProjectSelectionPatch(
+  projectRoots: string[],
+  projects: Map<string, DetectionProject>,
+): Pick<ProjectStoreState, "project" | "projects"> {
+  return {
+    project: getPrimaryProject(projectRoots, projects),
+    projects,
+  };
+}
+
+function resolveOwningRootPath(state: ProjectState, path: string): string | null {
+  if (!path.startsWith("/")) {
+    return state.project?.rootPath ?? state.projectRoots[0] ?? null;
+  }
+
+  const orderedRoots = [...state.projectRoots].sort((a, b) => b.length - a.length);
+  return (
+    orderedRoots.find(
+      (rootPath) => path === rootPath || path.startsWith(`${rootPath}/`),
+    ) ??
+    state.project?.rootPath ??
+    null
+  );
+}
+
+function getProjectForRoot(
+  state: ProjectState,
+  rootPath: string | null,
+): DetectionProject | null {
+  if (!rootPath) return null;
+  return state.projects.get(rootPath) ?? (state.project?.rootPath === rootPath ? state.project : null);
+}
+
+function relativePathWithinRoot(rootPath: string, path: string): string {
+  if (!path.startsWith("/")) {
+    return path.replace(/^\/+/, "");
+  }
+  if (!path.startsWith(rootPath)) {
+    return path.replace(/^\/+/, "");
+  }
+  return path.slice(rootPath.length).replace(/^\//, "");
+}
+
+function getFileStatusKeyForPath(state: ProjectState, filePath: string): string | null {
+  const rootPath = resolveOwningRootPath(state, filePath);
+  if (!rootPath) {
+    return filePath ? filePath.replace(/^\/+/, "") : null;
+  }
+  return getProjectFileStatusKey(rootPath, relativePathWithinRoot(rootPath, filePath));
+}
+
 // ---------------------------------------------------------------------------
 // Multi-root persistence helpers
 // ---------------------------------------------------------------------------
@@ -398,35 +465,54 @@ const useProjectStoreBase = create<ProjectStoreState>()((set, get) => ({
     },
 
     expandAll: () => {
-      const { project } = get();
-      if (!project) return;
-      const allDirs = collectDirPaths(project.files);
-      set({ project: { ...project, expandedDirs: new Set(allDirs) } });
+      const state = get();
+      if (state.projects.size > 0) {
+        const nextProjects = new Map(state.projects);
+        for (const [rootPath, project] of state.projects) {
+          nextProjects.set(rootPath, {
+            ...project,
+            expandedDirs: new Set(collectDirPaths(project.files)),
+          });
+        }
+        set(buildProjectSelectionPatch(state.projectRoots, nextProjects));
+        return;
+      }
+
+      if (!state.project) return;
+      const allDirs = collectDirPaths(state.project.files);
+      set({ project: { ...state.project, expandedDirs: new Set(allDirs) } });
     },
 
     collapseAll: () => {
-      const { project } = get();
-      if (!project) return;
-      set({ project: { ...project, expandedDirs: new Set<string>() } });
+      const state = get();
+      if (state.projects.size > 0) {
+        const nextProjects = new Map(state.projects);
+        for (const [rootPath, project] of state.projects) {
+          nextProjects.set(rootPath, {
+            ...project,
+            expandedDirs: new Set<string>(),
+          });
+        }
+        set(buildProjectSelectionPatch(state.projectRoots, nextProjects));
+        return;
+      }
+
+      if (!state.project) return;
+      set({ project: { ...state.project, expandedDirs: new Set<string>() } });
     },
 
     createFile: async (parentDirPath: string, fileName: string, fileType: FileType): Promise<string | null> => {
-      const { project } = get();
-      if (!project) return null;
+      const state = get();
+      const rootPath = resolveOwningRootPath(state, parentDirPath);
+      const project = getProjectForRoot(state, rootPath);
+      if (!project || !rootPath) return null;
 
       const { createDetectionFile } = await import("@/lib/tauri-bridge");
       const savedPath = await createDetectionFile(parentDirPath, fileName, fileType);
       if (!savedPath) return null;
 
-      // Compute the relative path within the project.
-      const relPath = savedPath.startsWith(project.rootPath)
-        ? savedPath.slice(project.rootPath.length).replace(/^\//, "")
-        : fileName;
-
-      // Compute parent relative path.
-      const parentRelPath = parentDirPath.startsWith(project.rootPath)
-        ? parentDirPath.slice(project.rootPath.length).replace(/^\//, "")
-        : parentDirPath;
+      const relPath = relativePathWithinRoot(rootPath, savedPath) || fileName;
+      const parentRelPath = relativePathWithinRoot(rootPath, parentDirPath);
 
       // Compute depth from relative path segments.
       const depth = relPath.split("/").filter(Boolean).length - 1;
@@ -453,38 +539,38 @@ const useProjectStoreBase = create<ProjectStoreState>()((set, get) => ({
         expandedDirs.add(parentRelPath);
       }
 
-      set({ project: { ...project, files: newFiles, expandedDirs } });
+      const nextProject = { ...project, files: newFiles, expandedDirs };
+      const nextProjects = new Map(get().projects);
+      nextProjects.set(rootPath, nextProject);
+      set(buildProjectSelectionPatch(get().projectRoots, nextProjects));
       // Re-scan from disk to ensure tree is in sync (catches nested dir creation, etc.)
-      get().actions.loadRoot(project.rootPath);
+      void get().actions.loadRoot(rootPath);
       return savedPath;
     },
 
     renameFile: async (oldPath: string, newName: string): Promise<boolean> => {
-      const { project } = get();
-      if (!project) return false;
+      const state = get();
+      const rootPath = resolveOwningRootPath(state, oldPath);
+      const project = getProjectForRoot(state, rootPath);
+      if (!project || !rootPath) return false;
 
       // oldPath may be relative; resolve to absolute for Tauri APIs.
       const oldAbsPath = oldPath.startsWith("/")
         ? oldPath
-        : `${project.rootPath}/${oldPath}`;
+        : `${rootPath}/${oldPath}`;
 
       // Compute new absolute path by replacing the last segment.
       const lastSlash = oldAbsPath.lastIndexOf("/");
       const newAbsPath = lastSlash >= 0
         ? oldAbsPath.substring(0, lastSlash + 1) + newName
-        : `${project.rootPath}/${newName}`;
+        : `${rootPath}/${newName}`;
 
       const { renameDetectionFile } = await import("@/lib/tauri-bridge");
       const ok = await renameDetectionFile(oldAbsPath, newAbsPath);
       if (!ok) return false;
 
-      // Compute relative paths.
-      const oldRelPath = oldAbsPath.startsWith(project.rootPath)
-        ? oldAbsPath.slice(project.rootPath.length).replace(/^\//, "")
-        : oldPath;
-      const newRelPath = newAbsPath.startsWith(project.rootPath)
-        ? newAbsPath.slice(project.rootPath.length).replace(/^\//, "")
-        : newName;
+      const oldRelPath = relativePathWithinRoot(rootPath, oldAbsPath);
+      const newRelPath = relativePathWithinRoot(rootPath, newAbsPath);
 
       const newFiles = mutateTree(project.files, oldRelPath, (siblings, idx) => {
         siblings[idx] = {
@@ -498,35 +584,39 @@ const useProjectStoreBase = create<ProjectStoreState>()((set, get) => ({
 
       // Migrate file status entry from old to new path.
       const fileStatuses = new Map(get().fileStatuses);
-      const oldStatus = fileStatuses.get(oldRelPath);
+      const oldStatusKey = getProjectFileStatusKey(rootPath, oldRelPath);
+      const newStatusKey = getProjectFileStatusKey(rootPath, newRelPath);
+      const oldStatus = fileStatuses.get(oldStatusKey);
       if (oldStatus) {
-        fileStatuses.delete(oldRelPath);
-        fileStatuses.set(newRelPath, oldStatus);
+        fileStatuses.delete(oldStatusKey);
+        fileStatuses.set(newStatusKey, oldStatus);
       }
 
-      set({ project: { ...project, files: newFiles }, fileStatuses });
+      const nextProject = { ...project, files: newFiles };
+      const nextProjects = new Map(get().projects);
+      nextProjects.set(rootPath, nextProject);
+      set({ ...buildProjectSelectionPatch(get().projectRoots, nextProjects), fileStatuses });
       // Re-scan from disk to pick up any side effects of the rename.
-      get().actions.loadRoot(project.rootPath);
+      void get().actions.loadRoot(rootPath);
       return true;
     },
 
     deleteFile: async (filePath: string): Promise<boolean> => {
-      const { project } = get();
-      if (!project) return false;
+      const state = get();
+      const rootPath = resolveOwningRootPath(state, filePath);
+      const project = getProjectForRoot(state, rootPath);
+      if (!project || !rootPath) return false;
 
       // filePath may be relative; resolve to absolute for Tauri APIs.
       const absPath = filePath.startsWith("/")
         ? filePath
-        : `${project.rootPath}/${filePath}`;
+        : `${rootPath}/${filePath}`;
 
       const { deleteDetectionFile } = await import("@/lib/tauri-bridge");
       const ok = await deleteDetectionFile(absPath);
       if (!ok) return false;
 
-      // Compute relative path.
-      const relPath = absPath.startsWith(project.rootPath)
-        ? absPath.slice(project.rootPath.length).replace(/^\//, "")
-        : filePath;
+      const relPath = relativePathWithinRoot(rootPath, absPath);
 
       const newFiles = mutateTree(project.files, relPath, (siblings, idx) => {
         siblings.splice(idx, 1);
@@ -535,23 +625,30 @@ const useProjectStoreBase = create<ProjectStoreState>()((set, get) => ({
 
       // Remove stale file status entry.
       const fileStatuses = new Map(get().fileStatuses);
-      fileStatuses.delete(relPath);
+      fileStatuses.delete(getProjectFileStatusKey(rootPath, relPath));
 
-      set({ project: { ...project, files: newFiles }, fileStatuses });
+      const nextProject = { ...project, files: newFiles };
+      const nextProjects = new Map(get().projects);
+      nextProjects.set(rootPath, nextProject);
+      set({ ...buildProjectSelectionPatch(get().projectRoots, nextProjects), fileStatuses });
       // Re-scan from disk to ensure deleted file (and any empty parent dirs) are gone.
-      get().actions.loadRoot(project.rootPath);
+      void get().actions.loadRoot(rootPath);
       return true;
     },
 
     setFileStatus: (filePath: string, status: FileStatus) => {
+      const key = getFileStatusKeyForPath(get(), filePath);
+      if (!key) return;
       const next = new Map(get().fileStatuses);
-      next.set(filePath, { ...next.get(filePath), ...status });
+      next.set(key, { ...next.get(key), ...status });
       set({ fileStatuses: next });
     },
 
     clearFileStatus: (filePath: string) => {
+      const key = getFileStatusKeyForPath(get(), filePath);
+      if (!key) return;
       const next = new Map(get().fileStatuses);
-      next.delete(filePath);
+      next.delete(key);
       set({ fileStatuses: next });
     },
 
@@ -571,12 +668,9 @@ const useProjectStoreBase = create<ProjectStoreState>()((set, get) => ({
       persistRoots(newRoots);
       const newProjects = new Map(projects);
       newProjects.delete(rootPath);
-      // Update backward-compat `project` field.
-      const firstProject = newRoots.length > 0 ? newProjects.get(newRoots[0]) ?? null : null;
       set({
         projectRoots: newRoots,
-        projects: newProjects,
-        project: firstProject,
+        ...buildProjectSelectionPatch(newRoots, newProjects),
       });
     },
 
@@ -597,12 +691,7 @@ const useProjectStoreBase = create<ProjectStoreState>()((set, get) => ({
         const newProjects = new Map(get().projects);
         newProjects.set(rootPath, dp);
 
-        // Backward compat: set `project` to the first root's DetectionProject.
-        const { projectRoots } = get();
-        const firstRoot = projectRoots.length > 0 ? projectRoots[0] : rootPath;
-        const firstProject = newProjects.get(firstRoot) ?? dp;
-
-        set({ projects: newProjects, project: firstProject });
+        set(buildProjectSelectionPatch(get().projectRoots, newProjects));
       } catch (err) {
         console.error("[project-store] Failed to load root:", rootPath, err);
       }
@@ -630,13 +719,7 @@ const useProjectStoreBase = create<ProjectStoreState>()((set, get) => ({
       const updated = { ...dp, expandedDirs: next };
       const newProjects = new Map(projects);
       newProjects.set(rootPath, updated);
-      // If this is the first root, also update backward-compat `project`.
-      const { projectRoots } = get();
-      const isFirstRoot = projectRoots.length > 0 && projectRoots[0] === rootPath;
-      set({
-        projects: newProjects,
-        ...(isFirstRoot ? { project: updated } : {}),
-      });
+      set(buildProjectSelectionPatch(get().projectRoots, newProjects));
     },
   },
 }));

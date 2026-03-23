@@ -631,17 +631,6 @@ function isDirtyVsClean(
   return !snapshotsEqual(takeSnapshot(editState), cleanSnapshot);
 }
 
-/** Actions that modify the policy and should be tracked by undo/redo. */
-const POLICY_MODIFYING_ACTIONS = new Set([
-  "SET_POLICY",
-  "SET_YAML",
-  "UPDATE_GUARD",
-  "TOGGLE_GUARD",
-  "UPDATE_SETTINGS",
-  "UPDATE_META",
-  "UPDATE_ORIGINS",
-]);
-
 // ---- Store interface ----
 
 export interface PolicyEditState {

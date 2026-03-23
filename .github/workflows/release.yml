@@ -95,11 +95,14 @@ jobs:
         run: |
           set -euo pipefail
 
-          # Keep this list to crates that verify against published registry dependencies.
-          # clawdstrike/hunt/hush-cli currently rely on vendored nono+hushspec APIs that have
-          # not been published to crates.io in matching form, so they are intentionally excluded
-          # from the automated crates.io release lane until the upstream registry surface catches up.
-          crates=(hush-core hush-proxy hush-spine)
+          # Keep this list to crates that currently pass `cargo publish --dry-run`
+          # against registry dependencies.
+          #
+          # The remaining 0.2.7-drifting public crates stay excluded for now:
+          # - clawdstrike: dry-run fails against crates.io's hushspec/nono surface
+          # - clawdstrike-policy-event, hunt-scan, hunt-query, hunt-correlate, hush-cli,
+          #   clawdstrike-logos: blocked transitively on clawdstrike 0.2.7 being unpublished
+          crates=(logos-ffi clawdstrike-ocsf hush-core hush-proxy hush-spine)
           missing=()
           for crate in "${crates[@]}"; do
             code="$(curl -s -o /dev/null -w '%{http_code}' "https://crates.io/api/v1/crates/${crate}/${VERSION}")"
@@ -168,6 +171,8 @@ jobs:
             exit 1
           }
 
+          publish_with_retry logos-ffi
+          publish_with_retry clawdstrike-ocsf
           publish_with_retry hush-core
           publish_with_retry hush-proxy
           publish_with_retry hush-spine
@@ -775,23 +780,87 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - name: Prefer Strawberry Perl on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $perlBinCandidates = @(
+            "${env:ChocolateyInstall}\lib\strawberryperl\tools\perl\bin",
+            "C:\Strawberry\perl\bin"
+          )
+          $cBinCandidates = @(
+            "${env:ChocolateyInstall}\lib\strawberryperl\tools\c\bin",
+            "C:\Strawberry\c\bin"
+          )
+
+          $perlBin = $perlBinCandidates | Where-Object { Test-Path (Join-Path $_ "perl.exe") } | Select-Object -First 1
+          if (-not $perlBin) {
+            choco install strawberryperl -y --no-progress
+            $perlBin = $perlBinCandidates | Where-Object { Test-Path (Join-Path $_ "perl.exe") } | Select-Object -First 1
+          }
+          if (-not $perlBin) {
+            throw "Unable to install or find Strawberry Perl on the Windows runner"
+          }
+
+          $perlExe = Join-Path $perlBin "perl.exe"
+          $perlBin | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          "PERL=$perlExe" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "OPENSSL_SRC_PERL=$perlExe" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          $cBin = $cBinCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if ($cBin) {
+            $cBin | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          }
+
+          & where.exe perl
+          & $perlExe -v
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
 
-      - name: Build release binaries
+      - name: Build release binaries (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
         run: |
-          cargo build --release --target ${{ matrix.target }} -p hush-cli
-          cargo build --release --target ${{ matrix.target }} -p hushd
+          set -euo pipefail
+          cargo build --release --target ${{ matrix.target }} -p hush-cli --bin hush --bin clawdstrike
+          cargo build --release --target ${{ matrix.target }} -p hushd --bin hushd
+
+      - name: Build release binaries (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          cargo build --release --target ${{ matrix.target }} -p hush-cli --bin hush --bin clawdstrike
 
       - name: Rename binary (Unix)
         if: runner.os != 'Windows'
-        run: cp target/${{ matrix.target }}/release/hush ${{ matrix.artifact }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          release_dir="target/${{ matrix.target }}/release"
+          bin_path="${release_dir}/hush"
+          if [[ ! -f "${bin_path}" ]]; then
+            echo "Missing expected binary: ${bin_path}" >&2
+            ls -la "${release_dir}" >&2 || true
+            exit 1
+          fi
+          cp "${bin_path}" "${{ matrix.artifact }}"
 
       - name: Rename binary (Windows)
         if: runner.os == 'Windows'
-        run: cp target/${{ matrix.target }}/release/hush.exe ${{ matrix.artifact }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          release_dir="target/${{ matrix.target }}/release"
+          bin_path="${release_dir}/hush.exe"
+          if [[ ! -f "${bin_path}" ]]; then
+            echo "Missing expected binary: ${bin_path}" >&2
+            ls -la "${release_dir}" >&2 || true
+            exit 1
+          fi
+          cp "${bin_path}" "${{ matrix.artifact }}"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v6
@@ -838,21 +907,86 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - name: Prefer Strawberry Perl on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $perlBinCandidates = @(
+            "${env:ChocolateyInstall}\lib\strawberryperl\tools\perl\bin",
+            "C:\Strawberry\perl\bin"
+          )
+          $cBinCandidates = @(
+            "${env:ChocolateyInstall}\lib\strawberryperl\tools\c\bin",
+            "C:\Strawberry\c\bin"
+          )
+
+          $perlBin = $perlBinCandidates | Where-Object { Test-Path (Join-Path $_ "perl.exe") } | Select-Object -First 1
+          if (-not $perlBin) {
+            choco install strawberryperl -y --no-progress
+            $perlBin = $perlBinCandidates | Where-Object { Test-Path (Join-Path $_ "perl.exe") } | Select-Object -First 1
+          }
+          if (-not $perlBin) {
+            throw "Unable to install or find Strawberry Perl on the Windows runner"
+          }
+
+          $perlExe = Join-Path $perlBin "perl.exe"
+          $perlBin | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          "PERL=$perlExe" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "OPENSSL_SRC_PERL=$perlExe" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          $cBin = $cBinCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if ($cBin) {
+            $cBin | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          }
+
+          & where.exe perl
+          & $perlExe -v
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
 
-      - name: Build release hushd binary
-        run: cargo build --release --target ${{ matrix.target }} -p hushd
+      - name: Build release hushd binary (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo build --release --target ${{ matrix.target }} -p hushd --bin hushd
+
+      - name: Build release hushd binary (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          cargo build --release --target ${{ matrix.target }} -p hushd --bin hushd
 
       - name: Rename hushd binary (Unix)
         if: runner.os != 'Windows'
-        run: cp target/${{ matrix.target }}/release/hushd ${{ matrix.artifact }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          release_dir="target/${{ matrix.target }}/release"
+          bin_path="${release_dir}/hushd"
+          if [[ ! -f "${bin_path}" ]]; then
+            echo "Missing expected binary: ${bin_path}" >&2
+            ls -la "${release_dir}" >&2 || true
+            exit 1
+          fi
+          cp "${bin_path}" "${{ matrix.artifact }}"
 
       - name: Rename hushd binary (Windows)
         if: runner.os == 'Windows'
-        run: cp target/${{ matrix.target }}/release/hushd.exe ${{ matrix.artifact }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          release_dir="target/${{ matrix.target }}/release"
+          bin_path="${release_dir}/hushd.exe"
+          if [[ ! -f "${bin_path}" ]]; then
+            echo "Missing expected binary: ${bin_path}" >&2
+            ls -la "${release_dir}" >&2 || true
+            exit 1
+          fi
+          cp "${bin_path}" "${{ matrix.artifact }}"
 
       - name: Upload hushd artifact
         uses: actions/upload-artifact@v6

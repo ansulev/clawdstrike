@@ -216,7 +216,21 @@ pub use irm::{
 #[cfg(feature = "full")]
 pub use origin_runtime::{OriginFingerprint, OriginRuntimeState};
 
-/// Re-export core types
-pub mod core {
+pub mod crypto {
     pub use hush_core::*;
+}
+
+/// Preserves the historical `hush_core::*` re-export while adding the
+/// pure decision core (`CoreSeverity`, `CoreVerdict`, etc.).
+pub mod core;
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn core_namespace_preserves_hush_core_and_decision_core_exports() {
+        let _ = crate::core::sha256(b"clawdstrike");
+        let _ = crate::core::CoreSeverity::Info;
+        let _ = std::mem::size_of::<crate::core::Error>();
+        let _: crate::core::Result<()> = Ok(());
+    }
 }

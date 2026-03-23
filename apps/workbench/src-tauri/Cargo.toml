@@ -23,6 +23,7 @@ chrono = { version = "0.4", features = ["serde"] }
 # Local crates
 hush-core = { path = "../../../crates/libs/hush-core" }
 clawdstrike = { path = "../../../crates/libs/clawdstrike" }
+clawdstrike-logos = { path = "../../../crates/libs/clawdstrike-logos" }
 hunt-correlate = { path = "../../../crates/libs/hunt-correlate" }
 hunt-query = { path = "../../../crates/libs/hunt-query" }
 clawdstrike-ocsf = { path = "../../../crates/libs/clawdstrike-ocsf" }

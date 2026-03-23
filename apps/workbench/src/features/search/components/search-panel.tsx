@@ -11,6 +11,19 @@ import type {
 import { useProjectStore } from "@/features/project/stores/project-store";
 import { usePaneStore } from "@/features/panes/pane-store";
 
+function sliceByCharacterRange(
+  value: string,
+  start: number,
+  end: number,
+): { before: string; match: string; after: string } {
+  const characters = Array.from(value);
+  return {
+    before: characters.slice(0, start).join(""),
+    match: characters.slice(start, end).join(""),
+    after: characters.slice(end).join(""),
+  };
+}
+
 // ---- Types ----
 
 interface SearchPanelProps {
@@ -69,9 +82,11 @@ function HighlightedLine({
   matchStart: number;
   matchEnd: number;
 }) {
-  const before = lineContent.slice(0, matchStart);
-  const match = lineContent.slice(matchStart, matchEnd);
-  const after = lineContent.slice(matchEnd);
+  const { before, match, after } = sliceByCharacterRange(
+    lineContent,
+    matchStart,
+    matchEnd,
+  );
 
   return (
     <span className="overflow-hidden text-ellipsis whitespace-nowrap">
@@ -106,9 +121,14 @@ function FileGroup({
         <span className="text-[10px] font-mono text-[#ece7dc]/70 truncate min-w-0 flex-1 direction-rtl text-left">
           {group.filePath}
         </span>
-        <span className="ml-2 shrink-0 text-[9px] font-mono text-[#6f7f9a]/50 bg-[#131721] px-1.5 py-0.5 rounded">
-          {group.matches.length}
-        </span>
+        <div className="ml-2 shrink-0 flex items-center gap-1.5">
+          <span className="max-w-[120px] truncate text-[9px] font-mono text-[#6f7f9a]/45">
+            {group.rootPath.split("/").pop() ?? group.rootPath}
+          </span>
+          <span className="text-[9px] font-mono text-[#6f7f9a]/50 bg-[#131721] px-1.5 py-0.5 rounded">
+            {group.matches.length}
+          </span>
+        </div>
       </div>
 
       {/* Match rows */}
@@ -278,7 +298,7 @@ export function SearchPanel({
           <div className="py-1">
             {resultGroups.map((group) => (
               <FileGroup
-                key={group.filePath}
+                key={`${group.rootPath}::${group.filePath}`}
                 group={group}
                 onResultClick={onResultClick}
               />
@@ -311,7 +331,7 @@ export function SearchPanelConnected() {
   const loading = useSearchStore.use.loading();
   const error = useSearchStore.use.error();
   const actions = useSearchStore.use.actions();
-  const project = useProjectStore.use.project();
+  const projectRoots = useProjectStore.use.projectRoots();
 
   return (
     <SearchPanel
@@ -325,9 +345,12 @@ export function SearchPanelConnected() {
       error={error}
       onQueryChange={actions.setQuery}
       onOptionToggle={(key) => actions.setOption(key, !options[key])}
-      onSearch={() => project && actions.performSearch(project.rootPath)}
+      onSearch={() => actions.performSearch(projectRoots)}
       onResultClick={(match) => {
-        usePaneStore.getState().openFile(match.filePath, match.filePath.split("/").pop() ?? match.filePath);
+        const absolutePath = `${match.rootPath.replace(/\/+$/, "")}/${match.filePath.replace(/^\/+/, "")}`;
+        usePaneStore
+          .getState()
+          .openFile(absolutePath, match.filePath.split("/").pop() ?? match.filePath);
       }}
     />
   );

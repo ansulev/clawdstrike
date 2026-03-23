@@ -2,9 +2,9 @@
 
 use regex::Regex;
 use serde::{Deserialize, Serialize};
-#[cfg(feature = "full")]
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
 
 use globset::GlobBuilder;
 
@@ -29,8 +29,6 @@ use crate::posture::{validate_posture_config, PostureConfig};
 pub const POLICY_SCHEMA_VERSION: &str = "1.5.0";
 pub const POLICY_SUPPORTED_SCHEMA_VERSIONS: &[&str] =
     &["1.1.0", "1.2.0", "1.3.0", "1.4.0", "1.5.0"];
-const MAX_POLICY_EXTENDS_DEPTH: usize = 32;
-
 fn default_true() -> bool {
     true
 }
@@ -203,6 +201,30 @@ pub struct Policy {
     pub broker: Option<BrokerConfig>,
 }
 
+/// Fully materialized policy load context passed to an optional verifier hook.
+///
+/// `effective_policy` is the validated policy that will be returned to the
+/// caller. For inherited policies, `source_policy` is the raw child policy and
+/// `parent_policy` is the resolved base policy that was merged into it.
+#[derive(Clone, Debug)]
+pub struct PolicyLoadVerificationInput {
+    pub effective_policy: Policy,
+    pub source_policy: Option<Policy>,
+    pub parent_policy: Option<Policy>,
+}
+
+type PolicyLoadVerifier =
+    dyn Fn(&PolicyLoadVerificationInput) -> Result<()> + Send + Sync + 'static;
+
+static POLICY_LOAD_VERIFIER: OnceLock<Box<PolicyLoadVerifier>> = OnceLock::new();
+
+pub fn install_policy_load_verifier<F>(verifier: F) -> bool
+where
+    F: Fn(&PolicyLoadVerificationInput) -> Result<()> + Send + Sync + 'static,
+{
+    POLICY_LOAD_VERIFIER.set(Box::new(verifier)).is_ok()
+}
+
 fn default_version() -> String {
     POLICY_SCHEMA_VERSION.to_string()
 }
@@ -244,8 +266,16 @@ pub struct GuardConfigs {
     pub mcp_tool: Option<McpToolConfig>,
     #[serde(default)]
     pub prompt_injection: Option<PromptInjectionConfig>,
+    /// Tracks explicitly provided prompt-injection object keys when compiling
+    /// partial HushSpec overlays so merge preserves inherited values.
+    #[serde(skip)]
+    pub prompt_injection_present_fields: BTreeSet<String>,
     #[serde(default)]
     pub jailbreak: Option<JailbreakConfig>,
+    /// Tracks explicitly provided jailbreak object keys when compiling partial
+    /// HushSpec overlays so merge preserves inherited values.
+    #[serde(skip)]
+    pub jailbreak_present_fields: BTreeSet<String>,
     #[serde(default)]
     pub computer_use: Option<ComputerUseConfig>,
     #[serde(default)]
@@ -322,11 +352,44 @@ impl GuardConfigs {
                 (None, Some(child_cfg)) => Some(McpToolConfig::default().merge_with(child_cfg)),
                 (None, None) => None,
             },
-            prompt_injection: child
-                .prompt_injection
-                .clone()
-                .or_else(|| self.prompt_injection.clone()),
-            jailbreak: child.jailbreak.clone().or_else(|| self.jailbreak.clone()),
+            prompt_injection: match (&self.prompt_injection, &child.prompt_injection) {
+                (Some(base), Some(child_cfg))
+                    if child.prompt_injection_present_fields.is_empty() =>
+                {
+                    Some(child_cfg.clone())
+                }
+                (Some(base), Some(child_cfg)) => Some(merge_prompt_injection_config(
+                    base,
+                    child_cfg,
+                    &child.prompt_injection_present_fields,
+                )),
+                (Some(base), None) => Some(base.clone()),
+                (None, Some(child_cfg)) => Some(child_cfg.clone()),
+                (None, None) => None,
+            },
+            prompt_injection_present_fields: if child.prompt_injection.is_some() {
+                BTreeSet::new()
+            } else {
+                self.prompt_injection_present_fields.clone()
+            },
+            jailbreak: match (&self.jailbreak, &child.jailbreak) {
+                (Some(base), Some(child_cfg)) if child.jailbreak_present_fields.is_empty() => {
+                    Some(child_cfg.clone())
+                }
+                (Some(base), Some(child_cfg)) => Some(merge_jailbreak_config(
+                    base,
+                    child_cfg,
+                    &child.jailbreak_present_fields,
+                )),
+                (Some(base), None) => Some(base.clone()),
+                (None, Some(child_cfg)) => Some(child_cfg.clone()),
+                (None, None) => None,
+            },
+            jailbreak_present_fields: if child.jailbreak.is_some() {
+                BTreeSet::new()
+            } else {
+                self.jailbreak_present_fields.clone()
+            },
             computer_use: child
                 .computer_use
                 .clone()
@@ -366,6 +429,48 @@ impl GuardConfigs {
             },
         }
     }
+}
+
+fn merge_prompt_injection_config(
+    base: &PromptInjectionConfig,
+    child: &PromptInjectionConfig,
+    present_fields: &BTreeSet<String>,
+) -> PromptInjectionConfig {
+    let mut merged = base.clone();
+    if present_fields.contains("enabled") {
+        merged.enabled = child.enabled;
+    }
+    if present_fields.contains("warn_at_or_above") {
+        merged.warn_at_or_above = child.warn_at_or_above;
+    }
+    if present_fields.contains("block_at_or_above") {
+        merged.block_at_or_above = child.block_at_or_above;
+    }
+    if present_fields.contains("max_scan_bytes") {
+        merged.max_scan_bytes = child.max_scan_bytes;
+    }
+    merged
+}
+
+fn merge_jailbreak_config(
+    base: &JailbreakConfig,
+    child: &JailbreakConfig,
+    present_fields: &BTreeSet<String>,
+) -> JailbreakConfig {
+    let mut merged = base.clone();
+    if present_fields.contains("enabled") {
+        merged.enabled = child.enabled;
+    }
+    if present_fields.contains("block_threshold") {
+        merged.detector.block_threshold = child.detector.block_threshold;
+    }
+    if present_fields.contains("warn_threshold") {
+        merged.detector.warn_threshold = child.detector.warn_threshold;
+    }
+    if present_fields.contains("max_input_bytes") {
+        merged.detector.max_input_bytes = child.detector.max_input_bytes;
+    }
+    merged
 }
 
 fn default_custom_guard_enabled() -> bool {
@@ -480,6 +585,62 @@ pub struct PolicySettings {
     pub verbose_logging: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub session_timeout_secs: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub verification: Option<VerificationSettings>,
+}
+
+/// Load-time formal verification settings (consistency, completeness,
+/// inheritance soundness). When `strict` is true, failure blocks policy loading.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct VerificationSettings {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default)]
+    pub strict: bool,
+    /// Cache results by content hash. Default: `true`.
+    #[serde(default = "default_cache_enabled")]
+    pub cache: bool,
+}
+
+fn default_cache_enabled() -> bool {
+    true
+}
+
+impl Default for VerificationSettings {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            strict: false,
+            cache: true,
+        }
+    }
+}
+
+impl VerificationSettings {
+    pub fn merge_with(&self, child: &Self) -> Self {
+        Self {
+            // Verification settings are monotonic across extends: a child may
+            // request stronger verification, but cannot weaken a parent gate.
+            enabled: self.enabled || child.enabled,
+            strict: self.strict || child.strict,
+            // Cache disablement is also monotonic for safety: if either side
+            // opts out of caching, the merged policy stays uncached.
+            cache: self.cache && child.cache,
+        }
+    }
+}
+
+fn merge_verification_settings(
+    base: &Option<VerificationSettings>,
+    child: &Option<VerificationSettings>,
+) -> Option<VerificationSettings> {
+    match (base, child) {
+        (Some(base), Some(child_cfg)) => Some(base.merge_with(child_cfg)),
+        (Some(base), None) => Some(base.clone()),
+        (None, Some(child_cfg)) => Some(child_cfg.clone()),
+        (None, None) => None,
+    }
 }
 
 fn default_timeout() -> u64 {
@@ -497,6 +658,19 @@ impl PolicySettings {
 
     pub fn effective_session_timeout_secs(&self) -> u64 {
         self.session_timeout_secs.unwrap_or(default_timeout())
+    }
+
+    pub fn effective_verification(&self) -> VerificationSettings {
+        self.verification.clone().unwrap_or_default()
+    }
+
+    pub fn merge_with(&self, child: &Self) -> Self {
+        Self {
+            fail_fast: child.fail_fast.or(self.fail_fast),
+            verbose_logging: child.verbose_logging.or(self.verbose_logging),
+            session_timeout_secs: child.session_timeout_secs.or(self.session_timeout_secs),
+            verification: merge_verification_settings(&self.verification, &child.verification),
+        }
     }
 }
 
@@ -782,6 +956,20 @@ impl Policy {
 
     /// Parse from YAML string
     pub fn from_yaml(yaml: &str) -> Result<Self> {
+        let policy = Self::from_yaml_without_load_verification(yaml)?;
+        if policy.extends.is_none() {
+            maybe_verify_loaded_policy(&policy, Some(&policy), None)?;
+        }
+        Ok(policy)
+    }
+
+    /// Parse from YAML string and validate it without running load-time
+    /// verification hooks.
+    ///
+    /// This is intended for callers that need source metadata before resolving
+    /// `extends`, or that will run load-time verification with richer parent
+    /// context later in the load pipeline.
+    pub fn from_yaml_without_load_verification(yaml: &str) -> Result<Self> {
         let policy = Self::from_yaml_unvalidated(yaml)?;
         policy.validate()?;
         Ok(policy)
@@ -1308,44 +1496,61 @@ impl Policy {
     /// Uses child's merge_strategy to determine how to combine.
     pub fn merge(&self, child: &Policy) -> Self {
         match child.merge_strategy {
-            MergeStrategy::Replace => child.clone(),
-            MergeStrategy::Merge => Self {
-                version: if child.version != self.version {
-                    child.version.clone()
-                } else {
-                    self.version.clone()
-                },
-                name: if !child.name.is_empty() {
-                    child.name.clone()
-                } else {
-                    self.name.clone()
-                },
-                description: if !child.description.is_empty() {
-                    child.description.clone()
-                } else {
-                    self.description.clone()
-                },
-                extends: None, // Don't propagate extends
-                merge_strategy: MergeStrategy::default(),
-                guards: if child.guards != GuardConfigs::default() {
-                    child.guards.clone()
-                } else {
-                    self.guards.clone()
-                },
-                custom_guards: if !child.custom_guards.is_empty() {
-                    child.custom_guards.clone()
-                } else {
-                    self.custom_guards.clone()
-                },
-                settings: if child.settings != PolicySettings::default() {
+            MergeStrategy::Replace => {
+                let mut replaced = child.clone();
+                replaced.extends = None;
+                replaced.merge_strategy = MergeStrategy::default();
+                replaced.settings.verification = merge_verification_settings(
+                    &self.settings.verification,
+                    &child.settings.verification,
+                );
+                replaced
+            }
+            MergeStrategy::Merge => {
+                let mut settings = if child.settings != PolicySettings::default() {
                     child.settings.clone()
                 } else {
                     self.settings.clone()
-                },
-                posture: child.posture.clone().or_else(|| self.posture.clone()),
-                origins: child.origins.clone().or_else(|| self.origins.clone()),
-                broker: child.broker.clone().or_else(|| self.broker.clone()),
-            },
+                };
+                settings.verification = merge_verification_settings(
+                    &self.settings.verification,
+                    &settings.verification,
+                );
+
+                Self {
+                    version: if child.version != self.version {
+                        child.version.clone()
+                    } else {
+                        self.version.clone()
+                    },
+                    name: if !child.name.is_empty() {
+                        child.name.clone()
+                    } else {
+                        self.name.clone()
+                    },
+                    description: if !child.description.is_empty() {
+                        child.description.clone()
+                    } else {
+                        self.description.clone()
+                    },
+                    extends: None, // Don't propagate extends
+                    merge_strategy: MergeStrategy::default(),
+                    guards: if child.guards != GuardConfigs::default() {
+                        child.guards.clone()
+                    } else {
+                        self.guards.clone()
+                    },
+                    custom_guards: if !child.custom_guards.is_empty() {
+                        child.custom_guards.clone()
+                    } else {
+                        self.custom_guards.clone()
+                    },
+                    settings,
+                    posture: child.posture.clone().or_else(|| self.posture.clone()),
+                    origins: child.origins.clone().or_else(|| self.origins.clone()),
+                    broker: child.broker.clone().or_else(|| self.broker.clone()),
+                }
+            }
             MergeStrategy::DeepMerge => Self {
                 version: if child.version != self.version {
                     child.version.clone()
@@ -1366,17 +1571,7 @@ impl Policy {
                 merge_strategy: MergeStrategy::default(),
                 guards: self.guards.merge_with(&child.guards),
                 custom_guards: merge_custom_guards(&self.custom_guards, &child.custom_guards),
-                settings: PolicySettings {
-                    fail_fast: child.settings.fail_fast.or(self.settings.fail_fast),
-                    verbose_logging: child
-                        .settings
-                        .verbose_logging
-                        .or(self.settings.verbose_logging),
-                    session_timeout_secs: child
-                        .settings
-                        .session_timeout_secs
-                        .or(self.settings.session_timeout_secs),
-                },
+                settings: self.settings.merge_with(&child.settings),
                 posture: match (&self.posture, &child.posture) {
                     (Some(base), Some(child_posture)) => Some(base.merge_with(child_posture)),
                     (Some(base), None) => Some(base.clone()),
@@ -1421,6 +1616,15 @@ impl Policy {
             .map(|p| PolicyLocation::File(p.to_path_buf()))
             .unwrap_or(PolicyLocation::None);
 
+        Self::from_yaml_with_extends_location_resolver(yaml, location, resolver)
+    }
+
+    /// Like `from_yaml_with_extends` but with an explicit source location.
+    pub fn from_yaml_with_extends_location_resolver(
+        yaml: &str,
+        location: PolicyLocation,
+        resolver: &impl PolicyResolver,
+    ) -> Result<Self> {
         Self::from_yaml_with_extends_internal_resolver(
             yaml,
             location,
@@ -1439,10 +1643,10 @@ impl Policy {
         depth: usize,
         validation: PolicyValidationOptions,
     ) -> Result<Self> {
-        if depth > MAX_POLICY_EXTENDS_DEPTH {
+        if depth > crate::core::cycle::MAX_POLICY_EXTENDS_DEPTH {
             return Err(Error::ConfigError(format!(
                 "Policy extends depth exceeded (limit: {})",
-                MAX_POLICY_EXTENDS_DEPTH
+                crate::core::cycle::MAX_POLICY_EXTENDS_DEPTH
             )));
         }
 
@@ -1451,12 +1655,20 @@ impl Policy {
         if let Some(ref extends) = child.extends {
             let resolved = resolver.resolve(extends, &location)?;
 
-            // Check for circular dependency
-            if visited.contains(&resolved.key) {
-                return Err(Error::ConfigError(format!(
-                    "Circular policy extension detected: {}",
-                    extends
-                )));
+            match crate::core::cycle::check_extends_cycle(&resolved.key, visited, depth + 1) {
+                crate::core::cycle::CycleCheckResult::Ok => {}
+                crate::core::cycle::CycleCheckResult::DepthExceeded { limit, .. } => {
+                    return Err(Error::ConfigError(format!(
+                        "Policy extends depth exceeded (limit: {})",
+                        limit
+                    )));
+                }
+                crate::core::cycle::CycleCheckResult::CycleDetected { .. } => {
+                    return Err(Error::ConfigError(format!(
+                        "Circular policy extension detected: {}",
+                        extends
+                    )));
+                }
             }
             visited.insert(resolved.key);
 
@@ -1471,9 +1683,11 @@ impl Policy {
 
             let merged = base.merge(&child);
             merged.validate_with_options(validation)?;
+            maybe_verify_loaded_policy(&merged, Some(&child), Some(&base))?;
             Ok(merged)
         } else {
             child.validate_with_options(validation)?;
+            maybe_verify_loaded_policy(&child, Some(&child), None)?;
             Ok(child)
         }
     }
@@ -1585,33 +1799,37 @@ impl Policy {
     }
 }
 
+fn maybe_verify_loaded_policy(
+    effective_policy: &Policy,
+    source_policy: Option<&Policy>,
+    parent_policy: Option<&Policy>,
+) -> Result<()> {
+    let settings = effective_policy.settings.effective_verification();
+    if !settings.enabled {
+        return Ok(());
+    }
+
+    let Some(verifier) = POLICY_LOAD_VERIFIER.get() else {
+        let message = "policy.settings.verification is enabled, but no load-time policy verifier is registered";
+        if settings.strict {
+            return Err(Error::ConfigError(message.to_string()));
+        }
+        tracing::warn!("{}", message);
+        return Ok(());
+    };
+
+    verifier(&PolicyLoadVerificationInput {
+        effective_policy: effective_policy.clone(),
+        source_policy: source_policy.cloned(),
+        parent_policy: parent_policy.cloned(),
+    })
+}
+
 fn merge_custom_guards(
     base: &[PolicyCustomGuardSpec],
     child: &[PolicyCustomGuardSpec],
 ) -> Vec<PolicyCustomGuardSpec> {
-    if child.is_empty() {
-        return base.to_vec();
-    }
-    if base.is_empty() {
-        return child.to_vec();
-    }
-
-    let mut out: Vec<PolicyCustomGuardSpec> = base.to_vec();
-    let mut index: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
-    for (i, cg) in out.iter().enumerate() {
-        index.insert(cg.id.clone(), i);
-    }
-
-    for cg in child {
-        if let Some(i) = index.get(&cg.id).copied() {
-            out[i] = cg.clone();
-        } else {
-            index.insert(cg.id.clone(), out.len());
-            out.push(cg.clone());
-        }
-    }
-
-    out
+    crate::core::merge::merge_keyed_vec(base, child, |cg| cg.id.clone())
 }
 
 fn validate_policy_version(version: &str) -> Result<()> {
@@ -2166,6 +2384,7 @@ mod tests {
 
     use super::*;
     use std::sync::Mutex;
+    use tempfile::tempdir;
 
     static ENV_MUTEX: Mutex<()> = Mutex::new(());
 
@@ -3680,6 +3899,38 @@ name: Test
     }
 
     #[test]
+    fn test_extends_depth_terminal_policy_still_fails() {
+        let dir = tempdir().expect("tempdir");
+        let mut previous: Option<std::path::PathBuf> = None;
+
+        for depth in 0..=crate::core::cycle::MAX_POLICY_EXTENDS_DEPTH + 1 {
+            let path = dir.path().join(format!("policy-{depth}.yaml"));
+            let yaml = if let Some(previous) = previous.as_ref() {
+                format!(
+                    "version: \"1.1.0\"\nname: \"policy-{depth}\"\nextends: \"{}\"\n",
+                    previous.file_name().expect("filename").to_string_lossy()
+                )
+            } else {
+                format!("version: \"1.1.0\"\nname: \"policy-{depth}\"\n")
+            };
+            std::fs::write(&path, yaml).expect("write policy");
+            previous = Some(path);
+        }
+
+        let root = dir.path().join(format!(
+            "policy-{}.yaml",
+            crate::core::cycle::MAX_POLICY_EXTENDS_DEPTH + 1
+        ));
+        let root_yaml = std::fs::read_to_string(&root).expect("read root");
+        let err = Policy::from_yaml_with_extends(&root_yaml, Some(root.as_path()))
+            .expect_err("depth exceeded");
+        assert!(
+            err.to_string().contains("Policy extends depth exceeded"),
+            "unexpected error: {err}"
+        );
+    }
+
+    #[test]
     fn test_origins_default_behavior_minimal_profile() {
         let yaml = r#"
 version: "1.4.0"
@@ -3745,5 +3996,161 @@ origins:
         assert_eq!(origins.profiles.len(), 2);
         assert!(origins.profiles.iter().any(|p| p.id == "existing"));
         assert!(origins.profiles.iter().any(|p| p.id == "new-profile"));
+    }
+
+    #[test]
+    fn strict_verification_without_registered_verifier_fails_closed() {
+        let yaml = r#"
+version: "1.5.0"
+name: strict-verified
+settings:
+  verification:
+    enabled: true
+    strict: true
+"#;
+
+        let err = Policy::from_yaml(yaml)
+            .expect_err("strict verification should fail without a registered verifier");
+        assert!(err
+            .to_string()
+            .contains("no load-time policy verifier is registered"));
+    }
+
+    #[test]
+    fn non_strict_verification_without_registered_verifier_warns_but_loads() {
+        let yaml = r#"
+version: "1.5.0"
+name: non-strict-verified
+settings:
+  verification:
+    enabled: true
+    strict: false
+"#;
+
+        let policy = Policy::from_yaml(yaml).expect("non-strict verification should not block");
+        assert_eq!(policy.name, "non-strict-verified");
+    }
+
+    #[test]
+    fn child_inherits_parent_verification_during_extends_load() {
+        let parent = Policy::from_yaml_unvalidated(
+            r#"
+version: "1.5.0"
+name: parent
+settings:
+  verification:
+    enabled: true
+    strict: true
+"#,
+        )
+        .expect("parse parent");
+
+        let child = Policy::from_yaml_unvalidated(
+            r#"
+version: "1.5.0"
+name: child
+extends: "parent.yaml"
+settings:
+  verification:
+    enabled: false
+    strict: false
+"#,
+        )
+        .expect("parse child");
+
+        let merged = parent.merge(&child);
+        merged.validate().expect("merged policy should validate");
+        assert_eq!(merged.name, "child");
+        let verification = merged.settings.effective_verification();
+        assert!(verification.enabled);
+        assert!(verification.strict);
+    }
+
+    #[test]
+    fn replace_merge_cannot_disable_parent_verification() {
+        let parent = Policy::from_yaml_unvalidated(
+            r#"
+version: "1.5.0"
+name: parent
+settings:
+  verification:
+    enabled: true
+    strict: true
+"#,
+        )
+        .expect("parse parent");
+
+        let child = Policy::from_yaml_unvalidated(
+            r#"
+version: "1.5.0"
+name: child
+merge_strategy: replace
+settings:
+  verification:
+    enabled: false
+    strict: false
+"#,
+        )
+        .expect("parse child");
+
+        let merged = parent.merge(&child);
+        let verification = merged.settings.effective_verification();
+        assert!(verification.enabled);
+        assert!(verification.strict);
+    }
+
+    #[test]
+    fn merge_strategy_merge_keeps_settings_shallow_except_verification_gate() {
+        let parent = Policy::from_yaml_unvalidated(
+            r#"
+version: "1.5.0"
+name: parent
+settings:
+  fail_fast: true
+  session_timeout_secs: 42
+  verification:
+    enabled: true
+    strict: true
+"#,
+        )
+        .expect("parse parent");
+
+        let child = Policy::from_yaml_unvalidated(
+            r#"
+version: "1.5.0"
+name: child
+merge_strategy: merge
+settings:
+  verbose_logging: true
+"#,
+        )
+        .expect("parse child");
+
+        let merged = parent.merge(&child);
+
+        assert_eq!(merged.settings.fail_fast, None);
+        assert_eq!(merged.settings.session_timeout_secs, None);
+        assert_eq!(merged.settings.verbose_logging, Some(true));
+
+        let verification = merged.settings.effective_verification();
+        assert!(verification.enabled);
+        assert!(verification.strict);
+    }
+
+    #[test]
+    fn strict_verification_with_extends_defers_until_resolution() {
+        let yaml = r#"
+version: "1.5.0"
+name: child
+extends: "parent.yaml"
+settings:
+  verification:
+    enabled: true
+    strict: true
+"#;
+
+        let policy =
+            Policy::from_yaml(yaml).expect("unresolved strict policies should defer verification");
+        assert_eq!(policy.extends.as_deref(), Some("parent.yaml"));
     }
 }

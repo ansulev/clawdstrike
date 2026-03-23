@@ -8,6 +8,8 @@ import {
 // ---- Types ----
 
 export interface SearchMatch {
+  /** Absolute workspace root that produced this match. */
+  rootPath: string;
   /** Relative path within the project root. */
   filePath: string;
   /** 1-indexed line number. */
@@ -27,6 +29,7 @@ export interface SearchOptions {
 }
 
 export interface SearchResultGroup {
+  rootPath: string;
   filePath: string;
   matches: SearchMatch[];
 }
@@ -47,7 +50,7 @@ interface SearchState {
       key: K,
       value: SearchOptions[K],
     ) => void;
-    performSearch: (rootPath: string) => Promise<void>;
+    performSearch: (rootPaths: string[]) => Promise<void>;
     clearResults: () => void;
   };
 }
@@ -55,8 +58,9 @@ interface SearchState {
 // ---- Helpers ----
 
 /** Convert snake_case TauriSearchMatch to camelCase SearchMatch. */
-function mapTauriMatch(m: TauriSearchMatch): SearchMatch {
+function mapTauriMatch(rootPath: string, m: TauriSearchMatch): SearchMatch {
   return {
+    rootPath,
     filePath: m.file_path,
     lineNumber: m.line_number,
     lineContent: m.line_content,
@@ -67,19 +71,21 @@ function mapTauriMatch(m: TauriSearchMatch): SearchMatch {
 
 /** Group flat matches by file path. */
 function groupByFile(matches: SearchMatch[]): SearchResultGroup[] {
-  const map = new Map<string, SearchMatch[]>();
+  const map = new Map<string, SearchResultGroup>();
   for (const m of matches) {
-    const existing = map.get(m.filePath);
+    const key = `${m.rootPath}::${m.filePath}`;
+    const existing = map.get(key);
     if (existing) {
-      existing.push(m);
+      existing.matches.push(m);
     } else {
-      map.set(m.filePath, [m]);
+      map.set(key, {
+        rootPath: m.rootPath,
+        filePath: m.filePath,
+        matches: [m],
+      });
     }
   }
-  return Array.from(map.entries()).map(([filePath, fileMatches]) => ({
-    filePath,
-    matches: fileMatches,
-  }));
+  return Array.from(map.values());
 }
 
 // ---- Store ----
@@ -115,7 +121,7 @@ const useSearchStoreBase = create<SearchState>((set, get) => ({
       }));
     },
 
-    performSearch: async (rootPath: string) => {
+    performSearch: async (rootPaths: string[]) => {
       const { query, options } = get();
 
       // Cancel any in-flight search before starting a new one
@@ -141,13 +147,30 @@ const useSearchStoreBase = create<SearchState>((set, get) => ({
         return;
       }
 
+      if (rootPaths.length === 0) {
+        activeSearchController = null;
+        set({
+          results: [],
+          resultGroups: [],
+          fileCount: 0,
+          totalMatches: 0,
+          truncated: false,
+          loading: false,
+        });
+        return;
+      }
+
       try {
-        const result = await searchInProjectNative(
-          rootPath,
-          query,
-          options.caseSensitive,
-          options.wholeWord,
-          options.useRegex,
+        const results = await Promise.all(
+          rootPaths.map((rootPath) =>
+            searchInProjectNative(
+              rootPath,
+              query,
+              options.caseSensitive,
+              options.wholeWord,
+              options.useRegex,
+            ).then((result) => ({ rootPath, result })),
+          ),
         );
 
         // Discard results if this search was aborted by a newer invocation
@@ -155,15 +178,27 @@ const useSearchStoreBase = create<SearchState>((set, get) => ({
         // Staleness guard: query changed while we were waiting
         if (queryAtDispatch !== get().query) return;
 
-        if (result) {
-          const matches = result.matches.map(mapTauriMatch);
+        const resolvedResults = results.filter(
+          ({ result }) => result !== null,
+        ) as Array<{ rootPath: string; result: NonNullable<(typeof results)[number]["result"]> }>;
+
+        if (resolvedResults.length > 0) {
+          const matches = resolvedResults.flatMap(({ rootPath, result }) =>
+            result.matches.map((match) => mapTauriMatch(rootPath, match)),
+          );
           const resultGroups = groupByFile(matches);
           set({
             results: matches,
             resultGroups,
-            fileCount: result.file_count,
-            totalMatches: result.total_matches,
-            truncated: result.truncated,
+            fileCount: resolvedResults.reduce(
+              (count, { result }) => count + result.file_count,
+              0,
+            ),
+            totalMatches: resolvedResults.reduce(
+              (count, { result }) => count + result.total_matches,
+              0,
+            ),
+            truncated: resolvedResults.some(({ result }) => result.truncated),
             loading: false,
           });
         } else {

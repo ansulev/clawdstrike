@@ -23,6 +23,7 @@ import {
 import type { PlaygroundError, ContributionSnapshot } from "./playground-store";
 import { pluginLoader } from "../plugin-loader";
 import { pluginRegistry } from "../plugin-registry";
+import { clearSnapshot } from "../dev/storage-snapshot";
 import type { PluginManifest } from "../types";
 
 // ---------------------------------------------------------------------------
@@ -153,6 +154,9 @@ export async function runPlaygroundPlugin(): Promise<void> {
     } catch {
       // Best-effort cleanup of previous instance
     }
+
+    // 5b. Clear any accumulated storage from previous runs
+    clearSnapshot(PLAYGROUND_PLUGIN_ID);
 
     // 6. Set window.__CLAWDSTRIKE_PLUGIN_SDK__
     window.__CLAWDSTRIKE_PLUGIN_SDK__ = { createPlugin };

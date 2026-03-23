@@ -63,7 +63,7 @@ export function unregisterStatusBarItem(id: string): void {
 export function getStatusBarItems(side: "left" | "right"): StatusBarItem[] {
   // Ensure snapshots are current even if called before any listener fires
   // (e.g., module-scope registrations before React mounts)
-  if (snapshotLeft.length === 0 && snapshotRight.length === 0 && itemMap.size > 0) {
+  if (snapshotLeft.length + snapshotRight.length !== itemMap.size) {
     rebuildSnapshots();
   }
   return side === "left" ? snapshotLeft : snapshotRight;

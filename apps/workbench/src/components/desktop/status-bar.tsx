@@ -274,9 +274,16 @@ function FilePathSegment() {
   return <span className="italic text-[#6f7f9a]/30">unsaved</span>;
 }
 
+const builtinStatusBarDisposers = new Map<string, () => void>();
+
 function registerBuiltinStatusBarItem(item: StatusBarItem): void {
+  builtinStatusBarDisposers.get(item.id)?.();
   unregisterStatusBarItem(item.id);
-  registerStatusBarItem(item);
+  const dispose = registerStatusBarItem(item);
+  builtinStatusBarDisposers.set(item.id, () => {
+    builtinStatusBarDisposers.delete(item.id);
+    dispose();
+  });
 }
 
 registerBuiltinStatusBarItem({
@@ -355,6 +362,15 @@ registerBuiltinStatusBarItem({
   priority: 40,
   render: () => <FilePathSegment />,
 });
+
+if (import.meta.hot) {
+  import.meta.hot.dispose(() => {
+    for (const dispose of Array.from(builtinStatusBarDisposers.values())) {
+      dispose();
+    }
+    builtinStatusBarDisposers.clear();
+  });
+}
 
 function useStatusBarItems(side: "left" | "right") {
   const getSnapshot = useCallback(() => getStatusBarItems(side), [side]);

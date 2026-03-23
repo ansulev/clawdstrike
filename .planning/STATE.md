@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v6.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 04-02-PLAN.md
-last_updated: "2026-03-23T00:40:58Z"
+stopped_at: Completed 02-02-PLAN.md
+last_updated: "2026-03-23T00:45:22.136Z"
 progress:
   total_phases: 5
-  completed_phases: 4
+  completed_phases: 2
   total_plans: 12
-  completed_plans: 10
+  completed_plans: 8
   percent: 83
 ---
 
@@ -65,6 +65,9 @@ Progress: [████████░░] 83%
 - Placed Plugin Development section before Recipes in SUMMARY.md (04-01)
 - TypeDoc outputs to docs/book/api/plugin-sdk/ (build dir, not source dir) -- must run after mdbook build (04-02)
 - Added missing SDK exports (EnrichmentRendererContribution, EnrichmentRenderersApi) for TypeDoc completeness (04-02)
+- [Phase 02]: Each template generates standalone typed const declarations at module scope for readability (02-02)
+- [Phase 02]: Test template uses getTypeSpecificAssertions() switch to produce per-type assertion lines (02-02)
+- [Phase 02]: Source router throws on unknown plugin type rather than falling back to default template (02-02)
 
 ### Pending Todos
 None.
@@ -74,6 +77,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-23T00:40:58Z
-Stopped at: Completed 04-02-PLAN.md
+Last session: 2026-03-23T00:45:22.134Z
+Stopped at: Completed 02-02-PLAN.md
 Resume file: None

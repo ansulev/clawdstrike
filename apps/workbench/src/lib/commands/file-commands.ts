@@ -7,14 +7,13 @@ import { usePaneStore } from "@/features/panes/pane-store";
 export interface FileCommandDeps {
   saveFile: () => Promise<void>;
   saveFileAs: () => Promise<void>;
-  newPolicy: () => void;
   openFile: () => Promise<void>;
   exportYaml: () => void;
   copyYaml: () => void;
 }
 
 export function registerFileCommands(deps: FileCommandDeps): void {
-  const { saveFile, saveFileAs, newPolicy, openFile, exportYaml, copyYaml } = deps;
+  const { saveFile, saveFileAs, openFile, exportYaml, copyYaml } = deps;
 
   const commands: Command[] = [
     {
@@ -94,14 +93,9 @@ export function registerFileCommands(deps: FileCommandDeps): void {
       category: "File",
       keybinding: "Meta+N",
       execute: () => {
-        newPolicy();
-        // Open the newly created tab in the pane system
-        const newTab = usePolicyTabsStore.getState().getActiveTab();
-        if (newTab) {
-          const route = newTab.filePath
-            ? `/file/${newTab.filePath}`
-            : `/file/__new__/${newTab.id}`;
-          usePaneStore.getState().openApp(route, newTab.name || "Untitled");
+        const newTabId = usePolicyTabsStore.getState().newTab();
+        if (newTabId) {
+          usePaneStore.getState().openApp(`/file/__new__/${newTabId}`, "Untitled");
         }
       },
     },

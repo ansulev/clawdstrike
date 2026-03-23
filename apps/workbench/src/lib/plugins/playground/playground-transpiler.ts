@@ -38,18 +38,30 @@ export function transpilePlugin(source: string): {
     let code = result.code;
 
     // Step 2: Replace SDK imports with window global destructuring
-    // Match: import { createPlugin, ...others } from "@clawdstrike/plugin-sdk";
-    // Also handle: import { createPlugin } from '@clawdstrike/plugin-sdk';
-    code = code.replace(
-      /import\s*\{([^}]+)\}\s*from\s*['"]@clawdstrike\/plugin-sdk['"];?/g,
-      (_match, imports: string) => {
-        const names = imports
-          .split(",")
-          .map((s: string) => s.trim())
-          .filter(Boolean);
-        return `const { ${names.join(", ")} } = window.__CLAWDSTRIKE_PLUGIN_SDK__;`;
-      },
-    );
+    // Handle: import { X } from "@clawdstrike/plugin-sdk"
+    // Handle: import { X,\n  Y } from "@clawdstrike/plugin-sdk" (multi-line)
+    // Handle: import type { X } from "@clawdstrike/plugin-sdk" (strip entirely)
+    // Handle: import * as SDK from "@clawdstrike/plugin-sdk"
+    const SDK_IMPORT_RE = /import\s+(?:type\s+)?(?:\{[^}]*\}|\*\s+as\s+\w+)\s+from\s*['"]@clawdstrike\/plugin-sdk(?:\/\w+)?['"];?\s*/gs;
+    code = code.replace(SDK_IMPORT_RE, (match) => {
+      // Strip type-only imports entirely
+      if (/^import\s+type\s/.test(match)) return '';
+
+      // For namespace imports: import * as SDK from "..."
+      const nsMatch = match.match(/import\s+\*\s+as\s+(\w+)/);
+      if (nsMatch) {
+        return `const ${nsMatch[1]} = window.__CLAWDSTRIKE_PLUGIN_SDK__;\n`;
+      }
+
+      // For named imports: import { X, Y } from "..."
+      const namedMatch = match.match(/import\s*\{([^}]+)\}/s);
+      if (namedMatch) {
+        const names = namedMatch[1].split(',').map((n: string) => n.trim()).filter(Boolean);
+        return `const { ${names.join(', ')} } = window.__CLAWDSTRIKE_PLUGIN_SDK__;\n`;
+      }
+
+      return match; // Shouldn't reach here
+    });
 
     // Step 3: Replace `export default` with window assignment
     code = code.replace(

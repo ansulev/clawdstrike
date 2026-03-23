@@ -9,10 +9,23 @@ import { usePaneStore } from "@/features/panes/pane-store";
 import { consumePendingEditorReveal } from "@/lib/workbench/editor-reveal";
 
 const openFileByPath = vi.fn<(...args: [string]) => Promise<void>>();
+const { searchInProjectNative, mockedWorkbenchState } = vi.hoisted(() => ({
+  searchInProjectNative: vi.fn(),
+  mockedWorkbenchState: {
+    tabs: [] as Array<{ filePath?: string | null }>,
+  },
+}));
+
+vi.mock("@/lib/tauri-commands", () => ({
+  searchInProjectNative,
+}));
 
 vi.mock("@/features/policy/stores/policy-store", () => ({
   useWorkbench: () => ({
     openFileByPath,
+  }),
+  useMultiPolicy: () => ({
+    tabs: mockedWorkbenchState.tabs,
   }),
 }));
 
@@ -20,6 +33,17 @@ describe("SearchPanelConnected", () => {
   beforeEach(() => {
     openFileByPath.mockReset();
     openFileByPath.mockResolvedValue();
+    searchInProjectNative.mockReset();
+    searchInProjectNative.mockResolvedValue({
+      matches: [],
+      file_count: 0,
+      total_matches: 0,
+      truncated: false,
+    });
+    mockedWorkbenchState.tabs = [
+      { filePath: "/workspace/project/policies/example.yml" },
+      { filePath: "/workspace/project/rules/other.yml" },
+    ];
     usePaneStore.getState()._reset();
     useProjectStore.setState({
       projectRoots: ["/workspace/project"],
@@ -73,6 +97,15 @@ describe("SearchPanelConnected", () => {
   });
 
   it("opens the matched file and queues an editor reveal", async () => {
+    useProjectStore.setState({
+      project: {
+        rootPath: "workspace",
+        name: "Workspace",
+        files: [],
+        expandedDirs: new Set<string>(),
+      },
+    });
+
     render(
       <MemoryRouter>
         <SearchPanelConnected />
@@ -91,6 +124,37 @@ describe("SearchPanelConnected", () => {
       lineNumber: 12,
       startColumn: 9,
       endColumn: 15,
+    });
+  });
+
+  it("derives a real search root when the workspace uses a synthetic project path", async () => {
+    useProjectStore.setState({
+      project: {
+        rootPath: "workspace",
+        name: "Workspace",
+        files: [],
+        expandedDirs: new Set<string>(),
+      },
+    });
+
+    render(
+      <MemoryRouter>
+        <SearchPanelConnected />
+      </MemoryRouter>,
+    );
+
+    const input = screen.getByPlaceholderText("Search files...");
+    await userEvent.click(input);
+    await userEvent.keyboard("{Enter}");
+
+    await waitFor(() => {
+      expect(searchInProjectNative).toHaveBeenCalledWith(
+        "/workspace/project",
+        "needle",
+        false,
+        false,
+        false,
+      );
     });
   });
 });

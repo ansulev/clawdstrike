@@ -1666,7 +1666,6 @@ fn collect_search_files(
     if is_search_cancelled(cancellation_flag) {
         return false;
     }
-
     let entries = match std::fs::read_dir(dir) {
         Ok(e) => e,
         Err(_) => return true,

@@ -10,6 +10,7 @@ import type { SigilType } from "@/lib/workbench/sentinel-manager";
 import { useActivityBarStore } from "../stores/activity-bar-store";
 import { ACTIVITY_BAR_ITEMS } from "../types";
 import { ActivityBarItem } from "./activity-bar-item";
+import { PresenceActivityPills } from "@/features/presence/components/presence-activity-pills";
 import { cn } from "@/lib/utils";
 
 // ---------------------------------------------------------------------------
@@ -99,6 +100,16 @@ export function ActivityBar() {
           />
         ))}
       </div>
+
+      {/* Analyst presence pills */}
+      <div
+        className="mx-3 mt-1 mb-0.5 h-px"
+        style={{
+          background:
+            "linear-gradient(to right, rgba(111,127,154,0.12), transparent 60%)",
+        }}
+      />
+      <PresenceActivityPills />
 
       {/* Flexible spacer */}
       <div className="flex-1" />

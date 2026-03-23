@@ -1,19 +1,3 @@
-/**
- * Cross-format field mapping registry.
- *
- * Maps Sigma canonical field names to their equivalents in Splunk CIM,
- * Microsoft Sentinel, Elastic Common Schema (ECS), and Google Chronicle
- * Unified Data Model (UDM). This is the backbone of cross-format
- * translation -- without it, SPL<->Sigma<->KQL translations produce
- * syntactically correct but semantically wrong queries.
- *
- * Plugins can extend the registry via `registerFieldMappings()` to add
- * mappings for platform-specific or custom fields. Use `translateField()`
- * for quick lookups of a single Sigma field in a target platform, or
- * `getFieldMapping()` for the full entry.
- */
-
-// ---- Types ----
 
 export interface FieldMappingEntry {
   /** Sigma canonical field name (e.g. "CommandLine"). */
@@ -33,7 +17,6 @@ export interface FieldMappingEntry {
 /** Platform target key for field translation. */
 export type FieldMappingTarget = "splunkCIM" | "sentinelField" | "ecsField" | "udmPath";
 
-// ---- Built-in Mappings ----
 
 /**
  * 50+ built-in field mapping entries covering the most common detection
@@ -47,7 +30,6 @@ export type FieldMappingTarget = "splunkCIM" | "sentinelField" | "ecsField" | "u
  * that may vary across SIEM versions or deployments.
  */
 export const BUILTIN_FIELD_MAPPINGS: FieldMappingEntry[] = [
-  // ---- Process (15 entries) ----
   {
     sigmaField: "CommandLine",
     splunkCIM: "process",
@@ -175,7 +157,6 @@ export const BUILTIN_FIELD_MAPPINGS: FieldMappingEntry[] = [
     category: "process",
   },
 
-  // ---- File (8 entries) ----
   {
     sigmaField: "TargetFilename",
     splunkCIM: "file_path",
@@ -255,7 +236,6 @@ export const BUILTIN_FIELD_MAPPINGS: FieldMappingEntry[] = [
     category: "file",
   },
 
-  // ---- Network (10 entries) ----
   {
     sigmaField: "SourceIp",
     splunkCIM: "src_ip",
@@ -346,7 +326,6 @@ export const BUILTIN_FIELD_MAPPINGS: FieldMappingEntry[] = [
     category: "network",
   },
 
-  // ---- DNS (5 entries) ----
   {
     sigmaField: "QueryName",
     splunkCIM: "query",
@@ -394,7 +373,6 @@ export const BUILTIN_FIELD_MAPPINGS: FieldMappingEntry[] = [
     category: "dns",
   },
 
-  // ---- Registry (5 entries) ----
   {
     sigmaField: "TargetObject",
     splunkCIM: "registry_path",
@@ -445,7 +423,6 @@ export const BUILTIN_FIELD_MAPPINGS: FieldMappingEntry[] = [
     category: "registry",
   },
 
-  // ---- Authentication (7 entries) ----
   {
     sigmaField: "LogonType",
     splunkCIM: "logon_type",
@@ -511,7 +488,6 @@ export const BUILTIN_FIELD_MAPPINGS: FieldMappingEntry[] = [
   },
 ];
 
-// ---- Registry Backing Store ----
 
 /** Module-level map keyed by sigmaField for O(1) lookups. */
 const fieldMap = new Map<string, FieldMappingEntry>();
@@ -521,7 +497,6 @@ for (const entry of BUILTIN_FIELD_MAPPINGS) {
   fieldMap.set(entry.sigmaField, entry);
 }
 
-// ---- Registry Functions ----
 
 /**
  * Register additional field mappings (e.g. from plugins).

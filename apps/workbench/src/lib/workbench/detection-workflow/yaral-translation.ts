@@ -1,20 +1,3 @@
-/**
- * YARA-L Translation Provider -- bidirectional Sigma <-> YARA-L translation.
- *
- * Direction 1: sigma_rule -> yaral_rule
- *   Parses Sigma YAML, maps fields to UDM paths via translateField(), converts
- *   logsource to Chronicle event types, and renders a syntactically valid YARA-L
- *   rule with meta, events, and condition sections.
- *
- * Direction 2: yaral_rule -> sigma_rule
- *   Parses YARA-L rule text, reverse-maps UDM paths to Sigma field names via
- *   getAllFieldMappings(), converts event predicates to Sigma detection blocks,
- *   and builds valid Sigma YAML. Multi-event correlation rules populate
- *   untranslatableFeatures with descriptions of lost semantics.
- *
- * Registered into the translation provider registry at module load.
- */
-
 import type {
   TranslationProvider,
   TranslationResult,
@@ -28,7 +11,6 @@ import { translateField, getAllFieldMappings } from "./field-mappings";
 import { parseYaralRule } from "./yaral-adapter";
 import type { YaralEventPredicate, ParsedYaralRule } from "./yaral-adapter";
 
-// ---- Sigma Level -> Chronicle Severity ----
 
 function sigmaLevelToChronicle(level: SigmaLevel | undefined): string {
   switch (level) {
@@ -47,7 +29,6 @@ function sigmaLevelToChronicle(level: SigmaLevel | undefined): string {
   }
 }
 
-// ---- Chronicle Severity -> Sigma Level ----
 
 function chronicleSeverityToSigma(severity: string | undefined): string {
   switch (severity?.toUpperCase()) {
@@ -66,7 +47,6 @@ function chronicleSeverityToSigma(severity: string | undefined): string {
   }
 }
 
-// ---- Sigma Logsource -> UDM Event Type ----
 
 function logsourceToEventType(logsource: SigmaLogsource | undefined): string {
   if (!logsource) return "GENERIC_EVENT";
@@ -95,7 +75,6 @@ function logsourceToEventType(logsource: SigmaLogsource | undefined): string {
   }
 }
 
-// ---- UDM Event Type -> Sigma Logsource Category ----
 
 function eventTypeToLogsource(eventType: string): string {
   switch (eventType.toUpperCase()) {
@@ -116,7 +95,6 @@ function eventTypeToLogsource(eventType: string): string {
   }
 }
 
-// ---- Rule Name Normalization ----
 
 function normalizeRuleName(title: string): string {
   return title
@@ -125,7 +103,6 @@ function normalizeRuleName(title: string): string {
     .replace(/[^a-z0-9_]/g, "");
 }
 
-// ---- MITRE ATT&CK Tag Extraction ----
 
 function extractTechniques(tags: string[] | undefined): string[] {
   if (!tags) return [];
@@ -134,7 +111,6 @@ function extractTechniques(tags: string[] | undefined): string[] {
     .map((t) => t.replace(/^attack\./, "").toUpperCase());
 }
 
-// ---- Sigma Detection Field Parsing ----
 
 interface ParsedSigmaField {
   baseField: string;
@@ -155,7 +131,6 @@ function normalizeDetectionValues(value: unknown): string[] {
   return [String(value)];
 }
 
-// ---- Direction 1: Sigma -> YARA-L ----
 
 function sigmaToYaral(source: string): TranslationResult {
   const diagnostics: TranslationDiagnostic[] = [];
@@ -297,7 +272,6 @@ function buildYaralPredicate(
   return `$e.${fieldPath} = "${value.replace(/"/g, '\\"')}"`;
 }
 
-// ---- Direction 2: YARA-L -> Sigma ----
 
 function yaralToSigma(source: string): TranslationResult {
   const diagnostics: TranslationDiagnostic[] = [];
@@ -460,7 +434,6 @@ function yaralToSigma(source: string): TranslationResult {
   };
 }
 
-// ---- Reverse UDM -> Sigma Mapping ----
 
 /**
  * Build a reverse lookup map: udmPath -> sigmaField.
@@ -482,7 +455,6 @@ function buildReverseUdmMap(): Map<string, string> {
   return reverseMap;
 }
 
-// ---- YARA-L Predicate -> Sigma Modifier ----
 
 interface SigmaModifierResult {
   modifier: string | null;
@@ -521,7 +493,6 @@ function yaralPredicateToSigmaModifier(pred: YaralEventPredicate): SigmaModifier
   return { modifier: "|re", cleanValue: pattern };
 }
 
-// ---- Rule Name Formatting ----
 
 /**
  * Convert a snake_case YARA-L rule name to a human-readable title.
@@ -532,7 +503,6 @@ function normalizeRuleNameToTitle(ruleName: string): string {
     .replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-// ---- Simple YAML Renderer ----
 
 /**
  * Render a Sigma rule object to YAML string without depending on the yaml library.
@@ -589,7 +559,6 @@ function formatYamlScalar(value: string | number | boolean): string {
   return value;
 }
 
-// ---- Translation Provider ----
 
 const yaralTranslationProvider: TranslationProvider = {
   canTranslate(from, to): boolean {
@@ -620,7 +589,6 @@ const yaralTranslationProvider: TranslationProvider = {
   },
 };
 
-// ---- Auto-register ----
 
 registerTranslationProvider(yaralTranslationProvider);
 

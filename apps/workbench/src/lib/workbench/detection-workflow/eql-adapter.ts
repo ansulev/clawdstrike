@@ -1,17 +1,3 @@
-/**
- * EQL workflow adapter -- implements DetectionWorkflowAdapter for eql_rule.
- *
- * Generates Elastic EQL queries from DraftSeeds, builds starter evidence
- * packs with ECS-normalized event payloads, provides full client-side lab
- * execution with per-step sequence matching and plugin_trace explainability,
- * and publishes to "eql" and "json_export" targets with NDJSON detection
- * rule wrapping.
- *
- * Lab execution uses evaluateEqlCondition for dotted-path ECS field resolution,
- * matchSingleQuery for single-event queries, and matchSequenceQuery for
- * multi-step sequence queries with per-step result tracking.
- */
-
 import type { DetectionWorkflowAdapter } from "./adapters";
 import { registerAdapter } from "./adapters";
 import { registerFileType } from "../file-type-registry";
@@ -47,7 +33,6 @@ import {
   type EqlEventCategory,
 } from "./eql-parser";
 
-// ---- SHA-256 ----
 
 async function sha256Hex(text: string): Promise<string> {
   const data = new TextEncoder().encode(text);
@@ -57,7 +42,6 @@ async function sha256Hex(text: string): Promise<string> {
     .join("");
 }
 
-// ---- File Type Registration ----
 
 const EQL_STARTER_TEMPLATE = `// Elastic EQL Detection Rule
 // Event category prefix: process, file, network, registry, dns
@@ -84,7 +68,6 @@ registerFileType({
   },
 });
 
-// ---- Draft Helpers ----
 
 /**
  * Infer level / risk_score from seed confidence.
@@ -191,7 +174,6 @@ function buildConditionsFromSeed(
   return conditions;
 }
 
-// ---- Evidence Normalization ----
 
 /**
  * Normalize an event payload to include ECS field names alongside any existing fields.
@@ -228,7 +210,6 @@ function normalizeEventPayloadForEql(
   return normalized;
 }
 
-// ---- Client-Side EQL Matching ----
 
 /**
  * Resolve a dotted field path from a payload object.
@@ -467,7 +448,6 @@ function findEqlSourceLineHints(source: string, fields: string[]): number[] {
   return [...hints].sort((a, b) => a - b);
 }
 
-// ---- EQL Adapter ----
 
 const eqlAdapter: DetectionWorkflowAdapter = {
   fileType: "eql_rule",
@@ -558,7 +538,6 @@ const eqlAdapter: DetectionWorkflowAdapter = {
   buildStarterEvidence(seed: DraftSeed, document: DetectionDocumentRef): EvidencePack {
     const datasets = createEmptyDatasets();
 
-    // Build structured_event items from source events with ECS normalization
     for (const eventId of seed.sourceEventIds) {
       const eventData = seed.extractedFields[eventId] as Record<string, unknown> | undefined;
       const item: EvidenceItem = {
@@ -678,7 +657,6 @@ const eqlAdapter: DetectionWorkflowAdapter = {
     const traces: ExplainabilityTrace[] = [];
 
     if (ast.type === "single") {
-      // ---- Single-event query: evaluate each evidence item ----
       for (const { item, dataset } of eventItems) {
         const caseId = item.id;
         const expectedMatch =
@@ -729,7 +707,6 @@ const eqlAdapter: DetectionWorkflowAdapter = {
         });
       }
     } else {
-      // ---- Sequence query: per-step matching across all events ----
       const indexedEvents = eventItems.map(({ item }, index) => ({ item, index }));
       const seqResult = matchSequenceQuery(ast, indexedEvents);
 
@@ -816,7 +793,6 @@ const eqlAdapter: DetectionWorkflowAdapter = {
       }
     }
 
-    // Compute summary
     const totalCases = results.length;
     const passed = results.filter((r) => r.status === "pass").length;
     const failed = results.filter((r) => r.status === "fail").length;
@@ -847,7 +823,6 @@ const eqlAdapter: DetectionWorkflowAdapter = {
       explainability: traces,
     };
 
-    // Build ReportArtifact summary with engine: "client"
     const reportArtifacts: ReportArtifact[] = [
       {
         id: crypto.randomUUID(),
@@ -980,7 +955,6 @@ const eqlAdapter: DetectionWorkflowAdapter = {
   },
 };
 
-// ---- Auto-register ----
 
 registerAdapter(eqlAdapter);
 

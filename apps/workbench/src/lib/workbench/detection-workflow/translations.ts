@@ -1,20 +1,7 @@
-/**
- * Translation Provider Registry
- *
- * Stores translation providers that can convert detection documents between
- * file types. Providers are registered into a global array (not a map) because
- * a single provider may handle multiple (from, to) pairs.
- *
- * Lookup uses a first-match strategy: getTranslationPath iterates providers
- * in registration order and returns the first one whose canTranslate() returns
- * true for the requested pair.
- */
-
 import type { FileType } from "../file-type-registry";
 import type { TranslationProvider, TranslationRequest, TranslationResult } from "./shared-types";
 import { getRegisteredFileTypes } from "./adapters";
 
-// ---- Registry ----
 
 const providers: TranslationProvider[] = [];
 

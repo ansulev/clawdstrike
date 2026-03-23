@@ -1,18 +1,3 @@
-/**
- * KQL Translation Provider -- bidirectional Sigma <-> KQL translation.
- *
- * Direction 1: sigma_rule -> kql_rule
- *   Uses the existing convertSigmaToQuery(source, "kql") from sigma-conversion.ts,
- *   then enriches the result with field mapping metadata.
- *
- * Direction 2: kql_rule -> sigma_rule
- *   Parses KQL where-clauses via parseKqlQuery(), reverse-maps Sentinel field names
- *   to Sigma canonical names, maps KQL operators to Sigma modifiers, and builds a
- *   valid Sigma YAML rule with appropriate logsource and detection blocks.
- *
- * Registered into the translation provider registry at module load.
- */
-
 import YAML from "yaml";
 import type { TranslationProvider, TranslationResult, TranslationDiagnostic, FieldMapping } from "./shared-types";
 import { registerTranslationProvider } from "./translations";
@@ -21,7 +6,6 @@ import { parseKqlQuery } from "./kql-adapter";
 import type { KqlWhereClause } from "./kql-adapter";
 import { getFieldMapping, getAllFieldMappings } from "./field-mappings";
 
-// ---- Sentinel Table -> Sigma Logsource ----
 
 interface SigmaLogsource {
   category: string;
@@ -54,7 +38,6 @@ function sentinelTableToLogsource(
   }
 }
 
-// ---- KQL Operator -> Sigma Modifier ----
 
 function kqlOperatorToSigmaModifier(operator: string): string | null {
   switch (operator) {
@@ -75,7 +58,6 @@ function kqlOperatorToSigmaModifier(operator: string): string | null {
   }
 }
 
-// ---- Reverse Field Mapping (Sentinel -> Sigma) ----
 
 /**
  * Build a reverse lookup map: sentinelField -> sigmaField.
@@ -97,7 +79,6 @@ function buildReverseSentinelMap(): Map<string, string> {
   return reverseMap;
 }
 
-// ---- Untranslatable Feature Detection ----
 
 /**
  * Detect KQL features that have no Sigma equivalent.
@@ -127,7 +108,6 @@ function detectUntranslatableFeatures(source: string): string[] {
   return features;
 }
 
-// ---- Translation Provider ----
 
 const kqlTranslationProvider: TranslationProvider = {
   canTranslate(from, to): boolean {
@@ -138,12 +118,10 @@ const kqlTranslationProvider: TranslationProvider = {
   },
 
   async translate(request): Promise<TranslationResult> {
-    // ---- Direction 1: sigma_rule -> kql_rule ----
     if (request.sourceFileType === "sigma_rule" && request.targetFileType === "kql_rule") {
       return translateSigmaToKql(request.source);
     }
 
-    // ---- Direction 2: kql_rule -> sigma_rule ----
     if (request.sourceFileType === "kql_rule" && request.targetFileType === "sigma_rule") {
       return translateKqlToSigma(request.source);
     }
@@ -158,7 +136,6 @@ const kqlTranslationProvider: TranslationProvider = {
   },
 };
 
-// ---- Sigma -> KQL ----
 
 function translateSigmaToKql(source: string): TranslationResult {
   const result = convertSigmaToQuery(source, "kql");
@@ -205,7 +182,6 @@ function translateSigmaToKql(source: string): TranslationResult {
   };
 }
 
-// ---- KQL -> Sigma ----
 
 function translateKqlToSigma(source: string): TranslationResult {
   const diagnostics: TranslationDiagnostic[] = [];
@@ -328,7 +304,6 @@ function translateKqlToSigma(source: string): TranslationResult {
   };
 }
 
-// ---- Auto-register ----
 
 registerTranslationProvider(kqlTranslationProvider);
 

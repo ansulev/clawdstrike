@@ -1,11 +1,3 @@
-/**
- * React hook for invoking format-to-format translation.
- *
- * Wraps chainTranslation() with React state management for loading,
- * result, and error states. Used by the command palette and any
- * UI component that triggers translation.
- */
-
 import { useState, useCallback } from "react";
 import type { FileType } from "../file-type-registry";
 import type { TranslationResult } from "./shared-types";

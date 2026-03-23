@@ -1,14 +1,3 @@
-/**
- * KQL (Microsoft Sentinel) workflow adapter -- implements DetectionWorkflowAdapter for kql_rule.
- *
- * Generates KQL queries from DraftSeeds using Sentinel table names and field mappings,
- * builds starter evidence packs with structured event items, provides client-side KQL
- * lab execution by parsing where-clauses and matching against evidence, and supports
- * publication to raw KQL or Sentinel Analytics Rule JSON.
- *
- * Also exports KQL parser utilities used by the visual panel and translation provider.
- */
-
 import type { DetectionWorkflowAdapter } from "./adapters";
 import { registerAdapter } from "./adapters";
 import { registerFileType } from "../file-type-registry";
@@ -33,7 +22,6 @@ import type {
 } from "./execution-types";
 import { translateField } from "./field-mappings";
 
-// ---- SHA-256 ----
 
 async function sha256Hex(text: string): Promise<string> {
   const data = new TextEncoder().encode(text);
@@ -43,9 +31,6 @@ async function sha256Hex(text: string): Promise<string> {
     .join("");
 }
 
-// ============================================================================
-// Section 1: KQL Parser Utilities
-// ============================================================================
 
 /**
  * A single KQL where-clause condition, parsed from a `| where` segment.
@@ -79,7 +64,6 @@ export interface KqlParsedQuery {
   comments: string[];
 }
 
-/** KQL operators ordered so multi-word operators match before single-word ones. */
 const KQL_OPERATORS = [
   "matches regex",
   "!startswith",
@@ -355,9 +339,6 @@ export function clientSideKqlMatch(
   return true;
 }
 
-// ============================================================================
-// Section 2: File Type Registration
-// ============================================================================
 
 const KQL_STARTER_TEMPLATE = `// KQL Detection Rule
 // Table: SecurityEvent
@@ -407,11 +388,6 @@ registerFileType({
   detect: detectKqlContent,
 });
 
-// ============================================================================
-// Section 3: KQL Adapter Implementation
-// ============================================================================
-
-// ---- Sentinel Table Mapping ----
 
 function inferSentinelTable(dataSourceHints: string[]): { table: string; eventIdClause: string | null } {
   if (dataSourceHints.includes("process") || dataSourceHints.includes("command")) {
@@ -429,7 +405,6 @@ function inferSentinelTable(dataSourceHints: string[]): { table: string; eventId
   return { table: "SecurityEvent", eventIdClause: null };
 }
 
-// ---- Modifier Mapping for KQL Operators ----
 
 function sigmaModifierToKqlOperator(modifier: string | undefined): string {
   switch (modifier) {
@@ -446,7 +421,6 @@ function sigmaModifierToKqlOperator(modifier: string | undefined): string {
   }
 }
 
-// ---- Event Payload Normalization for KQL ----
 
 function normalizeEventPayloadForKql(
   eventData: Record<string, unknown> | undefined,
@@ -474,7 +448,6 @@ function normalizeEventPayloadForKql(
   return normalized;
 }
 
-// ---- Source Line Hints ----
 
 function findKqlSourceLineHints(source: string, matchedFields: string[]): number[] {
   const lines = source.split(/\r?\n/);
@@ -494,7 +467,6 @@ function findKqlSourceLineHints(source: string, matchedFields: string[]): number
   return [...hints].sort((a, b) => a - b);
 }
 
-// ---- KQL Adapter ----
 
 const kqlAdapter: DetectionWorkflowAdapter = {
   fileType: "kql_rule",
@@ -511,7 +483,6 @@ const kqlAdapter: DetectionWorkflowAdapter = {
     const { table, eventIdClause } = inferSentinelTable(seed.dataSourceHints);
     const title = `Detection: ${seed.kind} ${seed.id.slice(0, 8)}`;
 
-    // Build where clauses from seed extracted fields
     const whereClauses: string[] = [];
 
     if (eventIdClause) {
@@ -556,7 +527,6 @@ const kqlAdapter: DetectionWorkflowAdapter = {
       whereClauses.push(`CommandLine contains "suspicious"`);
     }
 
-    // Build project columns
     const projectCols = ["TimeGenerated", "Computer"];
     // Add any mapped fields from seed.extractedFields
     for (const key of Object.keys(seed.extractedFields)) {
@@ -569,7 +539,6 @@ const kqlAdapter: DetectionWorkflowAdapter = {
       }
     }
 
-    // Build KQL text
     const lines: string[] = [];
     lines.push(`// ${title}`);
     lines.push(`// Generated from ${seed.kind} seed`);
@@ -592,7 +561,6 @@ const kqlAdapter: DetectionWorkflowAdapter = {
   buildStarterEvidence(seed: DraftSeed, document: DetectionDocumentRef): EvidencePack {
     const datasets = createEmptyDatasets();
 
-    // Build structured_event items from source events, normalizing to Sentinel field names
     for (const eventId of seed.sourceEventIds) {
       const eventData = seed.extractedFields[eventId] as Record<string, unknown> | undefined;
       const item: EvidenceItem = {
@@ -657,11 +625,9 @@ const kqlAdapter: DetectionWorkflowAdapter = {
       };
     }
 
-    // Parse the KQL query
     const parsed = parseKqlQuery(source);
     const whereClauses = parsed.whereClauses;
 
-    // Collect all evidence items across datasets
     const allItems: Array<{ item: EvidenceItem; dataset: EvidenceDatasetKind }> = [];
     for (const [datasetKind, items] of Object.entries(evidencePack.datasets)) {
       for (const item of items) {
@@ -697,7 +663,6 @@ const kqlAdapter: DetectionWorkflowAdapter = {
         explanationRefIds: [traceId],
       });
 
-      // Build matched/unmatched clause lists for trace data
       const matchedClauses: string[] = [];
       const unmatchedClauses: string[] = [];
       const matchedFields: Array<{ path: string; value: string }> = [];
@@ -906,9 +871,6 @@ const kqlAdapter: DetectionWorkflowAdapter = {
   },
 };
 
-// ============================================================================
-// Section 4: Auto-register
-// ============================================================================
 
 registerAdapter(kqlAdapter);
 

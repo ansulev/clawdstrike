@@ -1,16 +1,5 @@
 "use client";
 
-/**
- * KQL Visual Panel -- tabular expression editor for Microsoft Sentinel KQL rules.
- *
- * Renders a structured view of a KQL query: source table selector, editable
- * where-clause filter cards (field / operator / value), projection column list,
- * and extend expression display. Editing any field reconstructs valid KQL and
- * calls onSourceChange for live round-trip updates.
- *
- * Self-registers for the "kql_rule" file type via registerVisualPanel().
- */
-
 import { useMemo, useCallback, useState } from "react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
@@ -38,7 +27,6 @@ import {
   IconChevronRight,
 } from "@tabler/icons-react";
 
-// ---- Constants ----
 
 /** Default accent color for KQL panels (Microsoft blue). */
 const DEFAULT_ACCENT = "#0078d4";
@@ -80,7 +68,6 @@ const KQL_OPERATORS: SelectOption[] = [
   { value: "!in", label: "!in" },
 ];
 
-// ---- Round-trip Reconstruction ----
 
 /**
  * Reconstruct a valid KQL query string from its parsed components.
@@ -137,7 +124,6 @@ function reconstructKql(
   return lines.join("\n") + "\n";
 }
 
-// ---- Where Clause Card ----
 
 function WhereClauseCard({
   clause,
@@ -212,7 +198,6 @@ function WhereClauseCard({
   );
 }
 
-// ---- Raw KQL Preview (collapsible) ----
 
 function RawKqlPreview({ kql, accentColor }: { kql: string; accentColor: string }) {
   const [open, setOpen] = useState(false);
@@ -252,7 +237,6 @@ function RawKqlPreview({ kql, accentColor }: { kql: string; accentColor: string 
   );
 }
 
-// ---- Main Panel ----
 
 export function KqlVisualPanel(props: DetectionVisualPanelProps) {
   const { source, onSourceChange, readOnly, accentColor } = props;
@@ -261,7 +245,6 @@ export function KqlVisualPanel(props: DetectionVisualPanelProps) {
   // Parse the current KQL source into structured components
   const parsed: KqlParsedQuery = useMemo(() => parseKqlQuery(source), [source]);
 
-  // ---- Table change handler ----
 
   const handleTableChange = useCallback(
     (newTable: string) => {
@@ -277,7 +260,6 @@ export function KqlVisualPanel(props: DetectionVisualPanelProps) {
     [parsed, onSourceChange],
   );
 
-  // ---- Where-clause field/operator/value handlers ----
 
   const handleFieldChange = useCallback(
     (index: number, value: string) => {
@@ -360,7 +342,6 @@ export function KqlVisualPanel(props: DetectionVisualPanelProps) {
     onSourceChange(kql);
   }, [parsed, onSourceChange]);
 
-  // ---- Projection columns handler ----
 
   const handleProjectionChange = useCallback(
     (value: string) => {
@@ -551,7 +532,5 @@ export function KqlVisualPanel(props: DetectionVisualPanelProps) {
   );
 }
 
-// ---- Self-registration ----
-// Register KqlVisualPanel in the visual panel registry at module load.
 registerVisualPanel("kql_rule", KqlVisualPanel);
 export { KqlVisualPanel as default };

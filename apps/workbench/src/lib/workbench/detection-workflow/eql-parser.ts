@@ -1,17 +1,3 @@
-/**
- * EQL parser and code generator.
- *
- * Parses Elastic Event Query Language (EQL) into an AST and generates
- * syntactically valid EQL from AST nodes. Handles both single-event queries
- * (`process where ...`) and multi-event sequence queries
- * (`sequence by host.id [process where ...] [file where ...]`).
- *
- * Operators: == != : ~ >= <= > < in
- * Logic: and / or (within a single step)
- * Sequences: by-fields, maxspan, until clause
- */
-
-// ---- AST Types ----
 
 export type EqlEventCategory = "process" | "file" | "network" | "registry" | "dns" | "any";
 
@@ -58,7 +44,6 @@ export interface EqlParseResult {
   errors: string[];
 }
 
-// ---- Internal Helpers ----
 
 const EVENT_CATEGORIES: Set<string> = new Set([
   "process",
@@ -289,7 +274,6 @@ function parseSingleQueryBody(
   };
 }
 
-// ---- Public API ----
 
 /**
  * Parse EQL source text into an AST.
@@ -495,7 +479,6 @@ function parseStepFromInner(inner: string): EqlSequenceStep | null {
   };
 }
 
-// ---- Generator ----
 
 /**
  * Generate syntactically valid EQL text from an AST node.
@@ -559,7 +542,6 @@ function formatCondition(cond: EqlCondition): string {
   return `${prefix}${cond.field} ${cond.operator} ${formatted}`;
 }
 
-// ---- Utility Functions ----
 
 /**
  * Extract all unique field names referenced in conditions across all steps.

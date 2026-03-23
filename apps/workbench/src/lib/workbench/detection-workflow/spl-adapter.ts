@@ -1,12 +1,3 @@
-/**
- * SPL workflow adapter -- implements DetectionWorkflowAdapter for splunk_spl.
- *
- * Generates Splunk SPL search queries from DraftSeeds, builds starter
- * evidence packs with CIM-mapped fields, provides client-side lab
- * execution via regex-based SPL parsing, and supports publication to
- * raw SPL and JSON export targets.
- */
-
 import type { DetectionWorkflowAdapter } from "./adapters";
 import { registerAdapter } from "./adapters";
 import { registerFileType } from "../file-type-registry";
@@ -38,7 +29,6 @@ import {
 } from "./spl-parser";
 import { translateField } from "./field-mappings";
 
-// ---- SHA-256 ----
 
 async function sha256Hex(text: string): Promise<string> {
   const data = new TextEncoder().encode(text);
@@ -48,7 +38,6 @@ async function sha256Hex(text: string): Promise<string> {
     .join("");
 }
 
-// ---- Default Content ----
 
 const SPL_DEFAULT_CONTENT = `// Untitled SPL Detection Rule
 // Author: Detection Lab
@@ -58,7 +47,6 @@ index=main sourcetype=WinEventLog:Security EventCode=4688
 | table _time, ComputerName, process, CommandLine
 `;
 
-// ---- File Type Registration ----
 
 registerFileType({
   id: "splunk_spl",
@@ -82,7 +70,6 @@ registerFileType({
   },
 });
 
-// ---- Field Mapping Helper ----
 
 function mapFieldToCIM(sigmaField: string): string {
   return translateField(sigmaField, "splunkCIM") ?? sigmaField;
@@ -100,7 +87,6 @@ function mapPayloadToCIM(payload: Record<string, unknown>): Record<string, unkno
   return mapped;
 }
 
-// ---- SPL Adapter ----
 
 const splAdapter: DetectionWorkflowAdapter = {
   fileType: "splunk_spl",
@@ -130,7 +116,6 @@ const splAdapter: DetectionWorkflowAdapter = {
   buildStarterEvidence(seed: DraftSeed, document: DetectionDocumentRef): EvidencePack {
     const datasets = createEmptyDatasets();
 
-    // Build structured_event items from source events
     for (const eventId of seed.sourceEventIds) {
       const eventData = seed.extractedFields[eventId] as Record<string, unknown> | undefined;
       const payload = eventData ? mapPayloadToCIM(eventData) : { eventId, source: seed.kind };
@@ -208,7 +193,6 @@ const splAdapter: DetectionWorkflowAdapter = {
       };
     }
 
-    // Collect all evidence items across datasets
     const allItems: Array<{ item: EvidenceItem; dataset: EvidenceDatasetKind }> = [];
     for (const [datasetKind, items] of Object.entries(evidencePack.datasets)) {
       for (const item of items) {
@@ -216,16 +200,13 @@ const splAdapter: DetectionWorkflowAdapter = {
       }
     }
 
-    // Filter to structured_event / ocsf_event items
     const eventItems = allItems.filter(
       ({ item }) => item.kind === "structured_event" || item.kind === "ocsf_event",
     );
 
-    // Parse SPL conditions from source
     const conditions = parseSplFieldConditions(source);
     const commandChain = parseSplPipeChain(source).map((c) => c.command);
 
-    // Evaluate each evidence item
     const results: LabCaseResult[] = [];
     const traces: ExplainabilityTrace[] = [];
 
@@ -369,7 +350,6 @@ const splAdapter: DetectionWorkflowAdapter = {
       // Wrap SPL in a structured JSON export
       const pipeChain = parseSplPipeChain(request.source);
 
-      // Extract technique hints from comments
       const techniqueHints: string[] = [];
       const lines = request.source.split(/\r?\n/);
       for (const line of lines) {
@@ -439,7 +419,6 @@ const splAdapter: DetectionWorkflowAdapter = {
   },
 };
 
-// ---- Auto-register ----
 
 registerAdapter(splAdapter);
 

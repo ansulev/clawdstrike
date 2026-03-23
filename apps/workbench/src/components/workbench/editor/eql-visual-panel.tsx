@@ -1,14 +1,3 @@
-/**
- * Visual panel for EQL (Elastic Event Query Language) detection rules.
- *
- * Provides two editing modes:
- *  - SingleQueryEditor: condition editor for simple `category where ...` queries
- *  - SequenceBuilder: multi-step sequence builder with reorderable step cards,
- *    maxspan editing, by-fields, and optional until clause
- *
- * All edits round-trip back to EQL source text via generateEql().
- * Self-registers for the "eql_rule" file type via registerVisualPanel().
- */
 import { useMemo, useCallback, useState } from "react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
@@ -39,8 +28,6 @@ import {
 } from "@/lib/workbench/detection-workflow/eql-parser";
 
 
-// ---- Constants ----
-
 /** Default accent color for EQL panels (Elastic pink). */
 const DEFAULT_ACCENT = "#f04e98";
 
@@ -65,8 +52,6 @@ const OPERATOR_OPTIONS = [
   { value: "in", label: "in (...)" },
 ];
 
-
-// ---- ConditionRow ----
 
 interface ConditionRowProps {
   condition: EqlCondition;
@@ -157,8 +142,6 @@ function ConditionRow({ condition, onChange, onRemove, readOnly }: ConditionRowP
   );
 }
 
-
-// ---- SingleQueryEditor ----
 
 interface SingleQueryEditorProps {
   query: EqlSingleQuery;
@@ -277,8 +260,6 @@ function SingleQueryEditor({ query, onUpdate, readOnly }: SingleQueryEditorProps
   );
 }
 
-
-// ---- SequenceBuilder ----
 
 interface SequenceBuilderProps {
   query: EqlSequenceQuery;
@@ -593,8 +574,6 @@ function SequenceBuilder({ query, onUpdate, readOnly }: SequenceBuilderProps) {
 }
 
 
-// ---- StepConditions ----
-
 interface StepConditionsProps {
   step: EqlSequenceStep;
   onUpdate: (s: EqlSequenceStep) => void;
@@ -695,8 +674,6 @@ function StepConditions({ step, onUpdate, readOnly }: StepConditionsProps) {
   );
 }
 
-
-// ---- Main Panel ----
 
 export function EqlVisualPanel(props: DetectionVisualPanelProps) {
   const { source, onSourceChange, readOnly, accentColor } = props;
@@ -817,6 +794,4 @@ export function EqlVisualPanel(props: DetectionVisualPanelProps) {
 }
 
 
-// ---- Self-registration ----
-// Register EqlVisualPanel in the visual panel registry at module load.
 registerVisualPanel("eql_rule", EqlVisualPanel);

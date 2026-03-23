@@ -1,9 +1,3 @@
-/**
- * Translation Results Panel -- displays the output of a format-to-format
- * translation including output text, field mappings, diagnostics, and
- * untranslatable features.
- */
-
 import { useState, useCallback } from "react";
 import type { FileType } from "@/lib/workbench/file-type-registry";
 import { getDescriptor } from "@/lib/workbench/file-type-registry";
@@ -11,7 +5,6 @@ import type { TranslationResult } from "@/lib/workbench/detection-workflow/share
 import { FieldMappingTable } from "./detection-panel-kit";
 import { IconX, IconCopy, IconCheck } from "@tabler/icons-react";
 
-// ---- Types ----
 
 interface TranslationResultsPanelProps {
   result: TranslationResult;
@@ -20,7 +13,6 @@ interface TranslationResultsPanelProps {
   onClose: () => void;
 }
 
-// ---- Severity Icons ----
 
 function DiagnosticIcon({ severity }: { severity: "error" | "warning" | "info" }) {
   if (severity === "error") {
@@ -44,7 +36,6 @@ function DiagnosticIcon({ severity }: { severity: "error" | "warning" | "info" }
   );
 }
 
-// ---- Format Dot ----
 
 function FormatDot({ fileType }: { fileType: FileType }) {
   try {
@@ -63,7 +54,6 @@ function FormatDot({ fileType }: { fileType: FileType }) {
   }
 }
 
-// ---- Panel ----
 
 export function TranslationResultsPanel({
   result,

@@ -1,18 +1,3 @@
-/**
- * SPL Translation Provider -- bidirectional Sigma <-> SPL translation.
- *
- * Direction 1: sigma_rule -> splunk_spl
- *   Uses the existing convertSigmaToQuery(source, "spl") from sigma-conversion.ts,
- *   then enriches the result with CIM field mapping metadata.
- *
- * Direction 2: splunk_spl -> sigma_rule
- *   Parses SPL conditions via parseSplFieldConditions(), reverse-maps Splunk CIM
- *   field names to Sigma canonical names, maps SPL modifiers to Sigma modifiers,
- *   and builds a valid Sigma YAML rule with appropriate logsource and detection blocks.
- *
- * Registered into the translation provider registry at module load.
- */
-
 import YAML from "yaml";
 import type {
   TranslationProvider,
@@ -25,7 +10,6 @@ import { convertSigmaToQuery } from "./sigma-conversion";
 import { parseSplFieldConditions, parseSplPipeChain } from "./spl-parser";
 import { getFieldMapping, getAllFieldMappings } from "./field-mappings";
 
-// ---- Sourcetype -> Sigma Logsource ----
 
 interface SigmaLogsource {
   category: string;
@@ -68,7 +52,6 @@ function sourcetypeToLogsource(
   return { category: "process_creation" };
 }
 
-// ---- Reverse Field Mapping (Splunk CIM -> Sigma) ----
 
 /**
  * Build a reverse lookup map: splunkCIM -> sigmaField.
@@ -90,7 +73,6 @@ function buildReverseCimMap(): Map<string, string> {
   return reverseMap;
 }
 
-// ---- SPL Modifier -> Sigma Modifier ----
 
 function splModifierToSigmaModifier(modifier: string | null): string | null {
   switch (modifier) {
@@ -107,7 +89,6 @@ function splModifierToSigmaModifier(modifier: string | null): string | null {
   }
 }
 
-// ---- Untranslatable Feature Detection ----
 
 /**
  * Detect SPL features that have no Sigma equivalent.
@@ -154,7 +135,6 @@ function detectUntranslatableFeatures(source: string): string[] {
   return features;
 }
 
-// ---- Comment Metadata Extraction ----
 
 interface SplCommentMeta {
   title: string;
@@ -196,7 +176,6 @@ function extractCommentMeta(source: string): SplCommentMeta {
   return { title, author, description };
 }
 
-// ---- Extract sourcetype from pipe chain ----
 
 function extractSourcetype(source: string): string | null {
   const commands = parseSplPipeChain(source);
@@ -213,7 +192,6 @@ function extractSourcetype(source: string): string | null {
   return null;
 }
 
-// ---- Translation Provider ----
 
 const splTranslationProvider: TranslationProvider = {
   canTranslate(from, to): boolean {
@@ -224,12 +202,10 @@ const splTranslationProvider: TranslationProvider = {
   },
 
   async translate(request): Promise<TranslationResult> {
-    // ---- Direction 1: sigma_rule -> splunk_spl ----
     if (request.sourceFileType === "sigma_rule" && request.targetFileType === "splunk_spl") {
       return translateSigmaToSpl(request.source);
     }
 
-    // ---- Direction 2: splunk_spl -> sigma_rule ----
     if (request.sourceFileType === "splunk_spl" && request.targetFileType === "sigma_rule") {
       return translateSplToSigma(request.source);
     }
@@ -249,7 +225,6 @@ const splTranslationProvider: TranslationProvider = {
   },
 };
 
-// ---- Sigma -> SPL ----
 
 function translateSigmaToSpl(source: string): TranslationResult {
   const result = convertSigmaToQuery(source, "spl");
@@ -296,7 +271,6 @@ function translateSigmaToSpl(source: string): TranslationResult {
   };
 }
 
-// ---- SPL -> Sigma ----
 
 function translateSplToSigma(source: string): TranslationResult {
   const diagnostics: TranslationDiagnostic[] = [];
@@ -431,7 +405,6 @@ function translateSplToSigma(source: string): TranslationResult {
   };
 }
 
-// ---- Auto-register ----
 
 registerTranslationProvider(splTranslationProvider);
 

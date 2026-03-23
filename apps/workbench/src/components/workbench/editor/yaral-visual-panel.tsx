@@ -1,15 +1,5 @@
 "use client";
 
-/**
- * YARA-L Visual Panel -- structured editor for Google Chronicle YARA-L rules.
- *
- * Parses YARA-L source text into meta, events, condition, match, and outcome
- * sections, then renders each as an editable visual component. Round-trips
- * edits back to the source text via onSourceChange.
- *
- * Self-registers as the visual panel for `yaral_rule` file type.
- */
-
 import { useMemo, useCallback } from "react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
@@ -34,8 +24,6 @@ import type { DetectionVisualPanelProps } from "@/lib/workbench/detection-workfl
 import { registerVisualPanel } from "@/lib/workbench/detection-workflow/visual-panels";
 
 
-// ---- Constants ----
-
 /** Default accent color for YARA-L panels (Google blue). */
 const DEFAULT_ACCENT = "#4285f4";
 
@@ -56,8 +44,6 @@ const OPERATOR_OPTIONS = [
   { value: "<=", label: "<=" },
 ];
 
-
-// ---- Parser Types ----
 
 interface YaralPredicate {
   fieldPath: string;
@@ -82,8 +68,6 @@ interface ParsedYaralRule {
   outcomeSection: string | null;
 }
 
-
-// ---- Parser ----
 
 /**
  * Regex-based best-effort parser for YARA-L rule source text.
@@ -194,8 +178,6 @@ function parseYaralSource(source: string): ParsedYaralRule | null {
 }
 
 
-// ---- Regenerator ----
-
 /**
  * Regenerate valid YARA-L source text from a ParsedYaralRule.
  * Enables round-tripping: parse -> edit -> regenerate -> onSourceChange.
@@ -262,8 +244,6 @@ function regenerateYaralSource(parsed: ParsedYaralRule): string {
   return lines.join("\n");
 }
 
-
-// ---- Sub-components ----
 
 /** MetaSection -- renders meta fields as editable inputs. */
 function MetaSection({
@@ -602,8 +582,6 @@ function MatchOutcomeSection({
 }
 
 
-// ---- Main Component ----
-
 export function YaralVisualPanel({
   source,
   onSourceChange,
@@ -614,7 +592,6 @@ export function YaralVisualPanel({
 
   const parsed = useMemo(() => parseYaralSource(source), [source]);
 
-  // ---- Update handlers ----
 
   const updateRuleName = useCallback(
     (newName: string) => {
@@ -720,7 +697,6 @@ export function YaralVisualPanel({
     [parsed, onSourceChange],
   );
 
-  // ---- Render ----
 
   if (!parsed) {
     return (
@@ -887,6 +863,4 @@ export function YaralVisualPanel({
 }
 
 
-// ---- Self-registration ----
-// Register YaralVisualPanel in the visual panel registry at module load.
 registerVisualPanel("yaral_rule", YaralVisualPanel);

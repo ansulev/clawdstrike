@@ -1,15 +1,5 @@
 "use client";
 
-/**
- * SPL Visual Panel -- pipe-chain builder for Splunk SPL detection rules.
- *
- * Renders the SPL query as a vertical pipeline of command cards.
- * Search and where commands expose editable field-value pairs that
- * round-trip to the source text via onSourceChange.
- *
- * Self-registers in the visual panel registry at module load.
- */
-
 import { useMemo, useCallback } from "react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
@@ -22,12 +12,10 @@ import {
 } from "@/lib/workbench/detection-workflow/spl-parser";
 import { IconTerminal, IconFilter } from "@tabler/icons-react";
 
-// ---- Constants ----
 
 /** Default accent color for SPL panels (Splunk green). */
 const DEFAULT_ACCENT = "#65a637";
 
-// ---- Comment Metadata Parsing ----
 
 interface SplCommentMeta {
   title: string;
@@ -100,7 +88,6 @@ function rebuildCommentBlock(meta: SplCommentMeta): string {
   return parts.join("\n");
 }
 
-// ---- Field-Value Parsing for Editable Cards ----
 
 interface FieldValuePair {
   field: string;
@@ -149,7 +136,6 @@ function parseFieldValuePairs(args: string): FieldValuePair[] {
   return pairs;
 }
 
-// ---- Round-Trip Reconstruction ----
 
 /**
  * Strip comment lines from source to get the query portion.
@@ -197,7 +183,6 @@ function reconstructSplFromCommands(
   return queryStr;
 }
 
-// ---- Editable Command Card ----
 
 function EditableFieldRow({
   field,
@@ -229,7 +214,6 @@ function EditableFieldRow({
   );
 }
 
-// ---- Command Card ----
 
 function CommandCard({
   command,
@@ -307,7 +291,6 @@ function CommandCard({
   );
 }
 
-// ---- Pipe Connector ----
 
 function PipeConnector() {
   return (
@@ -317,7 +300,6 @@ function PipeConnector() {
   );
 }
 
-// ---- Main Panel ----
 
 export function SplVisualPanel(props: DetectionVisualPanelProps) {
   const { source, onSourceChange, readOnly, accentColor } = props;
@@ -454,6 +436,4 @@ export function SplVisualPanel(props: DetectionVisualPanelProps) {
   );
 }
 
-// ---- Self-registration ----
-// Register SplVisualPanel in the visual panel registry at module load.
 registerVisualPanel("splunk_spl", SplVisualPanel);

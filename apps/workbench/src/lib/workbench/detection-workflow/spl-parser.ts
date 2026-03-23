@@ -1,15 +1,5 @@
-/**
- * SPL parsing utilities for the Splunk SPL detection workflow adapter.
- *
- * Provides regex-based approximate parsing of SPL search queries for
- * client-side matching, draft generation, and editor highlighting.
- * This is NOT a full SPL parser -- subsearch, macros, and eval
- * expressions are outside scope.
- */
-
 import type { DraftSeed } from "./shared-types";
 
-// ---- Types ----
 
 export interface SplCommand {
   /** Command name: "search", "where", "stats", "eval", "table", "fields", "sort", "head", "dedup", "rename", "rex", "lookup", etc. */
@@ -33,7 +23,6 @@ export interface SplFieldCondition {
   negated: boolean;
 }
 
-// ---- Pipe Chain Parser ----
 
 /**
  * Split on `|` that is NOT inside quotes (single or double).
@@ -162,7 +151,6 @@ export function parseSplPipeChain(source: string): SplCommand[] {
   return commands;
 }
 
-// ---- Field Condition Parser ----
 
 /**
  * Remove surrounding quotes (single or double) from a string.
@@ -327,7 +315,6 @@ export function parseSplFieldConditions(source: string): SplFieldCondition[] {
   return conditions;
 }
 
-// ---- Client-Side Matching ----
 
 /**
  * Case-insensitive key lookup in a payload object.
@@ -430,7 +417,6 @@ export function matchSplConditions(
   return { matched: allMatched, matchedFields };
 }
 
-// ---- Draft Generation ----
 
 /**
  * Data source hint to SPL index/sourcetype mapping.
@@ -532,7 +518,6 @@ function escapeQuoted(value: string): string {
   return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
 }
 
-// ---- Source Line Hints ----
 
 /**
  * Find line numbers containing the given field names (for editor highlighting).

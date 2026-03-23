@@ -1,12 +1,3 @@
-/**
- * YARA-L workflow adapter -- implements DetectionWorkflowAdapter for yaral_rule.
- *
- * Generates Google Chronicle YARA-L rules from DraftSeeds, builds starter
- * evidence packs with UDM-structured events, provides client-side simulated
- * lab execution via predicate matching, and supports publication to raw
- * YARA-L text or Chronicle JSON export format.
- */
-
 import type { DetectionWorkflowAdapter } from "./adapters";
 import { registerAdapter } from "./adapters";
 import { registerFileType } from "../file-type-registry";
@@ -34,7 +25,6 @@ import { translateField } from "./field-mappings";
 // Side-effect import: registers YARA-L translation provider
 import "./yaral-translation";
 
-// ---- SHA-256 ----
 
 async function sha256Hex(text: string): Promise<string> {
   const data = new TextEncoder().encode(text);
@@ -44,7 +34,6 @@ async function sha256Hex(text: string): Promise<string> {
     .join("");
 }
 
-// ---- File Type Registration ----
 
 const YARAL_STARTER_TEMPLATE = `rule untitled_rule {
   meta:
@@ -85,7 +74,6 @@ registerFileType({
   },
 });
 
-// ---- UDM Field Mapping Helpers ----
 
 /** Local fallback lookup for common Sigma -> UDM field paths. */
 const LOCAL_UDM_FALLBACKS: Record<string, string> = {
@@ -135,7 +123,6 @@ function inferSeverity(confidence: number): string {
   return "INFORMATIONAL";
 }
 
-// ---- YARA-L Parser Helpers ----
 
 export interface YaralEventPredicate {
   variable: string;
@@ -254,7 +241,6 @@ export function parseYaralRule(source: string): ParsedYaralRule | null {
   return { ruleName, meta, events, condition, hasMatchSection, hasOutcomeSection };
 }
 
-// ---- Evidence Matching ----
 
 /**
  * Resolve a dot-notation field path against a nested object.
@@ -321,7 +307,6 @@ function matchPredicateAgainstEvidence(
   return fieldStr === predicateValue;
 }
 
-// ---- Source Line Hints ----
 
 function findSourceLineHints(source: string, fieldPaths: string[]): number[] {
   const lines = source.split(/\r?\n/);
@@ -342,7 +327,6 @@ function findSourceLineHints(source: string, fieldPaths: string[]): number[] {
   return [...lineHints].sort((a, b) => a - b);
 }
 
-// ---- Normalize Event Payload for YARA-L ----
 
 function normalizeEventPayloadForYaral(
   eventData: Record<string, unknown> | undefined,
@@ -364,7 +348,6 @@ function normalizeEventPayloadForYaral(
   return normalized;
 }
 
-// ---- YARA-L Adapter ----
 
 const yaralAdapter: DetectionWorkflowAdapter = {
   fileType: "yaral_rule",
@@ -461,7 +444,6 @@ const yaralAdapter: DetectionWorkflowAdapter = {
   buildStarterEvidence(seed: DraftSeed, document: DetectionDocumentRef): EvidencePack {
     const datasets = createEmptyDatasets();
 
-    // Build structured_event items from source events
     for (const eventId of seed.sourceEventIds) {
       const eventData = seed.extractedFields[eventId] as Record<string, unknown> | undefined;
       const item: EvidenceItem = {
@@ -547,7 +529,6 @@ const yaralAdapter: DetectionWorkflowAdapter = {
       };
     }
 
-    // Collect all evidence items across datasets
     const allItems: Array<{ item: EvidenceItem; dataset: EvidenceDatasetKind }> = [];
     for (const [datasetKind, items] of Object.entries(evidencePack.datasets)) {
       for (const item of items) {
@@ -555,12 +536,10 @@ const yaralAdapter: DetectionWorkflowAdapter = {
       }
     }
 
-    // Filter to structured_event and ocsf_event items
     const eventItems = allItems.filter(
       ({ item }) => item.kind === "structured_event" || item.kind === "ocsf_event",
     );
 
-    // Group predicates by variable name
     const predicatesByVar = new Map<string, YaralEventPredicate[]>();
     for (const pred of parsed.events) {
       const existing = predicatesByVar.get(pred.variable) ?? [];
@@ -813,11 +792,9 @@ const yaralAdapter: DetectionWorkflowAdapter = {
   },
 };
 
-// ---- Register publish targets ----
 
 registerPublishTarget({ id: "yaral", label: "YARA-L Rule", formatGroup: "siem" });
 
-// ---- Auto-register ----
 
 registerAdapter(yaralAdapter);
 

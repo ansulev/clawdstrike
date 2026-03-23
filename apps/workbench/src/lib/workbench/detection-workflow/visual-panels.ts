@@ -1,19 +1,7 @@
-/**
- * Visual Panel Registry
- *
- * Stores React component types keyed by file type. Detection format adapters
- * (built-in or plugin-contributed) register their visual panel components here
- * so the editor can look them up and render them uniformly.
- *
- * The registry follows the same dispose-on-register pattern as the adapter
- * registry and publish target registry.
- */
-
 import type { ComponentType } from "react";
 import type { FileType } from "../file-type-registry";
 import type { DetectionVisualPanelProps } from "./shared-types";
 
-// ---- Registry ----
 
 const visualPanels = new Map<FileType, ComponentType<DetectionVisualPanelProps>>();
 

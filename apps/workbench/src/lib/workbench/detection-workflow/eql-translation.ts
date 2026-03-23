@@ -1,19 +1,3 @@
-/**
- * EQL Translation Provider -- bidirectional Sigma <-> EQL translation.
- *
- * Direction 1: sigma_rule -> eql_rule
- *   Parses Sigma YAML via parseSigmaYaml(), maps logsource category to EQL event
- *   category, translates Sigma field names to ECS via translateField(), maps Sigma
- *   modifiers to EQL operators, and generates valid EQL via generateEql().
- *
- * Direction 2: eql_rule -> sigma_rule
- *   Parses EQL via parseEql(), reverse-maps ECS field names to Sigma canonical names,
- *   maps EQL operators to Sigma modifiers, and builds a valid Sigma YAML rule.
- *   Sequence queries populate untranslatableFeatures (correlation, byFields, maxspan, until).
- *
- * Registered into the translation provider registry at module load.
- */
-
 import YAML from "yaml";
 import type {
   TranslationProvider,
@@ -27,7 +11,6 @@ import { parseEql, generateEql } from "./eql-parser";
 import type { EqlCondition, EqlSingleQuery, EqlEventCategory } from "./eql-parser";
 import { translateField, getAllFieldMappings } from "./field-mappings";
 
-// ---- Sigma Logsource -> EQL Event Category ----
 
 function sigmaLogsourceToEventCategory(
   category: string | undefined,
@@ -68,7 +51,6 @@ function sigmaLogsourceToEventCategory(
   }
 }
 
-// ---- EQL Event Category -> Sigma Logsource ----
 
 interface SigmaLogsource {
   category: string;
@@ -99,7 +81,6 @@ function eventCategoryToLogsource(
   }
 }
 
-// ---- Sigma Field Key Parsing ----
 
 /**
  * Parse a Sigma detection field key into its base field name and modifiers.
@@ -122,7 +103,6 @@ function normalizeValues(value: unknown): string[] {
   return [String(value)];
 }
 
-// ---- Selection Extraction ----
 
 /**
  * Extract all selection blocks from the Sigma detection section.
@@ -142,7 +122,6 @@ function extractSelections(
   return selections;
 }
 
-// ---- Sigma Modifiers -> EQL Operators ----
 
 /**
  * Map Sigma modifiers to an EQL operator and value transformation.
@@ -167,7 +146,6 @@ function sigmaModifiersToEql(
   return { operator: "==", transformedValue: value };
 }
 
-// ---- EQL Operator -> Sigma Modifier ----
 
 /**
  * Determine the Sigma modifier string and cleaned value from an EQL condition.
@@ -206,7 +184,6 @@ function eqlOperatorToSigmaModifier(
   return { modifier: "", cleanedValue: value };
 }
 
-// ---- Reverse ECS Field Mapping ----
 
 /**
  * Build a reverse lookup map: ecsField -> sigmaField.
@@ -228,7 +205,6 @@ function buildReverseEcsMap(): Map<string, string> {
   return reverseMap;
 }
 
-// ---- Translation Provider ----
 
 const eqlTranslationProvider: TranslationProvider = {
   canTranslate(from, to): boolean {
@@ -239,12 +215,10 @@ const eqlTranslationProvider: TranslationProvider = {
   },
 
   async translate(request): Promise<TranslationResult> {
-    // ---- Direction 1: sigma_rule -> eql_rule ----
     if (request.sourceFileType === "sigma_rule" && request.targetFileType === "eql_rule") {
       return translateSigmaToEql(request.source);
     }
 
-    // ---- Direction 2: eql_rule -> sigma_rule ----
     if (request.sourceFileType === "eql_rule" && request.targetFileType === "sigma_rule") {
       return translateEqlToSigma(request.source);
     }
@@ -264,7 +238,6 @@ const eqlTranslationProvider: TranslationProvider = {
   },
 };
 
-// ---- Direction 1: Sigma -> EQL ----
 
 function translateSigmaToEql(source: string): TranslationResult {
   const diagnostics: TranslationDiagnostic[] = [];
@@ -446,7 +419,6 @@ function translateSigmaToEql(source: string): TranslationResult {
   };
 }
 
-// ---- Direction 2: EQL -> Sigma ----
 
 function translateEqlToSigma(source: string): TranslationResult {
   const diagnostics: TranslationDiagnostic[] = [];
@@ -622,7 +594,6 @@ function translateEqlToSigma(source: string): TranslationResult {
   };
 }
 
-// ---- Auto-register ----
 
 registerTranslationProvider(eqlTranslationProvider);
 

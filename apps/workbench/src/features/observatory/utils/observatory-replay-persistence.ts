@@ -61,7 +61,7 @@ function asAnnotationPins(value: unknown): ObservatoryAnnotationPin[] {
     && typeof entry.timestampMs === "number"
     && Array.isArray(entry.worldPosition)
     && entry.worldPosition.length === 3
-    && (entry.worldPosition as unknown[]).every((v: unknown) => typeof v === "number")
+    && entry.worldPosition.every((v: unknown) => typeof v === "number")
     && typeof entry.note === "string"
     && typeof entry.districtId === "string"
   ));
@@ -75,7 +75,7 @@ function asConstellationRoutes(value: unknown): ConstellationRoute[] {
     && typeof entry.name === "string"
     && typeof entry.createdAtMs === "number"
     && Array.isArray(entry.stationPath)
-    && (entry.stationPath as unknown[]).every((v: unknown) => typeof v === "string")
+    && entry.stationPath.every((v: unknown) => typeof v === "string")
     && typeof entry.missionHuntId === "string"
   ));
 }
@@ -110,10 +110,7 @@ export function savePersistedObservatoryReplayArtifacts(
   }
   window.localStorage.setItem(
     OBSERVATORY_REPLAY_PERSISTENCE_KEY,
-    JSON.stringify({
-      annotations: input.annotations,
-      bookmarks: input.bookmarks,
-    }),
+    JSON.stringify(input),
   );
 }
 
@@ -122,7 +119,6 @@ export function loadPersistedObservatoryReplayArtifactsV2(): PersistedObservator
     return { annotations: [], bookmarks: [], annotationPins: [], constellations: [] };
   }
   try {
-    // Try v2 first
     const rawV2 = window.localStorage.getItem(OBSERVATORY_REPLAY_PERSISTENCE_KEY_V2);
     if (rawV2) {
       const parsed = JSON.parse(rawV2) as unknown;
@@ -136,7 +132,6 @@ export function loadPersistedObservatoryReplayArtifactsV2(): PersistedObservator
         constellations: asConstellationRoutes(parsed.constellations),
       };
     }
-    // Fall back to v1 migration
     const rawV1 = window.localStorage.getItem(OBSERVATORY_REPLAY_PERSISTENCE_KEY);
     if (rawV1) {
       const parsed = JSON.parse(rawV1) as unknown;
@@ -162,11 +157,6 @@ export function savePersistedObservatoryReplayArtifactsV2(
   if (typeof window === "undefined" || !("localStorage" in window)) return;
   window.localStorage.setItem(
     OBSERVATORY_REPLAY_PERSISTENCE_KEY_V2,
-    JSON.stringify({
-      annotations: input.annotations,
-      bookmarks: input.bookmarks,
-      annotationPins: input.annotationPins,
-      constellations: input.constellations,
-    }),
+    JSON.stringify(input),
   );
 }

@@ -37,7 +37,6 @@ export interface ObservatoryRuntimeActivitySources {
   shouldInvalidateOnRouteChange: boolean;
   replayFrameIndex?: number;
   routeSignature?: string;
-  /** Phase 39: v10.0 invalidation sources */
   annotationDropCount?: number;
   heatmapPulseVersion?: number;
   spiritTrailSegmentCount?: number;

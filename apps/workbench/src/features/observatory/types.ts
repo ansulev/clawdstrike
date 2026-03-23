@@ -13,10 +13,10 @@ import type { FlightState } from "./character/ship/flight-types";
 import type { DockingState } from "./character/ship/docking-types";
 
 export type ObservatoryStationKind =
-  | "hunt"           // maps to /hunt pane route
-  | "observatory"    // maps to /observatory pane route (Phase 3)
-  | "nexus"          // maps to /nexus pane route (Phase 4)
-  | "spirit-chamber" // maps to /spirit-chamber pane route (Phase 2)
+  | "hunt"
+  | "observatory"
+  | "nexus"
+  | "spirit-chamber"
   | "missions"
   | "findings"
   | "receipt-preview";
@@ -120,7 +120,7 @@ export interface ObservatoryStation {
   kind: ObservatoryStationKind;
   label: string;
   reason?: string | null;
-  route: string; // workbench pane route to openApp to
+  route: string;
   routeLabel?: string;
   artifactCount: number;
   status?: HuntStationStatus;
@@ -140,8 +140,8 @@ export interface ObservatoryReplayState {
 
 export interface ObservatorySeamSummary {
   stationCount: number;
-  artifactCount: number; // total across all stations — drives activity bar badge
-  activeProbes: number;  // > 0 means hunt is live; drives badge liveness
+  artifactCount: number;
+  activeProbes: number;
 }
 
 export interface ObservatoryState {
@@ -149,7 +149,7 @@ export interface ObservatoryState {
   pressureLanes: ObservatoryPressureLane[];
   analystPresetId: ObservatoryAnalystPresetId | null;
   seamSummary: ObservatorySeamSummary;
-  connected: boolean; // true when linked to live hunt data
+  connected: boolean;
   confidence: number;
   likelyStationId: HuntStationId | null;
   mission: ObservatoryMissionLoopState | null;
@@ -158,21 +158,13 @@ export interface ObservatoryState {
   roomReceiveState: HuntObservatoryReceiveState;
   selectedStationId: HuntStationId | null;
   telemetrySnapshotMs: number | null;
-  /** Phase 21: space flight state slice */
   flightState: FlightState;
-  /** Phase 23: docking state slice */
   dockingState: DockingState;
-  /** Phase 25: autopilot target — separate from flightState (user intent, not physics) */
   autopilotTargetStationId: HuntStationId | null;
-  /** Phase 26: session-only discovery set — stations revealed by proximity fly-through */
   discoveredStations: Set<HuntStationId>;
-  /** Phase 29: panel registry — only one HUD panel open at a time */
   activePanel: HudPanelId | null;
-  /** Phase 39: annotation pins dropped during replay */
   annotationPins: ObservatoryAnnotationPin[];
-  /** Phase 39: constellation routes from completed missions */
   constellations: ConstellationRoute[];
-  /** Phase 39: interior zone state machine */
   interiorState: ObservatoryInteriorState;
   actions: {
     setStations: (stations: ObservatoryStation[]) => void;

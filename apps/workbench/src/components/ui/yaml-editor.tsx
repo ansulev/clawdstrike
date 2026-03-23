@@ -20,6 +20,7 @@ import { useGeneralSettings, type FontSize } from "@/features/settings/use-gener
 import { guardTestGutter, updateGuardRanges } from "@/lib/workbench/codemirror/guard-gutter";
 import { coverageGapGutter, updateCoverageGaps } from "@/lib/workbench/codemirror/coverage-gutter";
 import { parseGuardRanges, computeCoverageGaps } from "@/lib/workbench/codemirror/gutter-types";
+import { presenceCursors, presenceFilePath } from "@/lib/workbench/codemirror/presence-cursors";
 
 // ---- Active editor tracking ----
 
@@ -52,6 +53,8 @@ export interface YamlEditorProps {
   onRunGuardTest?: (guardId: string) => void;
   /** Enable detection gutters (Run Test + coverage gaps). Only for clawdstrike_policy files. */
   showDetectionGutters?: boolean;
+  /** Absolute file path for presence cursor scoping. */
+  filePath?: string;
 }
 
 // ---- ClawdStrike brand theme ----
@@ -347,6 +350,7 @@ export function YamlEditor({
   fileType,
   onRunGuardTest,
   showDetectionGutters = false,
+  filePath,
 }: YamlEditorProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
@@ -414,6 +418,14 @@ export function YamlEditor({
       base.push(...coverageGapGutter());
     }
 
+    // Presence cursors -- always included, self-manages via store subscription.
+    // The presenceFilePath Facet tells the plugin which file this editor is showing
+    // so it can filter remote cursors and send outbound updates with the correct path.
+    base.push(...presenceCursors());
+    if (filePath) {
+      base.push(presenceFilePath.of(filePath));
+    }
+
     if (readOnly) {
       base.push(EditorState.readOnly.of(true));
       base.push(EditorView.editable.of(false));
@@ -429,7 +441,7 @@ export function YamlEditor({
     }
 
     return base;
-  }, [readOnly, fontSize, showLineNumbers, fileType, showDetectionGutters, handleRunGuardTest]);
+  }, [readOnly, fontSize, showLineNumbers, fileType, showDetectionGutters, handleRunGuardTest, filePath]);
 
   // Create / destroy the editor view
   useEffect(() => {

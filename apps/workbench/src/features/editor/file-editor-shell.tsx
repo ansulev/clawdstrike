@@ -72,6 +72,7 @@ function GuardTestYamlEditor({
   errors,
   showDetectionGutters,
   activePolicy,
+  filePath,
 }: {
   value: string;
   onChange: (value: string) => void;
@@ -79,6 +80,7 @@ function GuardTestYamlEditor({
   errors?: YamlEditorError[];
   showDetectionGutters?: boolean;
   activePolicy: import("@/lib/workbench/types").WorkbenchPolicy;
+  filePath?: string;
 }) {
   const { toast } = useToast();
   const testRunner = useTestRunnerOptional();
@@ -125,6 +127,7 @@ function GuardTestYamlEditor({
       errors={errors}
       showDetectionGutters={showDetectionGutters}
       onRunGuardTest={fileType === "clawdstrike_policy" ? handleRunGuardTest : undefined}
+      filePath={filePath}
     />
   );
 }
@@ -353,6 +356,7 @@ export function FileEditorShell() {
             errors={editorErrors}
             showDetectionGutters={tabMeta.fileType === "clawdstrike_policy"}
             activePolicy={workbenchActivePolicy}
+            filePath={tabMeta.filePath ?? undefined}
           />
         </ResizablePanel>
       </ResizablePanelGroup>
@@ -364,6 +368,7 @@ export function FileEditorShell() {
         errors={editorErrors}
         showDetectionGutters={tabMeta.fileType === "clawdstrike_policy"}
         activePolicy={workbenchActivePolicy}
+        filePath={tabMeta.filePath ?? undefined}
       />
     );
 

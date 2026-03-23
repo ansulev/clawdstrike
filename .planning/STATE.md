@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Presence & Awareness
-status: ready_to_plan
-stopped_at: null
-last_updated: "2026-03-23T02:00:00.000Z"
-last_activity: 2026-03-23 -- Roadmap created for v2.0 (4 phases, 19 requirements)
+status: executing
+stopped_at: "Completed 18-01-PLAN.md"
+last_updated: "2026-03-23T15:41:52Z"
+last_activity: 2026-03-23 -- Phase 18 Plan 01 complete (PresenceHub + WS endpoint)
 progress:
   total_phases: 4
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 7
-  completed_plans: 0
-  percent: 0
+  completed_plans: 1
+  percent: 14
 ---
 
 # Project State
@@ -20,29 +20,29 @@ progress:
 
 See: .planning/PROJECT.md (updated 2026-03-23)
 **Core value:** Security operators work across multiple views simultaneously with IDE-grade workflows
-**Current focus:** v2.0 Presence & Awareness — Phase 18: Server Foundation
+**Current focus:** v2.0 Presence & Awareness — Phase 19: Client Connection & Store
 
 ## Current Position
 
 Phase: 18 of 21 (Server Foundation) — first of 4 phases in v2.0
-Plan: 0 of 1 in current phase
-Status: Ready to plan
-Last activity: 2026-03-23 — Roadmap created for v2.0 milestone
+Plan: 1 of 1 in current phase (COMPLETE)
+Status: Phase 18 complete, ready for Phase 19
+Last activity: 2026-03-23 — Completed 18-01 PresenceHub WS endpoint
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [#░░░░░░░░░] 14%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 0
-- Average duration: —
-- Total execution time: 0 hours
+- Total plans completed: 1
+- Average duration: 33min
+- Total execution time: 0.55 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| - | - | - | - |
+| 18-server-foundation | 1 | 33min | 33min |
 
 ## Previous Milestones
 
@@ -59,8 +59,10 @@ Progress: [░░░░░░░░░░] 0%
 - Awareness-only architecture (no CRDT/OT) — presence cursors, not collaborative editing
 - Native browser WebSocket, not tauri-plugin-websocket — avoids IPC overhead
 - Facet+StateEffect for CM6 cursor injection — prevents extension rebuild storm
-- Server-assigned colors with 8-color palette (to be confirmed in Phase 18 planning)
+- Server-assigned colors with 8-color palette -- confirmed in Phase 18: 8 colors, deterministic from fingerprint hex prefix
 - Reuse fleet SSE auth patterns (getCredentials function ref, not cached token)
+- WS route outside require_auth middleware (browser WS API cannot set headers); auth via ?token= query param
+- axum ws feature enabled per-crate (hushd only), not workspace-wide
 
 ### Blockers/Concerns
 
@@ -69,5 +71,5 @@ Progress: [░░░░░░░░░░] 0%
 ## Session Continuity
 
 Last session: 2026-03-23
-Stopped at: Roadmap created, ready to plan Phase 18
+Stopped at: Completed 18-01-PLAN.md
 Resume file: None

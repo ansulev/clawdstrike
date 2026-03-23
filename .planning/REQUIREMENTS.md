@@ -17,10 +17,10 @@ Requirements for the Presence & Awareness milestone. Each maps to roadmap phases
 ### Presence Protocol
 
 - [ ] **PRES-01**: Analyst presence is broadcast to all connected clients (join/leave/heartbeat)
-- [ ] **PRES-02**: Server detects stale analysts via heartbeat timeout (15s interval, 45s TTL)
-- [ ] **PRES-03**: Presence is scoped to file rooms (only receive cursor updates for files you have open)
-- [ ] **PRES-04**: File paths are normalized to workspace-relative before transmission
-- [ ] **PRES-05**: hushd PresenceHub manages per-file rooms with DashMap and broadcast fan-out
+- [x] **PRES-02**: Server detects stale analysts via heartbeat timeout (15s interval, 45s TTL)
+- [x] **PRES-03**: Presence is scoped to file rooms (only receive cursor updates for files you have open)
+- [x] **PRES-04**: File paths are normalized to workspace-relative before transmission
+- [x] **PRES-05**: hushd PresenceHub manages per-file rooms with DashMap and broadcast fan-out
 
 ### UI Indicators
 
@@ -82,10 +82,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CONN-03 | Phase 20 | Pending |
 | CONN-04 | Phase 19 | Pending |
 | PRES-01 | Phase 19 | Pending |
-| PRES-02 | Phase 18 | Pending |
-| PRES-03 | Phase 18 | Pending |
-| PRES-04 | Phase 18 | Pending |
-| PRES-05 | Phase 18 | Pending |
+| PRES-02 | Phase 18 | Complete |
+| PRES-03 | Phase 18 | Complete |
+| PRES-04 | Phase 18 | Complete |
+| PRES-05 | Phase 18 | Complete |
 | UI-01 | Phase 20 | Pending |
 | UI-02 | Phase 20 | Pending |
 | UI-03 | Phase 20 | Pending |

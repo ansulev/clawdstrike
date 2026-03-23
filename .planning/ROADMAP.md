@@ -13,7 +13,7 @@ Add real-time analyst presence and awareness to the workbench. Four phases build
 
 ## Phases
 
-- [ ] **Phase 18: Server Foundation** - hushd PresenceHub with axum WebSocket endpoint, room management, heartbeat timeout, path normalization
+- [x] **Phase 18: Server Foundation** - hushd PresenceHub with axum WebSocket endpoint, room management, heartbeat timeout, path normalization (completed 2026-03-23)
 - [ ] **Phase 19: Client Connection & Store** - PresenceSocket class with reconnect/jitter, presence-store Zustand store, offline degradation
 - [ ] **Phase 20: UI Presence Indicators** - Status bar connection dot, online count, pane tab dots, activity bar pills, analyst roster, Speakeasy presence
 - [ ] **Phase 21: CodeMirror Cursor Extension** - Remote cursors, selections, hover labels, line:column coordinates, Facet+StateEffect delivery
@@ -29,10 +29,10 @@ Add real-time analyst presence and awareness to the workbench. Four phases build
   2. When two clients join the same file room, each receives the other's join event; when one disconnects, the other receives a leave event
   3. If a connected client stops sending heartbeats for 45 seconds, the server evicts it and broadcasts a leave event to remaining room members
   4. File paths sent by clients are normalized to workspace-relative form before being used as room keys (absolute paths from different workstations resolve to the same room)
-**Plans**: TBD
+**Plans:** 1/1 plans complete
 
 Plans:
-- [ ] 18-01: PresenceHub struct, DashMap room state, broadcast fan-out, heartbeat timeout, WS endpoint with auth
+- [ ] 18-01-PLAN.md — PresenceHub struct, DashMap room state, broadcast fan-out, heartbeat timeout, WS endpoint with auth
 
 ### Phase 19: Client Connection & Store
 **Goal**: The workbench maintains a persistent WebSocket connection to hushd and exposes all presence data through a Zustand store that the rest of the app reads from
@@ -87,7 +87,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 18. Server Foundation | 0/1 | Not started | - |
+| 18. Server Foundation | 1/1 | Complete   | 2026-03-23 |
 | 19. Client Connection & Store | 0/2 | Not started | - |
 | 20. UI Presence Indicators | 0/3 | Not started | - |
 | 21. CodeMirror Cursor Extension | 0/1 | Not started | - |

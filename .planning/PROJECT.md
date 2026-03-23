@@ -44,25 +44,30 @@ Security operators can work across multiple views simultaneously — policy edit
 - ✓ File & folder icons (shield for policy, SIG/YAR badges, folder open/close) — v1.2
 - ✓ Tree visual refinement (indent guides, active file highlight, collapsible roots) — v1.2
 - ✓ Context menu completeness (root/file/folder menus, viewport clamping) — v1.2
+- ✓ Fix broken tests (App, desktop-layout, shortcut-provider) — v1.4
+- ✓ Search AbortController + staleness guard — v1.4
+- ✓ Terminal dynamic sizing — v1.4
+- ✓ Meta+W keybinding conflict resolved — v1.4
+- ✓ Multi-policy-store bridge deleted, all consumers migrated — v1.4
 
 ### Active
 
-- [ ] Fix failing tests (stale mocks in desktop-layout, unmocked ActivityBar in App.test)
-- [ ] Search race condition (no AbortController/staleness guard)
-- [ ] Terminal dynamic sizing (replace hardcoded 800x240)
-- [ ] Meta+W keybinding conflict resolution
-- [ ] Modernize file.new to use direct store calls (remove legacy newPolicy injection)
-- [ ] Migrate ~20 components from useMultiPolicy() bridge to direct store calls
-- [ ] Delete multi-policy-store.tsx bridge layer (975 lines)
+- [ ] WebSocket connection manager for hushd presence channel
+- [ ] Analyst presence protocol (join/leave/heartbeat/viewing)
+- [ ] Presence indicators in activity bar and sidebar
+- [ ] Cursor/selection awareness in CodeMirror editors
+- [ ] Presence-aware Speakeasy chat integration
 
-## Current Milestone: v1.4 Cleanup & Store Migration
+## Current Milestone: v2.0 Presence & Awareness
 
-**Goal:** Eliminate tech debt accumulated during v1.0-v1.3 rapid development and complete the multi-policy-store decomposition by migrating all consumers to direct Zustand store calls.
+**Goal:** Add real-time analyst presence and awareness to the workbench — WebSocket connection to hushd, presence protocol, colored cursors in CodeMirror, and presence indicators across the UI. Foundation for collaborative threat hunting (Tracks B-D).
 
 **Target features:**
-- Fix 5 known bugs (tests, search race, terminal sizing, keybinding conflict, file.new)
-- Migrate ~20 legacy components off useMultiPolicy()/useWorkbench() bridge hooks
-- Delete the 975-line multi-policy-store bridge layer
+- WebSocket connection manager with reconnection, auth reuse from fleet SSE
+- Analyst presence protocol (who's online, what file they're viewing, cursor position)
+- Colored cursor/selection awareness in CodeMirror editors
+- Presence indicators in activity bar, sidebar panels, and pane tabs
+- Presence integration with existing Speakeasy chat
 
 ### Out of Scope
 
@@ -74,6 +79,9 @@ Security operators can work across multiple views simultaneously — policy edit
 - Custom themes — dark-only for now
 
 ## Context
+
+### v1.4 Milestone Complete (2026-03-23)
+3 phases, 5 plans. Fixed broken tests, search race condition, terminal sizing, Meta+W conflict. Migrated all components off multi-policy-store bridge. Deleted 975-line bridge layer. Code review + production polish pass.
 
 ### v1.3 Milestone Complete (2026-03-22)
 4 gap closure phases (11-14), 7 plans. Completed Track B (Swarm Board Evolution) and wired Track C (Intel Pipeline). Fixed integration issues from file-first editor cutover. All 23 v1.3 requirements verified.
@@ -118,6 +126,7 @@ Filter bar phase completed. Remaining 15 requirements deferred — explorer poli
 | InProcessEventBus for local swarms | No SSE needed; same-process coordinator | ✓ Good |
 | Fleet SSE → signal-store bridge | Live signals feed automated finding pipeline | ✓ Good |
 | Post-draft annotation for finding links | Bidirectional link without schema changes | ✓ Good |
+| multi-policy-store bridge decomposition | 3 focused stores > 1 monolith; migration helper hooks | ✓ Good |
 
 ---
-*Last updated: 2026-03-22 after v1.3 milestone complete*
+*Last updated: 2026-03-23 after v1.4 milestone complete, v2.0 started*

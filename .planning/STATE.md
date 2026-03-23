@@ -1,35 +1,33 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.4
-milestone_name: milestone
-status: completed
-stopped_at: Completed 17-03-PLAN.md -- Phase 17 complete
-last_updated: "2026-03-23T00:50:54.419Z"
-last_activity: 2026-03-23 -- Executed 17-03 (multi-policy-store.tsx deleted, 18 production + 12 test files migrated)
+milestone: v2.0
+milestone_name: Presence & Awareness
+status: defining_requirements
+stopped_at: null
+last_updated: "2026-03-23T01:00:00.000Z"
+last_activity: 2026-03-23 -- Milestone v2.0 started
 progress:
-  total_phases: 3
-  completed_phases: 3
-  total_plans: 5
-  completed_plans: 5
-  percent: 100
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-03-22)
+See: .planning/PROJECT.md (updated 2026-03-23)
 **Core value:** Security operators work across multiple views simultaneously with IDE-grade workflows
-**Current focus:** v1.4 Cleanup & Store Migration -- all 3 phases complete
+**Current focus:** v2.0 Presence & Awareness — real-time analyst collaboration foundation
 
 ## Current Position
 
-Phase: 17 (Command Modernization & Store Migration)
-Plan: 03/03 -- done
-Status: Phase 17 complete. v1.4 milestone complete.
-Last activity: 2026-03-23 -- Executed 17-03 (multi-policy-store.tsx deleted, 18 production + 12 test files migrated)
-
-Progress: [██████████] 100%
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-03-23 — Milestone v2.0 started
 
 ## Previous Milestones
 
@@ -37,48 +35,34 @@ Progress: [██████████] 100%
 **v1.1 -- IDE Completeness** (2026-03-18/19): 13 phases, ~28 plans, 50+ reqs
 **v1.2 -- Explorer Polish** (partial, filter bar done): 1 phase, 1 plan
 **v1.3 -- Live Features** (2026-03-22): 15 phases (incl. gap closure), 29+ plans, 23 reqs
+**v1.4 -- Cleanup & Store Migration** (2026-03-23): 3 phases, 5 plans
 
 ## Accumulated Context
 
-### Key Files for Cleanup Work
-- `apps/workbench/src/features/policy/stores/multi-policy-store.tsx` -- 975-line bridge layer to delete
-- `apps/workbench/src/features/policy/stores/policy-tabs-store.ts` -- canonical tab store (target)
-- `apps/workbench/src/features/policy/stores/policy-edit-store.ts` -- canonical edit store (target)
-- `apps/workbench/src/__tests__/App.test.tsx` -- FIXED: DesktopLayout mocked with route-aware shell
-- `apps/workbench/src/components/desktop/__tests__/desktop-layout.test.tsx` -- FIXED: stale desktop-sidebar mock replaced
-- `apps/workbench/src/features/search/stores/search-store.ts` -- FIXED: AbortController + staleness guard added
-- `apps/workbench/src/features/bottom-pane/terminal-panel.tsx` -- FIXED: hardcoded 800x240 removed
-- `apps/workbench/src/lib/commands/file-commands.ts` -- MIGRATED: newPolicy removed, direct store call
-- `apps/workbench/src/features/policy/hooks/use-active-tab.ts` -- NEW: 3 migration hooks (useActiveTabState/useActiveTab/useActiveTabDispatch)
-- `apps/workbench/src/components/workbench/editor/split-editor.tsx` -- MIGRATED: 5 bridge calls replaced with direct stores
-- `apps/workbench/src/components/workbench/editor/editor-home-tab.tsx` -- MIGRATED: inline tauri-bridge + direct stores
-- `apps/workbench/src/lib/commands/init-commands.tsx` -- MIGRATED: all file ops inlined from useWorkbench
+### Collaborative Threat Hunting Roadmap
+Track A (v2.0): Presence & Awareness — WebSocket, presence protocol, cursors
+Track B (v2.1): Shared Investigation Sessions — investigation=swarm, shared findings, task assignment
+Track C (v2.2): Co-Editing — CRDT layer (Yjs/Automerge), conflict-free edits
+Track D (v2.3): Investigation Orchestration — runbooks, roles, status board, export
+
+### Key Existing Assets for Collaboration
+- SwarmCoordinator with InProcessEventBus — designed for networked transport swap
+- Speakeasy chat with Ed25519 signed messages — secure comms channel
+- Fleet SSE streaming (FleetEventStream) — real-time server→client pattern
+- Finding timeline annotations — chronological event log per finding
+- Receipt system (hush-core Ed25519) — cryptographic proof chain
+- Signal→Finding→Intel pipeline — shared intel as natural multiplayer data type
 
 ### Decisions
-- multi-policy-store.tsx is a bridge: useMultiPolicy()/useWorkbench() compose 3 underlying Zustand stores
-- ~20 components still use bridge hooks; all new features/ code uses direct stores
-- MultiPolicyProvider is already an empty fragment (<>{children}</>)
-- Phase 15+16 are independent; Phase 17 depends on Phase 15 (tests catch regressions)
-- AbortController cancels at consumer level (ignore stale result) since Tauri IPC does not accept AbortSignal
-- Removed width/height props from TerminalRenderer -- internal ResizeObserver handles sizing
-- edit.closeTab keybinding removed (not the command) to resolve Meta+W conflict with tab.close
-- App.test.tsx: mock DesktopLayout entirely (route-aware shell) rather than per-component mocks to avoid cascading chains
-- Test route for editor context: use /editor/visual (bare /editor redirects to /home, breaking editor shortcut context)
-- ResizeObserver polyfill in test/setup.ts is a global no-op stub for all tests
-- Inlined file ops (saveFile/saveFileAs/openFile/exportYaml/copyYaml) from useWorkbench into init-commands.tsx as useCallback hooks
-- EditCommandDeps simplified: removed dispatch/multiDispatch, edit.closeTab uses direct store call
-- ~15 pre-existing partially-migrated files found in working directory (from previous session); reverted to HEAD for clean compile
-
-- 31 production files migrated from useWorkbench/useMultiPolicy to direct store calls (Plan 02)
-- 15 complex helper-method consumer files remain (loadPolicy, saveFile, exportYaml patterns)
-- Direct store pattern: usePolicyTabsStore(s => s.activeTabId) + usePolicyEditStore(s => s.editStates.get(id))
-- [Phase 17]: Created usePolicyTabs/useWorkbenchState as named drop-in replacements rather than inline-migrating 18 consumers to raw store calls
-- [Phase 17]: multi-policy-store.tsx (975 lines) fully deleted; PolicyTab type + dispatch moved to policy-tab.ts + use-policy-actions.ts
+- Build on cryptographic receipt system — every collaborative action is a signed receipt
+- Investigation timeline IS the Merkle tree — unique to ClawdStrike
+- Reuse fleet SSE auth patterns for WebSocket connection
+- InProcessEventBus was always placeholder for networked transport
 
 ### Blockers/Concerns
-- None -- all store migration work is complete
+- None
 
 ## Session Continuity
 
-Last session: 2026-03-23T00:49:26.579Z
-Stopped at: Completed 17-03-PLAN.md -- Phase 17 complete
+Last session: 2026-03-23T01:00:00.000Z
+Stopped at: Milestone v2.0 started, defining requirements

@@ -11,6 +11,7 @@
  * Actions: setReplayState (imperative via getState())
  */
 
+import { useMemo } from "react";
 import { useObservatoryStore } from "../../../stores/observatory-store";
 import type { ObservatoryAnnotationPin } from "../../../types";
 
@@ -50,7 +51,10 @@ export function ReplayDrawerPanel() {
   const annotationPins = useObservatoryStore((state) => state.annotationPins);
 
   const bookmarks = replay.bookmarks ?? [];
-  const sortedPins = [...annotationPins].sort((a, b) => a.frameIndex - b.frameIndex);
+  const sortedPins = useMemo(
+    () => [...annotationPins].sort((a, b) => a.frameIndex - b.frameIndex),
+    [annotationPins],
+  );
   const hasSpikeSelected =
     replay.selectedSpikeTimestampMs !== null &&
     replay.selectedSpikeTimestampMs !== undefined;

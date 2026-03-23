@@ -30,7 +30,23 @@ export function ObservatoryInvalidationController({ sources }: ObservatoryInvali
         sources.constellationCount ?? 0,
         sources.interiorTransitionPhase ?? "none",
       ].join("|"),
-    [sources],
+    [
+      sources.activeHeroInteraction,
+      sources.eruptionCount,
+      sources.flyByActive,
+      sources.missionTargetStationId,
+      sources.playerInputEnabled,
+      sources.probeStatus,
+      sources.replayFrameIndex,
+      sources.replayScrubbing,
+      sources.routeSignature,
+      sources.selectedStationId,
+      sources.annotationDropCount,
+      sources.heatmapPulseVersion,
+      sources.spiritTrailSegmentCount,
+      sources.constellationCount,
+      sources.interiorTransitionPhase,
+    ],
   );
 
   useEffect(() => {

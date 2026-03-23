@@ -56,8 +56,18 @@ function ExteriorDimmer({
   children: ReactNode;
 }) {
   const groupRef = useRef<THREE.Group>(null!);
+  const needsUpdateRef = useRef(true);
+  const prevTargetRef = useRef(targetOpacity);
+
+  // Flag traversal as needed whenever targetOpacity changes
+  if (prevTargetRef.current !== targetOpacity) {
+    prevTargetRef.current = targetOpacity;
+    needsUpdateRef.current = true;
+  }
+
   useFrame((_, delta) => {
-    if (!groupRef.current) return;
+    if (!groupRef.current || !needsUpdateRef.current) return;
+    let allSettled = true;
     groupRef.current.traverse((obj) => {
       const mesh = obj as THREE.Mesh;
       if (mesh.isMesh && mesh.material) {
@@ -68,8 +78,14 @@ function ExteriorDimmer({
           targetOpacity,
           delta * EXTERIOR_DIM_SPEED,
         );
+        if (Math.abs(mat.opacity - targetOpacity) >= 0.01) {
+          allSettled = false;
+        }
       }
     });
+    if (allSettled) {
+      needsUpdateRef.current = false;
+    }
   });
   return <group ref={groupRef}>{children}</group>;
 }

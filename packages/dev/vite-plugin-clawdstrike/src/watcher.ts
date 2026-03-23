@@ -31,23 +31,27 @@ export function setupPluginWatcher(
 
   // Handle file changes
   const handleFileChange = (filePath: string): void => {
-    const pluginId = fileMap.resolve(filePath);
-    if (!pluginId) {
-      return; // File is not part of any registered plugin
+    try {
+      const pluginId = fileMap.resolve(filePath);
+      if (!pluginId) {
+        return; // File is not part of any registered plugin
+      }
+
+      const entryPath = fileMap.getEntry(pluginId);
+      if (!entryPath) {
+        return; // Should not happen if resolve() returned a pluginId
+      }
+
+      const payload: PluginUpdateEvent = {
+        pluginId,
+        entryPath,
+        timestamp: Date.now(),
+      };
+
+      server.ws.send(PLUGIN_UPDATE_EVENT, payload);
+    } catch (err) {
+      console.error(`[clawdstrike] File watcher error for ${filePath}:`, err);
     }
-
-    const entryPath = fileMap.getEntry(pluginId);
-    if (!entryPath) {
-      return; // Should not happen if resolve() returned a pluginId
-    }
-
-    const payload: PluginUpdateEvent = {
-      pluginId,
-      entryPath,
-      timestamp: Date.now(),
-    };
-
-    server.ws.send(PLUGIN_UPDATE_EVENT, payload);
   };
 
   // Listen for file changes and additions

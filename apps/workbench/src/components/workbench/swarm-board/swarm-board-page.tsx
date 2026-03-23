@@ -703,7 +703,7 @@ const NodeContextMenu = forwardRef<
     onDelete: () => void;
   }
 >(({ menu, onInspect, onDuplicate, onDelete }, ref) => {
-  const items = [
+  const items: Array<{ label: string; icon: typeof IconSearch; action: () => void; danger?: boolean }> = [
     { label: "Inspect", icon: IconSearch, action: onInspect },
     { label: "Duplicate", icon: IconCopy, action: onDuplicate },
     { label: "Delete", icon: IconTrash, action: onDelete, danger: true },
@@ -715,35 +715,22 @@ const NodeContextMenu = forwardRef<
       className="fixed z-[100] min-w-[140px] bg-[#0c0e14] border border-[#1a1f2e] rounded-md shadow-[0_8px_32px_rgba(0,0,0,0.6)] py-1"
       style={{ left: menu.x, top: menu.y }}
     >
-      {items.map((item, i) => {
-        if ("type" in item && item.type === "separator") {
-          return <div key={i} className="h-px bg-[#0f1119] my-1" />;
-        }
-        const Icon = "icon" in item ? item.icon : null;
-        const isDanger = "danger" in item && item.danger;
-        const isDisabled = "disabled" in item && item.disabled;
-        return (
-          <button
-            key={i}
-            type="button"
-            className={`flex items-center gap-2 w-full px-3 py-1.5 text-[10px] font-mono transition-colors text-left ${
-              isDisabled
-                ? "text-[#1e2230] cursor-default"
-                : isDanger
-                  ? "text-[#6f7f9a] hover:text-[#e74c3c] hover:bg-[#e74c3c08]"
-                  : "text-[#6f7f9a] hover:text-[#ece7dc] hover:bg-[#ffffff06]"
-            }`}
-            onClick={() => {
-              if (!isDisabled && "action" in item) item.action();
-            }}
-            disabled={isDisabled}
-            aria-label={"label" in item ? item.label : undefined}
-          >
-            {Icon && <Icon size={12} stroke={1.5} />}
-            {"label" in item && item.label}
-          </button>
-        );
-      })}
+      {items.map((item, i) => (
+        <button
+          key={i}
+          type="button"
+          className={`flex items-center gap-2 w-full px-3 py-1.5 text-[10px] font-mono transition-colors text-left ${
+            item.danger
+              ? "text-[#6f7f9a] hover:text-[#e74c3c] hover:bg-[#e74c3c08]"
+              : "text-[#6f7f9a] hover:text-[#ece7dc] hover:bg-[#ffffff06]"
+          }`}
+          onClick={item.action}
+          aria-label={item.label}
+        >
+          <item.icon size={12} stroke={1.5} />
+          {item.label}
+        </button>
+      ))}
     </div>
   );
 });

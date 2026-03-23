@@ -132,7 +132,26 @@ describe("verifyPluginTrust", () => {
     expect(result.reason).toBe("unsigned_allowed");
   });
 
-  // Test 7: signature signed with wrong key is rejected
+  // Test 7: installation.publisherKey is used when options.publisherKey is omitted
+  it('returns { trusted: true, reason: "signature_valid" } when installation.publisherKey is present', async () => {
+    const { publicKeyHex, secretKeyHex } = await generateOperatorKeypair();
+    const manifest = await createSignedManifest(secretKeyHex, {
+      installation: {
+        downloadUrl: "https://plugins.clawdstrike.dev/test-plugin-1.0.0.tgz",
+        size: 12345,
+        checksum: "a".repeat(64),
+        signature: "",
+        publisherKey: publicKeyHex,
+      },
+    });
+
+    const result = await verifyPluginTrust(manifest);
+
+    expect(result.trusted).toBe(true);
+    expect(result.reason).toBe("signature_valid");
+  });
+
+  // Test 8: signature signed with wrong key is rejected
   it('returns { trusted: false, reason: "signature_invalid" } when signed with a different key', async () => {
     const signerKeys = await generateOperatorKeypair();
     const verifierKeys = await generateOperatorKeypair();

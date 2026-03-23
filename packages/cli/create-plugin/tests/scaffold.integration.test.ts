@@ -30,6 +30,30 @@ function makeOptions(type: PluginType): ScaffoldOptions {
   };
 }
 
+const expectedSupplementalFiles: Record<PluginType, string[]> = {
+  guard: [],
+  detection: ["src/adapter.ts"],
+  ui: ["src/panel.ts"],
+  intel: ["src/source.ts"],
+  compliance: ["src/framework.ts"],
+  full: [
+    "src/adapter.ts",
+    "src/source.ts",
+    "src/framework.ts",
+    "src/panel.ts",
+    "src/status-widget.ts",
+  ],
+};
+
+const expectedExportKeys: Record<PluginType, string[]> = {
+  guard: ["."],
+  detection: [".", "./adapter"],
+  ui: [".", "./panel"],
+  intel: [".", "./source"],
+  compliance: [".", "./framework"],
+  full: [".", "./adapter", "./source", "./framework", "./panel", "./status-widget"],
+};
+
 for (const type of ALL_TYPES) {
   describe(`scaffold: ${type} template`, () => {
     let projectDir: string;
@@ -64,6 +88,26 @@ for (const type of ALL_TYPES) {
 
     it("creates tsup.config.ts", () => {
       expect(existsSync(join(projectDir, "tsup.config.ts"))).toBe(true);
+    });
+
+    it("creates supplemental entrypoint modules for contributed runtime files", () => {
+      for (const file of expectedSupplementalFiles[type]) {
+        expect(existsSync(join(projectDir, file))).toBe(true);
+      }
+    });
+
+    it("exports every generated entrypoint module from package.json", () => {
+      const pkg = JSON.parse(readFileSync(join(projectDir, "package.json"), "utf-8"));
+      expect(Object.keys(pkg.exports)).toEqual(expectedExportKeys[type]);
+    });
+
+    it("includes every generated entrypoint in tsup.config.ts", () => {
+      const tsupConfig = readFileSync(join(projectDir, "tsup.config.ts"), "utf-8");
+      for (const exportKey of expectedExportKeys[type]) {
+        const moduleName = exportKey === "." ? "index" : exportKey.slice(2);
+        expect(tsupConfig).toContain(`src/${moduleName}.ts`);
+      }
+      expect(tsupConfig).toContain("splitting: false");
     });
 
     it("creates vitest.config.ts", () => {

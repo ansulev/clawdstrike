@@ -27,6 +27,10 @@ function createMockModule(overrides?: Partial<PluginModule>): PluginModule {
   };
 }
 
+async function resolveCommunityPluginCode(): Promise<string> {
+  return 'console.debug("community installer test bootstrap");';
+}
+
 // ---- Tests ----
 
 describe("Plugin Installer", () => {
@@ -83,6 +87,7 @@ describe("Plugin Installer", () => {
       registry,
       resolveModule: async () => mockModule,
       trustOptions: { allowUnsigned: true },
+      resolvePluginCode: resolveCommunityPluginCode,
     });
 
     await installPlugin(manifest, { registry, loader: permissiveLoader });
@@ -156,6 +161,7 @@ describe("Plugin Installer", () => {
         registry,
         resolveModule: async () => mockModule,
         trustOptions: { allowUnsigned: true },
+        resolvePluginCode: resolveCommunityPluginCode,
       });
 
       const promptCallback = vi.fn().mockResolvedValue(true);
@@ -188,6 +194,7 @@ describe("Plugin Installer", () => {
         registry,
         resolveModule: async () => mockModule,
         trustOptions: { allowUnsigned: true },
+        resolvePluginCode: resolveCommunityPluginCode,
       });
 
       await installPlugin(manifest, {
@@ -213,6 +220,7 @@ describe("Plugin Installer", () => {
         registry,
         resolveModule: async () => mockModule,
         trustOptions: { allowUnsigned: true },
+        resolvePluginCode: resolveCommunityPluginCode,
       });
 
       await expect(
@@ -265,6 +273,7 @@ describe("Plugin Installer", () => {
         registry,
         resolveModule: async () => mockModule,
         trustOptions: { allowUnsigned: true },
+        resolvePluginCode: resolveCommunityPluginCode,
       });
 
       const promptCallback = vi.fn().mockResolvedValue(true);

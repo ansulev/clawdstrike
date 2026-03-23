@@ -49,7 +49,7 @@ vi.mock("@/features/fleet/use-fleet-connection", async () => {
 });
 
 import { HuntLayout } from "../hunt-layout";
-import { MultiPolicyProvider } from "@/features/policy/stores/multi-policy-store";
+import { PolicyBootstrapProvider as MultiPolicyProvider } from "@/features/policy/hooks/use-policy-bootstrap";
 
 async function flushMicrotasks() {
   await Promise.resolve();

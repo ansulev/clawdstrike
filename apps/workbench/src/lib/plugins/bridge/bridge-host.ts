@@ -31,6 +31,33 @@ import type { ReceiptMiddleware } from "./receipt-middleware";
 import { registerGuard } from "../../workbench/guard-registry";
 import { registerFileType } from "../../workbench/file-type-registry";
 import { statusBarRegistry } from "../../workbench/status-bar-registry";
+import {
+  commandRegistry,
+  type CommandCategory,
+} from "../../command-registry";
+
+const COMMAND_CATEGORIES: ReadonlySet<CommandCategory> = new Set([
+  "Navigate",
+  "File",
+  "Edit",
+  "Policy",
+  "Guard",
+  "Fleet",
+  "Test",
+  "Sentinel",
+  "Receipt",
+  "Swarm",
+  "View",
+  "Sidebar",
+  "Help",
+]);
+
+function normalizeCommandCategory(category: unknown): CommandCategory {
+  return typeof category === "string" &&
+    COMMAND_CATEGORIES.has(category as CommandCategory)
+    ? (category as CommandCategory)
+    : "View";
+}
 
 // ---- Types ----
 
@@ -358,10 +385,41 @@ export class PluginBridgeHost {
    * Register the default bridge handlers for all 7 PluginContext API methods.
    */
   private registerDefaultHandlers(): void {
-    // commands.register -- store command metadata; handler stays in iframe
+    // commands.register -- register command metadata in the host registry and
+    // bounce executions back into the iframe as bridge events.
     this.handlers.set("commands.register", (params: unknown) => {
-      const commandData = params as { id: string; [key: string]: unknown };
+      const commandData = params as {
+        id: string;
+        title: string;
+        category?: string;
+        shortcut?: string;
+        keybinding?: string;
+        icon?: string;
+      };
+
       this.commands.set(commandData.id, commandData);
+      commandRegistry.unregister(commandData.id);
+      commandRegistry.register({
+        id: commandData.id,
+        title: commandData.title,
+        category: normalizeCommandCategory(commandData.category),
+        keybinding:
+          typeof commandData.keybinding === "string"
+            ? commandData.keybinding
+            : typeof commandData.shortcut === "string"
+              ? commandData.shortcut
+              : undefined,
+        icon: commandData.icon,
+        execute: () => {
+          this.pushEvent("command.execute", { id: commandData.id });
+        },
+      });
+
+      const dispose = () => {
+        this.commands.delete(commandData.id);
+        commandRegistry.unregister(commandData.id);
+      };
+      this.disposables.push(dispose);
       return { registered: true };
     });
 

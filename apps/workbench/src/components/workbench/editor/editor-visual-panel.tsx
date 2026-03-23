@@ -8,7 +8,6 @@ import { DeployPanel } from "@/components/workbench/editor/deploy-panel";
 import { OriginEditor } from "@/components/workbench/editor/origin-editor";
 import { GUARD_CATEGORIES } from "@/lib/workbench/guard-registry";
 import type { GuardId } from "@/lib/workbench/types";
-import { useWorkbench } from "@/features/policy/stores/multi-policy-store";
 import { countNativeErrors } from "@/features/policy/use-native-validation";
 import { useGuardOrder } from "@/lib/workbench/use-guard-order";
 import { cn } from "@/lib/utils";
@@ -17,11 +16,15 @@ import {
   IconList,
   IconArrowsSort,
 } from "@tabler/icons-react";
+import { usePolicyTabsStore } from "@/features/policy/stores/policy-tabs-store";
+import { usePolicyEditStore } from "@/features/policy/stores/policy-edit-store";
 
 export function EditorVisualPanel() {
-  const { state } = useWorkbench();
+  const activeTabId = usePolicyTabsStore(s => s.activeTabId);
+  const activeTab = usePolicyTabsStore(s => s.tabs.find(t => t.id === s.activeTabId));
+  const editState = usePolicyEditStore(s => s.editStates.get(activeTabId));
 
-  const nv = state.nativeValidation;
+  const nv = (editState?.nativeValidation ?? { guardErrors: {}, topLevelErrors: [], topLevelWarnings: [], loading: false, valid: null });
   const errorCount = countNativeErrors(nv);
 
   const {
@@ -239,6 +242,7 @@ export function EditorVisualPanel() {
                 reorderable
                 isFirst={idx === 0}
                 isLast={idx === guardOrder.length - 1}
+                executionOrder={idx + 1}
                 onMoveUp={() => moveGuardUp(guardId)}
                 onMoveDown={() => moveGuardDown(guardId)}
                 onDragStart={handleDragStart(guardId)}

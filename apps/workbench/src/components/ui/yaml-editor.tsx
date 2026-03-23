@@ -1,11 +1,11 @@
-import { useRef, useEffect, useMemo } from "react";
+import { useRef, useEffect, useMemo, useCallback } from "react";
 import { EditorView, keymap, lineNumbers, highlightActiveLine, highlightSpecialChars, drawSelection, rectangularSelection, highlightActiveLineGutter, type ViewUpdate } from "@codemirror/view";
 import { Compartment, EditorState, type Extension } from "@codemirror/state";
 import { yaml } from "@codemirror/lang-yaml";
 import { json } from "@codemirror/lang-json";
 import { syntaxHighlighting, HighlightStyle, foldGutter, bracketMatching, indentOnInput, foldKeymap } from "@codemirror/language";
 import { tags } from "@lezer/highlight";
-import { searchKeymap, highlightSelectionMatches } from "@codemirror/search";
+import { searchKeymap, highlightSelectionMatches, search } from "@codemirror/search";
 import { defaultKeymap, historyKeymap, history } from "@codemirror/commands";
 import { lintGutter, type Diagnostic, setDiagnostics } from "@codemirror/lint";
 import { autocompletion, closeBrackets, closeBracketsKeymap } from "@codemirror/autocomplete";
@@ -14,9 +14,28 @@ import { policyYamlCompletionSource } from "@/features/policy/yaml-schema";
 import { sigmaYamlCompletionSource } from "@/lib/workbench/sigma-schema";
 import { ocsfJsonCompletionSource } from "@/lib/workbench/ocsf-schema";
 import { yaraLanguage } from "@/lib/workbench/yara-language";
+import { yaraCompletionSource } from "@/lib/workbench/yara-schema";
 import type { FileType } from "@/lib/workbench/file-type-registry";
 import { useGeneralSettings, type FontSize } from "@/features/settings/use-general-settings";
 import { useGutterExtensions } from "@/lib/plugins/gutter-extension-registry";
+import { guardTestGutter, updateGuardRanges } from "@/lib/workbench/codemirror/guard-gutter";
+import { coverageGapGutter, updateCoverageGaps } from "@/lib/workbench/codemirror/coverage-gutter";
+import { parseGuardRanges, computeCoverageGaps } from "@/lib/workbench/codemirror/gutter-types";
+import { presenceCursors, presenceFilePath } from "@/lib/workbench/codemirror/presence-cursors";
+import { toPresencePath } from "@/features/presence/presence-paths";
+
+// ---- Active editor tracking ----
+
+/**
+ * Module-level ref tracking the most recently focused EditorView.
+ * Used by command registry to dispatch search commands into the active editor.
+ */
+let _activeEditorView: import("@codemirror/view").EditorView | null = null;
+
+/** Returns the currently active (most recently focused) EditorView, or null. */
+export function getActiveEditorView(): import("@codemirror/view").EditorView | null {
+  return _activeEditorView;
+}
 
 // ---- Types ----
 
@@ -32,6 +51,12 @@ export interface YamlEditorProps {
   errors?: YamlEditorError[];
   className?: string;
   fileType?: FileType;
+  /** Callback when a gutter play button is clicked for a guard. */
+  onRunGuardTest?: (guardId: string) => void;
+  /** Enable detection gutters (Run Test + coverage gaps). Only for clawdstrike_policy files. */
+  showDetectionGutters?: boolean;
+  /** Absolute file path for presence cursor scoping. */
+  filePath?: string;
 }
 
 // ---- ClawdStrike brand theme ----
@@ -298,8 +323,10 @@ function getCompletionSource(fileType?: FileType): Extension {
         icons: false,
       });
     case "yara_rule":
-      // Phase 3 TODO: yaraCompletionSource
-      return autocompletion({ override: [] });
+      return autocompletion({
+        override: [yaraCompletionSource],
+        icons: false,
+      });
     case "ocsf_event":
       return autocompletion({
         override: [ocsfJsonCompletionSource],
@@ -323,6 +350,9 @@ export function YamlEditor({
   errors = [],
   className,
   fileType,
+  onRunGuardTest,
+  showDetectionGutters = false,
+  filePath,
 }: YamlEditorProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
@@ -330,17 +360,21 @@ export function YamlEditor({
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
 
-  // Compartment for plugin-contributed gutter extensions (dynamic reconfiguration)
   const gutterCompartmentRef = useRef(new Compartment());
-
-  // Plugin gutter extensions from the GutterExtensionRegistry
   const pluginGutterExtensions = useGutterExtensions();
+  const onRunGuardTestRef = useRef(onRunGuardTest);
+  onRunGuardTestRef.current = onRunGuardTest;
 
   // Read general settings for editor customization
   const { settings: generalSettings } = useGeneralSettings();
   const { fontSize, showLineNumbers } = generalSettings;
 
-  // Build the list of extensions (rebuilds when readOnly, fontSize, or showLineNumbers changes)
+  // Stable handler that delegates to the ref (avoids extension rebuilds on callback identity change)
+  const handleRunGuardTest = useCallback((guardId: string) => {
+    onRunGuardTestRef.current?.(guardId);
+  }, []);
+
+  // Build the list of extensions (rebuilds when readOnly, fontSize, showLineNumbers, or detection gutters change)
   const extensions = useMemo<Extension[]>(() => {
     const base: Extension[] = [
       getLanguageExtension(fileType),
@@ -352,7 +386,13 @@ export function YamlEditor({
       rectangularSelection(),
       bracketMatching(),
       indentOnInput(),
+      search({ top: true }),
       highlightSelectionMatches(),
+      EditorView.domEventHandlers({
+        focus: (_event, view) => {
+          _activeEditorView = view;
+        },
+      }),
       foldGutter({
         openText: "\u25BE",
         closedText: "\u25B8",
@@ -378,6 +418,20 @@ export function YamlEditor({
       base.push(highlightActiveLineGutter());
     }
 
+    // Detection engineering gutters (only for policy files when enabled)
+    if (showDetectionGutters && fileType === "clawdstrike_policy") {
+      base.push(...guardTestGutter(handleRunGuardTest));
+      base.push(...coverageGapGutter());
+    }
+
+    // Presence cursors -- always included, self-manages via store subscription.
+    // The presenceFilePath Facet tells the plugin which file this editor is showing
+    // so it can filter remote cursors and send outbound updates with the correct path.
+    base.push(...presenceCursors());
+    if (filePath) {
+      base.push(presenceFilePath.of(toPresencePath(filePath)));
+    }
+
     if (readOnly) {
       base.push(EditorState.readOnly.of(true));
       base.push(EditorView.editable.of(false));
@@ -393,7 +447,7 @@ export function YamlEditor({
     }
 
     return base;
-  }, [readOnly, fontSize, showLineNumbers, fileType]);
+  }, [readOnly, fontSize, showLineNumbers, fileType, showDetectionGutters, handleRunGuardTest, filePath]);
 
   // Create / destroy the editor view
   useEffect(() => {
@@ -412,6 +466,9 @@ export function YamlEditor({
     viewRef.current = view;
 
     return () => {
+      if (_activeEditorView === view) {
+        _activeEditorView = null;
+      }
       view.destroy();
       viewRef.current = null;
     };
@@ -480,6 +537,28 @@ export function YamlEditor({
 
     view.dispatch(setDiagnostics(view.state, diagnostics));
   }, [errors]);
+
+  // Debounced guard range parsing and coverage gap updates for detection gutters
+  useEffect(() => {
+    if (!showDetectionGutters || fileType !== "clawdstrike_policy") return;
+
+    const timer = setTimeout(() => {
+      const view = viewRef.current;
+      if (!view) return;
+
+      const guardRanges = parseGuardRanges(view.state.doc);
+      const gaps = computeCoverageGaps(guardRanges, value);
+
+      view.dispatch({
+        effects: [
+          updateGuardRanges.of(guardRanges),
+          updateCoverageGaps.of(gaps),
+        ],
+      });
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [value, showDetectionGutters, fileType]);
 
   return (
     <div

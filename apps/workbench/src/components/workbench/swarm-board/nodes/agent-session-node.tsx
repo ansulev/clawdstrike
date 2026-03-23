@@ -31,12 +31,14 @@ const STATUS_COLOR: Record<SessionStatus, string> = {
   blocked: "#c49a3c",
   completed: "#6b7a92",
   failed: "#b85450",
+  evaluating: "#d4a84b",
 };
 
 /** Statuses that show a pulsing animation on the dot. */
 const STATUS_PULSE: Partial<Record<SessionStatus, boolean>> = {
   running: true,
   blocked: true,
+  evaluating: true,
 };
 
 const STATUS_LABEL: Record<SessionStatus, string> = {
@@ -45,6 +47,7 @@ const STATUS_LABEL: Record<SessionStatus, string> = {
   blocked: "WAIT",
   completed: "DONE",
   failed: "FAIL",
+  evaluating: "EVAL",
 };
 
 const RISK_COLORS: Record<RiskLevel, string> = {
@@ -90,6 +93,7 @@ function AgentSessionNodeInner({ id, data, selected }: NodeProps) {
     status === 'running' && 'border-l-2 border-l-[#c49a3c]',
     status === 'blocked' && 'border-l-2 border-l-[#d4a04a]',
     status === 'failed' && 'border-l-2 border-l-[#b85450]',
+    status === 'evaluating' && 'border-l-2 border-l-[#d4a84b]',
   );
 
   const statusOpacityClass = cn(
@@ -103,6 +107,7 @@ function AgentSessionNodeInner({ id, data, selected }: NodeProps) {
       case 'running': return 'breathe-gold 3s ease-in-out infinite';
       case 'blocked': return 'breathe-amber 3s ease-in-out infinite';
       case 'failed': return 'breathe-red 3s ease-in-out infinite';
+      case 'evaluating': return 'breathe-gold 2s ease-in-out infinite';
       default: return undefined;
     }
   })();

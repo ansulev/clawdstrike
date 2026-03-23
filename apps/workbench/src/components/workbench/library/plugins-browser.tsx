@@ -11,6 +11,10 @@ import {
   type RegistrySearchResult,
 } from "@/lib/plugins/registry-client";
 import { installPlugin, uninstallPlugin } from "@/lib/plugins/plugin-installer";
+import {
+  extractRegistryPackageMetadata,
+  selectLatestInstallableVersion,
+} from "@/lib/plugins/registry-package";
 import type {
   PluginManifest,
   PluginTrustTier,
@@ -182,25 +186,46 @@ export function PluginsBrowser() {
   const handleInstallFromRegistry = useCallback(
     async (stub: RegistrySearchResult) => {
       try {
-        // Fetch full package info to resolve the latest non-yanked version
+        // Resolve the newest non-yanked release from the package history.
         const info = await registryClient.getPackageInfo(stub.name);
-        const latestVersion = info.versions.find((v) => !v.yanked);
-        const version = latestVersion?.version ?? stub.latest_version ?? "0.0.0";
+        const version = selectLatestInstallableVersion(
+          info.versions,
+          stub.latest_version,
+        );
+        const downloadUrl = registryClient.getDownloadUrl(stub.name, version);
 
-        // Fetch the signed version info (includes manifest_toml, checksum, signatures)
+        // Fetch the signed release metadata and the package archive so we can
+        // recover the real bundle entrypoint instead of synthesizing one.
         const versionInfo = await registryClient.getVersionInfo(stub.name, version);
+        const archiveResponse = await fetch(downloadUrl);
+        if (!archiveResponse.ok) {
+          throw new Error(
+            `Failed to download ${stub.name}@${version}: HTTP ${archiveResponse.status}`,
+          );
+        }
+        const archiveBuffer = await archiveResponse.arrayBuffer();
+        const packageMetadata = extractRegistryPackageMetadata(archiveBuffer);
 
-        // Build manifest from registry data including installation metadata
+        // Build the install manifest from registry metadata plus the packaged
+        // entrypoint so the loader can resolve the shipped bundle.
         const manifest: PluginManifest = {
           ...asManifest(stub),
           version,
-          description: info.description ?? stub.description ?? "",
-          main: `index.js`, // Default entry point — registry manifest_toml may override
+          displayName:
+            typeof packageMetadata.packageJson?.displayName === "string"
+              ? packageMetadata.packageJson.displayName
+              : asManifest(stub).displayName,
+          description:
+            typeof packageMetadata.packageJson?.description === "string"
+              ? packageMetadata.packageJson.description
+              : info.description ?? stub.description ?? "",
+          main: packageMetadata.entrypoint ?? undefined,
           installation: {
-            downloadUrl: registryClient.getDownloadUrl(stub.name, version),
-            size: 0, // Not available from version info endpoint
+            downloadUrl,
+            size: Math.max(packageMetadata.size, 1),
             checksum: versionInfo.checksum,
             signature: versionInfo.publisher_sig,
+            publisherKey: versionInfo.publisher_key,
           },
         };
 

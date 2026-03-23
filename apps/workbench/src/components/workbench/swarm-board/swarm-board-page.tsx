@@ -10,12 +10,19 @@
  */
 
 import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useLocation } from "react-router-dom";
+import { useCoordinatorBoardBridge } from "@/features/swarm/hooks/use-coordinator-board-bridge";
+import { usePolicyEvalBoardBridge } from "@/features/swarm/hooks/use-policy-eval-board-bridge";
+import { useTrustGraphBridge } from "@/features/swarm/hooks/use-trust-graph-bridge";
+import { useReceiptFlowBridge, receiptEdgeTimestamps } from "@/features/swarm/hooks/use-receipt-flow-bridge";
+import { getCoordinator } from "@/features/swarm/coordinator-instance";
 import {
   ReactFlow,
   ReactFlowProvider,
   MiniMap,
   useReactFlow,
   type Node,
+  type Edge,
   type OnConnect,
   type OnNodesChange,
   type OnEdgesChange,
@@ -29,11 +36,11 @@ import {
   IconSearch,
   IconCopy,
   IconTrash,
-  IconLink,
   IconCommand,
 } from "@tabler/icons-react";
 
-import { SwarmBoardProvider, useSwarmBoard } from "@/features/swarm/stores/swarm-board-store";
+import { SwarmBoardProvider, useSwarmBoard, useSwarmBoardStore } from "@/features/swarm/stores/swarm-board-store";
+import { usePaneStore } from "@/features/panes/pane-store";
 import { swarmBoardNodeTypes } from "./nodes";
 import { swarmBoardEdgeTypes } from "./edges";
 import { SwarmBoardToolbar } from "./swarm-board-toolbar";
@@ -103,9 +110,24 @@ interface NodeContextMenuState {
 // ---------------------------------------------------------------------------
 
 function SwarmBoardCanvas() {
-  const { state, dispatch, selectNode, removeNode, addNode, updateNode, rfEdges, killSession, spawnSession } = useSwarmBoard();
+  const { state, selectNode, removeNode, addNode, updateNode, rfEdges, killSession, spawnSession } = useSwarmBoard();
   const { nodes, edges } = state;
+  const storeActions = useSwarmBoardStore((s) => s.actions);
   const reactFlow = useReactFlow();
+
+  // Bridge SwarmCoordinator messages to board store (live intel/detection nodes)
+  const coordinator = useMemo(() => getCoordinator(), []);
+  useCoordinatorBoardBridge(coordinator);
+  usePolicyEvalBoardBridge(coordinator);
+  useTrustGraphBridge(coordinator);
+
+  // Bridge feed store findings to receipt nodes on the board
+  useReceiptFlowBridge();
+
+  // Coordinator status for stats bar
+  const coordinatorConnected = coordinator?.isConnected ?? false;
+  const outboxSize = coordinator?.outboxSize ?? 0;
+  const joinedSwarms = coordinator?.joinedSwarmIds?.length ?? 0;
 
   // Context menu
   const [contextMenu, setContextMenu] = useState<NodeContextMenuState | null>(null);
@@ -144,9 +166,9 @@ function SwarmBoardCanvas() {
         }
       }
       const updated = applyNodeChanges(changes, nodesRef.current);
-      dispatch({ type: "SET_NODES", nodes: updated as Node<SwarmBoardNodeData>[] });
+      storeActions.setNodes(updated as Node<SwarmBoardNodeData>[]);
     },
-    [dispatch, killSession],
+    [storeActions, killSession],
   );
 
   // Handle React Flow's built-in edge changes (remove)
@@ -161,9 +183,9 @@ function SwarmBoardCanvas() {
         label: typeof e.label === "string" ? e.label : undefined,
         type: findEdgeType(e.id, edgesRef.current),
       }));
-      dispatch({ type: "SET_EDGES", edges: newEdges });
+      storeActions.setEdges(newEdges);
     },
-    [dispatch],
+    [storeActions],
   );
 
   // Handle new connections drawn by the user
@@ -171,17 +193,14 @@ function SwarmBoardCanvas() {
     (params) => {
       if (!params.source || !params.target) return;
       const edgeId = `edge-${params.source}-${params.target}-${Date.now().toString(36)}`;
-      dispatch({
-        type: "ADD_EDGE",
-        edge: {
-          id: edgeId,
-          source: params.source,
-          target: params.target,
-          type: "handoff",
-        },
+      storeActions.addEdge({
+        id: edgeId,
+        source: params.source,
+        target: params.target,
+        type: "handoff",
       });
     },
-    [dispatch],
+    [storeActions],
   );
 
   // Node click -> select & open inspector
@@ -230,6 +249,21 @@ function SwarmBoardCanvas() {
     setContextMenu(null);
     setHoveredNodeId(null);
   }, [selectNode]);
+
+  // Click on edge -> open receipt detail for receipt-type edges
+  const onEdgeClick = useCallback(
+    (_event: React.MouseEvent, edge: Edge) => {
+      // Only handle receipt-type edges
+      const edgeType = (edge.data?.edgeType as string) ?? findEdgeType(edge.id, edgesRef.current);
+      if (edgeType !== "receipt") return;
+      // Find the receipt node (target of the receipt edge)
+      const receiptNode = nodesRef.current.find((n) => n.id === edge.target);
+      if (!receiptNode) return;
+      const shortId = receiptNode.id.slice(0, 8);
+      usePaneStore.getState().openApp(`/receipt/${receiptNode.id}`, `Receipt ${shortId}`);
+    },
+    [],
+  );
 
   // Track hovered node for edge hover-reveal behavior
   const onNodeMouseEnter: NodeMouseHandler = useCallback(
@@ -311,7 +345,7 @@ function SwarmBoardCanvas() {
           ...n,
           selected: true,
         }));
-        dispatch({ type: "SET_NODES", nodes: allNodes as Node<SwarmBoardNodeData>[] });
+        storeActions.setNodes(allNodes as Node<SwarmBoardNodeData>[]);
         return;
       }
 
@@ -390,7 +424,7 @@ function SwarmBoardCanvas() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [selectNode, dispatch, addNode, getDropPosition, reactFlow, spawnSession, state.repoRoot]);
+  }, [selectNode, storeActions, addNode, getDropPosition, reactFlow, spawnSession, state.repoRoot]);
 
   // Follow active — auto-zoom to running node
   useEffect(() => {
@@ -450,28 +484,33 @@ function SwarmBoardCanvas() {
     }
   }, [contextMenu, removeNode, killSession]);
 
-  const handleContextConnect = useCallback(() => {
-    if (contextMenu) {
-      // Connection picker not yet implemented (tracked in swarm-board backlog)
-      setContextMenu(null);
-    }
-  }, [contextMenu]);
-
   // Memoize the type maps (must be stable references)
   const nodeTypes = useMemo(() => swarmBoardNodeTypes, []);
   const edgeTypes = useMemo(() => swarmBoardEdgeTypes, []);
 
-  // Enrich edges with hoveredNodeId for hover-reveal behavior
+  // Enrich edges with hoveredNodeId for hover-reveal behavior + receipt activity timestamps
   const enrichedEdges = useMemo(() => {
     const selectedId = state.selectedNodeId;
-    return rfEdges.map((e) => ({
-      ...e,
-      data: {
-        ...e.data,
-        hoveredNodeId: hoveredNodeId,
-        selectedNodeId: selectedId,
-      },
-    }));
+    const now = Date.now();
+    const RECEIPT_ACTIVITY_MS = 3000;
+
+    return rfEdges.map((e) => {
+      // Check for receipt edge activity timestamp (bright pulse for 3s after creation)
+      const receiptTs = receiptEdgeTimestamps.get(e.id);
+      const receiptActivityAt = receiptTs != null && (now - receiptTs) < RECEIPT_ACTIVITY_MS
+        ? receiptTs
+        : undefined;
+
+      return {
+        ...e,
+        data: {
+          ...e.data,
+          hoveredNodeId: hoveredNodeId,
+          selectedNodeId: selectedId,
+          ...(receiptActivityAt != null ? { lastActivityAt: receiptActivityAt } : {}),
+        },
+      };
+    });
   }, [rfEdges, hoveredNodeId, state.selectedNodeId]);
 
   // Stats
@@ -521,6 +560,17 @@ function SwarmBoardCanvas() {
                 0%, 100% { opacity: 0.3; transform: scale(1); }
                 50% { opacity: 1; transform: scale(1.015); }
               }
+              @keyframes eval-glow {
+                0%, 100% { box-shadow: 0 0 8px 0 rgba(212,168,75,0.08); }
+                50% { box-shadow: 0 0 28px 6px rgba(212,168,75,0.2); }
+              }
+              @keyframes nodeEnter {
+                from { opacity: 0; transform: scale(0.85); }
+                to { opacity: 1; transform: scale(1); }
+              }
+              .react-flow__node {
+                animation: nodeEnter 0.3s ease-out;
+              }
             `}</style>
 
             <ReactFlow
@@ -534,6 +584,7 @@ function SwarmBoardCanvas() {
               onNodeClick={onNodeClick}
               onNodeDoubleClick={onNodeDoubleClick}
               onNodeContextMenu={onNodeContextMenu}
+              onEdgeClick={onEdgeClick}
               onNodeMouseEnter={onNodeMouseEnter}
               onNodeMouseLeave={onNodeMouseLeave}
               onPaneClick={onPaneClick}
@@ -617,7 +668,6 @@ function SwarmBoardCanvas() {
                 onInspect={handleContextInspect}
                 onDuplicate={handleContextDuplicate}
                 onDelete={handleContextDelete}
-                onConnect={handleContextConnect}
               />
             )}
           </div>
@@ -630,6 +680,9 @@ function SwarmBoardCanvas() {
             totalReceipts={totalReceipts}
             totalEdges={totalEdges}
             followActive={followActive}
+            coordinatorConnected={coordinatorConnected}
+            outboxSize={outboxSize}
+            joinedSwarms={joinedSwarms}
           />
         </div>
       </div>
@@ -648,15 +701,12 @@ const NodeContextMenu = forwardRef<
     onInspect: () => void;
     onDuplicate: () => void;
     onDelete: () => void;
-    onConnect: () => void;
   }
->(({ menu, onInspect, onDuplicate, onDelete, onConnect }, ref) => {
-  const items = [
+>(({ menu, onInspect, onDuplicate, onDelete }, ref) => {
+  const items: Array<{ label: string; icon: typeof IconSearch; action: () => void; danger?: boolean }> = [
     { label: "Inspect", icon: IconSearch, action: onInspect },
     { label: "Duplicate", icon: IconCopy, action: onDuplicate },
     { label: "Delete", icon: IconTrash, action: onDelete, danger: true },
-    { type: "separator" as const },
-    { label: "Connect to...", icon: IconLink, action: onConnect, disabled: true },
   ];
 
   return (
@@ -665,35 +715,22 @@ const NodeContextMenu = forwardRef<
       className="fixed z-[100] min-w-[140px] bg-[#0c0e14] border border-[#1a1f2e] rounded-md shadow-[0_8px_32px_rgba(0,0,0,0.6)] py-1"
       style={{ left: menu.x, top: menu.y }}
     >
-      {items.map((item, i) => {
-        if ("type" in item && item.type === "separator") {
-          return <div key={i} className="h-px bg-[#0f1119] my-1" />;
-        }
-        const Icon = "icon" in item ? item.icon : null;
-        const isDanger = "danger" in item && item.danger;
-        const isDisabled = "disabled" in item && item.disabled;
-        return (
-          <button
-            key={i}
-            type="button"
-            className={`flex items-center gap-2 w-full px-3 py-1.5 text-[10px] font-mono transition-colors text-left ${
-              isDisabled
-                ? "text-[#1e2230] cursor-default"
-                : isDanger
-                  ? "text-[#6f7f9a] hover:text-[#e74c3c] hover:bg-[#e74c3c08]"
-                  : "text-[#6f7f9a] hover:text-[#ece7dc] hover:bg-[#ffffff06]"
-            }`}
-            onClick={() => {
-              if (!isDisabled && "action" in item) item.action();
-            }}
-            disabled={isDisabled}
-            aria-label={"label" in item ? item.label : undefined}
-          >
-            {Icon && <Icon size={12} stroke={1.5} />}
-            {"label" in item && item.label}
-          </button>
-        );
-      })}
+      {items.map((item, i) => (
+        <button
+          key={i}
+          type="button"
+          className={`flex items-center gap-2 w-full px-3 py-1.5 text-[10px] font-mono transition-colors text-left ${
+            item.danger
+              ? "text-[#6f7f9a] hover:text-[#e74c3c] hover:bg-[#e74c3c08]"
+              : "text-[#6f7f9a] hover:text-[#ece7dc] hover:bg-[#ffffff06]"
+          }`}
+          onClick={item.action}
+          aria-label={item.label}
+        >
+          <item.icon size={12} stroke={1.5} />
+          {item.label}
+        </button>
+      ))}
     </div>
   );
 });
@@ -713,6 +750,9 @@ function SwarmBoardStatsBar({
   totalReceipts,
   totalEdges,
   followActive,
+  coordinatorConnected,
+  outboxSize,
+  joinedSwarms,
 }: {
   totalNodes: number;
   runningSessions: number;
@@ -720,6 +760,9 @@ function SwarmBoardStatsBar({
   totalReceipts: number;
   totalEdges: number;
   followActive: boolean;
+  coordinatorConnected: boolean;
+  outboxSize: number;
+  joinedSwarms: number;
 }) {
   // Build stat segments, then join with dot separator
   const segments: Array<{ text: string; color?: string }> = [
@@ -730,6 +773,17 @@ function SwarmBoardStatsBar({
   if (totalReceipts > 0) segments.push({ text: `${totalReceipts} receipts` });
   if (totalEdges > 0) segments.push({ text: `${totalEdges} edges` });
   if (followActive) segments.push({ text: "following", color: "#3dbf84" });
+
+  // Coordinator status segments
+  if (coordinatorConnected && joinedSwarms > 0) {
+    segments.push({ text: `${joinedSwarms} swarm${joinedSwarms !== 1 ? "s" : ""}`, color: "#3dbf84" });
+  }
+  if (outboxSize > 0) {
+    segments.push({ text: `${outboxSize} queued`, color: "#d4a84b" });
+  }
+  if (!coordinatorConnected) {
+    segments.push({ text: "offline", color: "#b85450" });
+  }
 
   return (
     <div
@@ -756,8 +810,24 @@ function SwarmBoardStatsBar({
 // ---------------------------------------------------------------------------
 
 export function SwarmBoardPage() {
+  // Extract bundlePath from the wildcard route segment.
+  // Route is "swarm-board/*" so location.pathname looks like "/swarm-board/encoded%2Fpath"
+  // For the plain "/swarm-board" route (scratch board), bundlePath will be undefined.
+  const location = useLocation();
+  const bundlePath = useMemo(() => {
+    const prefix = "/swarm-board/";
+    if (!location.pathname.startsWith(prefix)) return undefined;
+    const encoded = location.pathname.slice(prefix.length);
+    if (!encoded) return undefined;
+    try {
+      return decodeURIComponent(encoded);
+    } catch {
+      return undefined;
+    }
+  }, [location.pathname]);
+
   return (
-    <SwarmBoardProvider>
+    <SwarmBoardProvider bundlePath={bundlePath}>
       <ReactFlowProvider>
         <SwarmBoardCanvas />
       </ReactFlowProvider>

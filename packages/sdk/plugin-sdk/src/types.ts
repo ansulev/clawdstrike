@@ -395,6 +395,8 @@ export interface InstallationMetadata {
   checksum: string;
   /** Ed25519 signature of the canonical manifest JSON. */
   signature: string;
+  /** Optional Ed25519 public key used to verify the manifest signature. */
+  publisherKey?: string;
   /** Minimum compatible workbench version (semver). */
   minWorkbenchVersion?: string;
   /** Maximum compatible workbench version (semver). */

@@ -359,16 +359,16 @@ beforeEach(() => {
 // ---------------------------------------------------------------------------
 
 describe("SwarmBoard initial state", () => {
-  it("has a boardId and empty selection on first mount (with mock data)", () => {
+  it("has a boardId and empty board on first mount (no mock data)", () => {
     render(
       <SwarmBoardProvider>
         <Harness />
       </SwarmBoardProvider>,
     );
 
-    // The store seeds mock data on first visit (no localStorage)
+    // The store starts empty on first visit (no localStorage, no mock seeding)
     const nodeCount = Number(screen.getByTestId("node-count").textContent);
-    expect(nodeCount).toBeGreaterThan(0);
+    expect(nodeCount).toBe(0);
     expect(screen.getByTestId("selected-id").textContent).toBe("none");
     expect(screen.getByTestId("inspector-open").textContent).toBe("false");
     expect(screen.getByTestId("board-id").textContent).toBeTruthy();
@@ -407,17 +407,16 @@ describe("SwarmBoard initial state", () => {
     expect(screen.getByTestId("node-ids").textContent).toBe("node-persisted-1");
   });
 
-  it("falls back to mock data when localStorage is empty", () => {
+  it("starts with empty board when localStorage is empty (no mock fallback)", () => {
     render(
       <SwarmBoardProvider>
         <Harness />
       </SwarmBoardProvider>,
     );
 
-    // Mock board has 7 nodes and 4 edges
-    const mock = createMockBoard();
-    expect(Number(screen.getByTestId("node-count").textContent)).toBe(mock.nodes.length);
-    expect(Number(screen.getByTestId("edge-count").textContent)).toBe(mock.edges.length);
+    // Board starts empty — no mock data seeded
+    expect(Number(screen.getByTestId("node-count").textContent)).toBe(0);
+    expect(Number(screen.getByTestId("edge-count").textContent)).toBe(0);
   });
 });
 
@@ -998,7 +997,20 @@ describe("TOGGLE_INSPECTOR", () => {
 
 describe("rfEdges", () => {
   it("converts SwarmBoardEdge to React Flow Edge format", () => {
-    // Use the mock board which has edges with labels and types
+    // Seed a board with edges so we can test RF conversion
+    const persisted = {
+      boardId: "board-rfedge",
+      repoRoot: "/test",
+      nodes: [
+        { id: "n1", type: "agentSession", position: { x: 0, y: 0 }, data: { title: "A", status: "idle", nodeType: "agentSession" } },
+        { id: "n2", type: "agentSession", position: { x: 100, y: 0 }, data: { title: "B", status: "idle", nodeType: "agentSession" } },
+      ],
+      edges: [
+        { id: "e1", source: "n1", target: "n2", label: "handoff", type: "handoff" },
+      ],
+    };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(persisted));
+
     render(
       <SwarmBoardProvider>
         <Harness />
@@ -1017,35 +1029,28 @@ describe("rfEdges", () => {
 // ---------------------------------------------------------------------------
 
 describe("useSwarmBoard hook outside provider", () => {
-  it("throws when used outside SwarmBoardProvider", () => {
-    // Using a class-based error boundary
-    class TestErrorBoundary extends React.Component<
-      { children: React.ReactNode },
-      { error: string | null }
-    > {
-      state = { error: null as string | null };
-      static getDerivedStateFromError(error: Error) {
-        return { error: error.message };
-      }
-      render() {
-        if (this.state.error) return <pre data-testid="error">{this.state.error}</pre>;
-        return this.props.children;
-      }
-    }
+  it("works outside SwarmBoardProvider for store access but session methods reject", () => {
+    // After the Zustand migration, useSwarmBoard() no longer throws outside
+    // the provider. Store state is globally accessible. Session management
+    // methods (spawnSession, killSession, etc.) reject with an error because
+    // they require the SwarmBoardSessionContext from the provider.
+    let hookValue: ReturnType<typeof useSwarmBoard> | null = null;
 
-    const BadComponent = () => {
-      useSwarmBoard();
-      return null;
+    const ReaderComponent = () => {
+      hookValue = useSwarmBoard();
+      return <div data-testid="reader">ok</div>;
     };
 
-    render(
-      <TestErrorBoundary>
-        <BadComponent />
-      </TestErrorBoundary>,
-    );
+    render(<ReaderComponent />);
 
-    expect(screen.getByTestId("error").textContent).toContain(
-      "useSwarmBoard must be used within SwarmBoardProvider",
+    expect(screen.getByTestId("reader")).toBeInTheDocument();
+    expect(hookValue).not.toBeNull();
+    expect(hookValue!.state).toBeDefined();
+    expect(hookValue!.state.nodes).toBeDefined();
+
+    // Session methods should reject when used outside provider
+    expect(hookValue!.spawnSession({ cwd: "/tmp" })).rejects.toThrow(
+      "useSwarmBoard must be used within SwarmBoardProvider for session management",
     );
   });
 });

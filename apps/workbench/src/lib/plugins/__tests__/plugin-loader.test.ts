@@ -12,6 +12,10 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { PluginRegistry } from "../plugin-registry";
 import { createTestManifest } from "../manifest-validation";
 import { getGuardMeta, unregisterGuard } from "../../workbench/guard-registry";
+import {
+  getStatusBarItems,
+  onStatusBarChange,
+} from "../../workbench/status-bar-registry";
 import { getView, getViewsBySlot } from "../view-registry";
 import { getThreatIntelSource, _resetForTesting as resetThreatIntelRegistry } from "../../workbench/threat-intel-registry";
 import type { PluginManifest, GuardContribution, NetworkPermission } from "../types";
@@ -70,6 +74,10 @@ function createMockModule(overrides?: Partial<PluginModule>): PluginModule {
     deactivate: vi.fn(),
     ...overrides,
   };
+}
+
+async function resolveCommunityPluginCode(): Promise<string> {
+  return 'console.debug("community plugin test bootstrap");';
 }
 
 // ---- Test suite ----
@@ -367,6 +375,7 @@ describe("PluginLoader", () => {
         registry,
         resolveModule,
         trustOptions: { allowUnsigned: true },
+        resolvePluginCode: resolveCommunityPluginCode,
       });
 
       await loader.loadPlugin("community-noresolve");
@@ -391,6 +400,7 @@ describe("PluginLoader", () => {
         registry,
         trustOptions: { allowUnsigned: true },
         iframeContainer,
+        resolvePluginCode: resolveCommunityPluginCode,
       });
 
       await loader.loadPlugin("community-bridge");
@@ -422,6 +432,7 @@ describe("PluginLoader", () => {
         registry,
         trustOptions: { allowUnsigned: true },
         iframeContainer,
+        resolvePluginCode: resolveCommunityPluginCode,
       });
 
       await loader.loadPlugin("community-listener");
@@ -454,6 +465,7 @@ describe("PluginLoader", () => {
         registry,
         trustOptions: { allowUnsigned: true },
         iframeContainer,
+        resolvePluginCode: resolveCommunityPluginCode,
       });
 
       await loader.loadPlugin("community-activated");
@@ -483,6 +495,7 @@ describe("PluginLoader", () => {
         registry,
         trustOptions: { allowUnsigned: true },
         iframeContainer,
+        resolvePluginCode: resolveCommunityPluginCode,
       });
 
       await loader.loadPlugin("community-deactivate");
@@ -516,6 +529,7 @@ describe("PluginLoader", () => {
         registry,
         trustOptions: { allowUnsigned: true },
         iframeContainer,
+        resolvePluginCode: resolveCommunityPluginCode,
       });
 
       await loader.loadPlugin("community-deactivate-state");
@@ -549,6 +563,7 @@ describe("PluginLoader", () => {
         registry,
         trustOptions: { allowUnsigned: true },
         iframeContainer,
+        resolvePluginCode: resolveCommunityPluginCode,
       });
 
       await loader.loadPlugin("community-no-main");
@@ -609,6 +624,7 @@ describe("PluginLoader", () => {
         registry,
         trustOptions: { allowUnsigned: true },
         iframeContainer,
+        resolvePluginCode: resolveCommunityPluginCode,
       });
 
       await loader.loadPlugin("perm-wire-test");
@@ -639,6 +655,7 @@ describe("PluginLoader", () => {
         registry,
         trustOptions: { allowUnsigned: true },
         iframeContainer,
+        resolvePluginCode: resolveCommunityPluginCode,
       });
 
       await loader.loadPlugin("perm-deny-test");
@@ -674,6 +691,7 @@ describe("PluginLoader", () => {
         registry,
         trustOptions: { allowUnsigned: true },
         iframeContainer,
+        resolvePluginCode: resolveCommunityPluginCode,
       });
 
       await loader.loadPlugin("net-perm-wire-test");
@@ -704,6 +722,7 @@ describe("PluginLoader", () => {
         registry,
         trustOptions: { allowUnsigned: true },
         iframeContainer,
+        resolvePluginCode: resolveCommunityPluginCode,
       });
 
       await loader.loadPlugin("no-perm-compat-test");
@@ -884,6 +903,52 @@ describe("PluginLoader", () => {
       await loader.deactivatePlugin("status-bar-crash-test");
     });
 
+    it("re-registers async status bar items after their component module loads", async () => {
+      const notifications = vi.fn();
+      const unsubscribe = onStatusBarChange(notifications);
+      const entrypoint = `data:text/javascript,${encodeURIComponent(
+        "export default function PluginStatusWidget(){ return null; }",
+      )}`;
+      const manifest = createTestManifest({
+        id: "status-bar-async-test",
+        trust: "internal",
+        activationEvents: ["onStartup"],
+        contributions: {
+          statusBarItems: [
+            { id: "async-status", side: "right" as const, priority: 25, entrypoint },
+          ],
+        },
+      });
+      delete (manifest as Partial<PluginManifest> & { main?: string }).main;
+      registry.register(manifest);
+
+      const mockModule = createMockModule();
+      loader = new PluginLoader({
+        registry,
+        resolveModule: async () => mockModule,
+      });
+
+      await loader.loadPlugin("status-bar-async-test");
+
+      const pendingItem = getStatusBarItems("right").find(
+        (item) => item.id === "async-status",
+      );
+      expect(pendingItem).toBeDefined();
+      expect(pendingItem!.render()).toBeNull();
+
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      const resolvedItem = getStatusBarItems("right").find(
+        (item) => item.id === "async-status",
+      );
+      expect(resolvedItem).toBeDefined();
+      expect(resolvedItem!.render()).not.toBeNull();
+      expect(notifications.mock.calls.length).toBeGreaterThanOrEqual(3);
+
+      unsubscribe();
+      await loader.deactivatePlugin("status-bar-async-test");
+    });
+
     // Test 28: loadPlugin() with activityBarItems routes to ViewRegistry with slot 'activityBarPanel'
     it("loadPlugin() with activityBarItems contribution routes to ViewRegistry with slot 'activityBarPanel'", async () => {
       const manifest = createTestManifest({
@@ -915,6 +980,40 @@ describe("PluginLoader", () => {
 
       // Clean up
       await loader.deactivatePlugin("activity-bar-plugin");
+    });
+
+    it("registering SDK views does not eagerly invoke zero-arg React components", async () => {
+      const manifest = createTestManifest({
+        id: "sdk-view-plugin",
+        trust: "internal",
+        activationEvents: ["onStartup"],
+        main: "./index.ts",
+      });
+      registry.register(manifest);
+
+      const viewComponent = vi.fn(() => null);
+      const mockModule = createMockModule({
+        activate: (ctx: PluginActivationContext) => {
+          ctx.views.registerEditorTab({
+            id: "sdk-view",
+            label: "SDK View",
+            component: viewComponent,
+          });
+          return [];
+        },
+      });
+
+      loader = new PluginLoader({
+        registry,
+        resolveModule: async () => mockModule,
+      });
+
+      await loader.loadPlugin("sdk-view-plugin");
+
+      expect(viewComponent).not.toHaveBeenCalled();
+      expect(getView("sdk-view-plugin.sdk-view")).toBeDefined();
+
+      await loader.deactivatePlugin("sdk-view-plugin");
     });
   });
 
@@ -961,8 +1060,10 @@ describe("PluginLoader", () => {
       // Allow the async IIFE inside routeContributions to complete
       await new Promise((resolve) => setTimeout(resolve, 50));
 
-      // resolveEntrypoint should have been called with the source entrypoint
-      expect(resolveEntrypoint).toHaveBeenCalledWith("./sources/vt.ts");
+      // resolveEntrypoint should receive the plugin-root-relative resolved URL
+      expect(resolveEntrypoint).toHaveBeenCalledWith(
+        expect.stringContaining("/sources/vt.ts"),
+      );
 
       // The source should be registered in the threat intel registry
       const source = getThreatIntelSource("ti-plugin.vt");

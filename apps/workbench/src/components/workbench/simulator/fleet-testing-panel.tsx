@@ -2,7 +2,6 @@ import { useState, useCallback, useMemo, useRef } from "react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { VerdictBadge } from "@/components/workbench/shared/verdict-badge";
 import { useFleetConnection } from "@/features/fleet/use-fleet-connection";
-import { useWorkbench } from "@/features/policy/stores/multi-policy-store";
 import { useToast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
 import { simulatePolicy } from "@/lib/workbench/simulation-engine";
@@ -33,6 +32,8 @@ import {
   IconClock,
   IconX,
 } from "@tabler/icons-react";
+import { usePolicyTabsStore } from "@/features/policy/stores/policy-tabs-store";
+import { usePolicyEditStore } from "@/features/policy/stores/policy-edit-store";
 
 
 type TimeRange = "1h" | "24h" | "7d";
@@ -237,7 +238,9 @@ function DisconnectedState() {
 
 export function FleetTestingPanel() {
   const { connection, getAuthenticatedConnection } = useFleetConnection();
-  const { state } = useWorkbench();
+  const activeTabId = usePolicyTabsStore(s => s.activeTabId);
+  const activeTab = usePolicyTabsStore(s => s.tabs.find(t => t.id === s.activeTabId));
+  const editState = usePolicyEditStore(s => s.editStates.get(activeTabId));
   const { toast } = useToast();
 
   const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([]);
@@ -260,9 +263,9 @@ export function FleetTestingPanel() {
   const coverageGaps: CoverageGap[] = useMemo(
     () =>
       auditEvents.length > 0
-        ? identifyCoverageGaps(auditEvents, state.activePolicy)
+        ? identifyCoverageGaps(auditEvents, (editState?.policy ?? { version: "1.1.0", name: "", description: "", guards: {}, settings: {} }))
         : [],
-    [auditEvents, state.activePolicy],
+    [auditEvents, (editState?.policy ?? { version: "1.1.0", name: "", description: "", guards: {}, settings: {} })],
   );
 
   // Action type chart items
@@ -366,9 +369,9 @@ export function FleetTestingPanel() {
 
     // Validate active policy has guards before running
     if (
-      !state.activePolicy ||
-      !state.activePolicy.guards ||
-      Object.keys(state.activePolicy.guards).length === 0
+      !(editState?.policy ?? { version: "1.1.0", name: "", description: "", guards: {}, settings: {} }) ||
+      !(editState?.policy ?? { version: "1.1.0", name: "", description: "", guards: {}, settings: {} }).guards ||
+      Object.keys((editState?.policy ?? { version: "1.1.0", name: "", description: "", guards: {}, settings: {} }).guards).length === 0
     ) {
       toast({
         type: "error",
@@ -400,7 +403,7 @@ export function FleetTestingPanel() {
 
       const end = Math.min(offset + BATCH_SIZE, scenarios.length);
       for (let i = offset; i < end; i++) {
-        results.push(simulatePolicy(state.activePolicy, scenarios[i]));
+        results.push(simulatePolicy((editState?.policy ?? { version: "1.1.0", name: "", description: "", guards: {}, settings: {} }), scenarios[i]));
       }
       offset = end;
       setSimulationProgress(Math.round((offset / scenarios.length) * 100));
@@ -452,7 +455,7 @@ export function FleetTestingPanel() {
     }
 
     requestAnimationFrame(processBatch);
-  }, [scenarios, state.activePolicy, toast]);
+  }, [scenarios, (editState?.policy ?? { version: "1.1.0", name: "", description: "", guards: {}, settings: {} }), toast]);
 
   const toggleSection = useCallback(
     (section: string) => {

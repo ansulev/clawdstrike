@@ -1,23 +1,20 @@
-import type { NavigateFunction } from "react-router-dom";
 import type React from "react";
 import { commandRegistry } from "@/lib/command-registry";
 import type { Command } from "@/lib/command-registry";
-import type { WorkbenchAction } from "@/features/policy/stores/policy-store";
-import type { MultiPolicyAction } from "@/features/policy/stores/multi-policy-store";
-import type { PolicyTab } from "@/features/policy/stores/multi-policy-store";
+import type { TabMeta } from "@/features/policy/stores/policy-tabs-store";
+import { openSearchPanel, searchKeymap, gotoLine } from "@codemirror/search";
+import { getActiveEditorView } from "@/components/ui/yaml-editor";
+import { usePolicyTabsStore } from "@/features/policy/stores/policy-tabs-store";
+import { usePaneStore } from "@/features/panes/pane-store";
 
 export interface EditCommandDeps {
-  navigate: NavigateFunction;
-  dispatch: React.Dispatch<WorkbenchAction>;
-  multiDispatch: React.Dispatch<MultiPolicyAction>;
   undo: () => void;
   redo: () => void;
-  getSidebarCollapsed: () => boolean;
-  getActiveTab: () => PolicyTab | undefined;
+  getActiveTab: () => TabMeta | undefined;
 }
 
 export function registerEditCommands(deps: EditCommandDeps): void {
-  const { navigate, dispatch, multiDispatch, undo, redo, getSidebarCollapsed, getActiveTab } = deps;
+  const { undo, redo, getActiveTab } = deps;
 
   const commands: Command[] = [
     {
@@ -37,34 +34,22 @@ export function registerEditCommands(deps: EditCommandDeps): void {
       execute: () => redo(),
     },
     {
-      id: "edit.toggleSidebar",
-      title: "Toggle Sidebar",
-      category: "Edit",
-      keybinding: "Meta+B",
-      context: "editor",
-      execute: () => {
-        dispatch({
-          type: "SET_SIDEBAR_COLLAPSED",
-          collapsed: !getSidebarCollapsed(),
-        });
-      },
-    },
-    {
       id: "edit.newTab",
       title: "New Tab",
       category: "Edit",
       keybinding: "Meta+T",
       context: "editor",
       execute: () => {
-        multiDispatch({ type: "NEW_TAB" });
-        navigate("/editor");
+        const newTabId = usePolicyTabsStore.getState().newTab();
+        if (newTabId) {
+          usePaneStore.getState().openApp(`/file/__new__/${newTabId}`, "Untitled");
+        }
       },
     },
     {
       id: "edit.closeTab",
       title: "Close Tab",
       category: "Edit",
-      keybinding: "Meta+W",
       context: "editor",
       execute: () => {
         const tab = getActiveTab();
@@ -75,7 +60,50 @@ export function registerEditCommands(deps: EditCommandDeps): void {
           );
           if (!confirmed) return;
         }
-        multiDispatch({ type: "CLOSE_TAB", tabId: tab.id });
+        usePolicyTabsStore.getState().closeTab(tab.id);
+      },
+    },
+    {
+      id: "edit.find",
+      title: "Find",
+      category: "Edit",
+      keybinding: "Meta+F",
+      context: "editor",
+      execute: () => {
+        const view = getActiveEditorView();
+        if (view) openSearchPanel(view);
+      },
+    },
+    {
+      id: "edit.replace",
+      title: "Find and Replace",
+      category: "Edit",
+      keybinding: "Meta+H",
+      context: "editor",
+      execute: () => {
+        const view = getActiveEditorView();
+        if (!view) return;
+        // Find the Mod-h command from searchKeymap which opens search with replace enabled
+        const replaceCmd = searchKeymap.find(
+          (k) => k.key === "Mod-h" || k.key === "Mod-H"
+        );
+        if (replaceCmd?.run) {
+          replaceCmd.run(view);
+        } else {
+          // Fallback: open find-only panel
+          openSearchPanel(view);
+        }
+      },
+    },
+    {
+      id: "edit.goToLine",
+      title: "Go to Line",
+      category: "Edit",
+      keybinding: "Meta+G",
+      context: "editor",
+      execute: () => {
+        const view = getActiveEditorView();
+        if (view) gotoLine(view);
       },
     },
   ];

@@ -1,4 +1,4 @@
-import { Component, Suspense, useEffect } from "react";
+import { Component, Suspense, useEffect, useRef } from "react";
 import type { ErrorInfo, ReactNode } from "react";
 import { HashRouter, useRoutes } from "react-router-dom";
 import { ToastProvider } from "@/components/ui/toast";
@@ -6,10 +6,16 @@ import { DesktopLayout } from "@/components/desktop/desktop-layout";
 import { IdentityPrompt } from "@/components/workbench/identity/identity-prompt";
 import { useOperator } from "@/features/operator/stores/operator-store";
 import { useFleetConnection } from "@/features/fleet/use-fleet-connection";
+import { usePresenceConnection } from "@/features/presence/use-presence-connection";
+import { usePresenceFileTracking } from "@/features/presence/use-presence-file-tracking";
 import { useHintSettingsSafe } from "@/features/settings/use-hint-settings";
-import { useMultiPolicyBootstrap } from "@/features/policy/stores/multi-policy-store";
+import { usePolicyBootstrap } from "@/features/policy/hooks/use-policy-bootstrap";
 import { secureStore, migrateCredentialsToStronghold } from "@/features/settings/secure-store";
 import { bootstrapThreatIntelPlugins } from "@/lib/plugins/threat-intel/bootstrap";
+import { useProjectStore } from "@/features/project/stores/project-store";
+import { useToast } from "@/components/ui/toast";
+import { usePaneStore } from "@/features/panes/pane-store";
+import { useSignalCorrelator } from "@/features/findings/hooks/use-signal-correlator";
 
 function LoadingFallback() {
   return (
@@ -61,11 +67,101 @@ function LoadingFallback() {
   );
 }
 
+/**
+ * Bootstrap the workspace on first launch or restore persisted roots.
+ *
+ * - Always ensures ~/.clawdstrike/workspace/ exists (creates it if missing).
+ * - If persisted roots exist (subsequent launches), restores them. If the
+ *   default workspace path is not among the persisted roots it is added
+ *   automatically so the Explorer never shows the raw ~/.clawdstrike config
+ *   directory.
+ * - If no roots exist (first launch), scaffolds the default workspace
+ *   at ~/.clawdstrike/workspace/ and mounts it.
+ *
+ * Fire-and-forget: errors are logged but never thrown.
+ */
+function useWorkspaceBootstrap(toastRef: React.RefObject<ReturnType<typeof useToast>["toast"] | null>) {
+  useEffect(() => {
+    async function init() {
+      const { isDesktop } = await import("@/lib/tauri-bridge");
+      if (!isDesktop()) return;
+
+      const store = useProjectStore.getState();
+      store.actions.setLoading(true);
+
+      try {
+        // Always ensure the default workspace directory structure exists.
+        const { bootstrapDefaultWorkspace, getDefaultWorkspacePath } = await import(
+          "@/features/project/workspace-bootstrap"
+        );
+        const workspacePath = await bootstrapDefaultWorkspace();
+        const defaultPath = workspacePath ?? await getDefaultWorkspacePath();
+
+        const roots = store.projectRoots;
+
+        if (roots.length > 0) {
+          // Restore persisted workspace roots.
+          await store.actions.initFromPersistedRoots();
+
+          // If the default workspace path is missing from persisted roots,
+          // add it so the user always sees the workspace (not the raw config dir).
+          const currentRoots = useProjectStore.getState().projectRoots;
+          if (!currentRoots.includes(defaultPath)) {
+            store.actions.addRoot(defaultPath);
+          }
+        } else {
+          // First launch: mount the default workspace.
+          store.actions.addRoot(defaultPath);
+          await store.actions.loadRoot(defaultPath);
+        }
+
+        // Safety net: if after all bootstrap paths the projects Map is still
+        // empty (e.g. stale persisted roots pointing to deleted directories),
+        // ensure the default workspace is loaded as a fallback.
+        const finalProjects = useProjectStore.getState().projects;
+        if (finalProjects.size === 0) {
+          const finalRoots = useProjectStore.getState().projectRoots;
+          if (!finalRoots.includes(defaultPath)) {
+            store.actions.addRoot(defaultPath);
+          }
+          await store.actions.loadRoot(defaultPath);
+        }
+      } finally {
+        useProjectStore.getState().actions.setLoading(false);
+      }
+
+      // Restore the previous pane session AFTER workspace roots are loaded
+      // so that restored file panes can resolve against mounted projects.
+      const count = usePaneStore.getState().restoreSession();
+      if (count > 0 && toastRef.current) {
+        toastRef.current({
+          type: "info",
+          title: `Restored ${count} file${count === 1 ? "" : "s"}`,
+          description: "Your previous session has been restored",
+          duration: 3000,
+        });
+      }
+    }
+    init().catch((err) => {
+      console.warn("[workspace-bootstrap] Init failed:", err);
+      useProjectStore.getState().actions.setLoading(false);
+    });
+  }, []);
+}
+
 function WorkbenchBootstraps() {
+  const { toast } = useToast();
+  const toastRef = useRef<typeof toast | null>(null);
+  toastRef.current = toast;
+
   useOperator();
   useFleetConnection();
+  usePresenceConnection();
+  usePresenceFileTracking();
   useHintSettingsSafe();
-  useMultiPolicyBootstrap();
+  usePolicyBootstrap();
+  useSignalCorrelator();
+  useWorkspaceBootstrap(toastRef);
   return null;
 }
 
@@ -185,17 +281,26 @@ function AppProviders({ children }: { children: ReactNode }) {
 export function App() {
   // Initialise Stronghold vault, migrate legacy credentials, then bootstrap threat intel plugins.
   useEffect(() => {
-    secureStore
-      .init()
-      .then(() => {
-        migrateCredentialsToStronghold().catch((err) => {
-          console.warn("[secure-store] Credential migration failed (non-fatal):", err);
-        });
-        return bootstrapThreatIntelPlugins();
-      })
-      .catch((err) => {
+    async function bootstrapSecureStore() {
+      try {
+        await secureStore.init();
+      } catch (err) {
         console.warn("[secure-store] Startup init failed:", err);
-      });
+        return;
+      }
+
+      try {
+        await migrateCredentialsToStronghold();
+      } catch (err) {
+        console.warn("[secure-store] Credential migration failed (non-fatal):", err);
+      }
+
+      await bootstrapThreatIntelPlugins();
+    }
+
+    bootstrapSecureStore().catch((err) => {
+      console.warn("[plugins] Threat intel bootstrap failed:", err);
+    });
   }, []);
 
   return (

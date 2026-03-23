@@ -12,6 +12,7 @@ pub mod me;
 pub mod metrics;
 pub mod policy;
 pub mod policy_scoping;
+pub mod presence;
 pub mod rbac;
 pub mod saml;
 pub mod session;
@@ -449,12 +450,17 @@ pub fn create_router(state: AppState) -> Router {
         .route("/api/v1/swarm/blobs/pin", post(swarm_hub::pin_swarm_blob))
         .layer(middleware::from_fn_with_state(state.clone(), require_auth));
 
+    // WebSocket routes — auth handled internally via query param because the
+    // browser WebSocket constructor cannot set custom HTTP headers.
+    let ws_routes = Router::new().route("/api/v1/presence", get(presence::ws_handler));
+
     // Note: Rate limiting is applied to all routes except /health (handled in middleware).
     // CORS is applied only if enabled in config.
     let max_body = state.config.max_request_body_bytes;
 
     let app = Router::new()
         .merge(public_routes)
+        .merge(ws_routes)
         .nest("/v1", v1_routes)
         .merge(check_routes)
         .merge(read_routes)

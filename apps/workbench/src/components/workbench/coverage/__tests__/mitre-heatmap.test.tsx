@@ -2,7 +2,7 @@ import React from "react";
 import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { MitreHeatmap } from "../mitre-heatmap";
-import type { PolicyTab } from "@/features/policy/stores/multi-policy-store";
+import type { PolicyTab } from "@/features/policy/types/policy-tab";
 import { DEFAULT_POLICY } from "@/features/policy/stores/policy-store";
 
 vi.mock("@/components/ui/scroll-area", () => ({

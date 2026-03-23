@@ -655,21 +655,31 @@ function getDemoShelfContent(mode: ShelfMode) {
 // Capsule Content Renderers
 // =============================================================================
 
-function OutputContent({ capsule }: CapsuleContentProps) {
+function capsuleContentClass(baseClassName: string, isExpanded: boolean): string {
+  return `${baseClassName} ${isExpanded ? `${baseClassName}--expanded` : `${baseClassName}--collapsed`}`;
+}
+
+function OutputContent({ capsule, isExpanded }: CapsuleContentProps) {
   const output = capsule.sourceData as string | undefined;
   return (
-    <div className="capsule-content-output">
+    <div
+      className={capsuleContentClass("capsule-content-output", isExpanded)}
+      data-expanded={isExpanded}
+    >
       <pre className="capsule-output-log">{output || "Awaiting echoes from the void..."}</pre>
     </div>
   );
 }
 
-function EventsContent({ capsule }: CapsuleContentProps) {
+function EventsContent({ capsule, isExpanded }: CapsuleContentProps) {
   const events = capsule.sourceData as
     | Array<{ type: string; message: string; timestamp: string }>
     | undefined;
   return (
-    <div className="capsule-content-events">
+    <div
+      className={capsuleContentClass("capsule-content-events", isExpanded)}
+      data-expanded={isExpanded}
+    >
       {events?.length ? (
         <ul className="capsule-events-list">
           {events.map((event, i) => (
@@ -686,9 +696,12 @@ function EventsContent({ capsule }: CapsuleContentProps) {
   );
 }
 
-function ArtifactContent({ capsule }: CapsuleContentProps) {
+function ArtifactContent({ capsule, isExpanded }: CapsuleContentProps) {
   return (
-    <div className="capsule-content-artifact">
+    <div
+      className={capsuleContentClass("capsule-content-artifact", isExpanded)}
+      data-expanded={isExpanded}
+    >
       <div className="capsule-artifact-preview">
         <span className="capsule-artifact-icon" aria-hidden="true">
           <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor">
@@ -701,10 +714,13 @@ function ArtifactContent({ capsule }: CapsuleContentProps) {
   );
 }
 
-function InspectorContent({ capsule }: CapsuleContentProps) {
+function InspectorContent({ capsule, isExpanded }: CapsuleContentProps) {
   const data = capsule.sourceData as Record<string, unknown> | undefined;
   return (
-    <div className="capsule-content-inspector">
+    <div
+      className={capsuleContentClass("capsule-content-inspector", isExpanded)}
+      data-expanded={isExpanded}
+    >
       <pre className="capsule-inspector-json">
         {data ? JSON.stringify(data, null, 2) : "No data"}
       </pre>
@@ -712,9 +728,12 @@ function InspectorContent({ capsule }: CapsuleContentProps) {
   );
 }
 
-function TerminalContent({ capsule }: CapsuleContentProps) {
+function TerminalContent({ capsule, isExpanded }: CapsuleContentProps) {
   return (
-    <div className="capsule-content-terminal">
+    <div
+      className={capsuleContentClass("capsule-content-terminal", isExpanded)}
+      data-expanded={isExpanded}
+    >
       <div className="capsule-terminal-placeholder">Terminal: {capsule.sourceId || capsule.id}</div>
     </div>
   );
@@ -735,7 +754,7 @@ interface ActionData {
   createdAt?: string;
 }
 
-function ActionContent({ capsule }: CapsuleContentProps) {
+function ActionContent({ capsule, isExpanded }: CapsuleContentProps) {
   const action = capsule.sourceData as ActionData | undefined;
 
   if (!action) {
@@ -745,7 +764,10 @@ function ActionContent({ capsule }: CapsuleContentProps) {
   const priorityClass = `action-priority-${action.priority}`;
 
   return (
-    <div className={`capsule-content-action ${priorityClass}`}>
+    <div
+      className={`${capsuleContentClass("capsule-content-action", isExpanded)} ${priorityClass}`}
+      data-expanded={isExpanded}
+    >
       {/* Action Header */}
       <div className="action-header">
         <ActionTypeIcon type={action.type} />
@@ -813,11 +835,14 @@ interface ChatData {
   isTyping?: boolean;
 }
 
-function ChatContent({ capsule }: CapsuleContentProps) {
+function ChatContent({ capsule, isExpanded }: CapsuleContentProps) {
   const chat = capsule.sourceData as ChatData | undefined;
 
   return (
-    <div className="capsule-content-chat">
+    <div
+      className={capsuleContentClass("capsule-content-chat", isExpanded)}
+      data-expanded={isExpanded}
+    >
       {chat?.messages?.length ? (
         <>
           <div className="chat-messages">
@@ -877,11 +902,14 @@ interface SocialData {
   pendingRequests?: number;
 }
 
-function SocialContent({ capsule }: CapsuleContentProps) {
+function SocialContent({ capsule, isExpanded }: CapsuleContentProps) {
   const social = capsule.sourceData as SocialData | undefined;
 
   return (
-    <div className="capsule-content-social">
+    <div
+      className={capsuleContentClass("capsule-content-social", isExpanded)}
+      data-expanded={isExpanded}
+    >
       {social?.pendingRequests && social.pendingRequests > 0 && (
         <div className="social-pending-banner">
           <span className="social-pending-count">{social.pendingRequests}</span>
@@ -929,11 +957,14 @@ interface SeasonPassData {
   isPremium?: boolean;
 }
 
-function SeasonPassContent({ capsule }: CapsuleContentProps) {
+function SeasonPassContent({ capsule, isExpanded }: CapsuleContentProps) {
   const data = capsule.sourceData as SeasonPassData | undefined;
 
   return (
-    <div className="capsule-content-season-pass">
+    <div
+      className={capsuleContentClass("capsule-content-season-pass", isExpanded)}
+      data-expanded={isExpanded}
+    >
       <div className="capsule-empty">
         Season pass is not wired in this build{data?.isPremium ? " (premium)" : ""}.
       </div>

@@ -1,6 +1,7 @@
 import type { PaneFocusDirection } from "@/features/panes/pane-types";
 import { commandRegistry } from "@/lib/command-registry";
 import type { Command } from "@/lib/command-registry";
+import { useRightSidebarStore } from "@/features/right-sidebar/stores/right-sidebar-store";
 
 export interface ViewCommandDeps {
   toggleShortcutHelp: () => void;
@@ -15,6 +16,18 @@ export interface ViewCommandDeps {
   newTerminal: () => Promise<void>;
   closeTerminal: () => Promise<void>;
   hasActiveTerminal: () => boolean;
+  toggleSidebar: () => void;
+  showExplorer: () => void;
+  showSearch: () => void;
+  closeActiveTab: () => void;
+  toggleRightSidebar: () => void;
+  showSentinels: () => void;
+  showFindings: () => void;
+  showLibrary: () => void;
+  showFleet: () => void;
+  showCompliance: () => void;
+  showHeartbeat: () => void;
+  toggleAudit: () => void;
 }
 
 export function registerViewCommands(deps: ViewCommandDeps): void {
@@ -126,6 +139,128 @@ export function registerViewCommands(deps: ViewCommandDeps): void {
       context: "terminal",
       when: () => deps.hasActiveTerminal(),
       execute: () => deps.closeTerminal(),
+    },
+    {
+      id: "sidebar.toggle",
+      title: "Toggle Sidebar",
+      category: "View",
+      keybinding: "Meta+B",
+      context: "global",
+      execute: () => deps.toggleSidebar(),
+    },
+    {
+      id: "sidebar.explorer",
+      title: "Show Explorer",
+      category: "Sidebar",
+      keybinding: "Meta+Shift+E",
+      context: "global",
+      execute: () => deps.showExplorer(),
+    },
+    {
+      id: "sidebar.search",
+      title: "Search in Files",
+      category: "Sidebar",
+      keybinding: "Meta+Shift+F",
+      context: "global",
+      execute: () => deps.showSearch(),
+    },
+    {
+      id: "tab.close",
+      title: "Close Active Tab",
+      category: "View",
+      keybinding: "Meta+W",
+      context: "pane",
+      execute: () => deps.closeActiveTab(),
+    },
+    {
+      id: "sidebar.toggleRight",
+      title: "Toggle Right Sidebar",
+      category: "View",
+      keybinding: "Meta+Shift+B",
+      context: "global",
+      execute: () => deps.toggleRightSidebar(),
+    },
+    {
+      id: "sidebar.sentinels",
+      title: "Show Sentinels",
+      category: "Sidebar",
+      context: "global",
+      execute: () => deps.showSentinels(),
+    },
+    {
+      id: "sidebar.findings",
+      title: "Show Findings",
+      category: "Sidebar",
+      context: "global",
+      execute: () => deps.showFindings(),
+    },
+    {
+      id: "sidebar.library",
+      title: "Show Library",
+      category: "Sidebar",
+      context: "global",
+      execute: () => deps.showLibrary(),
+    },
+    {
+      id: "sidebar.fleet",
+      title: "Show Fleet",
+      category: "Sidebar",
+      context: "global",
+      execute: () => deps.showFleet(),
+    },
+    {
+      id: "sidebar.compliance",
+      title: "Show Compliance",
+      category: "Sidebar",
+      context: "global",
+      execute: () => deps.showCompliance(),
+    },
+    {
+      id: "sidebar.heartbeat",
+      title: "Show System Status",
+      category: "Sidebar",
+      context: "global",
+      execute: () => deps.showHeartbeat(),
+    },
+    {
+      id: "view.toggleAudit",
+      title: "Toggle Audit Panel",
+      category: "View",
+      context: "global",
+      execute: () => deps.toggleAudit(),
+    },
+    {
+      id: "rightSidebar.evidence",
+      title: "Show Evidence Packs",
+      category: "View",
+      context: "global",
+      execute: () => {
+        const store = useRightSidebarStore.getState();
+        store.actions.setActivePanel("evidence");
+        store.actions.show();
+      },
+    },
+    {
+      id: "rightSidebar.explain",
+      title: "Show Explainability Traces",
+      category: "View",
+      context: "global",
+      execute: () => {
+        const store = useRightSidebarStore.getState();
+        store.actions.setActivePanel("explain");
+        store.actions.show();
+      },
+    },
+    {
+      id: "rightSidebar.history",
+      title: "Show Version History",
+      category: "View",
+      context: "global",
+      execute: () => {
+        const store = useRightSidebarStore.getState();
+        store.actions.setActivePanel("history");
+        store.actions.show();
+      },
     },
   ];
 

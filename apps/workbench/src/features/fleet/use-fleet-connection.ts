@@ -2,7 +2,7 @@
 //
 // Migrated from React Context + useState. Preserves credential separation
 // (credentials are kept in a closure, never exposed in the store state),
-// health polling, agent polling, and auto-reconnect behavior.
+// health polling, agent polling, SSE streaming, and auto-reconnect behavior.
 import { useLayoutEffect, type ReactElement, type ReactNode } from "react";
 import { create } from "zustand";
 import { immer } from "zustand/middleware/immer";
@@ -25,6 +25,11 @@ import {
   redactFleetConnection,
 } from "@/features/fleet/fleet-client";
 import { secureStore } from "@/features/settings/secure-store";
+import { FleetEventStream, type FleetSSEState } from "@/features/fleet/fleet-event-stream";
+import { reduceFleetEvent } from "@/features/fleet/fleet-event-reducer";
+import type { CheckEventData } from "@/features/fleet/fleet-event-reducer";
+import { useSignalStore } from "@/features/findings/stores/signal-store";
+import type { Signal } from "@/lib/workbench/signal-pipeline";
 
 // ---- Types ----
 
@@ -49,6 +54,8 @@ export interface FleetConnectionState {
   secureStorageWarning: boolean;
   agents: AgentInfo[];
   remotePolicyInfo: RemotePolicyInfo | null;
+  /** SSE connection state: idle before first connect, then tracks lifecycle. */
+  sseState: FleetSSEState;
 }
 
 export interface FleetCredentials {
@@ -124,6 +131,44 @@ function readFleetConnectionSnapshot(): string {
 }
 
 // ---------------------------------------------------------------------------
+// Fleet check event -> Signal bridge (INTEL-01)
+// ---------------------------------------------------------------------------
+
+function checkEventToSignal(check: CheckEventData): Signal {
+  const verdict = check.verdict?.toLowerCase();
+  const severity = verdict === "deny" ? "high" : verdict === "warn" ? "medium" : "low";
+  return {
+    id: crypto.randomUUID(),
+    type: "policy_violation",
+    source: {
+      sentinelId: null,
+      guardId: check.guard ?? null,
+      externalFeed: null,
+      provenance: "guard_evaluation",
+    },
+    timestamp: Date.now(),
+    severity,
+    confidence: 0.8,
+    data: {
+      kind: "fleet_check",
+      summary: `${check.action_type} on ${check.target}: ${check.verdict}`,
+      actionType: check.action_type as any,
+      verdict: verdict === "deny" ? "deny" : verdict === "warn" ? "warn" : undefined,
+      target: check.target,
+    },
+    context: {
+      agentId: check.agent_id ?? "unknown",
+      agentName: check.agent_id ?? "unknown",
+      sessionId: check.session_id ?? "unknown",
+      flags: check.guard ? [{ type: "guard", reason: check.guard }] : [],
+    },
+    relatedSignals: [],
+    ttl: null,
+    findingId: null,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Credential closure — keeps apiKey + controlApiToken out of the Zustand
 // state tree so they are never serialized / exposed via selectors.
 // ---------------------------------------------------------------------------
@@ -154,6 +199,7 @@ function buildAuthenticatedConnection(info: FleetConnectionInfo): FleetConnectio
 let healthTimer: ReturnType<typeof setInterval> | null = null;
 let agentTimer: ReturnType<typeof setInterval> | null = null;
 let consecutivePollFailures = 0;
+let fleetEventStream: FleetEventStream | null = null;
 
 function stopPolling(): void {
   if (healthTimer) {
@@ -163,6 +209,10 @@ function stopPolling(): void {
   if (agentTimer) {
     clearInterval(agentTimer);
     agentTimer = null;
+  }
+  if (fleetEventStream) {
+    fleetEventStream.disconnect();
+    fleetEventStream = null;
   }
 }
 
@@ -191,6 +241,7 @@ function syncFleetConnectionStoreWithStorage(): void {
     secureStorageWarning: false,
     agents: [],
     remotePolicyInfo: null,
+    sseState: "idle",
   });
 }
 
@@ -236,7 +287,12 @@ const useFleetConnectionStoreBase = create<FleetStoreState>()(
     function pollAgents(): void {
       const conn = buildAuthenticatedConnection(get().connection);
       if (!conn.connected || !conn.hushdUrl) return;
-      apiFetchAgentList(conn)
+      const remotePolicyVersion =
+        get().remotePolicyInfo?.policyHash ?? get().remotePolicyInfo?.version;
+      apiFetchAgentList(
+        conn,
+        remotePolicyVersion ? { expectedPolicyVersion: remotePolicyVersion } : undefined,
+      )
         .then((list) => {
           set((state) => {
             state.agents = list as any;
@@ -302,6 +358,35 @@ const useFleetConnectionStoreBase = create<FleetStoreState>()(
 
       healthTimer = setInterval(pollHealth, HEALTH_POLL_MS);
       agentTimer = setInterval(pollAgents, AGENT_POLL_MS);
+
+      // Start SSE stream for real-time agent updates (additive to polling)
+      fleetEventStream = new FleetEventStream({
+        hushdUrl: conn.hushdUrl,
+        getApiKey: () => _credentials.apiKey,
+        onEvent: (event) => {
+          const currentAgents = get().agents;
+          const result = reduceFleetEvent(currentAgents, event);
+          set((state) => {
+            state.agents = result.agents as any;
+            state.connection.agentCount = result.agents.length;
+          });
+          // Bridge check events to signal pipeline (INTEL-01)
+          if (event.type === "check" && event.data) {
+            const signal = checkEventToSignal(event.data as CheckEventData);
+            useSignalStore.getState().actions.ingestSignal(signal);
+          }
+          if (result.refreshPolicy) {
+            fetchRemoteInfo();
+          }
+        },
+        onStateChange: (sseState) => {
+          set((state) => {
+            state.sseState = sseState;
+          });
+        },
+        onReconnect: () => pollAgents(),
+      });
+      fleetEventStream.connect();
     }
 
     // ---- Auto-reconnect ----
@@ -377,6 +462,7 @@ const useFleetConnectionStoreBase = create<FleetStoreState>()(
       secureStorageWarning: false,
       agents: [],
       remotePolicyInfo: null,
+      sseState: "idle" as FleetSSEState,
 
       actions: {
         connect: async (
@@ -465,6 +551,7 @@ const useFleetConnectionStoreBase = create<FleetStoreState>()(
             state.agents = [];
             state.remotePolicyInfo = null;
             state.error = null;
+            state.sseState = "idle";
           });
         },
 
@@ -511,6 +598,7 @@ export function useFleetConnection(): FleetConnectionHook {
   const secureStorageWarning = useFleetConnectionStore((s) => s.secureStorageWarning);
   const agents = useFleetConnectionStore((s) => s.agents);
   const remotePolicyInfo = useFleetConnectionStore((s) => s.remotePolicyInfo);
+  const sseState = useFleetConnectionStore((s) => s.sseState);
   const actions = useFleetConnectionStore((s) => s.actions);
 
   return {
@@ -521,6 +609,7 @@ export function useFleetConnection(): FleetConnectionHook {
     secureStorageWarning,
     agents,
     remotePolicyInfo,
+    sseState,
     connect: actions.connect,
     disconnect: actions.disconnect,
     testConnection: actions.testConnection,

@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useMultiPolicy } from "@/features/policy/stores/multi-policy-store";
 import { sanitizeYamlForStorageWithMetadata } from "@/lib/workbench/storage-sanitizer";
 import type { FileType } from "@/lib/workbench/file-type-registry";
+import { usePolicyTabsStore } from "@/features/policy/stores/policy-tabs-store";
+import { usePolicyEditStore } from "@/features/policy/stores/policy-edit-store";
 
 const AUTOSAVE_KEY = "clawdstrike_workbench_autosave";
 const PERIODIC_INTERVAL_MS = 30_000;
@@ -126,7 +127,9 @@ export function clearAutosave(): void {
 }
 
 export function useAutoSave() {
-  const { tabs, multiDispatch } = useMultiPolicy();
+  const tabs = usePolicyTabsStore(s => s.tabs);
+  const activeTabId = usePolicyTabsStore(s => s.activeTabId);
+  const editStates = usePolicyEditStore(s => s.editStates);
   const dirtyTabs = tabs.filter((tab) => tab.dirty);
 
   const [pendingRecovery, setPendingRecovery] = useState<AutosaveEntry[] | null>(
@@ -153,10 +156,10 @@ export function useAutoSave() {
     writeAutosaves(
       dirtyTabs.map((tab) => ({
         tabId: tab.id,
-        yaml: tab.yaml,
+        yaml: editStates.get(tab.id)?.yaml ?? "",
         filePath: tab.filePath,
         timestamp,
-        policyName: tab.policy.name || tab.name,
+        policyName: editStates.get(tab.id)?.policy?.name || tab.name,
         fileType: tab.fileType,
       })),
     );
@@ -210,10 +213,10 @@ export function useAutoSave() {
 
   const restoreRecovery = useCallback(() => {
     if (!pendingRecovery || pendingRecovery.length === 0) return;
-    multiDispatch({ type: "RESTORE_AUTOSAVE_ENTRIES", entries: pendingRecovery });
+    usePolicyTabsStore.getState().restoreAutosaveEntries(pendingRecovery);
     clearAutosave();
     setPendingRecovery(null);
-  }, [multiDispatch, pendingRecovery]);
+  }, [ pendingRecovery]);
 
   return {
     pendingRecovery,

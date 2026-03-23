@@ -1,7 +1,7 @@
 import { type ReactElement } from "react";
 import { render, type RenderOptions } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import { MultiPolicyProvider as WorkbenchProvider } from "@/features/policy/stores/multi-policy-store";
+import { PolicyBootstrapProvider as WorkbenchProvider } from "@/features/policy/hooks/use-policy-bootstrap";
 import { ToastProvider } from "@/components/ui/toast";
 
 interface ProviderOptions extends Omit<RenderOptions, "wrapper"> {

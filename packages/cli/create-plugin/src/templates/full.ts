@@ -52,6 +52,11 @@ const fileTypeDef: FileTypeContribution = {
   testable: true,
 };
 
+const adapterDef = {
+  fileType: "${options.name}",
+  entrypoint: "./adapter",
+};
+
 
 const intelSource: ThreatIntelSourceContribution = {
   id: "${options.name}-intel",
@@ -74,6 +79,26 @@ const editorTab: EditorTabContribution = {
   label: "${options.displayName}",
   icon: "layout-panel-top",
   entrypoint: "./panel",
+};
+
+const bottomPanelTab = {
+  id: "${options.name}-bottom",
+  label: "${options.displayName} Output",
+  entrypoint: "./panel",
+};
+
+const rightSidebarPanel = {
+  id: "${options.name}-inspector",
+  label: "${options.displayName} Inspector",
+  icon: "search",
+  entrypoint: "./panel",
+};
+
+const statusBarItem = {
+  id: "${options.name}-status",
+  side: "right" as const,
+  priority: 50,
+  entrypoint: "./status-widget",
 };
 
 const activityBarItem: ActivityBarItemContribution = {
@@ -100,9 +125,13 @@ export default createPlugin({
       guards: [guardDef],
       commands: [configureCommand],
       fileTypes: [fileTypeDef],
+      detectionAdapters: [adapterDef],
       threatIntelSources: [intelSource],
       complianceFrameworks: [framework],
       editorTabs: [editorTab],
+      bottomPanelTabs: [bottomPanelTab],
+      rightSidebarPanels: [rightSidebarPanel],
+      statusBarItems: [statusBarItem],
       activityBarItems: [activityBarItem],
     },
   },

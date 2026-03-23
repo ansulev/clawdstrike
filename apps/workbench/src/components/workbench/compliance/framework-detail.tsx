@@ -1,5 +1,4 @@
 import { useMemo } from "react";
-import { useWorkbench } from "@/features/policy/stores/multi-policy-store";
 import {
   scoreFramework,
   COMPLIANCE_FRAMEWORKS,
@@ -10,6 +9,8 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { IconCheck, IconX, IconArrowRight } from "@tabler/icons-react";
 import { Link } from "react-router-dom";
 import { Breadcrumb } from "@/components/workbench/shared/breadcrumb";
+import { usePolicyTabsStore } from "@/features/policy/stores/policy-tabs-store";
+import { usePolicyEditStore } from "@/features/policy/stores/policy-edit-store";
 
 interface FrameworkDetailProps {
   framework: ComplianceFramework;
@@ -81,8 +82,10 @@ function RequirementRow({
 }
 
 export function FrameworkDetail({ framework, onClose }: FrameworkDetailProps) {
-  const { state } = useWorkbench();
-  const { activePolicy } = state;
+  const activeTabId = usePolicyTabsStore(s => s.activeTabId);
+  const activeTab = usePolicyTabsStore(s => s.tabs.find(t => t.id === s.activeTabId));
+  const editState = usePolicyEditStore(s => s.editStates.get(activeTabId));
+  const activePolicy = editState?.policy ?? { version: "1.1.0", name: "", description: "", guards: {}, settings: {} };
 
   const frameworkDef = COMPLIANCE_FRAMEWORKS.find((f) => f.id === framework);
 

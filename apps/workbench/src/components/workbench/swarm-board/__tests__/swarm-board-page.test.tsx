@@ -442,11 +442,11 @@ describe("SwarmBoard page integration", () => {
     expect(screen.queryByTestId("inspector-panel")).toBeNull();
   });
 
-  it("loads with mock data when localStorage is empty", () => {
+  it("starts with empty board when localStorage is empty", () => {
     renderBoardPage();
 
     const nodeCount = Number(screen.getByTestId("total-nodes").textContent);
-    expect(nodeCount).toBeGreaterThan(0);
+    expect(nodeCount).toBe(0);
   });
 
   it("can select different nodes sequentially", () => {
@@ -596,13 +596,13 @@ describe("SwarmBoard page edge cases", () => {
     expect(screen.getByTestId("btn-remove-selected")).toBeDisabled();
   });
 
-  it("loads with mock data and all counts are consistent", () => {
+  it("starts with empty board and counts are zero", () => {
     renderBoardPage();
 
     const nodeCount = Number(screen.getByTestId("total-nodes").textContent);
     const edgeCount = Number(screen.getByTestId("total-edges").textContent);
 
-    expect(nodeCount).toBeGreaterThan(0);
-    expect(edgeCount).toBeGreaterThan(0);
+    expect(nodeCount).toBe(0);
+    expect(edgeCount).toBe(0);
   });
 });

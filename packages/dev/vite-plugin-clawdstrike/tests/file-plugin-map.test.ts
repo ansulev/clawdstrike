@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { normalize, sep } from 'path';
 import { FilePluginMap } from '../src/file-plugin-map';
 
 describe('FilePluginMap', () => {
@@ -96,12 +97,24 @@ describe('FilePluginMap', () => {
       map.register('clawdstrike.my-guard', '/workspace/plugins/my-guard');
 
       const dir = map.getPluginDir('clawdstrike.my-guard');
-      expect(dir).toBe('/workspace/plugins/my-guard/');
+      expect(dir).toBe(`${normalize('/workspace/plugins/my-guard')}${sep}`);
     });
 
     it('returns undefined for unregistered plugin', () => {
       const map = new FilePluginMap();
       expect(map.getPluginDir('nonexistent')).toBeUndefined();
+    });
+
+    it('normalizes Windows-style separators consistently', () => {
+      const map = new FilePluginMap();
+      map.register('clawdstrike.win-guard', 'C:\\workspace\\plugins\\win-guard');
+
+      expect(
+        map.resolve('C:\\workspace\\plugins\\win-guard\\src\\index.ts'),
+      ).toBe('clawdstrike.win-guard');
+      expect(map.getPluginDir('clawdstrike.win-guard')).toBe(
+        `${normalize('C:/workspace/plugins/win-guard')}${sep}`,
+      );
     });
   });
 });

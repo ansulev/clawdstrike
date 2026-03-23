@@ -17,7 +17,7 @@ export type SwarmNodeType =
   | "note"
   | "receipt";
 
-export type SessionStatus = "idle" | "running" | "blocked" | "completed" | "failed";
+export type SessionStatus = "idle" | "running" | "blocked" | "completed" | "failed" | "evaluating";
 export type RiskLevel = "low" | "medium" | "high";
 
 // ---------------------------------------------------------------------------
@@ -52,6 +52,12 @@ export interface SwarmBoardNodeData {
   // Receipt nodes
   verdict?: "allow" | "deny" | "warn";
   guardResults?: Array<{ guard: string; allowed: boolean; duration_ms?: number }>;
+  /** Hex-encoded Ed25519 signature from the receipt. */
+  signature?: string;
+  /** Hex-encoded Ed25519 public key from the receipt signer. */
+  publicKey?: string;
+  /** Verification status: true = verified, false = failed, undefined = not yet checked. */
+  signatureVerified?: boolean;
   // Diff nodes
   diffSummary?: { added: number; removed: number; files: string[] };
   // Artifact nodes
@@ -101,4 +107,6 @@ export interface SwarmBoardState {
   edges: SwarmBoardEdge[];
   selectedNodeId: string | null;
   inspectorOpen: boolean;
+  /** Absolute path to the .swarm bundle directory, or empty string for scratch boards. */
+  bundlePath: string;
 }

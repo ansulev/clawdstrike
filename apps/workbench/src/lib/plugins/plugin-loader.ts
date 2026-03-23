@@ -594,6 +594,20 @@ export class PluginLoader {
     pluginId: string,
     disposables: Disposable[],
   ): PluginActivationContext["views"] {
+    const isLazyFactory = (
+      comp: ComponentType<any> | (() => Promise<{ default: ComponentType<any> }>),
+    ): comp is () => Promise<{ default: ComponentType<any> }> => {
+      if (typeof comp !== "function") {
+        return false;
+      }
+
+      if ("__lazy" in comp && (comp as { __lazy?: boolean }).__lazy === true) {
+        return true;
+      }
+
+      return /\bimport\s*\(/.test(Function.prototype.toString.call(comp));
+    };
+
     const resolveComponent = (
       comp: ComponentType<any> | (() => Promise<{ default: ComponentType<any> }>),
     ): ComponentType<any> => {
@@ -601,27 +615,8 @@ export class PluginLoader {
         return comp as ComponentType<any>;
       }
 
-      // Explicit sentinel: functions marked with __lazy are lazy factories.
-      if ("__lazy" in comp && (comp as any).__lazy === true) {
-        return lazy(comp as () => Promise<{ default: ComponentType<any> }>);
-      }
-
-      // Probe heuristic: call the function and check if it returns a Promise.
-      // This distinguishes lazy import factories (return Promise) from React
-      // components that ignore props (return JSX/null). We avoid wrapping
-      // React components in React.lazy which would crash.
-      if (comp.length === 0) {
-        try {
-          const result = (comp as Function)();
-          if (result && typeof result === "object" && typeof result.then === "function") {
-            // It returned a Promise -- it's a lazy factory. Use React.lazy
-            // with a new wrapper that returns the already-initiated promise.
-            return lazy(() => result as Promise<{ default: ComponentType<any> }>);
-          }
-        } catch {
-          // If calling it threw, it's likely a React component that
-          // needs a render context. Fall through and use it directly.
-        }
+      if (isLazyFactory(comp)) {
+        return lazy(comp);
       }
 
       return comp as ComponentType<any>;
@@ -818,9 +813,13 @@ export class PluginLoader {
     if (contributions.threatIntelSources) {
       for (const source of contributions.threatIntelSources) {
         const sourceId = `${manifest.id}.${source.id}`;
+        const resolvedSourceEntrypoint = this.resolveEntrypointUrl(
+          source.entrypoint,
+          manifest,
+        );
         void (async () => {
           try {
-            const mod = await this.resolveEntrypoint(source.entrypoint);
+            const mod = await this.resolveEntrypoint(resolvedSourceEntrypoint);
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const sourceImpl = (mod.default ?? mod) as Record<string, any>;
             if (sourceImpl && typeof sourceImpl.enrich === "function") {

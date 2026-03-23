@@ -20,7 +20,23 @@
     },
     "stronghold:default",
     "fs:default",
+    {
+      "identifier": "fs:scope",
+      "allow": [
+        "$HOME/**",
+        "$DOWNLOAD/**",
+        "$DOCUMENT/**",
+        "$DESKTOP/**"
+      ]
+    },
     "fs:allow-read-text-file",
-    "fs:allow-write-text-file"
+    "fs:allow-write-text-file",
+    "fs:allow-rename",
+    "fs:allow-remove",
+    "fs:allow-mkdir",
+    "fs:allow-exists",
+    "fs:allow-read-dir",
+    "opener:default",
+    "opener:allow-reveal-item-in-dir"
   ]
 }

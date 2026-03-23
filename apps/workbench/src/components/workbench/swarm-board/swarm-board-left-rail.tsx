@@ -28,6 +28,7 @@ const STATUS_DOT_COLOR: Record<SessionStatus, string> = {
   blocked: "#d4a84b",
   completed: "#3d4250",
   failed: "#e74c3c",
+  evaluating: "#d4a84b",
 };
 
 // ---------------------------------------------------------------------------

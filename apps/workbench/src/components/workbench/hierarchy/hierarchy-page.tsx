@@ -32,7 +32,6 @@ import {
   IconLoader2,
 } from "@tabler/icons-react";
 import { cn } from "@/lib/utils";
-import { useWorkbench } from "@/features/policy/stores/multi-policy-store";
 import { GUARD_REGISTRY } from "@/lib/workbench/guard-registry";
 import type { OrgNode, OrgNodeType, PolicyHierarchy, EffectivePolicy } from "@/lib/workbench/hierarchy-types";
 import {
@@ -68,6 +67,8 @@ import type {
   HierarchyNodeInput,
   HierarchyTreeResponse,
 } from "@/features/fleet/fleet-client";
+import { usePolicyTabsStore } from "@/features/policy/stores/policy-tabs-store";
+import { usePolicyEditStore } from "@/features/policy/stores/policy-edit-store";
 
 
 const NODE_TYPE_COLORS: Record<OrgNodeType, string> = {
@@ -1036,8 +1037,10 @@ function RenameDialog({ node, onRename, onClose }: RenameDialogProps) {
 
 
 export function HierarchyPage() {
-  const { state } = useWorkbench();
-  const savedPolicies = state.savedPolicies;
+  const activeTabId = usePolicyTabsStore(s => s.activeTabId);
+  const activeTab = usePolicyTabsStore(s => s.tabs.find(t => t.id === s.activeTabId));
+  const editState = usePolicyEditStore(s => s.editStates.get(activeTabId));
+  const savedPolicies = usePolicyTabsStore.getState().savedPolicies;
   const { connection, getAuthenticatedConnection } = useFleetConnection();
   const fleetConnected = connection.connected;
 

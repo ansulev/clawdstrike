@@ -6,7 +6,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useWorkbench } from "@/features/policy/stores/multi-policy-store";
+import { useWorkbenchState } from "@/features/policy/hooks/use-policy-actions";
 import { yamlToPolicy, policyToYaml } from "@/features/policy/yaml-utils";
 import { useFleetConnection } from "@/features/fleet/use-fleet-connection";
 import {
@@ -544,7 +544,7 @@ function PublishDialog({
 // ---- Main catalog browser ----
 
 export function CatalogBrowser() {
-  const { state, loadPolicy } = useWorkbench();
+  const { state, loadPolicy } = useWorkbenchState();
   const { connection, getAuthenticatedConnection } = useFleetConnection();
   const isConnected = connection.connected;
 

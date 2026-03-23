@@ -74,6 +74,11 @@ describe("parseFlags", () => {
       const result = parseFlags(["my-guard", "--type", "guard", "--pm", "yarn"]);
       expect(result).toBeNull();
     });
+
+    it("does not treat flag values as the positional plugin name", () => {
+      const result = parseFlags(["--publisher", "acme", "--type", "guard"]);
+      expect(result).toBeNull();
+    });
   });
 
   describe("defaults", () => {

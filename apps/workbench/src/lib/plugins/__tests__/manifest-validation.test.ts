@@ -64,6 +64,19 @@ describe("validateManifest", () => {
     expect(result.errors.some((e: ManifestValidationError) => e.field.includes("version"))).toBe(true);
   });
 
+  it("rejects a manifest missing activationEvents", () => {
+    const manifest = createTestManifest();
+    const { activationEvents, ...withoutActivationEvents } = manifest;
+    const result = validateManifest(withoutActivationEvents);
+
+    expect(result.valid).toBe(false);
+    expect(
+      result.errors.some(
+        (e: ManifestValidationError) => e.field === "activationEvents",
+      ),
+    ).toBe(true);
+  });
+
   // Test 7: Guard contribution missing id
   it("rejects a guard contribution missing the id field", () => {
     const manifest = createTestManifest({
@@ -158,12 +171,33 @@ describe("validateManifest", () => {
         size: 102400,
         checksum: "a".repeat(64),
         signature: "base64signaturestring",
+        publisherKey: "publisher-public-key",
       },
     });
     const result = validateManifest(manifest);
 
     expect(result.valid).toBe(true);
     expect(result.errors).toEqual([]);
+  });
+
+  it("rejects installation metadata with an empty publisher key", () => {
+    const manifest = createTestManifest({
+      installation: {
+        downloadUrl: "https://plugins.clawdstrike.com/test-plugin-1.0.0.tgz",
+        size: 102400,
+        checksum: "a".repeat(64),
+        signature: "base64signaturestring",
+        publisherKey: "",
+      },
+    });
+    const result = validateManifest(manifest);
+
+    expect(result.valid).toBe(false);
+    expect(
+      result.errors.some(
+        (e: ManifestValidationError) => e.field === "installation.publisherKey",
+      ),
+    ).toBe(true);
   });
 
   // Test 12: Installation metadata missing checksum

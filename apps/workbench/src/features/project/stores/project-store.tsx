@@ -3,6 +3,8 @@ import { createSelectors } from "@/lib/create-selectors";
 import type { FileType } from "@/lib/workbench/file-type-registry";
 import { getFileTypeByExtension } from "@/lib/workbench/file-type-registry";
 
+const TAURI_FS_SPECIFIER = "@tauri-apps/plugin-fs";
+
 // ---- Types ----
 
 export interface ProjectFile {
@@ -31,6 +33,14 @@ export interface DetectionProject {
   expandedDirs: Set<string>;
 }
 
+/** Per-file status flags for Explorer visual indicators. */
+export interface FileStatus {
+  /** File has unsaved modifications. */
+  modified?: boolean;
+  /** File has validation errors. */
+  hasError?: boolean;
+}
+
 interface ProjectState {
   project: DetectionProject | null;
   loading: boolean;
@@ -39,6 +49,70 @@ interface ProjectState {
   filter: string;
   /** Filter files by a specific format. */
   formatFilter: FileType | null;
+  /** Per-file status map (keyed by relative file path). */
+  fileStatuses: Map<string, FileStatus>;
+  /** Absolute paths of mounted workspace roots (multi-root support). */
+  projectRoots: string[];
+  /** DetectionProject instances keyed by rootPath (one per mounted root). */
+  projects: Map<string, DetectionProject>;
+}
+
+// ---------------------------------------------------------------------------
+// Multi-root persistence helpers
+// ---------------------------------------------------------------------------
+
+const STORAGE_KEY = "clawdstrike_workspace_roots";
+
+/** Read persisted workspace roots from localStorage. */
+function loadPersistedRoots(): string[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Persist workspace roots to localStorage. */
+function persistRoots(roots: string[]): void {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(roots));
+  } catch {
+    // localStorage may be unavailable in some environments.
+  }
+}
+
+async function importTauriFs() {
+  return import(/* @vite-ignore */ TAURI_FS_SPECIFIER);
+}
+
+/**
+ * Recursively scan a directory via Tauri fs readDir and collect relative paths.
+ * Directories get a trailing "/" to distinguish them from files.
+ */
+async function scanDir(dirPath: string, basePath: string): Promise<string[]> {
+  const { readDir } = await importTauriFs();
+  const entries = await readDir(dirPath);
+  const paths: string[] = [];
+  for (const entry of entries) {
+    const fullPath = `${dirPath}/${entry.name}`;
+    const relPath = fullPath.slice(basePath.length + 1);
+    if (entry.isDirectory) {
+      // .swarm bundle detection -- emit as leaf file, skip recursion
+      if (entry.name.endsWith(".swarm")) {
+        paths.push(relPath);
+        continue;
+      }
+      paths.push(relPath + "/");
+      const subPaths = await scanDir(fullPath, basePath);
+      paths.push(...subPaths);
+    } else {
+      paths.push(relPath);
+    }
+  }
+  return paths;
 }
 
 // ---- Helpers ----
@@ -149,11 +223,79 @@ export function buildFileTree(rootPath: string, paths: string[]): ProjectFile[] 
   return convert(root);
 }
 
+// ---- Tree mutation helpers ----
+
+/**
+ * Recursively walk a ProjectFile[] tree and apply a mutator when the target
+ * node is found. Returns a new tree (shallow copies along the path).
+ *
+ * The mutator receives the parent's children array and the index of the
+ * matching node, and must return the replacement children array.
+ */
+function mutateTree(
+  files: ProjectFile[],
+  targetPath: string,
+  mutator: (siblings: ProjectFile[], index: number) => ProjectFile[],
+): ProjectFile[] {
+  for (let i = 0; i < files.length; i++) {
+    if (files[i].path === targetPath) {
+      return mutator([...files], i);
+    }
+    if (files[i].isDirectory && files[i].children) {
+      const mutated = mutateTree(files[i].children!, targetPath, mutator);
+      if (mutated !== files[i].children) {
+        const copy = [...files];
+        copy[i] = { ...copy[i], children: mutated };
+        return copy;
+      }
+    }
+  }
+  return files;
+}
+
+/** Sort children: directories first, then alphabetical by name. */
+function sortChildren(children: ProjectFile[]): ProjectFile[] {
+  return [...children].sort((a, b) => {
+    if (a.isDirectory !== b.isDirectory) return a.isDirectory ? -1 : 1;
+    return a.name.localeCompare(b.name);
+  });
+}
+
+/**
+ * Insert a new ProjectFile into a directory node's children. Returns new tree.
+ */
+function insertIntoDir(
+  files: ProjectFile[],
+  parentPath: string,
+  newNode: ProjectFile,
+): ProjectFile[] {
+  for (let i = 0; i < files.length; i++) {
+    if (files[i].path === parentPath && files[i].isDirectory) {
+      const copy = [...files];
+      const updatedChildren = sortChildren([...(copy[i].children ?? []), newNode]);
+      copy[i] = { ...copy[i], children: updatedChildren };
+      return copy;
+    }
+    if (files[i].isDirectory && files[i].children) {
+      const mutated = insertIntoDir(files[i].children!, parentPath, newNode);
+      if (mutated !== files[i].children) {
+        const copy = [...files];
+        copy[i] = { ...copy[i], children: mutated };
+        return copy;
+      }
+    }
+  }
+  return files;
+}
+
 /**
  * Infer a FileType from a path string. For unambiguous extensions (.yar, .json)
  * the result is deterministic. For YAML files we use path-segment heuristics.
  */
 function inferFileTypeFromPath(relPath: string, name: string): FileType {
+  // .swarm bundle directories treated as leaf files
+  if (name.endsWith(".swarm")) return "swarm_bundle";
+
   // Unambiguous by extension
   const byExt = getFileTypeByExtension(name);
   if (byExt !== null) return byExt;
@@ -191,6 +333,26 @@ interface ProjectStoreState extends ProjectState {
     expandAll: () => void;
     /** Collapse all directories. */
     collapseAll: () => void;
+    /** Create a new file in the given directory. Returns the new file path or null. */
+    createFile: (parentDirPath: string, fileName: string, fileType: FileType) => Promise<string | null>;
+    /** Rename a file. Returns true on success. */
+    renameFile: (oldPath: string, newName: string) => Promise<boolean>;
+    /** Delete a file. Returns true on success. */
+    deleteFile: (filePath: string) => Promise<boolean>;
+    /** Set or merge file status flags for a given file path. */
+    setFileStatus: (filePath: string, status: FileStatus) => void;
+    /** Clear file status for a given file path. */
+    clearFileStatus: (filePath: string) => void;
+    /** Add a root folder to the multi-root workspace. */
+    addRoot: (rootPath: string) => void;
+    /** Remove a root folder from the multi-root workspace. */
+    removeRoot: (rootPath: string) => void;
+    /** Scan a root directory and populate its DetectionProject. */
+    loadRoot: (rootPath: string) => Promise<void>;
+    /** Initialize the store from persisted workspace roots. */
+    initFromPersistedRoots: () => Promise<void>;
+    /** Toggle expand/collapse for a directory within a specific root. */
+    toggleDirForRoot: (rootPath: string, dirPath: string) => void;
   };
 }
 
@@ -200,6 +362,9 @@ const useProjectStoreBase = create<ProjectStoreState>()((set, get) => ({
   error: null,
   filter: "",
   formatFilter: null,
+  fileStatuses: new Map<string, FileStatus>(),
+  projectRoots: loadPersistedRoots(),
+  projects: new Map<string, DetectionProject>(),
 
   actions: {
     setProject: (project: DetectionProject) => {
@@ -207,7 +372,7 @@ const useProjectStoreBase = create<ProjectStoreState>()((set, get) => ({
     },
 
     clearProject: () => {
-      set({ project: null, error: null, filter: "", formatFilter: null });
+      set({ project: null, error: null, filter: "", formatFilter: null, fileStatuses: new Map() });
     },
 
     setLoading: (loading: boolean) => {
@@ -250,6 +415,235 @@ const useProjectStoreBase = create<ProjectStoreState>()((set, get) => ({
       if (!project) return;
       set({ project: { ...project, expandedDirs: new Set<string>() } });
     },
+
+    createFile: async (parentDirPath: string, fileName: string, fileType: FileType): Promise<string | null> => {
+      const { project } = get();
+      if (!project) return null;
+
+      const { createDetectionFile } = await import("@/lib/tauri-bridge");
+      const savedPath = await createDetectionFile(parentDirPath, fileName, fileType);
+      if (!savedPath) return null;
+
+      // Compute the relative path within the project.
+      const relPath = savedPath.startsWith(project.rootPath)
+        ? savedPath.slice(project.rootPath.length).replace(/^\//, "")
+        : fileName;
+
+      // Compute parent relative path.
+      const parentRelPath = parentDirPath.startsWith(project.rootPath)
+        ? parentDirPath.slice(project.rootPath.length).replace(/^\//, "")
+        : parentDirPath;
+
+      // Compute depth from relative path segments.
+      const depth = relPath.split("/").filter(Boolean).length - 1;
+
+      const newNode: ProjectFile = {
+        path: relPath,
+        name: fileName,
+        fileType: inferFileTypeFromPath(relPath, fileName),
+        isDirectory: false,
+        depth,
+      };
+
+      // Insert into tree and auto-expand the parent directory.
+      let newFiles: ProjectFile[];
+      if (parentRelPath === "" || parentDirPath === project.rootPath) {
+        // Inserting at root level.
+        newFiles = sortChildren([...project.files, newNode]);
+      } else {
+        newFiles = insertIntoDir(project.files, parentRelPath, newNode);
+      }
+
+      const expandedDirs = new Set(project.expandedDirs);
+      if (parentRelPath) {
+        expandedDirs.add(parentRelPath);
+      }
+
+      set({ project: { ...project, files: newFiles, expandedDirs } });
+      // Re-scan from disk to ensure tree is in sync (catches nested dir creation, etc.)
+      get().actions.loadRoot(project.rootPath);
+      return savedPath;
+    },
+
+    renameFile: async (oldPath: string, newName: string): Promise<boolean> => {
+      const { project } = get();
+      if (!project) return false;
+
+      // oldPath may be relative; resolve to absolute for Tauri APIs.
+      const oldAbsPath = oldPath.startsWith("/")
+        ? oldPath
+        : `${project.rootPath}/${oldPath}`;
+
+      // Compute new absolute path by replacing the last segment.
+      const lastSlash = oldAbsPath.lastIndexOf("/");
+      const newAbsPath = lastSlash >= 0
+        ? oldAbsPath.substring(0, lastSlash + 1) + newName
+        : `${project.rootPath}/${newName}`;
+
+      const { renameDetectionFile } = await import("@/lib/tauri-bridge");
+      const ok = await renameDetectionFile(oldAbsPath, newAbsPath);
+      if (!ok) return false;
+
+      // Compute relative paths.
+      const oldRelPath = oldAbsPath.startsWith(project.rootPath)
+        ? oldAbsPath.slice(project.rootPath.length).replace(/^\//, "")
+        : oldPath;
+      const newRelPath = newAbsPath.startsWith(project.rootPath)
+        ? newAbsPath.slice(project.rootPath.length).replace(/^\//, "")
+        : newName;
+
+      const newFiles = mutateTree(project.files, oldRelPath, (siblings, idx) => {
+        siblings[idx] = {
+          ...siblings[idx],
+          name: newName,
+          path: newRelPath,
+          fileType: inferFileTypeFromPath(newRelPath, newName),
+        };
+        return sortChildren(siblings);
+      });
+
+      // Migrate file status entry from old to new path.
+      const fileStatuses = new Map(get().fileStatuses);
+      const oldStatus = fileStatuses.get(oldRelPath);
+      if (oldStatus) {
+        fileStatuses.delete(oldRelPath);
+        fileStatuses.set(newRelPath, oldStatus);
+      }
+
+      set({ project: { ...project, files: newFiles }, fileStatuses });
+      // Re-scan from disk to pick up any side effects of the rename.
+      get().actions.loadRoot(project.rootPath);
+      return true;
+    },
+
+    deleteFile: async (filePath: string): Promise<boolean> => {
+      const { project } = get();
+      if (!project) return false;
+
+      // filePath may be relative; resolve to absolute for Tauri APIs.
+      const absPath = filePath.startsWith("/")
+        ? filePath
+        : `${project.rootPath}/${filePath}`;
+
+      const { deleteDetectionFile } = await import("@/lib/tauri-bridge");
+      const ok = await deleteDetectionFile(absPath);
+      if (!ok) return false;
+
+      // Compute relative path.
+      const relPath = absPath.startsWith(project.rootPath)
+        ? absPath.slice(project.rootPath.length).replace(/^\//, "")
+        : filePath;
+
+      const newFiles = mutateTree(project.files, relPath, (siblings, idx) => {
+        siblings.splice(idx, 1);
+        return siblings;
+      });
+
+      // Remove stale file status entry.
+      const fileStatuses = new Map(get().fileStatuses);
+      fileStatuses.delete(relPath);
+
+      set({ project: { ...project, files: newFiles }, fileStatuses });
+      // Re-scan from disk to ensure deleted file (and any empty parent dirs) are gone.
+      get().actions.loadRoot(project.rootPath);
+      return true;
+    },
+
+    setFileStatus: (filePath: string, status: FileStatus) => {
+      const next = new Map(get().fileStatuses);
+      next.set(filePath, { ...next.get(filePath), ...status });
+      set({ fileStatuses: next });
+    },
+
+    clearFileStatus: (filePath: string) => {
+      const next = new Map(get().fileStatuses);
+      next.delete(filePath);
+      set({ fileStatuses: next });
+    },
+
+    addRoot: (rootPath: string) => {
+      const { projectRoots } = get();
+      if (projectRoots.includes(rootPath)) return;
+      const newRoots = [...projectRoots, rootPath];
+      persistRoots(newRoots);
+      set({ projectRoots: newRoots });
+      // Trigger async scan (fire-and-forget from the synchronous action).
+      get().actions.loadRoot(rootPath);
+    },
+
+    removeRoot: (rootPath: string) => {
+      const { projectRoots, projects } = get();
+      const newRoots = projectRoots.filter((r) => r !== rootPath);
+      persistRoots(newRoots);
+      const newProjects = new Map(projects);
+      newProjects.delete(rootPath);
+      // Update backward-compat `project` field.
+      const firstProject = newRoots.length > 0 ? newProjects.get(newRoots[0]) ?? null : null;
+      set({
+        projectRoots: newRoots,
+        projects: newProjects,
+        project: firstProject,
+      });
+    },
+
+    loadRoot: async (rootPath: string) => {
+      try {
+        const paths = await scanDir(rootPath, rootPath);
+        const files = buildFileTree(rootPath, paths);
+        const name = rootPath.split("/").filter(Boolean).pop() ?? "workspace";
+        const allDirs = collectDirPaths(files);
+
+        const dp: DetectionProject = {
+          rootPath,
+          name,
+          files,
+          expandedDirs: new Set(allDirs),
+        };
+
+        const newProjects = new Map(get().projects);
+        newProjects.set(rootPath, dp);
+
+        // Backward compat: set `project` to the first root's DetectionProject.
+        const { projectRoots } = get();
+        const firstRoot = projectRoots.length > 0 ? projectRoots[0] : rootPath;
+        const firstProject = newProjects.get(firstRoot) ?? dp;
+
+        set({ projects: newProjects, project: firstProject });
+      } catch (err) {
+        console.error("[project-store] Failed to load root:", rootPath, err);
+      }
+    },
+
+    initFromPersistedRoots: async () => {
+      const roots = loadPersistedRoots();
+      if (roots.length === 0) return;
+      set({ projectRoots: roots });
+      for (const root of roots) {
+        await get().actions.loadRoot(root);
+      }
+    },
+
+    toggleDirForRoot: (rootPath: string, dirPath: string) => {
+      const { projects } = get();
+      const dp = projects.get(rootPath);
+      if (!dp) return;
+      const next = new Set(dp.expandedDirs);
+      if (next.has(dirPath)) {
+        next.delete(dirPath);
+      } else {
+        next.add(dirPath);
+      }
+      const updated = { ...dp, expandedDirs: next };
+      const newProjects = new Map(projects);
+      newProjects.set(rootPath, updated);
+      // If this is the first root, also update backward-compat `project`.
+      const { projectRoots } = get();
+      const isFirstRoot = projectRoots.length > 0 && projectRoots[0] === rootPath;
+      set({
+        projects: newProjects,
+        ...(isFirstRoot ? { project: updated } : {}),
+      });
+    },
   },
 }));
 
@@ -288,7 +682,7 @@ export function useProject(): ProjectContextValue {
   const actions = useProjectStore((s) => s.actions);
 
   return {
-    state: { project, loading, error, filter, formatFilter },
+    state: { project, loading, error, filter, formatFilter, fileStatuses: new Map(), projectRoots: [], projects: new Map() },
     dispatch: undefined as never,
     toggleDir: actions.toggleDir,
     setFilter: actions.setFilter,

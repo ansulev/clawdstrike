@@ -16,10 +16,7 @@ import type {
   EdgeKind,
   Capability,
 } from "@/lib/workbench/delegation-types";
-import {
-  isPrivateOrLoopbackFleetHostname,
-  validateFleetUrl,
-} from "@/features/fleet/fleet-url-policy";
+import { validateFleetUrl } from "@/features/fleet/fleet-url-policy";
 import { httpFetch } from "@/lib/workbench/http-transport";
 import {
   isHeadAnnouncement,
@@ -846,11 +843,18 @@ export async function fetchAgentCount(conn: FleetConnection): Promise<number> {
   }
 }
 
-export async function fetchAgentList(conn: FleetConnection): Promise<AgentInfo[]> {
+export async function fetchAgentList(
+  conn: FleetConnection,
+  opts?: { expectedPolicyVersion?: string },
+): Promise<AgentInfo[]> {
   const url = stripTrailingSlash(conn.hushdUrl);
   try {
+    let qs = "include_stale=true";
+    if (opts?.expectedPolicyVersion) {
+      qs += `&expected_policy_version=${encodeURIComponent(opts.expectedPolicyVersion)}`;
+    }
     const res = await jsonFetch<AgentStatusResponse>(
-      proxyUrl(`${url}/api/v1/agents/status?include_stale=true`, "hushd"),
+      proxyUrl(`${url}/api/v1/agents/status?${qs}`, "hushd"),
       { headers: hushdHeaders(conn.apiKey) },
     );
     return res.endpoints ?? [];

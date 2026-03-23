@@ -5,6 +5,8 @@ export interface PaneView {
   id: string;
   route: string;
   label: string;
+  dirty?: boolean;
+  fileType?: string;
 }
 
 export interface PaneGroup {

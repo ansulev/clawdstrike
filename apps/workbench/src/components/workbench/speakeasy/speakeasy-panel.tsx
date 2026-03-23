@@ -15,6 +15,10 @@ import type {
 } from "@/lib/workbench/sentinel-types";
 import { RoomHeader, CLASSIFICATION_CONFIG } from "./room-header";
 import { MessageList, type SpeakeasyDisplayMessage } from "./message-list";
+import { usePresenceStore } from "@/features/presence/stores/presence-store";
+import { usePaneStore, getActivePane } from "@/features/panes/pane-store";
+import { getPaneActiveView } from "@/features/panes/pane-tree";
+import { toPresencePath } from "@/features/presence/presence-paths";
 
 
 interface SpeakeasyPanelProps {
@@ -42,6 +46,11 @@ interface SpeakeasyPanelProps {
   onIntelClick?: (intelId: string) => void;
   /** Callback when the attached entity link is clicked. */
   onAttachedClick?: (entityId: string) => void;
+  /**
+   * When true, renders as an inline flex-column child (for embedding in a
+   * sidebar container) instead of a fixed overlay with backdrop.
+   */
+  inline?: boolean;
 }
 
 
@@ -205,12 +214,34 @@ export function SpeakeasyPanel({
   onFindingClick,
   onIntelClick,
   onAttachedClick,
+  inline = false,
 }: SpeakeasyPanelProps) {
   const [composeText, setComposeText] = useState("");
   const [sending, setSending] = useState(false);
   const [showSentinelForm, setShowSentinelForm] = useState(false);
   const composeRef = useRef<HTMLTextAreaElement>(null);
   const backdropRef = useRef<HTMLDivElement>(null);
+
+  // Presence context: how many analysts are viewing the currently active file
+  const paneRoot = usePaneStore((s) => s.root);
+  const activePaneId = usePaneStore((s) => s.activePaneId);
+  const activeFileRoute = useMemo(() => {
+    const pane = getActivePane(paneRoot, activePaneId);
+    const view = pane ? getPaneActiveView(pane) : null;
+    const rawPath = view?.route?.startsWith("/file/") ? view.route.slice("/file/".length) : null;
+    return rawPath ? toPresencePath(rawPath) : null;
+  }, [paneRoot, activePaneId]);
+
+  const fileViewerCount = usePresenceStore((s) => {
+    if (!activeFileRoute) return 0;
+    const viewers = s.viewersByFile.get(activeFileRoute);
+    if (!viewers) return 0;
+    // Exclude local analyst
+    const localId = s.localAnalystId;
+    let count = viewers.size;
+    if (localId && viewers.has(localId)) count--;
+    return count;
+  });
 
   // Build member lookup map
   const membersByPublicKey = useMemo(() => {
@@ -318,23 +349,29 @@ export function SpeakeasyPanel({
 
   return (
     <>
-      {/* Backdrop (click to close) */}
-      <div
-        ref={backdropRef}
-        onClick={handleBackdropClick}
-        className={cn(
-          "fixed inset-0 z-40 transition-opacity duration-200",
-          "bg-black/20 opacity-100",
-        )}
-      />
+      {/* Backdrop (click to close) -- hidden in inline mode */}
+      {!inline && (
+        <div
+          ref={backdropRef}
+          onClick={handleBackdropClick}
+          className={cn(
+            "fixed inset-0 z-40 transition-opacity duration-200",
+            "bg-black/20 opacity-100",
+          )}
+        />
+      )}
 
       {/* Panel */}
       <div
         className={cn(
-          "fixed top-0 right-0 bottom-0 z-50 w-96 flex flex-col",
-          "bg-zinc-950 border-l border-[#2d3240] shadow-2xl shadow-black/50",
-          "transition-transform duration-300 ease-out",
-          "translate-x-0",
+          inline
+            ? "flex-1 min-h-0 flex flex-col bg-zinc-950"
+            : cn(
+                "fixed top-0 right-0 bottom-0 z-50 w-96 flex flex-col",
+                "bg-zinc-950 border-l border-[#2d3240] shadow-2xl shadow-black/50",
+                "transition-transform duration-300 ease-out",
+                "translate-x-0",
+              ),
         )}
       >
         {!room ? (
@@ -399,6 +436,14 @@ export function SpeakeasyPanel({
             ) : (
               /* Compose area */
               <div className="shrink-0 border-t border-[#2d3240] bg-zinc-950 px-3 py-2.5">
+                {fileViewerCount > 0 && (
+                  <div className="flex items-center gap-1.5 mb-1.5">
+                    <span className="inline-block w-[5px] h-[5px] rounded-full bg-[#3dbf84]/60" />
+                    <span className="text-[10px] font-mono text-[#6f7f9a]/50">
+                      {fileViewerCount} analyst{fileViewerCount !== 1 ? "s" : ""} viewing this file
+                    </span>
+                  </div>
+                )}
                 <div className="flex items-end gap-2">
                   <textarea
                     ref={composeRef}

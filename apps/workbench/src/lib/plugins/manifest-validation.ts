@@ -259,6 +259,17 @@ function validateInstallation(
   }
 
   requireString(installation, "signature", errors, "installation");
+
+  if (
+    installation.publisherKey !== undefined &&
+    (typeof installation.publisherKey !== "string" ||
+      installation.publisherKey.length === 0)
+  ) {
+    errors.push({
+      field: "installation.publisherKey",
+      message: '"installation.publisherKey" must be a non-empty string when provided',
+    });
+  }
 }
 
 // ---- Main Validator ----
@@ -323,8 +334,13 @@ export function validateManifest(input: unknown): ManifestValidationResult {
     });
   }
 
-  // Activation events (optional but if present must be string array)
-  if (input.activationEvents !== undefined && !isStringArray(input.activationEvents)) {
+  // Activation events
+  if (input.activationEvents === undefined) {
+    errors.push({
+      field: "activationEvents",
+      message: '"activationEvents" is required and must be an array of strings',
+    });
+  } else if (!isStringArray(input.activationEvents)) {
     errors.push({
       field: "activationEvents",
       message: '"activationEvents" must be an array of strings',

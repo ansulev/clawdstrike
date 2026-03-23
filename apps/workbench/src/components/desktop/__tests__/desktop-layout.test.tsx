@@ -1,10 +1,10 @@
+import React from "react";
 import { afterEach, describe, it, expect, vi } from "vitest";
 import { screen } from "@testing-library/react";
 import { cleanup, render } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { DesktopLayout } from "../desktop-layout";
-
-let hasDirtyBackgroundTabs = false;
+import { usePolicyTabsStore } from "@/features/policy/stores/policy-tabs-store";
 
 vi.mock("@/lib/tauri-bridge", () => ({
   isDesktop: vi.fn(() => false),
@@ -18,11 +18,10 @@ vi.mock("@/lib/commands/init-commands", () => ({
   InitCommands: () => null,
 }));
 
-vi.mock("@/features/policy/stores/multi-policy-store", () => ({
-  useMultiPolicy: () => ({
-    tabs: hasDirtyBackgroundTabs ? [{ id: "dirty", dirty: true }] : [{ id: "clean", dirty: false }],
-  }),
-}));
+vi.mock("@/features/policy/stores/policy-store", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/features/policy/stores/policy-store")>();
+  return { ...actual };
+});
 
 vi.mock("@/lib/workbench/use-auto-save", () => ({
   useAutoSave: () => ({
@@ -41,13 +40,55 @@ vi.mock("@/components/desktop/titlebar", () => ({
   ),
 }));
 
-vi.mock("@/components/desktop/desktop-sidebar", () => ({
-  DesktopSidebar: () => (
+vi.mock("@/features/activity-bar/components/activity-bar", () => ({
+  ActivityBar: () => (
     <aside role="complementary">
       <span>Editor</span>
       <span>Lab</span>
     </aside>
   ),
+}));
+
+vi.mock("@/features/activity-bar/components/sidebar-panel", () => ({
+  SidebarPanel: () => null,
+}));
+
+vi.mock("@/features/activity-bar/components/sidebar-resize-handle", () => ({
+  SidebarResizeHandle: () => null,
+}));
+
+vi.mock("@/features/navigation/quick-open-dialog", () => ({
+  QuickOpenDialog: () => null,
+}));
+
+vi.mock("@/features/right-sidebar/components/right-sidebar", () => ({
+  RightSidebar: () => null,
+}));
+
+vi.mock("@/features/right-sidebar/components/right-sidebar-resize-handle", () => ({
+  RightSidebarResizeHandle: () => null,
+}));
+
+vi.mock("@/features/right-sidebar/stores/right-sidebar-store", () => ({
+  useRightSidebarStore: () => ({ visible: false }),
+}));
+
+vi.mock("@/components/ui/resizable", () => ({
+  ResizablePanelGroup: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  ResizablePanel: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  ResizableHandle: () => null,
+}));
+
+vi.mock("@/features/panes/pane-session", () => ({
+  savePaneSession: vi.fn(),
+  loadPaneSession: () => null,
+}));
+
+vi.mock("@/features/bottom-pane/bottom-pane-store", () => ({
+  useBottomPaneStore: Object.assign(() => ({ isOpen: false, size: 30 }), {
+    getState: () => ({ isOpen: false, activeTab: "terminal", setSize: vi.fn() }),
+    subscribe: () => () => {},
+  }),
 }));
 
 vi.mock("@/components/desktop/status-bar", () => ({
@@ -75,12 +116,18 @@ vi.mock("@/features/panes/pane-root", () => ({
 }));
 
 afterEach(() => {
-  hasDirtyBackgroundTabs = false;
+  usePolicyTabsStore.getState()._reset();
   cleanup();
 });
 
 function renderLayout(route = "/editor", withDirtyBackgroundTab = false) {
-  hasDirtyBackgroundTabs = withDirtyBackgroundTab;
+  if (withDirtyBackgroundTab) {
+    // Mark the default tab as dirty in the real Zustand store
+    const { tabs } = usePolicyTabsStore.getState();
+    if (tabs.length > 0) {
+      usePolicyTabsStore.getState().setDirty(tabs[0].id, true);
+    }
+  }
   return render(
     <MemoryRouter initialEntries={[route]}>
       <DesktopLayout />

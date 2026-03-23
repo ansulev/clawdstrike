@@ -82,8 +82,11 @@ export async function verifyPluginTrust(
     return { trusted: false, reason: "signature_missing" };
   }
 
+  const publisherKey =
+    options?.publisherKey ?? manifest.installation?.publisherKey;
+
   // 4. No publisher key => cannot verify
-  if (!options?.publisherKey) {
+  if (!publisherKey) {
     return { trusted: false, reason: "publisher_key_missing" };
   }
 
@@ -97,7 +100,7 @@ export async function verifyPluginTrust(
   const valid = await verifyCanonical(
     manifestForVerification,
     signature,
-    options.publisherKey,
+    publisherKey,
   );
 
   return valid

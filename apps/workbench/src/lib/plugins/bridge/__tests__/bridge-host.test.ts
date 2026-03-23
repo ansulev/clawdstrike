@@ -36,13 +36,30 @@ vi.mock("../../../workbench/status-bar-registry", () => ({
   },
 }));
 
+const {
+  mockCommandRegistryRegister,
+  mockCommandRegistryUnregister,
+} = vi.hoisted(() => ({
+  mockCommandRegistryRegister: vi.fn(),
+  mockCommandRegistryUnregister: vi.fn(),
+}));
+vi.mock("../../../command-registry", () => ({
+  commandRegistry: {
+    register: mockCommandRegistryRegister,
+    unregister: mockCommandRegistryUnregister,
+  },
+}));
+
 // Import after mocks
 import { PluginBridgeHost } from "../bridge-host";
 import { registerGuard } from "../../../workbench/guard-registry";
 import { registerFileType } from "../../../workbench/file-type-registry";
 import { statusBarRegistry } from "../../../workbench/status-bar-registry";
+import { commandRegistry } from "../../../command-registry";
 
 // ---- Helpers ----
+
+let currentMessageSource: MessageEventSource | null = null;
 
 function makeRequest(
   method: string,
@@ -55,8 +72,14 @@ function makeRequest(
 function makeMessageEvent(
   data: unknown,
   origin = "null",
+  source: MessageEventSource | null = currentMessageSource,
 ): MessageEvent {
-  return new MessageEvent("message", { data, origin });
+  const event = new MessageEvent("message", { data, origin });
+  Object.defineProperty(event, "source", {
+    configurable: true,
+    value: source,
+  });
+  return event;
 }
 
 // ---- Setup ----
@@ -68,6 +91,7 @@ describe("PluginBridgeHost", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockTargetWindow = { postMessage: vi.fn() };
+    currentMessageSource = mockTargetWindow as unknown as Window;
     host = new PluginBridgeHost({
       pluginId: "test-plugin",
       targetWindow: mockTargetWindow as unknown as Window,
@@ -270,14 +294,28 @@ describe("PluginBridgeHost", () => {
   // ---- commands.register ----
 
   describe("commands.register", () => {
-    it("stores command metadata and responds with registered: true", () => {
+    it("registers the command with the host command registry and responds with registered: true", () => {
       host.handleMessage(
         makeMessageEvent(
           makeRequest("commands.register", {
             id: "my.command",
             title: "My Command",
+            category: "Sidebar",
+            shortcut: "Cmd+Shift+M",
+            icon: "plug",
           }),
         ),
+      );
+
+      expect(commandRegistry.register).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: "my.command",
+          title: "My Command",
+          category: "Sidebar",
+          keybinding: "Cmd+Shift+M",
+          icon: "plug",
+          execute: expect.any(Function),
+        }),
       );
 
       const reply = mockTargetWindow.postMessage.mock
@@ -286,6 +324,32 @@ describe("PluginBridgeHost", () => {
         id: "req-1",
         type: "response",
         result: { registered: true },
+      });
+    });
+
+    it("forwards command execution back to the plugin iframe as a bridge event", () => {
+      host.handleMessage(
+        makeMessageEvent(
+          makeRequest("commands.register", {
+            id: "my.command",
+            title: "My Command",
+            category: "InvalidCategory",
+          }),
+        ),
+      );
+
+      const registeredCommand = vi.mocked(commandRegistry.register).mock
+        .calls[0][0] as { execute: () => void; category: string };
+      expect(registeredCommand.category).toBe("View");
+
+      registeredCommand.execute();
+
+      const event = mockTargetWindow.postMessage.mock
+        .calls[1][0] as BridgeEvent;
+      expect(event).toMatchObject({
+        type: "event",
+        method: "command.execute",
+        params: { id: "my.command" },
       });
     });
   });

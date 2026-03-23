@@ -15,7 +15,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useMultiPolicy, type PolicyTab, type BulkGuardUpdate } from "@/features/policy/stores/multi-policy-store";
+import { usePolicyTabs } from "@/features/policy/hooks/use-policy-actions";
+import type { PolicyTab, BulkGuardUpdate } from "@/features/policy/types/policy-tab";
 import { GUARD_REGISTRY } from "@/lib/workbench/guard-registry";
 import type { GuardId, GuardConfigMap } from "@/lib/workbench/types";
 import { cn } from "@/lib/utils";
@@ -59,7 +60,7 @@ export function BulkOperationsDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
-  const { multiDispatch, tabs } = useMultiPolicy();
+  const { multiDispatch, tabs } = usePolicyTabs();
   const [operation, setOperation] = useState<BulkOperation>({
     type: "toggle_guard",
     guardId: "spider_sense",

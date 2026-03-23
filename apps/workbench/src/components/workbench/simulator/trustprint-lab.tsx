@@ -1,6 +1,5 @@
 import { useState, useCallback, useMemo, useRef } from "react";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { useWorkbench } from "@/features/policy/stores/multi-policy-store";
 import { isDesktop } from "@/lib/tauri-bridge";
 import { cn } from "@/lib/utils";
 import {
@@ -26,6 +25,8 @@ import {
   IconClock,
   IconDatabase,
 } from "@tabler/icons-react";
+import { usePolicyTabsStore } from "@/features/policy/stores/policy-tabs-store";
+import { usePolicyEditStore } from "@/features/policy/stores/policy-edit-store";
 
 
 const ACTION_TYPES: { value: TestActionType; label: string }[] = [
@@ -508,7 +509,9 @@ function EmptyResults({ onTryExample }: { onTryExample: (text: string) => void }
 
 
 export function TrustprintLab() {
-  const { state } = useWorkbench();
+  const activeTabId = usePolicyTabsStore(s => s.activeTabId);
+  const activeTab = usePolicyTabsStore(s => s.tabs.find(t => t.id === s.activeTabId));
+  const editState = usePolicyEditStore(s => s.editStates.get(activeTabId));
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Input state
@@ -524,8 +527,8 @@ export function TrustprintLab() {
 
   // Spider Sense config from active policy
   const spiderSenseConfig = useMemo<SpiderSenseConfig>(
-    () => (state.activePolicy.guards.spider_sense ?? { enabled: true }),
-    [state.activePolicy.guards.spider_sense],
+    () => ((editState?.policy ?? { version: "1.1.0", name: "", description: "", guards: {}, settings: {} }).guards.spider_sense ?? { enabled: true }),
+    [(editState?.policy ?? { version: "1.1.0", name: "", description: "", guards: {}, settings: {} }).guards.spider_sense],
   );
 
   // Handle screening

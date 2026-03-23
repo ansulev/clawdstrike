@@ -3,6 +3,13 @@ import type { ScaffoldOptions, PluginType, ContributionPoint } from "./types";
 import { PLUGIN_TYPES, CONTRIBUTION_POINTS, PLUGIN_TYPE_DEFAULTS } from "./types";
 
 const KEBAB_CASE_RE = /^[a-z][a-z0-9]*(-[a-z0-9]+)*$/;
+const FLAGS_WITH_VALUES = new Set([
+  "--name",
+  "--type",
+  "--publisher",
+  "--contributions",
+  "--pm",
+]);
 
 function toDisplayName(name: string): string {
   return name
@@ -17,10 +24,26 @@ function getFlag(argv: string[], flag: string): string | undefined {
   return argv[idx + 1];
 }
 
+function getPositionalName(argv: string[]): string | undefined {
+  for (let i = 0; i < argv.length; i += 1) {
+    const arg = argv[i];
+    if (arg.startsWith("-")) {
+      if (FLAGS_WITH_VALUES.has(arg)) {
+        i += 1;
+      }
+      continue;
+    }
+
+    return arg;
+  }
+
+  return undefined;
+}
+
 /** Returns null if required flags are missing. */
 export function parseFlags(argv: string[]): ScaffoldOptions | null {
   const nameFlag = getFlag(argv, "--name");
-  const positionalName = argv.find((arg) => !arg.startsWith("-"));
+  const positionalName = getPositionalName(argv);
   const name = nameFlag ?? positionalName;
 
   if (!name) {

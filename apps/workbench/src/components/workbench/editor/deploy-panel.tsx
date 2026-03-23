@@ -23,7 +23,7 @@ import {
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { useFleetConnection } from "@/features/fleet/use-fleet-connection";
-import { useWorkbench, useMultiPolicy } from "@/features/policy/stores/multi-policy-store";
+import { useWorkbenchState, usePolicyTabs } from "@/features/policy/hooks/use-policy-actions";
 import { isPolicyFileType } from "@/lib/workbench/file-type-registry";
 import {
   deployPolicy,
@@ -39,8 +39,8 @@ const CONFIRM_TEXT = "deploy";
 
 export function DeployPanel() {
   const { connection, agents, remotePolicyInfo, refreshRemotePolicy } = useFleetConnection();
-  const { state } = useWorkbench();
-  const { activeTab } = useMultiPolicy();
+  const { state } = useWorkbenchState();
+  const { activeTab } = usePolicyTabs();
 
   // Hard gate: non-policy tabs cannot use direct fleet deploy
   const activeFileType = activeTab?.fileType;
@@ -169,7 +169,7 @@ function DeployConfirmDialog({
   onSuccess: () => void;
 }) {
   const { connection, agents, getAuthenticatedConnection: getAuthedConn } = useFleetConnection();
-  const { state } = useWorkbench();
+  const { state } = useWorkbenchState();
   const { toast } = useToast();
 
   const [confirmText, setConfirmText] = useState("");
@@ -418,7 +418,7 @@ function DeployConfirmDialog({
 
 function ImportConfirmDialog({ onClose }: { onClose: () => void }) {
   const { connection, getAuthenticatedConnection: getAuthedImport } = useFleetConnection();
-  const { state, dispatch } = useWorkbench();
+  const { state, dispatch } = useWorkbenchState();
   const { toast } = useToast();
 
   const [isImporting, setIsImporting] = useState(false);

@@ -4,7 +4,7 @@ import { fireEvent, screen } from "@testing-library/react";
 import { StatusBar } from "../status-bar";
 import { renderWithProviders } from "@/test/test-helpers";
 import { GUARD_REGISTRY } from "@/lib/workbench/guard-registry";
-import { useMultiPolicy, useWorkbench } from "@/features/policy/stores/multi-policy-store";
+import { usePolicyTabs, useWorkbenchState } from "@/features/policy/hooks/use-policy-actions";
 import { isDesktop } from "@/lib/tauri-bridge";
 
 vi.mock("@/lib/tauri-bridge", () => ({
@@ -16,8 +16,8 @@ vi.mock("@/lib/tauri-bridge", () => ({
 }));
 
 function DetectionStatusHarness() {
-  const { multiDispatch } = useMultiPolicy();
-  const { dispatch } = useWorkbench();
+  const { multiDispatch } = usePolicyTabs();
+  const { dispatch } = useWorkbenchState();
 
   return (
     <>

@@ -1,7 +1,7 @@
 import { useState, useMemo, useCallback } from "react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
-import type { PolicyTab } from "@/features/policy/stores/multi-policy-store";
+import type { PolicyTab } from "@/features/policy/types/policy-tab";
 import { FILE_TYPE_REGISTRY, type FileType } from "@/lib/workbench/file-type-registry";
 import { parseSigmaYaml } from "@/lib/workbench/sigma-types";
 import {

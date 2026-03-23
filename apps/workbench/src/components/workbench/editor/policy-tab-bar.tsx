@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from "react";
-import { useMultiPolicy } from "@/features/policy/stores/multi-policy-store";
-import type { PolicyTab } from "@/features/policy/stores/multi-policy-store";
+import { usePolicyTabs } from "@/features/policy/hooks/use-policy-actions";
+import type { PolicyTab } from "@/features/policy/types/policy-tab";
 import { FILE_TYPE_REGISTRY } from "@/lib/workbench/file-type-registry";
 import type { FileType } from "@/lib/workbench/file-type-registry";
 import {
@@ -277,7 +277,7 @@ interface PolicyTabBarProps {
 }
 
 export function PolicyTabBar({ isHomeActive, onHomeClick, onTabSwitch }: PolicyTabBarProps = {}) {
-  const { multiState, multiDispatch, tabs, canAddTab } = useMultiPolicy();
+  const { multiState, multiDispatch, tabs, canAddTab } = usePolicyTabs();
   const { activeTabId, splitTabId } = multiState;
 
   // Plugin view tabs integration

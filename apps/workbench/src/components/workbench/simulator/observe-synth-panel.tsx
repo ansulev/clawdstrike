@@ -3,7 +3,6 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
 import { VerdictBadge } from "@/components/workbench/shared/verdict-badge";
 import { Button as MovingBorderButton } from "@/components/ui/moving-border";
-import { useWorkbench } from "@/features/policy/stores/multi-policy-store";
 import { useToast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
 import {
@@ -39,6 +38,8 @@ import {
 } from "@tabler/icons-react";
 import type { TestActionType } from "@/lib/workbench/types";
 import { ClaudeCodeHint } from "@/components/workbench/shared/claude-code-hint";
+import { usePolicyTabsStore } from "@/features/policy/stores/policy-tabs-store";
+import { usePolicyEditStore } from "@/features/policy/stores/policy-edit-store";
 
 
 const ACTION_ICONS: Record<string, typeof IconFile> = {
@@ -268,7 +269,9 @@ function SynthGuardConfig({ synth }: { synth: SynthResult }) {
 
 
 export function ObserveSynthPanel() {
-  const { state, dispatch } = useWorkbench();
+  const activeTabId = usePolicyTabsStore(s => s.activeTabId);
+  const activeTab = usePolicyTabsStore(s => s.tabs.find(t => t.id === s.activeTabId));
+  const editState = usePolicyEditStore(s => s.editStates.get(activeTabId));
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -389,14 +392,15 @@ export function ObserveSynthPanel() {
   // Apply synth to active policy
   const handleApplyToPolicy = useCallback(() => {
     if (!synthResult) return;
-    const merged = mergeSynthIntoPolicy(state.activePolicy, synthResult.guards);
-    dispatch({ type: "SET_POLICY", policy: merged });
+    const merged = mergeSynthIntoPolicy((editState?.policy ?? { version: "1.1.0", name: "", description: "", guards: {}, settings: {} }), synthResult.guards);
+    usePolicyEditStore.getState().updatePolicy(activeTabId, merged, activeTab?.fileType ?? "clawdstrike_policy");
+      usePolicyTabsStore.getState().setDirty(activeTabId, true);
     toast({
       type: "success",
       title: "Policy updated",
       description: "Synthesized configuration merged into active policy",
     });
-  }, [synthResult, state.activePolicy, dispatch, toast]);
+  }, [synthResult, editState?.policy, activeTabId, activeTab?.fileType, toast]);
 
   // Clear all
   const handleClear = useCallback(() => {

@@ -8,6 +8,7 @@ import { FILE_TYPE_REGISTRY } from "@/lib/workbench/file-type-registry";
 import { GUARD_REGISTRY } from "@/lib/workbench/guard-registry";
 import type { GuardId } from "@/lib/workbench/types";
 import { cn } from "@/lib/utils";
+import { PresenceStatusIndicator } from "@/features/presence/components/presence-status-indicator";
 import { usePaneStore, getActivePane } from "@/features/panes/pane-store";
 import { getPaneActiveView } from "@/features/panes/pane-tree";
 import {
@@ -136,6 +137,10 @@ export function StatusBar() {
               : "Local"}
           </span>
         </button>
+
+        {/* Presence status (always visible) */}
+        <span className="w-px h-3 bg-[#2d3240]/60" />
+        <PresenceStatusIndicator />
 
         {/* MCP sidecar status (desktop only) */}
         {desktop && (

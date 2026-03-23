@@ -76,10 +76,10 @@ Plans:
   3. Hovering over a remote cursor caret displays a label with the analyst's name
   4. Rapid cursor movement from a remote analyst updates smoothly without editor flicker, jank, or extension rebuild (Facet+StateEffect delivery, not extension array mutation)
   5. Closing a file tab cleanly removes all cursor decorations and unsubscribes from presence updates for that file (no memory leak)
-**Plans**: TBD
+**Plans:** 1 plan
 
 Plans:
-- [ ] 21-01: PresenceCursorExtension ViewPlugin (Facet+StateEffect, cursor carets, selection highlights, name labels, throttle, cleanup)
+- [ ] 21-01-PLAN.md — PresenceCursorExtension ViewPlugin + yaml-editor integration (Facet+StateEffect data injection, cursor carets, selection highlights, name labels, 50ms throttle, store subscription, outbound broadcasting, cleanup)
 
 ## Progress
 

@@ -77,31 +77,31 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| CONN-01 | — | Pending |
-| CONN-02 | — | Pending |
-| CONN-03 | — | Pending |
-| CONN-04 | — | Pending |
-| PRES-01 | — | Pending |
-| PRES-02 | — | Pending |
-| PRES-03 | — | Pending |
-| PRES-04 | — | Pending |
-| PRES-05 | — | Pending |
-| UI-01 | — | Pending |
-| UI-02 | — | Pending |
-| UI-03 | — | Pending |
-| UI-04 | — | Pending |
-| UI-05 | — | Pending |
-| CM-01 | — | Pending |
-| CM-02 | — | Pending |
-| CM-03 | — | Pending |
-| CM-04 | — | Pending |
-| CM-05 | — | Pending |
+| CONN-01 | Phase 19 | Pending |
+| CONN-02 | Phase 19 | Pending |
+| CONN-03 | Phase 20 | Pending |
+| CONN-04 | Phase 19 | Pending |
+| PRES-01 | Phase 19 | Pending |
+| PRES-02 | Phase 18 | Pending |
+| PRES-03 | Phase 18 | Pending |
+| PRES-04 | Phase 18 | Pending |
+| PRES-05 | Phase 18 | Pending |
+| UI-01 | Phase 20 | Pending |
+| UI-02 | Phase 20 | Pending |
+| UI-03 | Phase 20 | Pending |
+| UI-04 | Phase 20 | Pending |
+| UI-05 | Phase 20 | Pending |
+| CM-01 | Phase 21 | Pending |
+| CM-02 | Phase 21 | Pending |
+| CM-03 | Phase 21 | Pending |
+| CM-04 | Phase 21 | Pending |
+| CM-05 | Phase 21 | Pending |
 
 **Coverage:**
 - v2.0 requirements: 19 total
-- Mapped to phases: 0
-- Unmapped: 19 ⚠️
+- Mapped to phases: 19
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-03-23*
-*Last updated: 2026-03-23 after initial definition*
+*Last updated: 2026-03-23 after roadmap creation*

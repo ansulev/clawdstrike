@@ -6,6 +6,7 @@ import { DesktopLayout } from "@/components/desktop/desktop-layout";
 import { IdentityPrompt } from "@/components/workbench/identity/identity-prompt";
 import { useOperator } from "@/features/operator/stores/operator-store";
 import { useFleetConnection } from "@/features/fleet/use-fleet-connection";
+import { usePresenceConnection } from "@/features/presence/use-presence-connection";
 import { useHintSettingsSafe } from "@/features/settings/use-hint-settings";
 import { usePolicyBootstrap } from "@/features/policy/hooks/use-policy-bootstrap";
 import { secureStore, migrateCredentialsToStronghold } from "@/features/settings/secure-store";
@@ -153,6 +154,7 @@ function WorkbenchBootstraps() {
 
   useOperator();
   useFleetConnection();
+  usePresenceConnection();
   useHintSettingsSafe();
   usePolicyBootstrap();
   useSignalCorrelator();

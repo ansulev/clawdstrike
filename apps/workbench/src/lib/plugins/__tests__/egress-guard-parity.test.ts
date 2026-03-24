@@ -2,7 +2,7 @@
  * Egress Guard Plugin Parity Tests
  *
  * Verifies verdict parity between the plugin guard and the built-in
- * EgressAllowlistGuard from @clawdstrike/sdk. Proves that the config
+ * EgressAllowlistGuard from the SDK guard source. Proves that the config
  * schema declared by the plugin produces correct allow/deny/warn verdicts
  * when consumed by the hush-ts evaluation logic.
  */
@@ -10,11 +10,13 @@
 import { describe, it, expect } from "vitest";
 import {
   EgressAllowlistGuard,
+} from "../../../../../../packages/sdk/hush-ts/src/guards/egress-allowlist";
+import {
   GuardAction,
   GuardContext,
   GuardResult,
   Severity,
-} from "@clawdstrike/sdk";
+} from "../../../../../../packages/sdk/hush-ts/src/guards/types";
 import { BUILTIN_GUARDS } from "../../workbench/guard-registry";
 import egressGuardPlugin from "../examples/egress-guard-plugin";
 

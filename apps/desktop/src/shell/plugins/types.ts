@@ -149,7 +149,7 @@ export const PLUGIN_ICONS: Record<string, string> = new Proxy(
       return undefined;
     },
     has(_target, prop: string) {
-      return pluginIconMap.has(prop);
+      return pluginIconMap.has(prop) || prop in Object.prototype;
     },
     set(target, prop: string, value: string, receiver: unknown) {
       if (typeof prop === "symbol") {

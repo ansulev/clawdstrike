@@ -20,6 +20,8 @@ describe("desktop plugin icon registry", () => {
   it("preserves inherited Object.prototype methods on the PLUGIN_ICONS proxy", () => {
     expect(typeof PLUGIN_ICONS.toString).toBe("function");
     expect(String(PLUGIN_ICONS)).toBe("[object Object]");
+    expect("toString" in PLUGIN_ICONS).toBe(true);
+    expect("valueOf" in PLUGIN_ICONS).toBe(true);
   });
 
   it("keeps compatibility with direct PLUGIN_ICONS assignments", () => {

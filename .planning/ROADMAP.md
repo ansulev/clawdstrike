@@ -47,12 +47,13 @@ Plans:
   3. TopologyManager supports mesh, hierarchical, centralized, hybrid, and adaptive modes with O(1) role index, BFS shortest path, leader election, dynamic rebalancing on join/leave, partition strategies, and failover on unhealthy agents
   4. All three subsystems use the TypedEventEmitter from Phase 1 (not Node.js EventEmitter), accept Record-based state (not Map), and have zero Node.js imports
   5. TopologyState, AgentSession, and TaskGraph state are JSON-serializable for transport via SwarmEnvelope
-**Plans**: TBD
+**Plans**: 4 plans
 
 Plans:
-- [ ] 02-01: TBD
-- [ ] 02-02: TBD
-- [ ] 02-03: TBD
+- [ ] 02-01-PLAN.md — Deque/PriorityQueue extraction from ruflo, new types (TaskErrorCategory, AgentRegistration, TaskSubmission, HealthCheckStatus), TaskProgressEvent
+- [ ] 02-02-PLAN.md — AgentRegistry port from ruflo (544 lines) with browser-safe adaptations, full AgentSession lifecycle, health checks
+- [ ] 02-03-PLAN.md — TaskGraph port from ruflo (605 lines) with DAG, cycle detection, 5-level priority queue, capability-based assignment, timeout/retry
+- [ ] 02-04-PLAN.md — TopologyManager port from ruflo (656 lines) with 5 modes including new adaptive, O(1) role index, BFS, leader election
 
 ### Phase 3: Orchestrator + Protocol
 **Goal**: A single SwarmOrchestrator facade composes all subsystems with guard pipeline integration, and the ProtocolBridge maps engine events to SwarmEnvelope v2 channels across existing transports
@@ -126,8 +127,8 @@ Phases execute in numeric order: 1 > 2 > 3 > 4 > 5 > 6
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation | 1/2 | In Progress | - |
-| 2. Core Subsystems | 0/3 | Not started | - |
+| 1. Foundation | 2/2 | Complete | - |
+| 2. Core Subsystems | 0/4 | Planned | - |
 | 3. Orchestrator + Protocol | 0/3 | Not started | - |
 | 4. Consensus + Shared Memory | 0/2 | Not started | - |
 | 5. React Integration | 0/2 | Not started | - |

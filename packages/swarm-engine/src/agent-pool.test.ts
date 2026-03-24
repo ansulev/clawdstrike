@@ -291,8 +291,11 @@ describe("AgentPool", () => {
     it("detect unhealthy agents (no heartbeat)", () => {
       pool.initialize();
 
-      // Advance time past unhealthy threshold (3x health check interval)
-      vi.advanceTimersByTime(30_001); // 3 * 10000 = 30000ms
+      // Unhealthy threshold = 3 * healthCheckIntervalMs = 30000ms
+      // Need to advance past the threshold AND trigger a health check after it
+      // Health checks fire at 10000, 20000, 30000, 40000...
+      // At T=40000: timeSinceLastHeartbeat = 40000 > 30000 -> unhealthy
+      vi.advanceTimersByTime(40_001);
 
       // Health checks should have run and detected unhealthy agents
       const state = pool.getState();
@@ -306,19 +309,23 @@ describe("AgentPool", () => {
   describe("replaceUnhealthyAgent", () => {
     it("removes unhealthy agent and creates replacement", () => {
       pool.initialize();
-      const initialCount = Object.keys(pool.getState().agents).length;
+      const initialIds = new Set(Object.keys(pool.getState().agents));
 
-      // Advance time far enough for agents to become fully unhealthy (health <= 0)
-      // Each health check reduces health by 0.2, so 5 checks * 10s = 50s
-      vi.advanceTimersByTime(50_001);
+      // Health degrades by 0.2 each check after the threshold (30s).
+      // First degradation at T=40000, then 50000, 60000, 70000, 80000.
+      // 5 degradations * 0.2 = 1.0 -> health reaches 0 -> replacement triggered.
+      // Need 8 health check intervals (80s) + a bit more.
+      vi.advanceTimersByTime(90_001);
 
       // After replacement, pool should still have minSize agents
       const state = pool.getState();
       expect(Object.keys(state.agents).length).toBeGreaterThanOrEqual(
         pool.getState().config.minSize,
       );
-      // But the agent IDs should be different from the originals
-      expect(Object.keys(state.agents).length).toBeGreaterThanOrEqual(initialCount);
+      // Agent IDs should be different (replaced)
+      const currentIds = new Set(Object.keys(state.agents));
+      const replacedSome = [...initialIds].some((id) => !currentIds.has(id));
+      expect(replacedSome).toBe(true);
     });
   });
 
@@ -357,6 +364,8 @@ describe("AgentPool", () => {
 
   describe("getUtilization", () => {
     it("returns busy/total ratio", () => {
+      // Use a pool where auto-scaling won't trigger (scaleUpThreshold: 1.0)
+      pool = new AgentPool(events, makeConfig({ minSize: 2, maxSize: 2, scaleUpThreshold: 1.0 }));
       pool.initialize(); // 2 agents
       expect(pool.getUtilization()).toBe(0);
 

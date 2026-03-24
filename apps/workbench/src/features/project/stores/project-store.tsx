@@ -16,6 +16,7 @@ import {
   isValidProjectBasename,
   replaceProjectPathBasename,
 } from "@/features/project/utils/resolve-project-path";
+import { getWorkbenchE2EBridge } from "@/lib/workbench/e2e-bridge";
 
 const TAURI_FS_SPECIFIER = "@tauri-apps/plugin-fs";
 
@@ -157,13 +158,22 @@ async function importTauriFs() {
   return import(/* @vite-ignore */ TAURI_FS_SPECIFIER);
 }
 
+async function readProjectDirEntries(dirPath: string) {
+  const e2eBridge = getWorkbenchE2EBridge();
+  if (e2eBridge?.readDetectionDir) {
+    return e2eBridge.readDetectionDir(dirPath);
+  }
+
+  const { readDir } = await importTauriFs();
+  return readDir(dirPath);
+}
+
 /**
  * Recursively scan a directory via Tauri fs readDir and collect relative paths.
  * Directories get a trailing "/" to distinguish them from files.
  */
 async function scanDir(dirPath: string, basePath: string): Promise<string[]> {
-  const { readDir } = await importTauriFs();
-  const entries = await readDir(dirPath);
+  const entries = await readProjectDirEntries(dirPath);
   const paths: string[] = [];
   for (const entry of entries) {
     const fullPath = `${dirPath}/${entry.name}`;

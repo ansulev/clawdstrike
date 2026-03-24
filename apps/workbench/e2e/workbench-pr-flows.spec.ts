@@ -7,6 +7,7 @@ const signalsFresh = makePolicyYaml("signals-fresh", "needle in the haystack");
 const signalsStale = makePolicyYaml("signals-stale", "outdated search snapshot");
 const unicodeWholeWord = makePolicyYaml("unicode-whole-word", "ẞ");
 const unicodeInsideWord = makePolicyYaml("unicode-inside-word", "maßstab");
+const alphaFileRoute = "/#/file//workspace/policies/alpha.yml";
 
 test.use({ viewport: { width: 1440, height: 960 } });
 
@@ -57,7 +58,7 @@ test.beforeEach(async ({ page }) => {
 });
 
 test("sidebar explorer opens the latest file content from the workspace", async ({ page }) => {
-  await page.goto("/#/editor");
+  await page.goto(alphaFileRoute);
 
   await expectEditorToContain(page, "name: alpha-stale");
   await expect(page.locator("#sidebar-panel")).toContainText("Explorer");
@@ -69,10 +70,10 @@ test("sidebar explorer opens the latest file content from the workspace", async 
 });
 
 test("sidebar explorer creates a file and loads it into the editor", async ({ page }) => {
-  await page.goto("/#/editor");
+  await page.goto(alphaFileRoute);
 
   await expect(page.locator("#sidebar-panel")).toContainText("Explorer");
-  await page.getByTitle("New File").click();
+  await page.locator("#sidebar-panel").getByTitle("New File").click();
   await page.getByPlaceholder("filename.yaml").fill("fresh-policy.yml");
   await page.getByPlaceholder("filename.yaml").press("Enter");
 
@@ -81,7 +82,7 @@ test("sidebar explorer creates a file and loads it into the editor", async ({ pa
 });
 
 test("sidebar search opens the match and queues an editor reveal target", async ({ page }) => {
-  await page.goto("/#/editor");
+  await page.goto(alphaFileRoute);
 
   await page.getByTitle("Search (Cmd+Shift+F)").click();
   await page.getByPlaceholder("Search files...").fill("needle");
@@ -96,7 +97,7 @@ test("sidebar search opens the match and queues an editor reveal target", async 
       page.evaluate(() => (window as Window & { __WORKBENCH_E2E_LAST_REVEAL__?: unknown }).__WORKBENCH_E2E_LAST_REVEAL__),
     )
     .toEqual({
-      filePath: "workspace/policies/signals.yml",
+      filePath: "/workspace/policies/signals.yml",
       lineNumber: 3,
       startColumn: 14,
       endColumn: 20,
@@ -106,7 +107,7 @@ test("sidebar search opens the match and queues an editor reveal target", async 
 test("sidebar search whole-word matching stays aligned with the unicode-aware backend", async ({
   page,
 }) => {
-  await page.goto("/#/editor");
+  await page.goto(alphaFileRoute);
 
   await page.getByTitle("Search (Cmd+Shift+F)").click();
   await page.getByPlaceholder("Search files...").fill("ß");

@@ -83,26 +83,78 @@ export function makePolicyYaml(name: string, description = ""): string {
 
 export async function seedWorkbench(page: Page, options: SeedWorkbenchOptions): Promise<void> {
   const activeTabId = options.activeTabId ?? options.tabs[0]?.id ?? "";
-  const persistedTabs = {
-    tabs: options.tabs.map((tab) => ({
-      id: tab.id,
-      documentId: tab.documentId,
-      name: tab.name,
-      filePath: tab.filePath,
-      yaml: tab.yaml,
-      fileType: tab.fileType,
-    })),
-    activeTabId,
-  };
 
   await page.addInitScript(
-    ({ files, persistedTabs, defaultContentsByType, operator }) => {
-      const fileMap = new Map<string, { path: string; content: string; fileType: string }>(
-        files.map((file) => [file.path, { ...file }]),
-      );
-
+    ({ files, tabs, activeTabId, defaultContentsByType, operator }) => {
       const normalizePath = (value: string) =>
         value.replace(/\\/g, "/").replace(/\/+/g, "/").replace(/\/$/, "");
+
+      const normalizeSeedPath = (value: string) => {
+        const normalized = normalizePath(value);
+        if (
+          normalized === "" ||
+          normalized.startsWith("/") ||
+          normalized.startsWith("//") ||
+          /^[A-Za-z]:\//.test(normalized)
+        ) {
+          return normalized || "/";
+        }
+        return `/${normalized.replace(/^\/+/, "")}`;
+      };
+
+      const normalizedFiles = files.map((file) => ({
+        ...file,
+        path: normalizeSeedPath(file.path),
+      }));
+      const normalizedTabs = tabs.map((tab) => ({
+        ...tab,
+        filePath: tab.filePath ? normalizeSeedPath(tab.filePath) : null,
+      }));
+      const persistedTabs = {
+        tabs: normalizedTabs.map((tab) => ({
+          id: tab.id,
+          documentId: tab.documentId,
+          name: tab.name,
+          filePath: tab.filePath,
+          yaml: tab.yaml,
+          fileType: tab.fileType,
+        })),
+        activeTabId,
+      };
+      const fileMap = new Map<string, { path: string; content: string; fileType: string }>(
+        normalizedFiles.map((file) => [file.path, { ...file }]),
+      );
+
+      const deriveWorkspaceRoot = () => {
+        const firstPath = normalizedFiles[0]?.path ?? normalizedTabs[0]?.filePath ?? "/workspace";
+        if (firstPath.startsWith("/") && firstPath !== "/") {
+          const [firstSegment] = firstPath.split("/").filter(Boolean);
+          return firstSegment ? `/${firstSegment}` : "/";
+        }
+        return firstPath;
+      };
+      const workspaceRoot = deriveWorkspaceRoot();
+      const activeTab = normalizedTabs.find((tab) => tab.id === activeTabId) ?? normalizedTabs[0] ?? null;
+      const activeRoute = activeTab
+        ? activeTab.filePath
+          ? `/file/${activeTab.filePath}`
+          : `/file/__new__/${activeTab.id}`
+        : "/home";
+      const paneSession = {
+        root: {
+          type: "group",
+          id: "pane-e2e",
+          views: [
+            {
+              id: "view-e2e",
+              route: activeRoute,
+              label: activeTab?.name ?? "Home",
+            },
+          ],
+          activeViewId: "view-e2e",
+        },
+        activePaneId: "pane-e2e",
+      };
 
       const relativePathFor = (rootPath: string, filePath: string) => {
         const normalizedRoot = normalizePath(rootPath);
@@ -203,11 +255,51 @@ export async function seedWorkbench(page: Page, options: SeedWorkbenchOptions): 
 
       window.__WORKBENCH_E2E__ = {
         readDetectionFileByPath: async (filePath: string) => {
-          const file = fileMap.get(normalizePath(filePath));
+          const file = fileMap.get(normalizeSeedPath(filePath));
           return file ? { content: file.content, path: file.path, fileType: file.fileType as E2EFileType } : null;
         },
+        readDetectionDir: async (dirPath: string) => {
+          const normalizedDir = normalizeSeedPath(dirPath);
+          const dirPrefix = normalizedDir === "/" ? "/" : `${normalizedDir}/`;
+          const entries = new Map<string, { name: string; isDirectory: boolean }>();
+
+          for (const file of fileMap.values()) {
+            const normalizedFilePath = normalizePath(file.path);
+            if (
+              normalizedFilePath !== normalizedDir &&
+              !normalizedFilePath.startsWith(dirPrefix)
+            ) {
+              continue;
+            }
+
+            const remainder = normalizedFilePath.slice(dirPrefix.length);
+            if (!remainder) {
+              continue;
+            }
+
+            const segments = remainder.split("/").filter(Boolean);
+            const entryName = segments[0];
+            if (!entryName) {
+              continue;
+            }
+
+            const isDirectory = segments.length > 1;
+            const existingEntry = entries.get(entryName);
+            entries.set(entryName, {
+              name: entryName,
+              isDirectory: existingEntry?.isDirectory || isDirectory,
+            });
+          }
+
+          return Array.from(entries.values()).sort((a, b) => {
+            if (a.isDirectory !== b.isDirectory) {
+              return a.isDirectory ? -1 : 1;
+            }
+            return a.name.localeCompare(b.name);
+          });
+        },
         createDetectionFile: async (dirPath: string, fileName: string, fileType: string) => {
-          const fullPath = normalizePath(`${dirPath}/${fileName}`);
+          const fullPath = normalizeSeedPath(`${dirPath}/${fileName}`);
           fileMap.set(fullPath, {
             path: fullPath,
             content: resolveSeededContent(fileName, fileType),
@@ -216,17 +308,17 @@ export async function seedWorkbench(page: Page, options: SeedWorkbenchOptions): 
           return fullPath;
         },
         renameDetectionFile: async (oldPath: string, newPath: string) => {
-          const existing = fileMap.get(normalizePath(oldPath));
+          const existing = fileMap.get(normalizeSeedPath(oldPath));
           if (!existing) {
             return false;
           }
 
-          const nextPath = normalizePath(newPath);
-          fileMap.delete(normalizePath(oldPath));
+          const nextPath = normalizeSeedPath(newPath);
+          fileMap.delete(normalizeSeedPath(oldPath));
           fileMap.set(nextPath, { ...existing, path: nextPath });
           return true;
         },
-        deleteDetectionFile: async (filePath: string) => fileMap.delete(normalizePath(filePath)),
+        deleteDetectionFile: async (filePath: string) => fileMap.delete(normalizeSeedPath(filePath)),
         invoke: async (cmd: string, args?: Record<string, unknown>) => {
           if (cmd === "search_in_project") {
             return searchProject(
@@ -253,6 +345,8 @@ export async function seedWorkbench(page: Page, options: SeedWorkbenchOptions): 
       localStorage.setItem("clawdstrike_workbench_operator", JSON.stringify(operator));
       localStorage.setItem("clawdstrike_workbench_tabs", JSON.stringify(persistedTabs));
       localStorage.setItem("clawdstrike_workbench_policies", "[]");
+      localStorage.setItem("clawdstrike_workspace_roots", JSON.stringify([workspaceRoot]));
+      localStorage.setItem("clawdstrike_pane_layout", JSON.stringify(paneSession));
       localStorage.setItem(
         "clawdstrike_hint_settings",
         JSON.stringify({ showHints: true, overrides: {} }),
@@ -260,7 +354,8 @@ export async function seedWorkbench(page: Page, options: SeedWorkbenchOptions): 
     },
     {
       files: options.files,
-      persistedTabs,
+      tabs: options.tabs,
+      activeTabId,
       defaultContentsByType: DEFAULT_CONTENT_BY_TYPE,
       operator: DEFAULT_OPERATOR,
     },

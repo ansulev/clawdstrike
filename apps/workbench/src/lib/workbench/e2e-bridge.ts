@@ -8,10 +8,16 @@ export interface WorkbenchE2EOpenFileResult {
   fileType: FileType;
 }
 
+export interface WorkbenchE2EDirEntry {
+  name: string;
+  isDirectory: boolean;
+}
+
 export interface WorkbenchE2EBridge {
   invoke?: <T = unknown>(cmd: string, args?: Record<string, unknown>) => Awaitable<T>;
   openDetectionFile?: () => Awaitable<WorkbenchE2EOpenFileResult | null>;
   readDetectionFileByPath?: (filePath: string) => Awaitable<WorkbenchE2EOpenFileResult | null>;
+  readDetectionDir?: (dirPath: string) => Awaitable<WorkbenchE2EDirEntry[]>;
   saveDetectionFile?: (
     content: string,
     fileType: FileType,

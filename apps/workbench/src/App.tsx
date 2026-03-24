@@ -84,12 +84,21 @@ function useWorkspaceBootstrap(toastRef: React.RefObject<ReturnType<typeof useTo
   useEffect(() => {
     async function init() {
       const { isDesktop } = await import("@/lib/tauri-bridge");
-      if (!isDesktop()) return;
+      const { getWorkbenchE2EBridge } = await import("@/lib/workbench/e2e-bridge");
+      const isWorkbenchE2E = getWorkbenchE2EBridge() !== null;
+      if (!isDesktop() && !isWorkbenchE2E) return;
 
       const store = useProjectStore.getState();
       store.actions.setLoading(true);
 
       try {
+        if (!isDesktop()) {
+          if (store.projectRoots.length > 0) {
+            await store.actions.initFromPersistedRoots();
+          }
+          return;
+        }
+
         // Always ensure the default workspace directory structure exists.
         const { bootstrapDefaultWorkspace, getDefaultWorkspacePath } = await import(
           "@/features/project/workspace-bootstrap"

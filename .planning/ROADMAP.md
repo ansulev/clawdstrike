@@ -82,11 +82,12 @@ Plans:
   3. In-memory knowledge graph stores entity-relationship data with Map-based backing, and IndexedDB persistence backend snapshots vectors, graph, agent states, task graph, and consensus log -- with graceful fallback to in-memory when IndexedDB is unavailable
   4. Memory writes are guarded actions passing through the guard pipeline (mapped to file_write TestActionType), and namespaced memory supports tag-based search with TTL expiration
   5. Importing only `@clawdstrike/swarm-engine` (without `/consensus` or `/memory` subpath) does NOT bundle consensus or memory code -- tree-shaking verified via subpath exports
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 04-01: TBD
-- [ ] 04-02: TBD
+- [ ] 04-01-PLAN.md — Consensus subsystem: port Raft, Byzantine, Gossip from ruflo with TypedEventEmitter injection, ConsensusEngine factory
+- [ ] 04-02-PLAN.md — Memory subsystem: HNSW verbatim copy, KnowledgeGraph, IdbBackend, SharedMemory manager with guard pipeline integration
+- [ ] 04-03-PLAN.md — Subpath exports (./consensus, ./memory) in package.json, build verification, full test suite regression check
 
 ### Phase 5: React Integration
 **Goal**: The SwarmBoard canvas renders live engine state with topology-driven layout, connected through the established provider/bridge pattern, and developers access engine subsystems via typed convenience hooks
@@ -129,7 +130,7 @@ Phases execute in numeric order: 1 > 2 > 3 > 4 > 5 > 6
 |-------|----------------|--------|-----------|
 | 1. Foundation | 2/2 | Complete | - |
 | 2. Core Subsystems | 4/4 | Complete | - |
-| 3. Orchestrator + Protocol | 0/3 | Planned | - |
-| 4. Consensus + Shared Memory | 0/2 | Not started | - |
+| 3. Orchestrator + Protocol | 3/3 | Complete | - |
+| 4. Consensus + Shared Memory | 0/3 | Planned | - |
 | 5. React Integration | 0/2 | Not started | - |
 | 6. Validation + Tauri Transport | 0/2 | Not started | - |

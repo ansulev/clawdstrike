@@ -186,6 +186,52 @@ export interface AgentQualityScores {
 }
 
 // ---------------------------------------------------------------------------
+// Agent registration (input to AgentRegistry.register)
+// ---------------------------------------------------------------------------
+
+/**
+ * Input for registering an agent with the AgentRegistry.
+ *
+ * Provides the minimal required information to create an AgentSession
+ * when the agent is spawned. The registry generates the agent ID.
+ */
+export interface AgentRegistration {
+  /** Human-readable name for the agent. */
+  name: string;
+  /** Agent role within the swarm. */
+  role: AgentRole;
+  /** Agent capabilities for task assignment. */
+  capabilities: AgentCapabilities;
+  /** Optional quality score overrides (defaults to 0.5 for each). */
+  quality?: Partial<AgentQualityScores>;
+  /** Policy mode for the agent (e.g., "strict", "permissive"). */
+  policyMode?: string | null;
+  /** Agent model identifier (e.g., "claude-3.5-sonnet"). */
+  agentModel?: string | null;
+}
+
+// ---------------------------------------------------------------------------
+// Health check status
+// ---------------------------------------------------------------------------
+
+/**
+ * Health check status for a registered agent.
+ * Tracked by the AgentRegistry health check loop.
+ */
+export interface HealthCheckStatus {
+  /** Agent ID. */
+  agentId: string;
+  /** Whether the agent is currently considered healthy. */
+  healthy: boolean;
+  /** Timestamp of last heartbeat (Unix ms). */
+  lastHeartbeatAt: number;
+  /** Number of consecutive missed heartbeats. */
+  consecutiveMisses: number;
+  /** Current agent session status. */
+  status: AgentSessionStatus;
+}
+
+// ---------------------------------------------------------------------------
 // Guard receipt summary
 // ---------------------------------------------------------------------------
 

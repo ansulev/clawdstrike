@@ -1773,15 +1773,13 @@ pub async fn search_in_project(
         });
     }
 
-    let query_clone = query.clone();
     let cancellation_flag = search_id.as_deref().map(register_search_cancellation);
     let search_result = tokio::task::spawn_blocking(move || {
         if is_search_cancelled(cancellation_flag.as_deref()) {
             return Err("Search canceled".into());
         }
-
         let compiled_regex =
-            build_search_regex(&query_clone, case_sensitive, whole_word, use_regex)?;
+            build_search_regex(&query, case_sensitive, whole_word, use_regex)?;
 
         // Collect eligible files.
         let mut file_paths = Vec::new();

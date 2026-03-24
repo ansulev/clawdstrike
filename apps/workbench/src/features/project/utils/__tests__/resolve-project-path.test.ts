@@ -15,7 +15,20 @@ describe("resolve-project-path", () => {
       deriveSearchRootPath("workspace", [
         "/repo/policies/example.yml",
         "/repo/rules/detections.yml",
+      ], [
+        "policies/example.yml",
+        "rules/detections.yml",
       ]),
+    ).toBe("/repo");
+  });
+
+  it("derives the workspace root from a single absolute file and relative project paths", () => {
+    expect(
+      deriveSearchRootPath(
+        "workspace",
+        ["/repo/policies/example.yml"],
+        ["policies/example.yml", "rules/detections.yml"],
+      ),
     ).toBe("/repo");
   });
 

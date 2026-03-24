@@ -69,6 +69,41 @@ function seedOpenDocument(filePath: string, lineNumber: number, lineContent: str
   });
 }
 
+const syntheticProjectFiles = [
+  {
+    path: "policies",
+    name: "policies",
+    fileType: "clawdstrike_policy" as const,
+    isDirectory: true,
+    depth: 0,
+    children: [
+      {
+        path: "policies/example.yml",
+        name: "example.yml",
+        fileType: "clawdstrike_policy" as const,
+        isDirectory: false,
+        depth: 1,
+      },
+    ],
+  },
+  {
+    path: "rules",
+    name: "rules",
+    fileType: "clawdstrike_policy" as const,
+    isDirectory: true,
+    depth: 0,
+    children: [
+      {
+        path: "rules/other.yml",
+        name: "other.yml",
+        fileType: "clawdstrike_policy" as const,
+        isDirectory: false,
+        depth: 1,
+      },
+    ],
+  },
+];
+
 describe("SearchPanelConnected", () => {
   beforeEach(() => {
     openFileByPath.mockReset();
@@ -293,7 +328,41 @@ describe("SearchPanelConnected", () => {
       project: {
         rootPath: "workspace",
         name: "Workspace",
-        files: [],
+        files: syntheticProjectFiles,
+        expandedDirs: new Set<string>(),
+      },
+    });
+
+    render(
+      <MemoryRouter>
+        <SearchPanelConnected />
+      </MemoryRouter>,
+    );
+
+    const input = screen.getByPlaceholderText("Search files...");
+    await userEvent.click(input);
+    await userEvent.keyboard("{Enter}");
+
+    await waitFor(() => {
+      expect(searchInProjectNative).toHaveBeenCalledWith(
+        "/workspace/project",
+        "needle",
+        false,
+        false,
+        false,
+      );
+    });
+  });
+
+  it("keeps the workspace root when only one absolute tab is open", async () => {
+    mockedWorkbenchState.tabs = [
+      { filePath: "/workspace/project/policies/example.yml" },
+    ];
+    useProjectStore.setState({
+      project: {
+        rootPath: "workspace",
+        name: "Workspace",
+        files: syntheticProjectFiles,
         expandedDirs: new Set<string>(),
       },
     });

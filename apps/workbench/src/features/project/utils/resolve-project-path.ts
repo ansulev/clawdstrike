@@ -119,12 +119,87 @@ function stringifyAbsoluteDirectory(
   return directories.length > 0 ? `/${directories.join("/")}` : "/";
 }
 
+function deriveSearchRootFromProjectFiles(
+  absoluteFilePaths: string[],
+  projectRelativeFilePaths: string[],
+): string | null {
+  if (projectRelativeFilePaths.length === 0) {
+    return null;
+  }
+
+  const candidateRoots = absoluteFilePaths
+    .map((absoluteFilePath) => {
+      const parsedAbsolutePath = parseAbsoluteDirectory(absoluteFilePath);
+      if (!parsedAbsolutePath) {
+        return null;
+      }
+
+      const normalizedAbsolutePath = normalizeProjectPath(absoluteFilePath);
+      const absoluteSegments = normalizedAbsolutePath.split("/").filter(Boolean);
+      const absoluteBasename = absoluteSegments[absoluteSegments.length - 1];
+      if (!absoluteBasename) {
+        return null;
+      }
+
+      const matches = projectRelativeFilePaths
+        .map((relativeFilePath) => {
+          const normalizedRelativePath = normalizeProjectPath(relativeFilePath).replace(/^\/+/, "");
+          const relativeSegments = normalizedRelativePath.split("/").filter(Boolean);
+          const relativeBasename = relativeSegments[relativeSegments.length - 1];
+          const relativeDirectories = relativeSegments.slice(0, -1);
+
+          if (
+            relativeSegments.length === 0
+            || relativeBasename !== absoluteBasename
+            || relativeDirectories.length > parsedAbsolutePath.directories.length
+          ) {
+            return null;
+          }
+
+          const absoluteTail = parsedAbsolutePath.directories.slice(
+            parsedAbsolutePath.directories.length - relativeDirectories.length,
+          );
+          if (absoluteTail.join("/") !== relativeDirectories.join("/")) {
+            return null;
+          }
+
+          return stringifyAbsoluteDirectory(
+            parsedAbsolutePath,
+            parsedAbsolutePath.directories.slice(
+              0,
+              parsedAbsolutePath.directories.length - relativeDirectories.length,
+            ),
+          );
+        })
+        .filter((candidate): candidate is string => candidate !== null);
+
+      return matches.length === 1 ? matches[0] : null;
+    })
+    .filter((candidate): candidate is string => candidate !== null);
+
+  if (candidateRoots.length === 0) {
+    return null;
+  }
+
+  const [firstRoot, ...restRoots] = candidateRoots;
+  return restRoots.every((candidate) => candidate === firstRoot) ? firstRoot : null;
+}
+
 export function deriveSearchRootPath(
   rootPath: string | null | undefined,
   absoluteFilePaths: string[],
+  projectRelativeFilePaths: string[] = [],
 ): string | null {
   if (isAbsoluteProjectPath(rootPath)) {
     return rootPath ?? null;
+  }
+
+  const projectDerivedRoot = deriveSearchRootFromProjectFiles(
+    absoluteFilePaths,
+    projectRelativeFilePaths,
+  );
+  if (projectDerivedRoot) {
+    return projectDerivedRoot;
   }
 
   const parsedPaths = absoluteFilePaths

@@ -114,6 +114,14 @@ export async function seedWorkbench(page: Page, options: SeedWorkbenchOptions): 
       };
 
       const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const isWordChar = (value: string) => /[\p{L}\p{N}_]/u.test(value);
+      const hasWholeWordBoundary = (line: string, start: number, end: number) => {
+        const previousChar = Array.from(line.slice(0, start)).at(-1);
+        const nextChar = Array.from(line.slice(end))[0];
+        const beforeOk = previousChar === undefined || !isWordChar(previousChar);
+        const afterOk = nextChar === undefined || !isWordChar(nextChar);
+        return beforeOk && afterOk;
+      };
 
       const buildMatcher = (
         query: string,
@@ -122,7 +130,7 @@ export async function seedWorkbench(page: Page, options: SeedWorkbenchOptions): 
         useRegex: boolean,
       ) => {
         const source = useRegex ? query : escapeRegex(query);
-        const bounded = wholeWord ? `\\b(?:${source})\\b` : source;
+        const bounded = wholeWord && useRegex ? `\\b(?:${source})\\b` : source;
         return new RegExp(bounded, caseSensitive ? "g" : "gi");
       };
 
@@ -156,6 +164,11 @@ export async function seedWorkbench(page: Page, options: SeedWorkbenchOptions): 
             let match = matcher.exec(line);
             while (match) {
               const value = match[0] ?? "";
+              if (wholeWord && !useRegex
+                && !hasWholeWordBoundary(line, match.index, match.index + value.length)) {
+                match = matcher.exec(line);
+                continue;
+              }
               matches.push({
                 file_path: relativePathFor(rootPath, file.path),
                 line_number: index + 1,

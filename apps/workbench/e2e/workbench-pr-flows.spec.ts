@@ -5,6 +5,8 @@ const alphaFresh = makePolicyYaml("alpha-fresh", "explorer fixture");
 const alphaStale = makePolicyYaml("alpha-stale", "persisted tab snapshot");
 const signalsFresh = makePolicyYaml("signals-fresh", "needle in the haystack");
 const signalsStale = makePolicyYaml("signals-stale", "outdated search snapshot");
+const unicodeWholeWord = makePolicyYaml("unicode-whole-word", "ß");
+const unicodeInsideWord = makePolicyYaml("unicode-inside-word", "maßstab");
 
 test.use({ viewport: { width: 1440, height: 960 } });
 
@@ -19,6 +21,16 @@ test.beforeEach(async ({ page }) => {
       {
         path: "workspace/policies/signals.yml",
         content: signalsFresh,
+        fileType: "clawdstrike_policy",
+      },
+      {
+        path: "workspace/policies/unicode-word.yml",
+        content: unicodeWholeWord,
+        fileType: "clawdstrike_policy",
+      },
+      {
+        path: "workspace/policies/unicode-inside-word.yml",
+        content: unicodeInsideWord,
         fileType: "clawdstrike_policy",
       },
     ],
@@ -89,6 +101,20 @@ test("sidebar search opens the match and queues an editor reveal target", async 
       startColumn: 14,
       endColumn: 20,
     });
+});
+
+test("sidebar search whole-word matching stays aligned with the unicode-aware backend", async ({
+  page,
+}) => {
+  await page.goto("/#/editor");
+
+  await page.getByTitle("Search (Cmd+Shift+F)").click();
+  await page.getByPlaceholder("Search files...").fill("ß");
+  await page.getByTitle("Match Whole Word").click();
+
+  await expect(page.getByText("1 results in 1 files")).toBeVisible();
+  await expect(page.locator("#sidebar-panel")).toContainText("unicode-word.yml");
+  await expect(page.locator("#sidebar-panel")).not.toContainText("unicode-inside-word.yml");
 });
 
 test("settings renders the Claude Code tab without crashing", async ({ page }) => {

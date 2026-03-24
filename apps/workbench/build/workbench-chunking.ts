@@ -12,7 +12,7 @@ function normalizeModuleId(id: string) {
   return id.split("\\").join("/");
 }
 
-export function matchesNodeModulePackage(id: string, packageName: string) {
+function matchesNodeModulePackage(id: string, packageName: string) {
   const normalizedId = normalizeModuleId(id);
   const packageRoot = `/node_modules/${packageName}`;
   const packageIndex = normalizedId.indexOf(packageRoot);

@@ -65,12 +65,12 @@ Plans:
   3. AgentPool acquires and releases agents with auto-scaling (configurable thresholds + cooldown), LRU eviction, and circuit-breaker removal of unhealthy agents
   4. SwarmEnvelope v2 adds 6 new channels (agent_lifecycle, task_orchestration, topology, consensus, memory, hooks) with version-field discrimination, backward-compatible topic parsing, and DenyNotification on guard denial
   5. InProcessEventBus and Speakeasy Gossipsub handle new channel topics without modification -- existing transport remains topic-agnostic with TTL hop-decrement for Gossipsub
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 03-01: TBD
-- [ ] 03-02: TBD
-- [ ] 03-03: TBD
+- [ ] 03-01-PLAN.md — Guard pipeline types (GuardEvaluator, AgentPoolConfig, DenyNotification, guard events) + AgentPool port from ruflo (acquire/release, auto-scaling, LRU eviction, circuit-breaker health checks)
+- [ ] 03-02-PLAN.md — ProtocolBridge (event-to-envelope mapping), 10 topic builders, EVENT_TO_CHANNEL map, parseSwarmTopic (10 channels), getSwarmTopics (backward-compat boolean shim), TRNS-02/TRNS-03 verification
+- [ ] 03-03-PLAN.md — SwarmOrchestrator facade (subsystem composition, lifecycle, guard pipeline integration, getState/getMetrics), index.ts re-exports for all Phase 3 modules
 
 ### Phase 4: Consensus + Shared Memory
 **Goal**: Agents can participate in distributed consensus for governance decisions, and swarms have browser-native shared memory with vector search, knowledge graph, and persistent storage -- both subsystems are tree-shakeable opt-ins
@@ -128,8 +128,8 @@ Phases execute in numeric order: 1 > 2 > 3 > 4 > 5 > 6
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundation | 2/2 | Complete | - |
-| 2. Core Subsystems | 0/4 | Planned | - |
-| 3. Orchestrator + Protocol | 0/3 | Not started | - |
+| 2. Core Subsystems | 4/4 | Complete | - |
+| 3. Orchestrator + Protocol | 0/3 | Planned | - |
 | 4. Consensus + Shared Memory | 0/2 | Not started | - |
 | 5. React Integration | 0/2 | Not started | - |
 | 6. Validation + Tauri Transport | 0/2 | Not started | - |

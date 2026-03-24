@@ -31,12 +31,9 @@ const gutterMap = new Map<string, GutterExtensionEntry>();
 const listeners = new Set<() => void>();
 
 /** Snapshot of all registered extensions as a flat array. Rebuilt on every mutation. */
-let snapshot: Extension[] = EMPTY_SNAPSHOT();
-
-/** Frozen empty array for reference stability when no extensions are registered. */
-function EMPTY_SNAPSHOT(): Extension[] {
-  return Object.freeze([]) as Extension[];
-}
+const EMPTY_SNAPSHOT: Extension[] = [];
+Object.freeze(EMPTY_SNAPSHOT);
+let snapshot: Extension[] = EMPTY_SNAPSHOT;
 
 // ---------------------------------------------------------------------------
 // Internal helpers
@@ -44,7 +41,7 @@ function EMPTY_SNAPSHOT(): Extension[] {
 
 function rebuildSnapshot(): void {
   if (gutterMap.size === 0) {
-    snapshot = EMPTY_SNAPSHOT();
+    snapshot = EMPTY_SNAPSHOT;
     return;
   }
   const extensions: Extension[] = [];

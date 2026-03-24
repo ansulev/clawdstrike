@@ -52,7 +52,10 @@ function makeFinding(overrides: Partial<Finding> = {}): Finding {
     scope: {
       agentIds: [],
       sessionIds: [],
-      timeRange: { start: Date.now() - 60_000, end: Date.now() },
+      timeRange: {
+        start: new Date(Date.now() - 60_000).toISOString(),
+        end: new Date().toISOString(),
+      },
     },
     timeline: [],
     enrichments: [],
@@ -62,9 +65,10 @@ function makeFinding(overrides: Partial<Finding> = {}): Finding {
     promotedToIntel: null,
     receipt: null,
     speakeasyId: null,
-    missionIds: [],
     createdAt: Date.now(),
     updatedAt: Date.now(),
+    createdBy: "operator-1",
+    updatedBy: "operator-1",
     ...overrides,
   };
 }

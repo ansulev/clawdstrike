@@ -650,7 +650,14 @@ const eqlAdapter: DetectionWorkflowAdapter = {
     }
 
     const eventItems = allItems.filter(
-      ({ item }) => item.kind === "structured_event" || item.kind === "ocsf_event",
+      (
+        entry,
+      ): entry is {
+        item:
+          | Extract<EvidenceItem, { kind: "structured_event" }>
+          | Extract<EvidenceItem, { kind: "ocsf_event" }>;
+        dataset: EvidenceDatasetKind;
+      } => entry.item.kind === "structured_event" || entry.item.kind === "ocsf_event",
     );
 
     const results: LabCaseResult[] = [];

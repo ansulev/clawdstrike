@@ -198,7 +198,7 @@ describe("PluginSecretsSettings", () => {
     mockThreatIntelCatalog.getBuiltinThreatIntelDescriptor.mockReturnValue({
       secretKeys: ["api_key"],
       create: vi.fn(() => ({ healthCheck })),
-    });
+    } as never);
 
     render(<PluginSecretsSettings />);
 

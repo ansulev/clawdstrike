@@ -57,6 +57,7 @@
     "zustand": "^5.0.12"
   },
   "devDependencies": {
+    "@clawdstrike/sdk": "^0.2.7",
     "@modelcontextprotocol/sdk": "^1.12.1",
     "@tailwindcss/postcss": "^4.0.0",
     "@tauri-apps/cli": "^2.0.0",

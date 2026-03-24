@@ -27,6 +27,10 @@ function createMockModule(): PluginModule {
   };
 }
 
+async function resolveCommunityPluginCode(): Promise<string> {
+  return 'console.debug("community plugin test bootstrap");';
+}
+
 // ---- Integration test suite ----
 
 describe("Sandbox Integration (PluginLoader + iframe + bridge)", () => {
@@ -59,6 +63,7 @@ describe("Sandbox Integration (PluginLoader + iframe + bridge)", () => {
       registry,
       trustOptions: { allowUnsigned: true },
       iframeContainer,
+      resolvePluginCode: resolveCommunityPluginCode,
     });
 
     await loader.loadPlugin("community-iframe-test");
@@ -84,6 +89,7 @@ describe("Sandbox Integration (PluginLoader + iframe + bridge)", () => {
       registry,
       trustOptions: { allowUnsigned: true },
       iframeContainer,
+      resolvePluginCode: resolveCommunityPluginCode,
     });
 
     await loader.loadPlugin("community-sandbox-attr");
@@ -115,6 +121,7 @@ describe("Sandbox Integration (PluginLoader + iframe + bridge)", () => {
       registry,
       trustOptions: { allowUnsigned: true },
       iframeContainer,
+      resolvePluginCode: resolveCommunityPluginCode,
     });
 
     await loader.loadPlugin("community-csp-check");
@@ -143,6 +150,7 @@ describe("Sandbox Integration (PluginLoader + iframe + bridge)", () => {
       registry,
       trustOptions: { allowUnsigned: true },
       iframeContainer,
+      resolvePluginCode: resolveCommunityPluginCode,
     });
 
     await loader.loadPlugin("community-activated-check");
@@ -167,6 +175,7 @@ describe("Sandbox Integration (PluginLoader + iframe + bridge)", () => {
       registry,
       trustOptions: { allowUnsigned: true },
       iframeContainer,
+      resolvePluginCode: resolveCommunityPluginCode,
     });
 
     await loader.loadPlugin("community-deactivate-iframe");
@@ -194,6 +203,7 @@ describe("Sandbox Integration (PluginLoader + iframe + bridge)", () => {
       registry,
       trustOptions: { allowUnsigned: true },
       iframeContainer,
+      resolvePluginCode: resolveCommunityPluginCode,
     });
 
     await loader.loadPlugin("community-deactivated-state");
@@ -219,6 +229,7 @@ describe("Sandbox Integration (PluginLoader + iframe + bridge)", () => {
       resolveModule: async () => mockModule,
       trustOptions: { allowUnsigned: true },
       iframeContainer,
+      resolvePluginCode: resolveCommunityPluginCode,
     });
 
     await loader.loadPlugin("internal-no-iframe");
@@ -253,6 +264,7 @@ describe("Sandbox Integration (PluginLoader + iframe + bridge)", () => {
       resolveModule: async () => mockModule,
       trustOptions: { allowUnsigned: true },
       iframeContainer,
+      resolvePluginCode: resolveCommunityPluginCode,
     });
 
     await loader.loadPlugin("coexist-internal");

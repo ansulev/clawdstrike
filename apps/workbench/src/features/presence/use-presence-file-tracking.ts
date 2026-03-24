@@ -17,15 +17,22 @@ import { toPresencePath } from "./presence-paths";
 // ---------------------------------------------------------------------------
 
 /** Derive the active file path from current pane state. Returns null for non-file views. */
+const DRAFT_FILE_ROUTE_PREFIX = "/file/__new__/";
+
+export function getTrackedPresenceFilePath(route: string): string | null {
+  if (!route.startsWith("/file/") || route.startsWith(DRAFT_FILE_ROUTE_PREFIX)) {
+    return null;
+  }
+
+  return route.slice("/file/".length);
+}
+
+/** Derive the active file path from current pane state. Returns null for non-file views. */
 function deriveActiveFilePath(): string | null {
   const state = usePaneStore.getState();
   const pane = getActivePane(state.root, state.activePaneId);
   const view = pane ? getPaneActiveView(pane) : null;
-  const route = view?.route ?? "";
-  if (route.startsWith("/file/") && !route.includes("__new__")) {
-    return route.slice("/file/".length);
-  }
-  return null;
+  return getTrackedPresenceFilePath(view?.route ?? "");
 }
 
 // ---------------------------------------------------------------------------
@@ -67,11 +74,7 @@ export function usePresenceFileTracking(): void {
     const unsubscribe = usePaneStore.subscribe((state) => {
       const pane = getActivePane(state.root, state.activePaneId);
       const view = pane ? getPaneActiveView(pane) : null;
-      const route = view?.route ?? "";
-      const filePath =
-        route.startsWith("/file/") && !route.includes("__new__")
-          ? route.slice("/file/".length)
-          : null;
+      const filePath = getTrackedPresenceFilePath(view?.route ?? "");
 
       if (filePath === lastSentFileRef.current) return;
 

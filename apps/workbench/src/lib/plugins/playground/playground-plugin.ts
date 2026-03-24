@@ -1,5 +1,5 @@
 import { lazy } from "react";
-import { createPlugin } from "@clawdstrike/plugin-sdk";
+import { createPlugin } from "../plugin-sdk-shim";
 
 export default createPlugin({
   manifest: {

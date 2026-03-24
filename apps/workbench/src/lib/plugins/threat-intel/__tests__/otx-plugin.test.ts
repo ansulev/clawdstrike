@@ -82,8 +82,7 @@ describe("OTX_MANIFEST", () => {
   });
 
   it("declares requiredSecrets with api_key entry", () => {
-    const manifest = OTX_MANIFEST as Record<string, unknown>;
-    const secrets = manifest.requiredSecrets as Array<{ key: string; label: string; description: string }>;
+    const secrets = OTX_MANIFEST.requiredSecrets ?? [];
     expect(secrets).toBeDefined();
     expect(secrets.length).toBeGreaterThanOrEqual(1);
     expect(secrets.some((s) => s.key === "api_key")).toBe(true);

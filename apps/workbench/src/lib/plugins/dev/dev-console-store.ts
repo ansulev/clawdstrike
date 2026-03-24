@@ -10,7 +10,9 @@ const MAX_EVENTS = 500;
 // Module-level state
 
 let events: DevLifecycleEvent[] = [];
-let snapshot: DevLifecycleEvent[] = Object.freeze([]) as DevLifecycleEvent[];
+const EMPTY_EVENTS: DevLifecycleEvent[] = [];
+Object.freeze(EMPTY_EVENTS);
+let snapshot: DevLifecycleEvent[] = EMPTY_EVENTS;
 const listeners = new Set<() => void>();
 
 // Internal helpers

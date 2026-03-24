@@ -284,9 +284,10 @@ describe("PluginRegistry", () => {
 
     expect(registry.getAll()).toHaveLength(0);
     expect(callback).toHaveBeenCalledTimes(2);
-    const ids = callback.mock.calls.map(
-      (c: [PluginRegistryEvent]) => c[0].pluginId,
-    );
+    const ids = callback.mock.calls.map((call) => {
+      const [event] = call as [PluginRegistryEvent];
+      return event.pluginId;
+    });
     expect(ids.sort()).toEqual(["reset-a", "reset-b"]);
   });
 });

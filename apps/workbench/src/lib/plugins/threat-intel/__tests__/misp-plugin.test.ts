@@ -100,8 +100,7 @@ describe("MISP_MANIFEST", () => {
   });
 
   it("declares requiredSecrets with api_key AND base_url entries", () => {
-    const manifest = MISP_MANIFEST as Record<string, unknown>;
-    const secrets = manifest.requiredSecrets as Array<{ key: string; label: string; description: string }>;
+    const secrets = MISP_MANIFEST.requiredSecrets ?? [];
     expect(secrets).toBeDefined();
     expect(secrets.length).toBeGreaterThanOrEqual(2);
     expect(secrets.some((s) => s.key === "api_key")).toBe(true);

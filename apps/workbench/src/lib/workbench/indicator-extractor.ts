@@ -114,7 +114,10 @@ interface IndicatorAccumulator {
  * @param signals - The signals contributing to this finding.
  * @returns Deduplicated array of Indicator objects with context linking.
  */
-export function extractIndicators(finding: Finding, signals: Signal[]): Indicator[] {
+export function extractIndicators(
+  finding: Pick<Finding, "id">,
+  signals: Signal[],
+): Indicator[] {
   const accumulators = new Map<string, IndicatorAccumulator>();
 
   for (const signal of signals) {

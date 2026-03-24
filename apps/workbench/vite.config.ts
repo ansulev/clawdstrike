@@ -41,9 +41,17 @@ export default defineConfig({
     },
   ],
   resolve: {
-    alias: {
-      "@": resolve(__dirname, "src"),
-    },
+    alias: [
+      { find: /^@\//, replacement: `${resolve(__dirname, "src")}/` },
+      {
+        find: /^@clawdstrike\/plugin-sdk$/,
+        replacement: resolve(__dirname, "../../packages/sdk/plugin-sdk/src/index.ts"),
+      },
+      {
+        find: /^@clawdstrike\/plugin-sdk\/testing$/,
+        replacement: resolve(__dirname, "../../packages/sdk/plugin-sdk/src/testing.ts"),
+      },
+    ],
   },
   clearScreen: false,
   server: {

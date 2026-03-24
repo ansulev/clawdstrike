@@ -181,7 +181,8 @@ describe("threat-reporting", () => {
           baseUrl,
         );
 
-        const body = JSON.parse(fetchSpy.mock.calls.at(-1)![1].body);
+        const latestCall = fetchSpy.mock.calls[fetchSpy.mock.calls.length - 1]!;
+        const body = JSON.parse(latestCall[1].body);
         expect(body.Event.threat_level_id).toBe(test.expectedThreatLevel);
       }
     });

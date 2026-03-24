@@ -76,8 +76,14 @@ function makeSource(id: string, name: string): ThreatIntelSource {
 // ---- Mock orchestrator ----
 
 function makeMockOrchestrator() {
+  type EnrichOptions = {
+    sourceIds?: string[];
+    signal?: AbortSignal;
+    onResult?: (result: EnrichmentResult) => void;
+  };
+
   return {
-    enrich: vi.fn<(indicator: Indicator, options?: Record<string, unknown>) => Promise<EnrichmentResult[]>>(),
+    enrich: vi.fn<(indicator: Indicator, options?: EnrichOptions) => Promise<EnrichmentResult[]>>(),
     clearCache: vi.fn(),
     clearCacheForSource: vi.fn(),
   };

@@ -12,8 +12,8 @@
  * This proves the full pipeline: SDK -> manifest -> loader -> guard registry -> config UI.
  */
 
-import { createPlugin } from "@clawdstrike/plugin-sdk";
-import type { PluginContext, GuardContribution, ConfigFieldDef } from "@clawdstrike/plugin-sdk";
+import { createPlugin } from "../plugin-sdk-shim";
+import type { PluginContext, GuardContribution, ConfigFieldDef } from "../plugin-sdk-shim";
 
 const EGRESS_CONFIG_FIELDS: ConfigFieldDef[] = [
   { key: "enabled", label: "Enabled", type: "toggle", defaultValue: true },

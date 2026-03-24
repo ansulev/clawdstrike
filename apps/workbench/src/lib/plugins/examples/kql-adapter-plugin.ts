@@ -12,8 +12,8 @@
  * documentation of those contributions for the plugin loader.
  */
 
-import { createPlugin } from "@clawdstrike/plugin-sdk";
-import type { PluginContext } from "@clawdstrike/plugin-sdk";
+import { createPlugin } from "../plugin-sdk-shim";
+import type { PluginContext } from "../plugin-sdk-shim";
 
 export default createPlugin({
   manifest: {

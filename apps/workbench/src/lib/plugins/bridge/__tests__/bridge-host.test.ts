@@ -16,6 +16,7 @@ import type {
   BridgeErrorResponse,
   BridgeEvent,
 } from "../types";
+import type { ReceiptMiddleware } from "../receipt-middleware";
 
 // ---- Registry mocks ----
 
@@ -605,14 +606,14 @@ describe("PluginBridgeHost", () => {
 
   describe("receipt middleware integration", () => {
     let receiptHost: PluginBridgeHost;
-    let mockRecordAllowed: ReturnType<typeof vi.fn>;
-    let mockRecordDenied: ReturnType<typeof vi.fn>;
-    let mockRecordError: ReturnType<typeof vi.fn>;
+    let mockRecordAllowed: ReturnType<typeof vi.fn<ReceiptMiddleware["recordAllowed"]>>;
+    let mockRecordDenied: ReturnType<typeof vi.fn<ReceiptMiddleware["recordDenied"]>>;
+    let mockRecordError: ReturnType<typeof vi.fn<ReceiptMiddleware["recordError"]>>;
 
     beforeEach(() => {
-      mockRecordAllowed = vi.fn().mockResolvedValue(undefined);
-      mockRecordDenied = vi.fn().mockResolvedValue(undefined);
-      mockRecordError = vi.fn().mockResolvedValue(undefined);
+      mockRecordAllowed = vi.fn<ReceiptMiddleware["recordAllowed"]>().mockResolvedValue(undefined);
+      mockRecordDenied = vi.fn<ReceiptMiddleware["recordDenied"]>().mockResolvedValue(undefined);
+      mockRecordError = vi.fn<ReceiptMiddleware["recordError"]>().mockResolvedValue(undefined);
     });
 
     afterEach(() => {

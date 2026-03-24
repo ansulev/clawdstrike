@@ -24,7 +24,6 @@ import type { CapsuleContentProps, CapsuleViewMode, DockCapsuleState, ShelfMode 
 import { useDockDemo } from "./useDockDemo";
 import { registerCapsuleRenderer, unregisterCapsuleRenderer, getCapsuleRenderer } from "./capsule-renderer-registry";
 import type { ComponentType } from "react";
-import type { CapsuleContentProps } from "./types";
 
 /** Guard with unregister-first to survive Vite HMR re-evaluation */
 function registerBuiltinCapsuleRenderer(kind: string, component: ComponentType<CapsuleContentProps>): void {

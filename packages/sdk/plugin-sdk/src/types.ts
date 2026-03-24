@@ -183,6 +183,17 @@ export interface DetectionAdapterContribution {
   fileType: string;
   /** Path to the adapter module within the plugin package. */
   entrypoint: string;
+  /** Optional inline file type descriptor metadata for discovery UIs. */
+  fileTypeDescriptor?: Omit<FileTypeContribution, "id">;
+  /** Whether the adapter exposes a visual panel for this file type. */
+  hasVisualPanel?: boolean;
+  /** Optional translation routes advertised by the adapter. */
+  translations?: Array<{
+    from: string;
+    to: string;
+    lossless: boolean;
+    lossDescription?: string;
+  }>;
 }
 
 /**

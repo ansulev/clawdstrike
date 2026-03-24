@@ -353,7 +353,7 @@ fn resolve_presence_identity(
     }
 
     (
-        fingerprint.to_string(),
+        format!("fingerprint:{fingerprint}:{connection_id}"),
         display_name.to_string(),
         sigil.to_string(),
     )
@@ -782,13 +782,30 @@ mod tests {
     }
 
     #[test]
-    fn resolve_presence_identity_preserves_client_values_without_auth() {
+    fn resolve_presence_identity_keeps_unauthenticated_connections_unique() {
         let (fingerprint, display_name, sigil) =
             resolve_presence_identity(None, "conn-1", "fp-1", "Alice", "A");
 
-        assert_eq!(fingerprint, "fp-1");
+        assert_eq!(fingerprint, "fingerprint:fp-1:conn-1");
         assert_eq!(display_name, "Alice");
         assert_eq!(sigil, "A");
+    }
+
+    #[test]
+    fn hub_keeps_unauthenticated_duplicate_fingerprints_distinct() {
+        let (hub, _rx) = PresenceHub::new();
+        let (first, _, _) = resolve_presence_identity(None, "conn-1", "fp-1", "Alice", "A");
+        let (second, _, _) = resolve_presence_identity(None, "conn-2", "fp-1", "Alice", "A");
+
+        hub.join(&first, "Alice", "A");
+        hub.join(&second, "Alice", "A");
+
+        assert_eq!(hub.roster().len(), 2);
+
+        let removed = hub.leave(&first);
+        assert!(removed.is_some());
+        assert_eq!(hub.roster().len(), 1);
+        assert!(hub.analysts.contains_key(&second));
     }
 
     #[test]
@@ -1010,7 +1027,7 @@ mod tests {
             .expect("send join");
         let welcome = recv_text(&mut socket).await;
         assert!(welcome.contains(r#""type":"welcome""#));
-        assert!(welcome.contains(r#""analyst_id":"fp1""#));
+        assert!(welcome.contains(r#""analyst_id":"fingerprint:fp1:"#));
         let echoed_join =
             tokio::time::timeout(Duration::from_millis(100), recv_text(&mut socket)).await;
         assert!(

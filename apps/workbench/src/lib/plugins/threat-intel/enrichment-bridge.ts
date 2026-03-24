@@ -26,7 +26,7 @@ interface EnrichmentOrchestratorLike {
 }
 
 export interface UseEnrichmentBridgeReturn {
-  runEnrichment: (finding: Finding) => void;
+  runEnrichment: (finding: Pick<Finding, "id">) => void;
   sourceStatuses: EnrichmentSourceStatus[];
   isEnriching: boolean;
   results: EnrichmentResult[];
@@ -50,7 +50,7 @@ export function useEnrichmentBridge(
   }, []);
 
   const runEnrichment = useCallback(
-    (finding: Finding) => {
+    (finding: Pick<Finding, "id">) => {
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
       }

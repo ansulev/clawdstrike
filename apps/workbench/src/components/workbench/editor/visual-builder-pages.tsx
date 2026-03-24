@@ -9,7 +9,11 @@ export function SigmaBuilderPage() {
   );
   return (
     <div className="h-full w-full overflow-auto bg-[#0b0d13]">
-      <SigmaVisualPanel yaml={yaml} onYamlChange={setYaml} />
+      <SigmaVisualPanel
+        source={yaml}
+        onSourceChange={setYaml}
+        accentColor="#7c9aef"
+      />
     </div>
   );
 }
@@ -20,7 +24,11 @@ export function YaraBuilderPage() {
   );
   return (
     <div className="h-full w-full overflow-auto bg-[#0b0d13]">
-      <YaraVisualPanel source={source} onSourceChange={setSource} />
+      <YaraVisualPanel
+        source={source}
+        onSourceChange={setSource}
+        accentColor="#e0915c"
+      />
     </div>
   );
 }
@@ -29,7 +37,11 @@ export function OcsfBuilderPage() {
   const [json, setJson] = useState("{}");
   return (
     <div className="h-full w-full overflow-auto bg-[#0b0d13]">
-      <OcsfVisualPanel json={json} onJsonChange={setJson} />
+      <OcsfVisualPanel
+        source={json}
+        onSourceChange={setJson}
+        accentColor="#5cc5c4"
+      />
     </div>
   );
 }

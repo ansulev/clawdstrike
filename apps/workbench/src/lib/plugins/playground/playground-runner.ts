@@ -1,4 +1,4 @@
-import { createPlugin } from "@clawdstrike/plugin-sdk";
+import { createPlugin } from "../plugin-sdk-shim";
 import { transpilePlugin } from "./playground-transpiler";
 import {
   getPlaygroundState,

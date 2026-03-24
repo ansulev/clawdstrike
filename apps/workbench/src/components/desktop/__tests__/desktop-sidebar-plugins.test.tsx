@@ -40,7 +40,7 @@ const mockSetActivePluginView = vi.fn((id: string | null) => {
 
 vi.mock("../active-plugin-view", () => ({
   useActivePluginView: () => mockActivePluginViewId,
-  setActivePluginView: (...args: any[]) => mockSetActivePluginView(...args),
+  setActivePluginView: (id: string | null) => mockSetActivePluginView(id),
 }));
 
 // ---------------------------------------------------------------------------

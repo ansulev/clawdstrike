@@ -77,7 +77,7 @@ export function TranslationResultsPanel({
   const hasUntranslatable = result.untranslatableFeatures.length > 0;
 
   // Determine target label for field mapping table
-  let targetLabel = "Target";
+  let targetLabel: string;
   try {
     const desc = getDescriptor(targetFileType);
     targetLabel = desc.shortLabel;

@@ -38,6 +38,7 @@ import { PluginBridgeHost } from "../bridge-host";
 describe("Bridge Integration (client <-> host round-trip)", () => {
   let client: PluginBridgeClient;
   let host: PluginBridgeHost;
+  let targetWindow: Window;
 
   beforeEach(() => {
     // Wire the two sides together:
@@ -46,17 +47,18 @@ describe("Bridge Integration (client <-> host round-trip)", () => {
     //    event so the client's listener picks it up
 
     // targetWindow: host responses arrive on the global window as MessageEvents
-    const targetWindow: { postMessage: (data: unknown, origin: string) => void } = {
+    const hostTargetWindow: { postMessage: (data: unknown, origin: string) => void } = {
       postMessage(data: unknown) {
         // Dispatch a real MessageEvent on window so the client listener receives it
         window.dispatchEvent(new MessageEvent("message", { data }));
       },
     };
+    targetWindow = hostTargetWindow as unknown as Window;
 
     // Create host first so we have a reference for parentWindow
     host = new PluginBridgeHost({
       pluginId: "integration-test",
-      targetWindow: targetWindow as unknown as Window,
+      targetWindow,
       allowedOrigin: "null",
     });
 
@@ -65,7 +67,7 @@ describe("Bridge Integration (client <-> host round-trip)", () => {
       postMessage(data: unknown) {
         // Simulate the MessageEvent the host would receive from the iframe
         host.handleMessage(
-          new MessageEvent("message", { data, origin: "null" }),
+          new MessageEvent("message", { data, origin: "null", source: targetWindow }),
         );
       },
     };

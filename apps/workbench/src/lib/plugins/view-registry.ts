@@ -131,7 +131,8 @@ export function getViewsBySlot(slot: ViewSlot): ViewRegistration[] {
 }
 
 /** Frozen empty array shared across all empty-slot queries for reference stability. */
-const EMPTY: ViewRegistration[] = Object.freeze([]) as ViewRegistration[];
+const EMPTY: ViewRegistration[] = [];
+Object.freeze(EMPTY);
 
 /**
  * Subscribe to registry changes. The listener is called whenever a view

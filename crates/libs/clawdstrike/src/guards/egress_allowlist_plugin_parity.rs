@@ -30,10 +30,7 @@ mod tests {
                     EgressAllowlistConfig::with_defaults()
                 } else {
                     serde_json::from_value(config).map_err(|e| {
-                        crate::error::Error::ConfigError(format!(
-                            "Invalid egress config: {}",
-                            e
-                        ))
+                        crate::error::Error::ConfigError(format!("Invalid egress config: {}", e))
                     })?
                 };
             Ok(Box::new(EgressAllowlistGuard::with_config(guard_config)))

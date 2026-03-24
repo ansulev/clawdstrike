@@ -28,6 +28,20 @@ function simulateHostMessage(data: unknown): void {
   window.dispatchEvent(new MessageEvent("message", { data }));
 }
 
+function captureBridgeError(promise: Promise<unknown>): Promise<BridgeError> {
+  return promise.then(
+    () => {
+      throw new Error("Expected promise to reject");
+    },
+    (error: unknown) => {
+      if (!(error instanceof BridgeError)) {
+        throw error;
+      }
+      return error;
+    },
+  );
+}
+
 // ---- Setup ----
 
 describe("PluginBridgeClient", () => {
@@ -98,26 +112,24 @@ describe("PluginBridgeClient", () => {
       vi.useFakeTimers();
 
       const promise = client.call<string>("storage.get", { key: "test" });
-      // Attach rejection handler BEFORE advancing timers to prevent unhandled rejection
-      const caughtError = promise.catch((err: BridgeError) => err);
+      const timeoutError = captureBridgeError(promise);
 
       // Advance time by 30 seconds
       await vi.advanceTimersByTimeAsync(30_000);
 
-      const err1 = await caughtError;
-      expect(err1).toBeInstanceOf(BridgeError);
-      expect(err1.code).toBe("TIMEOUT");
-      expect(err1.message).toContain("storage.get");
+      await expect(timeoutError).resolves.toMatchObject({
+        code: "TIMEOUT",
+        message: expect.stringContaining("storage.get"),
+      });
 
       // Verify a second call also times out with method name in message
       const promise2 = client.call<string>("guards.register", { id: "x" });
-      const caughtError2 = promise2.catch((err: BridgeError) => err);
+      const secondTimeoutError = captureBridgeError(promise2);
       await vi.advanceTimersByTimeAsync(30_000);
-
-      const err2 = await caughtError2;
-      expect(err2).toBeInstanceOf(BridgeError);
-      expect(err2.code).toBe("TIMEOUT");
-      expect(err2.message).toContain("guards.register");
+      await expect(secondTimeoutError).resolves.toMatchObject({
+        code: "TIMEOUT",
+        message: expect.stringContaining("guards.register"),
+      });
     });
 
     it("uses monotonically increasing IDs for correlation", async () => {
@@ -206,13 +218,13 @@ describe("PluginBridgeClient", () => {
 
       const p1 = client.call("storage.get", { key: "a" });
       const p2 = client.call("guards.register", { id: "x" });
+      const destroyedError1 = captureBridgeError(p1);
+      const destroyedError2 = captureBridgeError(p2);
 
       client.destroy();
 
-      await expect(p1).rejects.toThrow(BridgeError);
-      await expect(p1).rejects.toMatchObject({ code: "TIMEOUT" });
-      await expect(p2).rejects.toThrow(BridgeError);
-      await expect(p2).rejects.toMatchObject({ code: "TIMEOUT" });
+      await expect(destroyedError1).resolves.toMatchObject({ code: "TIMEOUT" });
+      await expect(destroyedError2).resolves.toMatchObject({ code: "TIMEOUT" });
 
       // After destroy, responses for old IDs should be ignored
       // (listener was removed, so this is a no-op)

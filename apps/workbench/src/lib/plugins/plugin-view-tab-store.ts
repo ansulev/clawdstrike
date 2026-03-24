@@ -34,7 +34,8 @@ export interface PluginViewTab {
 // ---------------------------------------------------------------------------
 
 /** Frozen empty array shared for reference stability when no tabs are open. */
-const EMPTY_TABS: PluginViewTab[] = Object.freeze([]) as PluginViewTab[];
+const EMPTY_TABS: PluginViewTab[] = [];
+Object.freeze(EMPTY_TABS);
 
 /** Maximum number of hidden (non-active) plugin tabs kept alive. */
 const MAX_KEPT_ALIVE = 5;

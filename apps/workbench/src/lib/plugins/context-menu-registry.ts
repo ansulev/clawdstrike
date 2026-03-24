@@ -52,7 +52,8 @@ const listeners = new Set<() => void>();
 let snapshotByMenu = new Map<ContextMenuTarget, ContextMenuItemRegistration[]>();
 
 /** Frozen empty array shared across empty-menu queries for reference stability. */
-const EMPTY: ContextMenuItemRegistration[] = Object.freeze([]) as ContextMenuItemRegistration[];
+const EMPTY: ContextMenuItemRegistration[] = [];
+Object.freeze(EMPTY);
 
 // ---------------------------------------------------------------------------
 // Internal helpers

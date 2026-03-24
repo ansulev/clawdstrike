@@ -1029,7 +1029,7 @@ describe("rfEdges", () => {
 // ---------------------------------------------------------------------------
 
 describe("useSwarmBoard hook outside provider", () => {
-  it("works outside SwarmBoardProvider for store access but session methods reject", () => {
+  it("works outside SwarmBoardProvider for store access but session methods reject", async () => {
     // After the Zustand migration, useSwarmBoard() no longer throws outside
     // the provider. Store state is globally accessible. Session management
     // methods (spawnSession, killSession, etc.) reject with an error because
@@ -1049,7 +1049,7 @@ describe("useSwarmBoard hook outside provider", () => {
     expect(hookValue!.state.nodes).toBeDefined();
 
     // Session methods should reject when used outside provider
-    expect(hookValue!.spawnSession({ cwd: "/tmp" })).rejects.toThrow(
+    await expect(hookValue!.spawnSession({ cwd: "/tmp" })).rejects.toThrow(
       "useSwarmBoard must be used within SwarmBoardProvider for session management",
     );
   });

@@ -54,9 +54,10 @@ function makeRequest(
 
 function makeMessageEvent(
   data: unknown,
+  source?: MessageEventSource | null,
   origin = "null",
 ): MessageEvent {
-  return new MessageEvent("message", { data, origin });
+  return new MessageEvent("message", { data, origin, source });
 }
 
 function createMockModule(overrides?: Partial<PluginModule>): PluginModule {
@@ -97,7 +98,10 @@ describe("Bridge host revocation guard", () => {
 
     // Send a bridge request
     host.handleMessage(
-      makeMessageEvent(makeRequest("storage.get", { key: "x" })),
+      makeMessageEvent(
+        makeRequest("storage.get", { key: "x" }),
+        mockTargetWindow as unknown as Window,
+      ),
     );
 
     const reply = mockTargetWindow.postMessage.mock
@@ -117,6 +121,7 @@ describe("Bridge host revocation guard", () => {
     host.handleMessage(
       makeMessageEvent(
         makeRequest("storage.set", { key: "k", value: "v" }),
+        mockTargetWindow as unknown as Window,
       ),
     );
 
@@ -143,7 +148,10 @@ describe("Bridge host revocation guard", () => {
     revocationStore.revoke("receipt-revoke-plugin", { reason: "Bad" });
 
     host.handleMessage(
-      makeMessageEvent(makeRequest("storage.get", { key: "x" })),
+      makeMessageEvent(
+        makeRequest("storage.get", { key: "x" }),
+        mockTargetWindow as unknown as Window,
+      ),
     );
 
     // Receipt middleware should record a denial
@@ -161,6 +169,10 @@ describe("PluginLoader.revokePlugin", () => {
   let registry: PluginRegistry;
   let loader: PluginLoader;
   let iframeContainer: HTMLDivElement;
+
+  async function resolveCommunityPluginCode(): Promise<string> {
+    return 'console.debug("community plugin test bootstrap");';
+  }
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -189,6 +201,7 @@ describe("PluginLoader.revokePlugin", () => {
       registry,
       trustOptions: { allowUnsigned: true },
       iframeContainer,
+      resolvePluginCode: resolveCommunityPluginCode,
     });
 
     await loader.loadPlugin("revoke-target");
@@ -231,6 +244,7 @@ describe("PluginLoader.revokePlugin", () => {
       registry,
       trustOptions: { allowUnsigned: true },
       iframeContainer,
+      resolvePluginCode: resolveCommunityPluginCode,
     });
 
     await loader.loadPlugin("drain-test");
@@ -270,6 +284,7 @@ describe("PluginLoader.revokePlugin", () => {
       registry,
       trustOptions: { allowUnsigned: true },
       iframeContainer,
+      resolvePluginCode: resolveCommunityPluginCode,
     });
 
     await loader.loadPlugin("post-revoke-bridge");

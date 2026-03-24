@@ -14,5 +14,7 @@ export { TopologyManager } from "./topology.js";
 export type { AdaptiveThresholds } from "./topology.js";
 export { AgentRegistry } from "./agent-registry.js";
 export type { AgentRegistryConfig } from "./agent-registry.js";
+export { TaskGraph } from "./task-graph.js";
+export type { TaskGraphConfig } from "./task-graph.js";
 export { generateSwarmId } from "./ids.js";
 export type { SwarmEngineIdPrefix } from "./ids.js";

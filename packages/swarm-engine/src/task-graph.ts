@@ -1,0 +1,766 @@
+/**
+ * TaskGraph -- DAG-based task lifecycle engine for the swarm engine.
+ *
+ * Ported from ruflo v3 `coordination/task-orchestrator.ts` (605 lines) with:
+ * - PriorityQueue<string> for 5-level scheduling (from Plan 01 collections.ts)
+ * - AgentRegistry for capability-based auto-assignment (from Plan 02)
+ * - Categorized errors (TaskErrorCategory)
+ * - Progress reporting (task.progress events, guard-exempt)
+ * - Iterative DFS cycle detection (stack-based, not recursive)
+ * - Kahn's algorithm for topological ordering
+ * - JSON-serializable state via getState() -> Record<string, Task>
+ *
+ * @module
+ */
+
+import type { TypedEventEmitter, SwarmEngineEventMap } from "./events.js";
+import type { AgentRegistry } from "./agent-registry.js";
+import { PriorityQueue } from "./collections.js";
+import { generateSwarmId } from "./ids.js";
+import type {
+  Task,
+  TaskErrorCategory,
+  TaskPriority,
+  TaskStatus,
+  TaskSubmission,
+} from "./types.js";
+import { SWARM_ENGINE_CONSTANTS } from "./types.js";
+
+// ============================================================================
+// Configuration
+// ============================================================================
+
+/**
+ * Configuration for the TaskGraph.
+ */
+export interface TaskGraphConfig {
+  /** Maximum tasks allowed in the graph. */
+  maxTasks?: number;
+  /** Default timeout for tasks in milliseconds. */
+  defaultTimeoutMs?: number;
+  /** Default maximum retry count. */
+  defaultMaxRetries?: number;
+  /** Swarm engine instance ID for tagging tasks. */
+  swarmEngineId?: string;
+}
+
+// ============================================================================
+// TaskGraph
+// ============================================================================
+
+/**
+ * Manages a dependency DAG of tasks with cycle detection, topological ordering,
+ * 5-level priority scheduling via PriorityQueue, auto-assignment to capable
+ * agents, timeout/retry with error categorization, and progress reporting.
+ *
+ * Ported from ruflo's TaskOrchestrator (lines 101-593) with transforms
+ * specified in plan 02-03.
+ */
+export class TaskGraph {
+  private readonly tasks = new Map<string, Task>();
+  private readonly dependencyGraph = new Map<string, Set<string>>();
+  private readonly dependentGraph = new Map<string, Set<string>>();
+  private readonly priorityQueue: PriorityQueue<string>;
+
+  private taskSequence = 0;
+  private readonly maxTasks: number;
+  private readonly defaultTimeoutMs: number;
+  private readonly defaultMaxRetries: number;
+  private readonly swarmEngineId: string;
+
+  constructor(
+    private readonly events: TypedEventEmitter<SwarmEngineEventMap>,
+    private readonly agentRegistry: AgentRegistry,
+    config: TaskGraphConfig = {},
+  ) {
+    this.priorityQueue = new PriorityQueue<string>();
+    this.maxTasks =
+      config.maxTasks ?? SWARM_ENGINE_CONSTANTS.DEFAULT_MAX_TASKS;
+    this.defaultTimeoutMs =
+      config.defaultTimeoutMs ??
+      SWARM_ENGINE_CONSTANTS.DEFAULT_TASK_TIMEOUT_MS;
+    this.defaultMaxRetries =
+      config.defaultMaxRetries ?? SWARM_ENGINE_CONSTANTS.MAX_RETRIES;
+    this.swarmEngineId = config.swarmEngineId ?? "";
+  }
+
+  // ==========================================================================
+  // Task Creation
+  // ==========================================================================
+
+  /**
+   * Add a new task from a submission. Validates dependencies exist and
+   * checks for cycles before adding.
+   *
+   * @throws If a dependency is not found or adding would create a cycle.
+   */
+  addTask(submission: TaskSubmission): Task {
+    if (this.tasks.size >= this.maxTasks) {
+      throw new Error(
+        `TaskGraph is at capacity (${this.maxTasks} tasks)`,
+      );
+    }
+
+    const deps = submission.dependencies ?? [];
+
+    // Validate all dependencies exist
+    for (const dep of deps) {
+      if (!this.tasks.has(dep)) {
+        throw new Error(
+          `Task dependency not found: ${dep}`,
+        );
+      }
+    }
+
+    const id = generateSwarmId("tsk");
+
+    // Check for cycles before adding
+    // Temporarily add edges to the dependency graph and check
+    this.dependencyGraph.set(id, new Set(deps));
+    this.dependentGraph.set(id, new Set());
+
+    for (const dep of deps) {
+      // Check cycle: would any dep path lead back to id?
+      if (this.wouldCreateCycle(id, dep)) {
+        // Clean up temporary entries
+        this.dependencyGraph.delete(id);
+        this.dependentGraph.delete(id);
+        throw new Error(
+          `Adding dependency ${dep} to ${id} would create a cycle`,
+        );
+      }
+    }
+
+    const now = Date.now();
+
+    const task: Task = {
+      id,
+      swarmEngineId: this.swarmEngineId,
+      type: submission.type,
+      name: submission.name,
+      description: submission.description,
+      priority: submission.priority ?? "normal",
+      status: "created",
+      sequence: ++this.taskSequence,
+      assignedTo: null,
+      dependencies: [...deps],
+      input: submission.input ?? {},
+      output: null,
+      timeoutMs:
+        submission.timeoutMs ?? this.defaultTimeoutMs,
+      retries: 0,
+      maxRetries:
+        submission.maxRetries ?? this.defaultMaxRetries,
+      taskPrompt: null,
+      previewLines: [],
+      huntId: null,
+      artifactIds: [],
+      receipt: null,
+      metadata: { tags: submission.tags ?? [] },
+      createdAt: now,
+      startedAt: null,
+      completedAt: null,
+      updatedAt: now,
+    };
+
+    this.tasks.set(id, task);
+
+    // Update dependent graph for each dependency
+    for (const dep of deps) {
+      this.dependentGraph.get(dep)?.add(id);
+    }
+
+    this.events.emit("task.created", {
+      kind: "task.created",
+      task,
+      sourceAgentId: null,
+      timestamp: now,
+    });
+
+    return task;
+  }
+
+  // ==========================================================================
+  // Dependency Management
+  // ==========================================================================
+
+  /**
+   * Add a dependency edge: taskId depends on dependsOn.
+   *
+   * @throws If either task doesn't exist or adding would create a cycle.
+   */
+  addDependency(taskId: string, dependsOn: string): void {
+    this.getTaskOrThrow(taskId);
+    this.getTaskOrThrow(dependsOn);
+
+    if (this.wouldCreateCycle(taskId, dependsOn)) {
+      throw new Error(
+        `Adding dependency ${dependsOn} to ${taskId} would create a cycle`,
+      );
+    }
+
+    const task = this.tasks.get(taskId)!;
+    if (!task.dependencies.includes(dependsOn)) {
+      task.dependencies.push(dependsOn);
+    }
+    this.dependencyGraph.get(taskId)!.add(dependsOn);
+    this.dependentGraph.get(dependsOn)!.add(taskId);
+  }
+
+  /**
+   * Remove a dependency edge.
+   */
+  removeDependency(taskId: string, dependsOn: string): void {
+    const task = this.getTaskOrThrow(taskId);
+
+    const index = task.dependencies.indexOf(dependsOn);
+    if (index > -1) {
+      task.dependencies.splice(index, 1);
+    }
+
+    this.dependencyGraph.get(taskId)?.delete(dependsOn);
+    this.dependentGraph.get(dependsOn)?.delete(taskId);
+  }
+
+  /**
+   * Get tasks this task depends on.
+   */
+  getDependencies(taskId: string): string[] {
+    return Array.from(this.dependencyGraph.get(taskId) ?? []);
+  }
+
+  /**
+   * Get tasks that depend on this task.
+   */
+  getDependents(taskId: string): string[] {
+    return Array.from(this.dependentGraph.get(taskId) ?? []);
+  }
+
+  /**
+   * Check if a task is blocked by incomplete dependencies.
+   */
+  isBlocked(taskId: string): boolean {
+    return this.getBlockingTasks(taskId).length > 0;
+  }
+
+  /**
+   * Get the list of dependency task IDs that are not yet completed.
+   */
+  getBlockingTasks(taskId: string): string[] {
+    const dependencies = this.dependencyGraph.get(taskId);
+    if (!dependencies) {
+      return [];
+    }
+
+    return Array.from(dependencies).filter((depId) => {
+      const depTask = this.tasks.get(depId);
+      return depTask && depTask.status !== "completed";
+    });
+  }
+
+  // ==========================================================================
+  // Task Lifecycle
+  // ==========================================================================
+
+  /**
+   * Queue a task for execution. If blocked by dependencies, keeps status "created".
+   *
+   * @throws If task doesn't exist.
+   */
+  queueTask(taskId: string): void {
+    this.getTaskOrThrow(taskId);
+
+    if (this.isBlocked(taskId)) {
+      // Task is blocked; keep as "created", do not enqueue
+      return;
+    }
+
+    this.updateTaskStatus(taskId, "queued");
+    const task = this.tasks.get(taskId)!;
+    this.priorityQueue.enqueue(taskId, task.priority);
+  }
+
+  /**
+   * Assign a task to an agent.
+   *
+   * @throws If task is not queued or is blocked.
+   */
+  assignTask(taskId: string, agentId: string): void {
+    const task = this.getTaskOrThrow(taskId);
+
+    if (task.status !== "queued") {
+      throw new Error(
+        `Task ${taskId} is not queued (status: ${task.status})`,
+      );
+    }
+
+    if (this.isBlocked(taskId)) {
+      throw new Error(`Task ${taskId} is blocked by dependencies`);
+    }
+
+    task.assignedTo = agentId;
+    this.updateTaskStatus(taskId, "assigned");
+
+    this.agentRegistry.assignTask(agentId, taskId);
+
+    this.events.emit("task.assigned", {
+      kind: "task.assigned",
+      taskId,
+      agentId,
+      receipt: null,
+      sourceAgentId: null,
+      timestamp: Date.now(),
+    });
+  }
+
+  /**
+   * Start a task (must be assigned first).
+   *
+   * @throws If task is not assigned.
+   */
+  startTask(taskId: string): void {
+    const task = this.getTaskOrThrow(taskId);
+
+    if (task.status !== "assigned") {
+      throw new Error(
+        `Task ${taskId} is not assigned (status: ${task.status})`,
+      );
+    }
+
+    task.startedAt = Date.now();
+    this.updateTaskStatus(taskId, "running");
+  }
+
+  /**
+   * Complete a running task with output.
+   *
+   * @throws If task is not running.
+   */
+  completeTask(taskId: string, output: Record<string, unknown>): void {
+    const task = this.getTaskOrThrow(taskId);
+
+    if (task.status !== "running") {
+      throw new Error(
+        `Task ${taskId} is not running (status: ${task.status})`,
+      );
+    }
+
+    const now = Date.now();
+    task.completedAt = now;
+    task.output = output;
+    this.updateTaskStatus(taskId, "completed");
+
+    const durationMs = task.startedAt ? now - task.startedAt : 0;
+
+    if (task.assignedTo) {
+      this.agentRegistry.completeTask(task.assignedTo, taskId, durationMs);
+    }
+
+    this.events.emit("task.completed", {
+      kind: "task.completed",
+      taskId,
+      agentId: task.assignedTo ?? "",
+      output,
+      durationMs,
+      receipt: null,
+      sourceAgentId: null,
+      timestamp: now,
+    });
+
+    this.unblockDependentTasks(taskId);
+  }
+
+  /**
+   * Fail a task. Retries if under maxRetries; otherwise permanently fails.
+   *
+   * @param taskId - The task to fail
+   * @param error - Error message
+   * @param category - Error category for classification
+   */
+  failTask(
+    taskId: string,
+    error: string,
+    category: TaskErrorCategory = "runtime_error",
+  ): void {
+    const task = this.getTaskOrThrow(taskId);
+
+    task.metadata.lastErrorCategory = category;
+    task.retries++;
+
+    if (task.retries < task.maxRetries) {
+      // Retryable: re-queue
+      if (task.assignedTo) {
+        this.agentRegistry.failTask(task.assignedTo, taskId);
+      }
+      task.assignedTo = null;
+      this.updateTaskStatus(taskId, "queued");
+      this.priorityQueue.enqueue(taskId, task.priority);
+
+      this.events.emit("task.failed", {
+        kind: "task.failed",
+        taskId,
+        agentId: null,
+        error,
+        retryable: true,
+        sourceAgentId: null,
+        timestamp: Date.now(),
+      });
+    } else {
+      // Permanent failure
+      if (task.assignedTo) {
+        this.agentRegistry.failTask(task.assignedTo, taskId);
+      }
+      this.updateTaskStatus(taskId, "failed");
+
+      this.events.emit("task.failed", {
+        kind: "task.failed",
+        taskId,
+        agentId: task.assignedTo,
+        error,
+        retryable: false,
+        sourceAgentId: null,
+        timestamp: Date.now(),
+      });
+    }
+  }
+
+  /**
+   * Cancel a task. Only non-terminal tasks can be cancelled.
+   *
+   * @throws If task is completed or failed.
+   */
+  cancelTask(taskId: string): void {
+    const task = this.getTaskOrThrow(taskId);
+
+    if (task.status === "completed" || task.status === "failed") {
+      throw new Error(
+        `Cannot cancel ${task.status} task ${taskId}`,
+      );
+    }
+
+    if (task.assignedTo) {
+      // Release the agent -- update status directly to avoid
+      // task mismatch if the agent's currentTaskId was already
+      // cleared by a retry cycle
+      const session = this.agentRegistry.getAgentSession(task.assignedTo);
+      if (session && session.currentTaskId === taskId) {
+        this.agentRegistry.failTask(task.assignedTo, taskId);
+      }
+    }
+
+    this.updateTaskStatus(taskId, "cancelled");
+  }
+
+  /**
+   * Timeout a running task. Sets status to "timeout" and emits task.failed
+   * with category "timeout".
+   */
+  timeoutTask(taskId: string): void {
+    const task = this.getTaskOrThrow(taskId);
+
+    if (task.assignedTo) {
+      const session = this.agentRegistry.getAgentSession(task.assignedTo);
+      if (session && session.currentTaskId === taskId) {
+        this.agentRegistry.failTask(task.assignedTo, taskId);
+      }
+    }
+
+    this.updateTaskStatus(taskId, "timeout");
+
+    this.events.emit("task.failed", {
+      kind: "task.failed",
+      taskId,
+      agentId: task.assignedTo,
+      error: `Task ${taskId} timeout after ${task.timeoutMs}ms`,
+      retryable: false,
+      sourceAgentId: null,
+      timestamp: Date.now(),
+    });
+  }
+
+  /**
+   * Report progress on a running task. Guard-exempt (no receipt needed).
+   */
+  reportProgress(
+    taskId: string,
+    progress: {
+      percent: number;
+      currentStep: string;
+      stepIndex: number;
+      totalSteps: number;
+    },
+  ): void {
+    const task = this.getTaskOrThrow(taskId);
+
+    this.events.emit("task.progress", {
+      kind: "task.progress",
+      taskId,
+      agentId: task.assignedTo ?? "",
+      percent: progress.percent,
+      currentStep: progress.currentStep,
+      stepIndex: progress.stepIndex,
+      totalSteps: progress.totalSteps,
+      sourceAgentId: null,
+      timestamp: Date.now(),
+    });
+  }
+
+  // ==========================================================================
+  // Queue Management
+  // ==========================================================================
+
+  /**
+   * Get the next task from the priority queue. Optionally filter by agent
+   * capabilities when agentId is provided.
+   *
+   * Without agentId: dequeues highest-priority unblocked task.
+   * With agentId: finds the highest-priority task matching the agent's capabilities.
+   */
+  getNextTask(agentId?: string): Task | undefined {
+    if (!agentId) {
+      // Simple dequeue -- skip blocked tasks
+      while (this.priorityQueue.length > 0) {
+        const taskId = this.priorityQueue.dequeue();
+        if (!taskId) break;
+
+        const task = this.tasks.get(taskId);
+        if (!task || task.status !== "queued") continue;
+        if (this.isBlocked(taskId)) {
+          // Re-enqueue blocked tasks
+          this.priorityQueue.enqueue(taskId, task.priority);
+          continue;
+        }
+        return task;
+      }
+      return undefined;
+    }
+
+    // With agentId: filter by capability
+    const session = this.agentRegistry.getAgentSession(agentId);
+    if (!session) {
+      return this.getNextTask();
+    }
+
+    // Get task types this agent can handle
+    const capableAgentTypes = new Set<string>();
+    const allQueuedTasks = this.getTasksByStatus("queued").filter(
+      (t) => !this.isBlocked(t.id),
+    );
+
+    for (const task of allQueuedTasks) {
+      const agents = this.agentRegistry.getAgentsByCapability(task.type);
+      if (agents.some((a) => a.id === agentId)) {
+        capableAgentTypes.add(task.type);
+      }
+    }
+
+    // Find the highest-priority queued task that this agent can handle
+    // Sort by priority (same as PriorityQueue ordering)
+    const priorityOrder: Record<TaskPriority, number> = {
+      critical: 0,
+      high: 1,
+      normal: 2,
+      low: 3,
+      background: 4,
+    };
+
+    const matchingTasks = allQueuedTasks
+      .filter((t) => capableAgentTypes.has(t.type))
+      .sort((a, b) => {
+        const diff =
+          priorityOrder[a.priority] - priorityOrder[b.priority];
+        if (diff !== 0) return diff;
+        return a.createdAt - b.createdAt;
+      });
+
+    return matchingTasks[0];
+  }
+
+  // ==========================================================================
+  // Queries
+  // ==========================================================================
+
+  /**
+   * Get a single task by ID.
+   */
+  getTask(taskId: string): Task | undefined {
+    return this.tasks.get(taskId);
+  }
+
+  /**
+   * Get all tasks as a JSON-serializable Record.
+   */
+  getState(): Record<string, Task> {
+    return Object.fromEntries(this.tasks);
+  }
+
+  /**
+   * Get tasks by status.
+   */
+  getTasksByStatus(status: TaskStatus): Task[] {
+    return Array.from(this.tasks.values()).filter(
+      (t) => t.status === status,
+    );
+  }
+
+  /**
+   * Get tasks assigned to a specific agent.
+   */
+  getTasksByAgent(agentId: string): Task[] {
+    return Array.from(this.tasks.values()).filter(
+      (t) => t.assignedTo === agentId,
+    );
+  }
+
+  /**
+   * Get tasks in dependency-respecting topological order using Kahn's algorithm.
+   */
+  getTopologicalOrder(): Task[] {
+    // Calculate in-degrees
+    const inDegree = new Map<string, number>();
+    for (const taskId of this.tasks.keys()) {
+      inDegree.set(taskId, 0);
+    }
+
+    for (const [taskId, deps] of this.dependencyGraph) {
+      inDegree.set(taskId, deps.size);
+    }
+
+    // Start with nodes having zero in-degree
+    const queue: string[] = [];
+    for (const [taskId, degree] of inDegree) {
+      if (degree === 0) {
+        queue.push(taskId);
+      }
+    }
+
+    const result: Task[] = [];
+
+    while (queue.length > 0) {
+      const current = queue.shift()!;
+      const task = this.tasks.get(current);
+      if (task) {
+        result.push(task);
+      }
+
+      const dependents = this.dependentGraph.get(current);
+      if (dependents) {
+        for (const dep of dependents) {
+          const newDegree = (inDegree.get(dep) ?? 0) - 1;
+          inDegree.set(dep, newDegree);
+          if (newDegree === 0) {
+            queue.push(dep);
+          }
+        }
+      }
+    }
+
+    return result;
+  }
+
+  // ==========================================================================
+  // Dispose
+  // ==========================================================================
+
+  /**
+   * Clear all internal state. Does NOT dispose the shared emitter.
+   */
+  dispose(): void {
+    this.priorityQueue.clear();
+    this.tasks.clear();
+    this.dependencyGraph.clear();
+    this.dependentGraph.clear();
+  }
+
+  // ==========================================================================
+  // Private Helpers
+  // ==========================================================================
+
+  private getTaskOrThrow(taskId: string): Task {
+    const task = this.tasks.get(taskId);
+    if (!task) {
+      throw new Error(`Task ${taskId} not found`);
+    }
+    return task;
+  }
+
+  /**
+   * Update task status, updatedAt, and emit status_changed event.
+   */
+  private updateTaskStatus(
+    taskId: string,
+    status: TaskStatus,
+    reason?: string,
+  ): void {
+    const task = this.getTaskOrThrow(taskId);
+    const previousStatus = task.status;
+    task.status = status;
+    task.updatedAt = Date.now();
+
+    this.events.emit("task.status_changed", {
+      kind: "task.status_changed",
+      taskId,
+      previousStatus,
+      newStatus: status,
+      reason: reason ?? null,
+      sourceAgentId: null,
+      timestamp: Date.now(),
+    });
+  }
+
+  /**
+   * After completing a task, check if any dependent tasks can be unblocked.
+   * Ported from ruflo lines 516-522.
+   */
+  private unblockDependentTasks(taskId: string): void {
+    const dependents = this.getDependents(taskId);
+
+    for (const dependentId of dependents) {
+      if (!this.isBlocked(dependentId)) {
+        const task = this.tasks.get(dependentId);
+        if (task && task.status === "created") {
+          // Auto-queue now that dependencies are met
+          this.updateTaskStatus(dependentId, "queued");
+          this.priorityQueue.enqueue(dependentId, task.priority);
+        }
+      }
+    }
+  }
+
+  /**
+   * Iterative DFS cycle detection.
+   * Copied from ruflo lines 524-548 VERBATIM (stack-based, not recursive).
+   *
+   * Checks whether adding a dependency from taskId to newDependency would
+   * create a cycle. Walks the dependency graph starting from newDependency
+   * to see if taskId is reachable.
+   */
+  private wouldCreateCycle(
+    taskId: string,
+    newDependency: string,
+  ): boolean {
+    const visited = new Set<string>();
+    const stack = [newDependency];
+
+    while (stack.length > 0) {
+      const current = stack.pop()!;
+
+      if (current === taskId) {
+        return true;
+      }
+
+      if (visited.has(current)) {
+        continue;
+      }
+
+      visited.add(current);
+
+      const deps = this.dependencyGraph.get(current);
+      if (deps) {
+        stack.push(...deps);
+      }
+    }
+
+    return false;
+  }
+}

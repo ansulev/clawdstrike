@@ -8,9 +8,8 @@
  * auto-assignment, unblocking, serialization.
  */
 
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import { TaskGraph } from "./task-graph.js";
-import type { TaskGraphConfig } from "./task-graph.js";
 import { TypedEventEmitter } from "./events.js";
 import type { SwarmEngineEventMap } from "./events.js";
 import { AgentRegistry } from "./agent-registry.js";
@@ -480,7 +479,7 @@ describe("TaskGraph", () => {
     it("permanently fails when maxRetries exhausted", () => {
       const agentId = registry.register(makeRegistration());
       registry.spawn(agentId);
-      const task = graph.addTask(makeSubmission({ maxRetries: 1 }));
+      const task = graph.addTask(makeSubmission({ maxRetries: 2 }));
 
       // First attempt
       graph.queueTask(task.id);
@@ -729,7 +728,7 @@ describe("TaskGraph", () => {
 
     it("getTasksByStatus filters correctly", () => {
       const a = graph.addTask(makeSubmission({ name: "A" }));
-      const b = graph.addTask(makeSubmission({ name: "B" }));
+      graph.addTask(makeSubmission({ name: "B" }));
       graph.queueTask(a.id);
 
       expect(graph.getTasksByStatus("queued")).toHaveLength(1);

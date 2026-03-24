@@ -970,7 +970,12 @@ mod tests {
             >,
         ) -> String {
             loop {
-                match socket.next().await.expect("websocket frame").expect("websocket message") {
+                match socket
+                    .next()
+                    .await
+                    .expect("websocket frame")
+                    .expect("websocket message")
+                {
                     tokio_tungstenite::tungstenite::Message::Text(text) => {
                         return text.to_string();
                     }
@@ -1006,8 +1011,7 @@ mod tests {
 
         socket
             .send(tokio_tungstenite::tungstenite::Message::Text(
-                r#"{"type":"cursor","file_path":"/tmp/policies/foo.yaml","line":7,"ch":3}"#
-                    .into(),
+                r#"{"type":"cursor","file_path":"/tmp/policies/foo.yaml","line":7,"ch":3}"#.into(),
             ))
             .await
             .expect("send cursor");
@@ -1056,7 +1060,10 @@ mod tests {
             tokio::time::sleep(Duration::from_millis(10)).await;
         }
         assert!(state.presence_hub.roster().is_empty());
-        assert!(state.presence_hub.viewers_of("tmp/policies/foo.yaml").is_empty());
+        assert!(state
+            .presence_hub
+            .viewers_of("tmp/policies/foo.yaml")
+            .is_empty());
 
         state.shutdown.notify_waiters();
         let _ = shutdown_tx.send(());

@@ -43,12 +43,12 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Orchestrator
 
-- [ ] **ORCH-01**: SwarmOrchestrator facade composing AgentRegistry, TaskGraph, TopologyManager, AgentPool, and optional ConsensusEngine
-- [ ] **ORCH-02**: Full lifecycle (initialize, shutdown, pause, resume) with dispose() cleanup
+- [x] **ORCH-01**: SwarmOrchestrator facade composing AgentRegistry, TaskGraph, TopologyManager, AgentPool, and optional ConsensusEngine
+- [x] **ORCH-02**: Full lifecycle (initialize, shutdown, pause, resume) with dispose() cleanup
 - [x] **ORCH-03**: GuardEvaluator interface injected by host environment — engine calls evaluate() before every mutable action
 - [x] **ORCH-04**: Guard pipeline flow: action → evaluate → receipt → allow/deny/warn → emit event
-- [ ] **ORCH-05**: SwarmEngineState root type combining all subsystem state, serializable to JSON
-- [ ] **ORCH-06**: SwarmEngineMetrics (uptime, active agents, task stats, guard evaluations, denial rate)
+- [x] **ORCH-05**: SwarmEngineState root type combining all subsystem state, serializable to JSON
+- [x] **ORCH-06**: SwarmEngineMetrics (uptime, active agents, task stats, guard evaluations, denial rate)
 
 ### Agent Pool
 
@@ -168,12 +168,12 @@ Deferred to future release. Tracked but not in current roadmap.
 | TOPO-03 | Phase 2 | Complete |
 | TOPO-04 | Phase 2 | Complete |
 | TOPO-05 | Phase 2 | Complete |
-| ORCH-01 | Phase 3 | Pending |
-| ORCH-02 | Phase 3 | Pending |
+| ORCH-01 | Phase 3 | Complete |
+| ORCH-02 | Phase 3 | Complete |
 | ORCH-03 | Phase 3 | Complete |
 | ORCH-04 | Phase 3 | Complete |
-| ORCH-05 | Phase 3 | Pending |
-| ORCH-06 | Phase 3 | Pending |
+| ORCH-05 | Phase 3 | Complete |
+| ORCH-06 | Phase 3 | Complete |
 | POOL-01 | Phase 3 | Complete |
 | POOL-02 | Phase 3 | Complete |
 | POOL-03 | Phase 3 | Complete |

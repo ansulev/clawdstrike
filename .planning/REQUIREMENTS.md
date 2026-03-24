@@ -76,11 +76,11 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Shared Memory
 
-- [ ] **MEMO-01**: Pure-math HNSW vector index with Float32Array vectors, cosine similarity, neighbor pruning
-- [ ] **MEMO-02**: In-memory knowledge graph (Map-based entity-relationship store)
-- [ ] **MEMO-03**: IndexedDB persistence backend for vectors, graph, agent states, task graph, consensus log
-- [ ] **MEMO-04**: Namespaced memory with tag-based search and TTL-based expiration
-- [ ] **MEMO-05**: Memory writes are guarded actions (maps to file_write TestActionType)
+- [x] **MEMO-01**: Pure-math HNSW vector index with Float32Array vectors, cosine similarity, neighbor pruning
+- [x] **MEMO-02**: In-memory knowledge graph (Map-based entity-relationship store)
+- [x] **MEMO-03**: IndexedDB persistence backend for vectors, graph, agent states, task graph, consensus log
+- [x] **MEMO-04**: Namespaced memory with tag-based search and TTL-based expiration
+- [x] **MEMO-05**: Memory writes are guarded actions (maps to file_write TestActionType)
 
 ### React Integration
 
@@ -191,11 +191,11 @@ Deferred to future release. Tracked but not in current roadmap.
 | CONS-03 | Phase 4 | Pending |
 | CONS-04 | Phase 4 | Pending |
 | CONS-05 | Phase 4 | Pending |
-| MEMO-01 | Phase 4 | Pending |
-| MEMO-02 | Phase 4 | Pending |
-| MEMO-03 | Phase 4 | Pending |
-| MEMO-04 | Phase 4 | Pending |
-| MEMO-05 | Phase 4 | Pending |
+| MEMO-01 | Phase 4 | Complete |
+| MEMO-02 | Phase 4 | Complete |
+| MEMO-03 | Phase 4 | Complete |
+| MEMO-04 | Phase 4 | Complete |
+| MEMO-05 | Phase 4 | Complete |
 | INTG-01 | Phase 5 | Pending |
 | INTG-02 | Phase 5 | Pending |
 | INTG-03 | Phase 5 | Pending |

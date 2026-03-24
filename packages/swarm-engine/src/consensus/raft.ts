@@ -176,6 +176,9 @@ export class RaftConsensus {
       proposal,
     });
 
+    // Check if self-vote alone meets threshold (e.g., small cluster)
+    this.checkConsensus(proposalId);
+
     return proposal;
   }
 
@@ -406,6 +409,12 @@ export class RaftConsensus {
     // Vote for self
     let votesReceived = 1;
     const votesNeeded = Math.floor((this.peers.size + 1) / 2) + 1;
+
+    // Check if self-vote alone is enough (e.g., single-node cluster)
+    if (votesReceived >= votesNeeded) {
+      this.becomeLeader(Date.now() - electionStart);
+      return;
+    }
 
     // Request votes from peers
     for (const [peerId] of this.peers) {

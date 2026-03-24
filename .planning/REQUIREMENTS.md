@@ -58,13 +58,13 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Protocol
 
-- [ ] **PROT-01**: SwarmEnvelope v2 extending type union with 6 new channels (agent_lifecycle, task_orchestration, topology, consensus, memory, hooks)
-- [ ] **PROT-02**: ProtocolBridge mapping engine events to SwarmEnvelope transport via publish function
-- [ ] **PROT-03**: GuardedPayload with EnvelopeReceipt for every mutable action, guard-exempt flag for read-only actions
-- [ ] **PROT-04**: DenyNotification on coordination channel when guard pipeline returns deny
-- [ ] **PROT-05**: Extended parseSwarmTopic and routeMessage for new channels
-- [ ] **PROT-06**: Backward-compatible getSwarmTopics with boolean shim and deprecation warning
-- [ ] **PROT-07**: Topic builder functions for all 6 new channels
+- [x] **PROT-01**: SwarmEnvelope v2 extending type union with 6 new channels (agent_lifecycle, task_orchestration, topology, consensus, memory, hooks)
+- [x] **PROT-02**: ProtocolBridge mapping engine events to SwarmEnvelope transport via publish function
+- [x] **PROT-03**: GuardedPayload with EnvelopeReceipt for every mutable action, guard-exempt flag for read-only actions
+- [x] **PROT-04**: DenyNotification on coordination channel when guard pipeline returns deny
+- [x] **PROT-05**: Extended parseSwarmTopic and routeMessage for new channels
+- [x] **PROT-06**: Backward-compatible getSwarmTopics with boolean shim and deprecation warning
+- [x] **PROT-07**: Topic builder functions for all 6 new channels
 
 ### Consensus
 
@@ -97,8 +97,8 @@ Requirements for initial release. Each maps to roadmap phases.
 ### Transport
 
 - [ ] **TRNS-01**: TauriIpcTransport implementing TransportAdapter via Tauri invoke/listen APIs
-- [ ] **TRNS-02**: InProcessEventBus handles new topics without modification (topic-agnostic)
-- [ ] **TRNS-03**: Speakeasy Gossipsub adapter handles new channels with TTL hop-decrement
+- [x] **TRNS-02**: InProcessEventBus handles new topics without modification (topic-agnostic)
+- [x] **TRNS-03**: Speakeasy Gossipsub adapter handles new channels with TTL hop-decrement
 
 ### Backward Compatibility
 
@@ -177,15 +177,15 @@ Deferred to future release. Tracked but not in current roadmap.
 | POOL-01 | Phase 3 | Pending |
 | POOL-02 | Phase 3 | Pending |
 | POOL-03 | Phase 3 | Pending |
-| PROT-01 | Phase 3 | Pending |
-| PROT-02 | Phase 3 | Pending |
-| PROT-03 | Phase 3 | Pending |
-| PROT-04 | Phase 3 | Pending |
-| PROT-05 | Phase 3 | Pending |
-| PROT-06 | Phase 3 | Pending |
-| PROT-07 | Phase 3 | Pending |
-| TRNS-02 | Phase 3 | Pending |
-| TRNS-03 | Phase 3 | Pending |
+| PROT-01 | Phase 3 | Complete |
+| PROT-02 | Phase 3 | Complete |
+| PROT-03 | Phase 3 | Complete |
+| PROT-04 | Phase 3 | Complete |
+| PROT-05 | Phase 3 | Complete |
+| PROT-06 | Phase 3 | Complete |
+| PROT-07 | Phase 3 | Complete |
+| TRNS-02 | Phase 3 | Complete |
+| TRNS-03 | Phase 3 | Complete |
 | CONS-01 | Phase 4 | Pending |
 | CONS-02 | Phase 4 | Pending |
 | CONS-03 | Phase 4 | Pending |

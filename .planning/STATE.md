@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: executing
-stopped_at: Completed 02-03-PLAN.md
-last_updated: "2026-03-24T22:00:24Z"
-last_activity: 2026-03-24 -- Completed 02-03 (task graph)
+status: in_progress
+stopped_at: Completed 03-02-PLAN.md
+last_updated: "2026-03-24T22:33:22Z"
+last_activity: 2026-03-24 -- Completed 03-02 (protocol bridge)
 progress:
   total_phases: 6
   completed_phases: 2
-  total_plans: 6
-  completed_plans: 6
-  percent: 100
+  total_plans: 9
+  completed_plans: 7
+  percent: 78
 ---
 
 # Project State
@@ -21,23 +21,23 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-24)
 
 **Core value:** Every agent action passes through ClawdStrike's guard pipeline -- orchestration and security share a single wire format, transport, and audit trail.
-**Current focus:** Phase 2: Core Subsystems
+**Current focus:** Phase 3: Orchestrator + Protocol
 
 ## Current Position
 
-Phase: 2 of 6 (Core Subsystems)
-Plan: 4 of 4 in current phase
-Status: Phase Complete
-Last activity: 2026-03-24 -- Completed 02-03 (task graph)
+Phase: 3 of 6 (Orchestrator + Protocol)
+Plan: 2 of 3 in current phase
+Status: In Progress
+Last activity: 2026-03-24 -- Completed 03-02 (protocol bridge)
 
-Progress: [██████████] 100%
+Progress: [████████░░] 78%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 6
-- Average duration: 5.8 min
-- Total execution time: 0.58 hours
+- Total plans completed: 7
+- Average duration: 5.9 min
+- Total execution time: 0.69 hours
 
 **By Phase:**
 
@@ -45,9 +45,10 @@ Progress: [██████████] 100%
 |-------|-------|-------|----------|
 | 01-foundation | 2 | 10 min | 5 min |
 | 02-core-subsystems | 4 | 25 min | 6.3 min |
+| 03-orchestrator-+-protocol | 1 | 6 min | 6 min |
 
 **Recent Trend:**
-- Last 5 plans: 01-02 (4 min), 02-01 (4 min), 02-02 (5 min), 02-04 (7 min), 02-03 (7 min)
+- Last 5 plans: 02-01 (4 min), 02-02 (5 min), 02-04 (7 min), 02-03 (7 min), 03-02 (6 min)
 - Trend: stable
 
 *Updated after each plan completion*
@@ -56,6 +57,7 @@ Progress: [██████████] 100%
 | Phase 02-02 P02 | 5min | 1 task | 4 files |
 | Phase 02 P04 | 7 | 1 tasks | 3 files |
 | Phase 02 P03 | 7min | 1 task | 3 files |
+| Phase 03 P02 | 6min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -83,6 +85,9 @@ Recent decisions affecting current work:
 - [Phase 02-03]: maxTasks enforcement at addTask to bound graph size
 - [Phase 02-03]: lastErrorCategory stored in task.metadata since TaskFailedEvent lacks category field
 - [Phase 02-03]: getNextTask(agentId) filters by capability via AgentRegistry then sorts by priority inline
+- [Phase 03-02]: CHANNEL_TO_TOPIC_SUFFIX includes all 11 envelope types (including status) for completeness
+- [Phase 03-02]: getSwarmTopics defaults to 6 topics; signals, consensus, memory, hooks are opt-in
+- [Phase 03-02]: parseSwarmTopic validates empty channel/swarmId as null (stricter than spec)
 
 ### Pending Todos
 
@@ -97,6 +102,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-24T22:00:24Z
-Stopped at: Completed 02-03-PLAN.md
+Last session: 2026-03-24T22:33:22Z
+Stopped at: Completed 03-02-PLAN.md
 Resume file: None

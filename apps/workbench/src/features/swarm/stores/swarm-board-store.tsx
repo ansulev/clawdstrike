@@ -62,7 +62,10 @@ export type SwarmBoardAction =
   | { type: "LOAD"; state: Partial<SwarmBoardState> }
   | { type: "CLEAR_BOARD" }
   | { type: "SET_SESSION_STATUS"; sessionId: string; status: SessionStatus; exitCode?: number }
-  | { type: "SET_SESSION_METADATA"; sessionId: string; metadata: Partial<SwarmBoardNodeData> };
+  | { type: "SET_SESSION_METADATA"; sessionId: string; metadata: Partial<SwarmBoardNodeData> }
+  | { type: "TOPOLOGY_LAYOUT"; topology: string; positions: Map<string, { x: number; y: number }> }
+  | { type: "ENGINE_SYNC"; engineNodes: Array<{ id: string; agentId?: string; taskId?: string; data: Partial<SwarmBoardNodeData>; position?: { x: number; y: number } }>; engineEdges: SwarmBoardEdge[] }
+  | { type: "GUARD_EVALUATE"; agentNodeId: string; verdict: string; guardResults: Array<{ guard: string; allowed: boolean; duration_ms?: number }>; signature?: string; publicKey?: string };
 
 // ---------------------------------------------------------------------------
 // Persistence
@@ -580,6 +583,9 @@ interface SwarmBoardStoreState extends SwarmBoardState {
     setEdges: (edges: SwarmBoardEdge[]) => void;
     toggleInspector: (open?: boolean) => void;
     loadFromBundle: (bundlePath: string) => Promise<void>;
+    topologyLayout: (topology: string, positions: Map<string, { x: number; y: number }>) => void;
+    engineSync: (engineNodes: Array<{ id: string; agentId?: string; taskId?: string; data: Partial<SwarmBoardNodeData>; position?: { x: number; y: number } }>, engineEdges: SwarmBoardEdge[]) => void;
+    guardEvaluate: (agentNodeId: string, verdict: string, guardResults: Array<{ guard: string; allowed: boolean; duration_ms?: number }>, signature?: string, publicKey?: string) => void;
   };
 }
 
@@ -822,6 +828,112 @@ const useSwarmBoardStoreBase = create<SwarmBoardStoreState>()((set, get) => ({
         set({ bundlePath });
       }
     },
+
+    topologyLayout: (_topology: string, positions: Map<string, { x: number; y: number }>): void => {
+      const current = get();
+      const nodes = current.nodes.map((n) => {
+        const pos = positions.get(n.id);
+        return pos ? { ...n, position: pos } : n;
+      });
+      set({
+        nodes,
+        selectedNode: deriveSelectedNode(nodes, current.selectedNodeId),
+      });
+      schedulePersist({ ...get() });
+    },
+
+    engineSync: (
+      engineNodes: Array<{ id: string; agentId?: string; taskId?: string; data: Partial<SwarmBoardNodeData>; position?: { x: number; y: number } }>,
+      engineEdges: SwarmBoardEdge[],
+    ): void => {
+      const current = get();
+      const lookup = new Map(engineNodes.map((en) => [en.id, en]));
+
+      // Update existing engine-managed nodes and collect their IDs
+      const existingIds = new Set(current.nodes.map((n) => n.id));
+      const nodes = current.nodes.map((n) => {
+        const d = n.data as SwarmBoardNodeData;
+        const eng = lookup.get(n.id);
+        if (d.engineManaged && eng) {
+          return {
+            ...n,
+            data: { ...d, ...eng.data },
+            position: eng.position ?? n.position,
+          };
+        }
+        return n;
+      });
+
+      // Add new engine nodes that are not already present
+      for (const en of engineNodes) {
+        if (!existingIds.has(en.id)) {
+          const newNode = createBoardNode({
+            nodeType: (en.data.nodeType as SwarmBoardNodeData["nodeType"]) ?? "agentSession",
+            title: (en.data.title as string) ?? en.id,
+            position: en.position,
+            data: { ...en.data, agentId: en.agentId, taskId: en.taskId, engineManaged: true },
+          });
+          // Override the generated id with the engine-provided id
+          nodes.push({ ...newNode, id: en.id });
+        }
+      }
+
+      // Merge edges: keep existing, add new engine edges (dedup by id)
+      const existingEdgeIds = new Set(current.edges.map((e) => e.id));
+      const edges = [...current.edges, ...engineEdges.filter((e) => !existingEdgeIds.has(e.id))];
+
+      set({
+        nodes,
+        edges,
+        rfEdges: toRfEdges(edges),
+        selectedNode: deriveSelectedNode(nodes, current.selectedNodeId),
+      });
+      schedulePersist({ ...get() });
+    },
+
+    guardEvaluate: (
+      agentNodeId: string,
+      verdict: string,
+      guardResults: Array<{ guard: string; allowed: boolean; duration_ms?: number }>,
+      signature?: string,
+      publicKey?: string,
+    ): void => {
+      const current = get();
+      const agentNode = current.nodes.find((n) => n.id === agentNodeId);
+      if (!agentNode) return;
+
+      const receiptNode = createBoardNode({
+        nodeType: "receipt",
+        title: `Guard: ${verdict.toUpperCase()}`,
+        position: { x: agentNode.position.x, y: agentNode.position.y + 340 },
+        data: {
+          verdict: verdict as "allow" | "deny" | "warn",
+          guardResults,
+          signature,
+          publicKey,
+          status: "completed",
+          engineManaged: true,
+        },
+      });
+
+      const nodes = [...current.nodes, receiptNode];
+      const receiptEdge: SwarmBoardEdge = {
+        id: `edge-receipt-${receiptNode.id}-${agentNodeId}`,
+        source: agentNodeId,
+        target: receiptNode.id,
+        type: "receipt",
+        label: verdict,
+      };
+      const edges = [...current.edges, receiptEdge];
+
+      set({
+        nodes,
+        edges,
+        rfEdges: toRfEdges(edges),
+        selectedNode: deriveSelectedNode(nodes, current.selectedNodeId),
+      });
+      schedulePersist({ ...get() });
+    },
   },
 }));
 
@@ -951,6 +1063,15 @@ function createDispatchShim(): (action: SwarmBoardAction) => void {
         break;
       case "SET_SESSION_METADATA":
         actions.setSessionMetadata(action.sessionId, action.metadata);
+        break;
+      case "TOPOLOGY_LAYOUT":
+        actions.topologyLayout(action.topology, action.positions);
+        break;
+      case "ENGINE_SYNC":
+        actions.engineSync(action.engineNodes, action.engineEdges);
+        break;
+      case "GUARD_EVALUATE":
+        actions.guardEvaluate(action.agentNodeId, action.verdict, action.guardResults, action.signature, action.publicKey);
         break;
     }
   };

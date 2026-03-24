@@ -1084,9 +1084,8 @@ jobs:
             and .checks.pluginStatusLoaded
             and .checks.hookPreflightPresent
             and .checks.hookCuaPresent
-            and .checks.chatSendStarted
-            and .checks.historyHasMessages
-            and .checks.assistantBlockSignal
+            and .checks.policyCheckCallOk
+            and .checks.policyCheckDenied
             and .checks.targetFileAbsent
           ' artifacts/openclaw-runtime-blocked-e2e-${{ matrix.openclaw_version }}/summary.json >/dev/null
 

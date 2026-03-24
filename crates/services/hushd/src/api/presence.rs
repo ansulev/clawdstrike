@@ -592,6 +592,7 @@ async fn handle_ws(socket: WebSocket, state: AppState, authenticated_key: Option
 #[cfg(test)]
 mod tests {
     use super::*;
+    use futures::{SinkExt, StreamExt};
 
     #[test]
     fn hub_new_creates_empty_hub() {
@@ -691,6 +692,21 @@ mod tests {
     }
 
     #[test]
+    fn assign_color_falls_back_for_non_hex_fingerprint() {
+        assert_eq!(assign_color("not-hex"), PRESENCE_COLORS[0]);
+    }
+
+    #[test]
+    fn derive_presence_sigil_falls_back_to_first_alphanumeric_character() {
+        assert_eq!(derive_presence_sigil("!!! 7even"), "7");
+    }
+
+    #[test]
+    fn derive_presence_sigil_falls_back_to_question_mark_without_alphanumeric_characters() {
+        assert_eq!(derive_presence_sigil("!!!"), "?");
+    }
+
+    #[test]
     fn resolve_presence_identity_uses_authenticated_api_key() {
         let key = ApiKey {
             id: "key-123".to_string(),
@@ -708,6 +724,26 @@ mod tests {
         assert_eq!(fingerprint, "api_key:key-123:conn-1");
         assert_eq!(display_name, "Blue Team");
         assert_eq!(sigil, "BT");
+    }
+
+    #[test]
+    fn resolve_presence_identity_uses_api_key_id_when_name_is_blank() {
+        let key = ApiKey {
+            id: "key-123".to_string(),
+            key_hash: "hash".to_string(),
+            name: "   ".to_string(),
+            tier: None,
+            scopes: std::collections::HashSet::new(),
+            created_at: chrono::Utc::now(),
+            expires_at: None,
+        };
+
+        let (fingerprint, display_name, sigil) =
+            resolve_presence_identity(Some(&key), "conn-1", "spoofed", "Mallory", "M");
+
+        assert_eq!(fingerprint, "api_key:key-123:conn-1");
+        assert_eq!(display_name, "API Key key-123");
+        assert_eq!(sigil, "AK");
     }
 
     #[test]
@@ -810,6 +846,21 @@ mod tests {
     }
 
     #[test]
+    fn hub_touch_refreshes_last_seen_timestamp() {
+        let (hub, _rx) = PresenceHub::new();
+        hub.join("fp1", "Alice", "A");
+        hub.last_seen.insert(
+            "fp1".to_string(),
+            tokio::time::Instant::now() - Duration::from_secs(60),
+        );
+
+        hub.touch("fp1");
+
+        let stale = hub.stale_analysts(Duration::from_secs(45));
+        assert!(stale.is_empty());
+    }
+
+    #[test]
     fn hub_two_analysts_in_same_room() {
         let (hub, _rx) = PresenceHub::new();
         hub.join("fp1", "Alice", "A");
@@ -834,5 +885,181 @@ mod tests {
         let json = r#"{"type":"heartbeat"}"#;
         let msg: ClientMessage = serde_json::from_str(json).expect("deserialize");
         assert!(matches!(msg, ClientMessage::Heartbeat));
+    }
+
+    #[tokio::test]
+    async fn hub_broadcast_delivers_messages_to_subscribers() {
+        let (hub, _rx) = PresenceHub::new();
+        let mut subscriber = hub.subscribe();
+
+        hub.broadcast(ServerMessage::HeartbeatAck);
+
+        let message = tokio::time::timeout(Duration::from_secs(1), subscriber.recv())
+            .await
+            .expect("broadcast receive timeout")
+            .expect("broadcast message");
+        assert!(matches!(message, ServerMessage::HeartbeatAck));
+    }
+
+    #[tokio::test]
+    async fn heartbeat_reaper_evicts_stale_analyst_and_honors_shutdown() {
+        let (hub, mut rx) = PresenceHub::new();
+        let hub = Arc::new(hub);
+        hub.join("fp1", "Alice", "A");
+        hub.view_file("fp1", "policies/foo.yaml");
+        hub.last_seen.insert(
+            "fp1".to_string(),
+            tokio::time::Instant::now() - Duration::from_secs(HEARTBEAT_TTL_SECS + 1),
+        );
+
+        let shutdown = Arc::new(Notify::new());
+        let task = tokio::spawn(spawn_heartbeat_reaper(hub.clone(), shutdown.clone()));
+
+        let message = tokio::time::timeout(Duration::from_secs(1), rx.recv())
+            .await
+            .expect("reaper receive timeout")
+            .expect("reaper message");
+        assert!(matches!(
+            message,
+            ServerMessage::AnalystLeft { ref fingerprint } if fingerprint == "fp1"
+        ));
+        assert!(hub.roster().is_empty());
+        assert!(hub.viewers_of("policies/foo.yaml").is_empty());
+
+        shutdown.notify_waiters();
+        tokio::time::timeout(Duration::from_secs(1), task)
+            .await
+            .expect("reaper shutdown timeout")
+            .expect("reaper task result");
+    }
+
+    #[tokio::test]
+    async fn websocket_presence_session_broadcasts_expected_events() {
+        let temp_dir = tempfile::tempdir().expect("tempdir");
+        let config = crate::config::Config {
+            cors_enabled: false,
+            audit_db: temp_dir.path().join("audit.db"),
+            control_db: Some(temp_dir.path().join("control.db")),
+            ..Default::default()
+        };
+        let state = crate::state::AppState::new(config).await.expect("state");
+        let app = crate::api::create_router(state.clone());
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind listener");
+        let addr = listener.local_addr().expect("listener addr");
+        let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel::<()>();
+        let server = tokio::spawn(async move {
+            axum::serve(listener, app)
+                .with_graceful_shutdown(async {
+                    let _ = shutdown_rx.await;
+                })
+                .await
+                .expect("serve presence app");
+        });
+
+        let (mut socket, _response) =
+            tokio_tungstenite::connect_async(format!("ws://{addr}/api/v1/presence"))
+                .await
+                .expect("connect websocket");
+
+        async fn recv_text(
+            socket: &mut tokio_tungstenite::WebSocketStream<
+                tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
+            >,
+        ) -> String {
+            loop {
+                match socket.next().await.expect("websocket frame").expect("websocket message") {
+                    tokio_tungstenite::tungstenite::Message::Text(text) => {
+                        return text.to_string();
+                    }
+                    tokio_tungstenite::tungstenite::Message::Ping(_)
+                    | tokio_tungstenite::tungstenite::Message::Pong(_) => {}
+                    other => panic!("unexpected websocket message: {other:?}"),
+                }
+            }
+        }
+
+        socket
+            .send(tokio_tungstenite::tungstenite::Message::Text(
+                r#"{"type":"join","fingerprint":"fp1","display_name":"Alice Example","sigil":"AE"}"#
+                    .into(),
+            ))
+            .await
+            .expect("send join");
+        let welcome = recv_text(&mut socket).await;
+        assert!(welcome.contains(r#""type":"welcome""#));
+        assert!(welcome.contains(r#""analyst_id":"fp1""#));
+        let joined = recv_text(&mut socket).await;
+        assert!(joined.contains(r#""type":"analyst_joined""#));
+
+        socket
+            .send(tokio_tungstenite::tungstenite::Message::Text(
+                r#"{"type":"view_file","file_path":"/tmp/policies/foo.yaml"}"#.into(),
+            ))
+            .await
+            .expect("send view_file");
+        let viewing = recv_text(&mut socket).await;
+        assert!(viewing.contains(r#""type":"analyst_viewing""#));
+        assert!(viewing.contains(r#""file_path":"tmp/policies/foo.yaml""#));
+
+        socket
+            .send(tokio_tungstenite::tungstenite::Message::Text(
+                r#"{"type":"cursor","file_path":"/tmp/policies/foo.yaml","line":7,"ch":3}"#
+                    .into(),
+            ))
+            .await
+            .expect("send cursor");
+        let cursor = recv_text(&mut socket).await;
+        assert!(cursor.contains(r#""type":"analyst_cursor""#));
+        assert!(cursor.contains(r#""line":7"#));
+        assert!(cursor.contains(r#""ch":3"#));
+
+        socket
+            .send(tokio_tungstenite::tungstenite::Message::Text(
+                r#"{"type":"selection","file_path":"/tmp/policies/foo.yaml","anchor_line":1,"anchor_ch":0,"head_line":3,"head_ch":2}"#
+                    .into(),
+            ))
+            .await
+            .expect("send selection");
+        let selection = recv_text(&mut socket).await;
+        assert!(selection.contains(r#""type":"analyst_selection""#));
+        assert!(selection.contains(r#""anchor_line":1"#));
+        assert!(selection.contains(r#""head_line":3"#));
+
+        socket
+            .send(tokio_tungstenite::tungstenite::Message::Text(
+                r#"{"type":"heartbeat"}"#.into(),
+            ))
+            .await
+            .expect("send heartbeat");
+        let ack = recv_text(&mut socket).await;
+        assert!(ack.contains(r#""type":"heartbeat_ack""#));
+
+        socket
+            .send(tokio_tungstenite::tungstenite::Message::Text(
+                r#"{"type":"join","fingerprint":"fp1","display_name":"Alice","sigil":"A","extra":1}"#
+                    .into(),
+            ))
+            .await
+            .expect("send invalid message");
+        let error = recv_text(&mut socket).await;
+        assert!(error.contains(r#""type":"error""#));
+        assert!(error.contains("Invalid message:"));
+
+        socket.close(None).await.expect("close websocket");
+        for _ in 0..20 {
+            if state.presence_hub.roster().is_empty() {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        assert!(state.presence_hub.roster().is_empty());
+        assert!(state.presence_hub.viewers_of("tmp/policies/foo.yaml").is_empty());
+
+        state.shutdown.notify_waiters();
+        let _ = shutdown_tx.send(());
+        server.await.expect("join server");
     }
 }

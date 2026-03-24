@@ -35,11 +35,11 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Topology
 
-- [ ] **TOPO-01**: TopologyManager extracted from ruflo (656 lines) with mesh, hierarchical, centralized, hybrid, and adaptive modes
-- [ ] **TOPO-02**: Adjacency list graph with O(1) role index, BFS shortest path, leader election
-- [ ] **TOPO-03**: Dynamic rebalancing on agent join/leave with partition strategy (hash/range/round-robin)
-- [ ] **TOPO-04**: Failover when agents go unhealthy — heartbeat timeout detection, task reassignment
-- [ ] **TOPO-05**: TopologyState snapshot serializable for transport via SwarmEnvelope
+- [x] **TOPO-01**: TopologyManager extracted from ruflo (656 lines) with mesh, hierarchical, centralized, hybrid, and adaptive modes
+- [x] **TOPO-02**: Adjacency list graph with O(1) role index, BFS shortest path, leader election
+- [x] **TOPO-03**: Dynamic rebalancing on agent join/leave with partition strategy (hash/range/round-robin)
+- [x] **TOPO-04**: Failover when agents go unhealthy — heartbeat timeout detection, task reassignment
+- [x] **TOPO-05**: TopologyState snapshot serializable for transport via SwarmEnvelope
 
 ### Orchestrator
 
@@ -163,11 +163,11 @@ Deferred to future release. Tracked but not in current roadmap.
 | TASK-04 | Phase 2 | Pending |
 | TASK-05 | Phase 2 | Complete |
 | TASK-06 | Phase 2 | Complete |
-| TOPO-01 | Phase 2 | Pending |
-| TOPO-02 | Phase 2 | Pending |
-| TOPO-03 | Phase 2 | Pending |
-| TOPO-04 | Phase 2 | Pending |
-| TOPO-05 | Phase 2 | Pending |
+| TOPO-01 | Phase 2 | Complete |
+| TOPO-02 | Phase 2 | Complete |
+| TOPO-03 | Phase 2 | Complete |
+| TOPO-04 | Phase 2 | Complete |
+| TOPO-05 | Phase 2 | Complete |
 | ORCH-01 | Phase 3 | Pending |
 | ORCH-02 | Phase 3 | Pending |
 | ORCH-03 | Phase 3 | Pending |

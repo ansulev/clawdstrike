@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 02-02-PLAN.md (agent registry)
-last_updated: "2026-03-24T21:50:49.304Z"
-last_activity: 2026-03-24 -- Completed 02-02 (agent registry)
+stopped_at: Completed 02-04-PLAN.md
+last_updated: "2026-03-24T21:51:26.416Z"
+last_activity: 2026-03-24 -- Completed 02-04 (topology manager)
 progress:
   total_phases: 6
   completed_phases: 1
   total_plans: 6
   completed_plans: 5
-  percent: 66
+  percent: 83
 ---
 
 # Project State
@@ -28,9 +28,9 @@ See: .planning/PROJECT.md (updated 2026-03-24)
 Phase: 2 of 6 (Core Subsystems)
 Plan: 2 of 4 in current phase
 Status: In Progress
-Last activity: 2026-03-24 -- Completed 02-02 (agent registry)
+Last activity: 2026-03-24 -- Completed 02-04 (topology manager)
 
-Progress: [██████░░░░] 66%
+Progress: [████████░░] 83%
 
 ## Performance Metrics
 
@@ -54,6 +54,7 @@ Progress: [██████░░░░] 66%
 | Phase 02-core-subsystems P01 | 4min | 2 tasks | 5 files |
 | Phase 02-01 P01 | 4 | 2 tasks | 5 files |
 | Phase 02-02 P02 | 5min | 1 task | 4 files |
+| Phase 02 P04 | 7 | 1 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -76,6 +77,8 @@ Recent decisions affecting current work:
 - [Phase 02-02]: Register generates IDs with generateSwarmId('agt') -- prevents duplicate ID collisions
 - [Phase 02-02]: failTask is new method not in ruflo -- needed for accurate successRate tracking
 - [Phase 02-02]: dispose() only stops health timer, never disposes shared emitter (Research Pitfall 7)
+- [Phase 02]: Reverse adjacency for all topology types: non-mesh modes add reverse adjacency entries for BFS routing even though edge.bidirectional is false
+- [Phase 02]: Node ID uses agentId directly (not prefixed with node_) matching Phase 1 TopologyNode.id spec
 
 ### Pending Todos
 
@@ -90,6 +93,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-24T21:48:27.000Z
-Stopped at: Completed 02-02-PLAN.md (agent registry)
+Last session: 2026-03-24T21:51:26.413Z
+Stopped at: Completed 02-04-PLAN.md
 Resume file: None

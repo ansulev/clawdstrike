@@ -12,20 +12,13 @@ import { useProjectStore } from "@/features/project/stores/project-store";
 import { resolveProjectPath } from "@/features/project/utils/resolve-project-path";
 import { usePaneStore } from "@/features/panes/pane-store";
 import { useWorkbench } from "@/features/policy/stores/policy-store";
+import { usePolicyEditStore } from "@/features/policy/stores/policy-edit-store";
+import { usePolicyTabsStore } from "@/features/policy/stores/policy-tabs-store";
 import { requestEditorReveal } from "@/lib/workbench/editor-reveal";
-
-function sliceByCharacterRange(
-  value: string,
-  start: number,
-  end: number,
-): { before: string; match: string; after: string } {
-  const characters = Array.from(value);
-  return {
-    before: characters.slice(0, start).join(""),
-    match: characters.slice(start, end).join(""),
-    after: characters.slice(end).join(""),
-  };
-}
+import {
+  characterOffsetToCodeUnitIndex,
+  getLineTextAt,
+} from "@/features/search/utils/search-offsets";
 
 // ---- Types ----
 
@@ -76,6 +69,19 @@ function OptionToggle({
 
 // ---- Highlighted match line ----
 
+function getOpenDocumentLineText(filePath: string, lineNumber: number): string | null {
+  const tab = usePolicyTabsStore
+    .getState()
+    .tabs.find((candidate) => candidate.filePath === filePath);
+
+  if (!tab) {
+    return null;
+  }
+
+  const yaml = usePolicyEditStore.getState().editStates.get(tab.id)?.yaml;
+  return typeof yaml === "string" ? getLineTextAt(yaml, lineNumber) : null;
+}
+
 function HighlightedLine({
   lineContent,
   matchStart,
@@ -85,11 +91,14 @@ function HighlightedLine({
   matchStart: number;
   matchEnd: number;
 }) {
-  const { before, match, after } = sliceByCharacterRange(
-    lineContent,
-    matchStart,
-    matchEnd,
+  const previewMatchStart = characterOffsetToCodeUnitIndex(lineContent, matchStart);
+  const previewMatchEnd = Math.max(
+    previewMatchStart,
+    characterOffsetToCodeUnitIndex(lineContent, matchEnd),
   );
+  const before = lineContent.slice(0, previewMatchStart);
+  const match = lineContent.slice(previewMatchStart, previewMatchEnd);
+  const after = lineContent.slice(previewMatchEnd);
 
   return (
     <span className="overflow-hidden text-ellipsis whitespace-nowrap">
@@ -353,11 +362,18 @@ export function SearchPanelConnected() {
       onResultClick={async (match) => {
         const filePath = resolveProjectPath(match.rootPath, match.filePath);
         await openFileByPath(filePath);
+        const sourceLine = getOpenDocumentLineText(filePath, match.lineNumber) ?? match.lineContent;
+        const startColumn =
+          characterOffsetToCodeUnitIndex(sourceLine, match.sourceMatchStart) + 1;
+        const endColumn = Math.max(
+          startColumn,
+          characterOffsetToCodeUnitIndex(sourceLine, match.sourceMatchEnd) + 1,
+        );
         requestEditorReveal({
           filePath,
           lineNumber: match.lineNumber,
-          startColumn: match.sourceMatchStart + 1,
-          endColumn: match.sourceMatchEnd + 1,
+          startColumn,
+          endColumn,
         });
         usePaneStore
           .getState()

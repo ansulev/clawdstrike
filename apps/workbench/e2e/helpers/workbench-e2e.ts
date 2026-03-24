@@ -131,7 +131,7 @@ export async function seedWorkbench(page: Page, options: SeedWorkbenchOptions): 
       ) => {
         const source = useRegex ? query : escapeRegex(query);
         const bounded = wholeWord && useRegex ? `\\b(?:${source})\\b` : source;
-        return new RegExp(bounded, caseSensitive ? "g" : "gi");
+        return new RegExp(bounded, caseSensitive ? "gu" : "giu");
       };
 
       const searchProject = (

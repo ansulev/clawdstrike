@@ -6,6 +6,9 @@ import { SearchPanelConnected } from "../components/search-panel";
 import { useSearchStore } from "../stores/search-store";
 import { useProjectStore } from "@/features/project/stores/project-store";
 import { usePaneStore } from "@/features/panes/pane-store";
+import { emptyNativeValidation, usePolicyEditStore } from "@/features/policy/stores/policy-edit-store";
+import { usePolicyTabsStore } from "@/features/policy/stores/policy-tabs-store";
+import { DEFAULT_POLICY } from "@/features/policy/stores/policy-store";
 import { consumePendingEditorReveal } from "@/lib/workbench/editor-reveal";
 
 const openFileByPath = vi.fn<(...args: [string]) => Promise<void>>();
@@ -29,6 +32,43 @@ vi.mock("@/features/policy/stores/policy-store", () => ({
   }),
 }));
 
+function makeDocumentWithLine(lineNumber: number, lineContent: string): string {
+  return Array.from({ length: lineNumber }, (_, index) =>
+    index === lineNumber - 1 ? lineContent : `line ${index + 1}`,
+  ).join("\n");
+}
+
+function seedOpenDocument(filePath: string, lineNumber: number, lineContent: string): void {
+  usePolicyTabsStore.setState({
+    tabs: [
+      {
+        id: "tab-search-result",
+        documentId: "doc-search-result",
+        name: "example.yml",
+        filePath,
+        dirty: false,
+        fileType: "clawdstrike_policy",
+      },
+    ],
+    activeTabId: "tab-search-result",
+  });
+  usePolicyEditStore.setState({
+    editStates: new Map([
+      [
+        "tab-search-result",
+        {
+          policy: DEFAULT_POLICY,
+          yaml: makeDocumentWithLine(lineNumber, lineContent),
+          validation: { valid: true, errors: [], warnings: [] },
+          nativeValidation: emptyNativeValidation(),
+          undoStack: { past: [], future: [] },
+          cleanSnapshot: null,
+        },
+      ],
+    ]),
+  });
+}
+
 describe("SearchPanelConnected", () => {
   beforeEach(() => {
     openFileByPath.mockReset();
@@ -44,6 +84,7 @@ describe("SearchPanelConnected", () => {
       { filePath: "/workspace/project/policies/example.yml" },
       { filePath: "/workspace/project/rules/other.yml" },
     ];
+    seedOpenDocument("/workspace/project/policies/example.yml", 12, "  name: needle");
     usePaneStore.getState()._reset();
     useProjectStore.setState({
       projectRoots: ["/workspace/project"],
@@ -153,6 +194,7 @@ describe("SearchPanelConnected", () => {
       totalMatches: 1,
       truncated: false,
     });
+    seedOpenDocument("/workspace/project/policies/example.yml", 27, "x".repeat(700));
 
     render(
       <MemoryRouter>
@@ -167,6 +209,82 @@ describe("SearchPanelConnected", () => {
       lineNumber: 27,
       startColumn: 613,
       endColumn: 619,
+    });
+  });
+
+  it("highlights preview matches after astral unicode characters", () => {
+    useSearchStore.setState({
+      resultGroups: [
+        {
+          rootPath: "/workspace/project",
+          filePath: "policies/example.yml",
+          matches: [
+            {
+              rootPath: "/workspace/project",
+              filePath: "policies/example.yml",
+              lineNumber: 7,
+              lineContent: "😀😀needle tail",
+              matchStart: 2,
+              matchEnd: 8,
+              sourceMatchStart: 2,
+              sourceMatchEnd: 8,
+            },
+          ],
+        },
+      ],
+      fileCount: 1,
+      totalMatches: 1,
+      truncated: false,
+    });
+
+    render(
+      <MemoryRouter>
+        <SearchPanelConnected />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText("needle", { selector: "mark" })).toBeTruthy();
+  });
+
+  it("converts source match columns to editor utf-16 columns", async () => {
+    useSearchStore.setState({
+      resultGroups: [
+        {
+          rootPath: "/workspace/project",
+          filePath: "policies/example.yml",
+          matches: [
+            {
+              rootPath: "/workspace/project",
+              filePath: "policies/example.yml",
+              lineNumber: 12,
+              lineContent: "😀😀needle tail",
+              matchStart: 2,
+              matchEnd: 8,
+              sourceMatchStart: 2,
+              sourceMatchEnd: 8,
+            },
+          ],
+        },
+      ],
+      fileCount: 1,
+      totalMatches: 1,
+      truncated: false,
+    });
+    seedOpenDocument("/workspace/project/policies/example.yml", 12, "😀😀needle tail");
+
+    render(
+      <MemoryRouter>
+        <SearchPanelConnected />
+      </MemoryRouter>,
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: /12/i }));
+
+    expect(consumePendingEditorReveal("/workspace/project/policies/example.yml")).toEqual({
+      filePath: "/workspace/project/policies/example.yml",
+      lineNumber: 12,
+      startColumn: 5,
+      endColumn: 11,
     });
   });
 

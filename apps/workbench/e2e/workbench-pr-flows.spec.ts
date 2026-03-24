@@ -5,7 +5,7 @@ const alphaFresh = makePolicyYaml("alpha-fresh", "explorer fixture");
 const alphaStale = makePolicyYaml("alpha-stale", "persisted tab snapshot");
 const signalsFresh = makePolicyYaml("signals-fresh", "needle in the haystack");
 const signalsStale = makePolicyYaml("signals-stale", "outdated search snapshot");
-const unicodeWholeWord = makePolicyYaml("unicode-whole-word", "ß");
+const unicodeWholeWord = makePolicyYaml("unicode-whole-word", "ẞ");
 const unicodeInsideWord = makePolicyYaml("unicode-inside-word", "maßstab");
 
 test.use({ viewport: { width: 1440, height: 960 } });
@@ -115,6 +115,7 @@ test("sidebar search whole-word matching stays aligned with the unicode-aware ba
   await expect(page.getByText("1 results in 1 files")).toBeVisible();
   await expect(page.locator("#sidebar-panel")).toContainText("unicode-word.yml");
   await expect(page.locator("#sidebar-panel")).not.toContainText("unicode-inside-word.yml");
+  await expect(page.locator("#sidebar-panel")).toContainText("ẞ");
 });
 
 test("settings renders the Claude Code tab without crashing", async ({ page }) => {

@@ -32,7 +32,10 @@ import {
   type Extension,
   type Range,
 } from "@codemirror/state";
-import { usePresenceStore } from "@/features/presence/stores/presence-store";
+import {
+  usePresenceStore,
+  type PresenceStoreState,
+} from "@/features/presence/stores/presence-store";
 import { getPresenceSocket } from "@/features/presence/use-presence-connection";
 
 // ---------------------------------------------------------------------------
@@ -62,6 +65,32 @@ interface RemoteCursorData {
   } | null;
 }
 
+function collectRemoteCursors(
+  filePath: string,
+  state: Pick<PresenceStoreState, "analysts" | "localAnalystId">,
+): RemoteCursorData[] {
+  if (!filePath) {
+    return [];
+  }
+
+  const cursors: RemoteCursorData[] = [];
+
+  for (const [fp, analyst] of state.analysts) {
+    if (fp === state.localAnalystId) continue;
+    if (analyst.activeFile !== filePath) continue;
+    if (!analyst.cursor && !analyst.selection) continue;
+    cursors.push({
+      fingerprint: fp,
+      displayName: analyst.displayName,
+      color: analyst.color,
+      cursor: analyst.cursor,
+      selection: analyst.selection,
+    });
+  }
+
+  return cursors;
+}
+
 // ---------------------------------------------------------------------------
 // Facet — file path injection (set once per editor instance)
 // ---------------------------------------------------------------------------
@@ -86,8 +115,11 @@ export const updateRemoteCursors = StateEffect.define<RemoteCursorData[]>();
 
 /** State field storing the latest set of remote cursors for this editor. */
 const remoteCursorsField = StateField.define<RemoteCursorData[]>({
-  create() {
-    return [];
+  create(state) {
+    return collectRemoteCursors(
+      state.facet(presenceFilePath),
+      usePresenceStore.getState(),
+    );
   },
   update(value, tr) {
     for (const effect of tr.effects) {
@@ -150,26 +182,19 @@ const presenceCursorsPlugin = ViewPlugin.fromClass(
     private lastSentMessage = "";
 
     constructor(private view: EditorView) {
+      this.decorations = this.buildDecorations(
+        view,
+        view.state.field(remoteCursorsField),
+      );
+
       // Subscribe to presence store outside React.
       // On every store update we extract remote cursors for this file and
       // dispatch a StateEffect so the StateField + decorations update.
       this.unsubscribe = usePresenceStore.subscribe((state) => {
-        const filePath = this.view.state.facet(presenceFilePath);
-        const localId = state.localAnalystId;
-        const cursors: RemoteCursorData[] = [];
-
-        for (const [fp, analyst] of state.analysts) {
-          if (fp === localId) continue; // Skip self
-          if (analyst.activeFile !== filePath) continue;
-          if (!analyst.cursor && !analyst.selection) continue;
-          cursors.push({
-            fingerprint: fp,
-            displayName: analyst.displayName,
-            color: analyst.color,
-            cursor: analyst.cursor,
-            selection: analyst.selection,
-          });
-        }
+        const cursors = collectRemoteCursors(
+          this.view.state.facet(presenceFilePath),
+          state,
+        );
 
         // Dispatch into the editor — safe from outside React
         this.view.dispatch({ effects: updateRemoteCursors.of(cursors) });

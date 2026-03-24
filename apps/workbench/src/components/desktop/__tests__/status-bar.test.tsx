@@ -1,6 +1,6 @@
 import React from "react";
 import { afterEach, beforeEach, describe, it, expect, vi } from "vitest";
-import { fireEvent, screen } from "@testing-library/react";
+import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { StatusBar } from "../status-bar";
 import { renderWithProviders } from "@/test/test-helpers";
 import { GUARD_REGISTRY } from "@/lib/workbench/guard-registry";
@@ -85,6 +85,39 @@ function DetectionStatusHarness() {
           })}
       >
         set-native-loading
+      </button>
+      <StatusBar />
+    </>
+  );
+}
+
+function StatusBarVisibilityHarness() {
+  const { multiDispatch } = usePolicyTabs();
+  const [ready, setReady] = React.useState(false);
+
+  React.useEffect(() => {
+    multiDispatch({
+      type: "NEW_TAB",
+      fileType: "yara_rule",
+      yaml: `rule demo_rule {
+  strings:
+    $re = /a{2,3}/
+  condition:
+    $re
+}
+`,
+    });
+    setReady(true);
+  }, [multiDispatch]);
+
+  if (!ready) {
+    return null;
+  }
+
+  return (
+    <>
+      <button type="button" onClick={() => multiDispatch({ type: "NEW_TAB" })}>
+        open-policy
       </button>
       <StatusBar />
     </>
@@ -180,5 +213,17 @@ describe("StatusBar", () => {
 
     expect(screen.getByText("1 error")).toBeInTheDocument();
     expect(screen.getByText("YARA Rule")).toBeInTheDocument();
+  });
+
+  it("reveals segments that start empty once their content appears", async () => {
+    renderWithProviders(<StatusBarVisibilityHarness />);
+
+    expect(screen.queryByText("v1.2.0")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "open-policy" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("v1.2.0")).toBeInTheDocument();
+    });
   });
 });

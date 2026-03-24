@@ -2,6 +2,7 @@ import {
   useState,
   useRef,
   useEffect,
+  useLayoutEffect,
   useSyncExternalStore,
   useCallback,
 } from "react";
@@ -391,16 +392,26 @@ function StatusBarSegmentWithSeparator({
   showSeparator: boolean;
 }) {
   const contentRef = useRef<HTMLSpanElement>(null);
-  const [hasContent, setHasContent] = useState(true);
+  const [hasContent, setHasContent] = useState(false);
 
   const checkContent = useCallback(() => {
-    if (!contentRef.current) return;
-    setHasContent(contentRef.current.childNodes.length > 0);
+    setHasContent((contentRef.current?.childNodes.length ?? 0) > 0);
   }, []);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     checkContent();
-  });
+    const node = contentRef.current;
+    if (!node) return;
+
+    const observer = new MutationObserver(checkContent);
+    observer.observe(node, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+    });
+
+    return () => observer.disconnect();
+  }, [checkContent]);
 
   return (
     <>

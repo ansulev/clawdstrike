@@ -1,31 +1,16 @@
 import { extractRegistryPackageFile } from "./registry-package";
+import { rewritePluginSdkImports } from "./sdk-import-rewrite";
 import type { PluginManifest } from "./types";
 
-const SDK_IMPORT_RE =
-  /import\s+(?:type\s+)?(?:\{[^}]*\}|\*\s+as\s+\w+)\s+from\s*['"]@clawdstrike\/plugin-sdk(?:\/\w+)?['"];?\s*/gs;
+async function sha256Hex(buffer: ArrayBuffer): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", buffer);
+  return Array.from(new Uint8Array(digest))
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+}
 
 export function transformCommunityPluginSource(source: string): string {
-  let code = source.replace(SDK_IMPORT_RE, (match) => {
-    if (/^import\s+type\s/.test(match)) {
-      return "";
-    }
-
-    const namespaceMatch = match.match(/import\s+\*\s+as\s+(\w+)/);
-    if (namespaceMatch) {
-      return `const ${namespaceMatch[1]} = window.__CLAWDSTRIKE_PLUGIN_SDK__;\n`;
-    }
-
-    const namedMatch = match.match(/import\s*\{([^}]+)\}/s);
-    if (namedMatch) {
-      const names = namedMatch[1]
-        .split(",")
-        .map((name) => name.trim())
-        .filter(Boolean);
-      return `const { ${names.join(", ")} } = window.__CLAWDSTRIKE_PLUGIN_SDK__;\n`;
-    }
-
-    return match;
-  });
+  let code = rewritePluginSdkImports(source);
 
   code = code.replace(
     /export\s*\{\s*([A-Za-z_$][\w$]*)\s+as\s+default\s*\};?/g,
@@ -50,6 +35,12 @@ export async function resolveRegistryPluginCode(
       `Cannot load community plugin "${manifest.id}": installation.downloadUrl is missing`,
     );
   }
+  const expectedChecksum = manifest.installation?.checksum;
+  if (!expectedChecksum) {
+    throw new Error(
+      `Cannot load community plugin "${manifest.id}": installation.checksum is missing`,
+    );
+  }
   if (!manifest.main) {
     throw new Error(
       `Cannot load community plugin "${manifest.id}": main entry point is missing`,
@@ -64,6 +55,12 @@ export async function resolveRegistryPluginCode(
   }
 
   const archiveBuffer = await response.arrayBuffer();
+  const actualChecksum = await sha256Hex(archiveBuffer);
+  if (actualChecksum !== expectedChecksum.toLowerCase()) {
+    throw new Error(
+      `Failed to verify plugin package checksum for "${manifest.id}"`,
+    );
+  }
   const entrypointSource = extractRegistryPackageFile(
     archiveBuffer,
     manifest.main,

@@ -20,11 +20,11 @@ export async function bootstrapThreatIntelPlugins(): Promise<number> {
   for (const plugin of BUILTIN_THREAT_INTEL_PLUGINS) {
     const { manifest } = plugin;
 
-    if (!pluginRegistry.get(manifest.id)) {
-      pluginRegistry.register(manifest);
-    }
-
     try {
+      if (!pluginRegistry.get(manifest.id)) {
+        pluginRegistry.register(manifest);
+      }
+
       const secrets = await Promise.all(
         plugin.secretKeys.map((key) =>
           secureStore.get(`plugin:${manifest.id}:${key}`),

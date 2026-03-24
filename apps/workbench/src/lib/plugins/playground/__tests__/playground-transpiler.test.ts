@@ -34,6 +34,17 @@ describe("transpilePlugin - SDK import rewriting", () => {
       // Should be destructured, not a type-only strip
       expect(code).toContain("const {");
     });
+
+    it("rewrites aliased named imports to valid object destructuring", () => {
+      const source = `import { createPlugin as cp } from "@clawdstrike/plugin-sdk";\ncp({});`;
+      const { code, error } = transpilePlugin(source);
+
+      expect(error).toBeNull();
+      expect(code).toContain(
+        `const { createPlugin: cp } = window.__CLAWDSTRIKE_PLUGIN_SDK__;`,
+      );
+      expect(code).not.toContain("createPlugin as cp");
+    });
   });
 
   describe("type-only imports", () => {

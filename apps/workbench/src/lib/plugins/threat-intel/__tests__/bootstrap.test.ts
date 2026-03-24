@@ -3,6 +3,7 @@ import { pluginRegistry } from "@/lib/plugins/plugin-registry";
 import { getThreatIntelSource, _resetForTesting } from "@/lib/workbench/threat-intel-registry";
 import { bootstrapThreatIntelPlugins } from "../bootstrap";
 import { BUILTIN_THREAT_INTEL_PLUGINS } from "../catalog";
+import { GREYNOISE_MANIFEST } from "../greynoise-plugin";
 import { VIRUSTOTAL_MANIFEST } from "../virustotal-plugin";
 
 const mockSecureStore = vi.hoisted(() => ({
@@ -53,5 +54,23 @@ describe("bootstrapThreatIntelPlugins", () => {
     expect(registeredCount).toBe(1);
     expect(getThreatIntelSource("virustotal")).toBeDefined();
     expect(pluginRegistry.get(VIRUSTOTAL_MANIFEST.id)?.state).toBe("activated");
+  });
+
+  it("continues bootstrapping later plugins when manifest registration throws", async () => {
+    vi.spyOn(pluginRegistry, "register").mockImplementationOnce(() => {
+      throw new Error("invalid manifest");
+    });
+    mockSecureStore.get.mockImplementation(async (key: string) => {
+      if (key === `plugin:${GREYNOISE_MANIFEST.id}:api_key`) {
+        return "gn-key";
+      }
+      return null;
+    });
+
+    const registeredCount = await bootstrapThreatIntelPlugins();
+
+    expect(registeredCount).toBe(1);
+    expect(pluginRegistry.get(VIRUSTOTAL_MANIFEST.id)).toBeUndefined();
+    expect(pluginRegistry.get(GREYNOISE_MANIFEST.id)?.state).toBe("activated");
   });
 });

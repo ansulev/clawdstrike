@@ -7,6 +7,7 @@
  * runner to pick up.
  */
 import { transform } from "sucrase";
+import { rewritePluginSdkImports } from "../sdk-import-rewrite";
 import type { PlaygroundError } from "./playground-store";
 
 // ---------------------------------------------------------------------------
@@ -42,26 +43,7 @@ export function transpilePlugin(source: string): {
     // Handle: import { X,\n  Y } from "@clawdstrike/plugin-sdk" (multi-line)
     // Handle: import type { X } from "@clawdstrike/plugin-sdk" (strip entirely)
     // Handle: import * as SDK from "@clawdstrike/plugin-sdk"
-    const SDK_IMPORT_RE = /import\s+(?:type\s+)?(?:\{[^}]*\}|\*\s+as\s+\w+)\s+from\s*['"]@clawdstrike\/plugin-sdk(?:\/\w+)?['"];?\s*/gs;
-    code = code.replace(SDK_IMPORT_RE, (match) => {
-      // Strip type-only imports entirely
-      if (/^import\s+type\s/.test(match)) return '';
-
-      // For namespace imports: import * as SDK from "..."
-      const nsMatch = match.match(/import\s+\*\s+as\s+(\w+)/);
-      if (nsMatch) {
-        return `const ${nsMatch[1]} = window.__CLAWDSTRIKE_PLUGIN_SDK__;\n`;
-      }
-
-      // For named imports: import { X, Y } from "..."
-      const namedMatch = match.match(/import\s*\{([^}]+)\}/s);
-      if (namedMatch) {
-        const names = namedMatch[1].split(',').map((n: string) => n.trim()).filter(Boolean);
-        return `const { ${names.join(', ')} } = window.__CLAWDSTRIKE_PLUGIN_SDK__;\n`;
-      }
-
-      return match; // Shouldn't reach here
-    });
+    code = rewritePluginSdkImports(code);
 
     // Step 3: Replace `export default` with window assignment
     code = code.replace(

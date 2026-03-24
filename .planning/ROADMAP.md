@@ -99,11 +99,12 @@ Plans:
   3. Topology-driven layout automatically positions React Flow nodes using force-directed layout for mesh, Sugiyama for hierarchical, radial for centralized, and hybrid combination -- using existing ported algorithms (no new layout dependencies)
   4. spawnEngineSession wraps spawnSession with guard evaluation and receipt node creation, 3 new board actions (topologyLayout, engineSync, guardEvaluate) dispatch correctly, and "topology" edge type renders
   5. useSwarmEngine(), useAgentRegistry(), useTaskGraph(), and useTopology() hooks return typed subsystem accessors from engine context
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 05-01: TBD
-- [ ] 05-02: TBD
+- [ ] 05-01-PLAN.md — Workspace wiring, type extensions (topology edge, engine metadata fields), 3 new store actions (topologyLayout, engineSync, guardEvaluate) + dispatch shim
+- [ ] 05-02-PLAN.md — Topology layout module: port forceLayout.ts + Sugiyama + hub-spoke + hybrid algorithms with tests
+- [ ] 05-03-PLAN.md — SwarmEngineProvider + convenience hooks, engine-to-board event bridge with dedup and glow, SwarmBoardPage wiring
 
 ### Phase 6: Validation + Tauri Transport
 **Goal**: The entire package is proven backward-compatible with all existing SwarmBoard functionality, TauriIpcTransport enables desktop swarm communication, and no existing test regresses
@@ -131,6 +132,6 @@ Phases execute in numeric order: 1 > 2 > 3 > 4 > 5 > 6
 | 1. Foundation | 2/2 | Complete | - |
 | 2. Core Subsystems | 4/4 | Complete | - |
 | 3. Orchestrator + Protocol | 3/3 | Complete | - |
-| 4. Consensus + Shared Memory | 0/3 | Planned | - |
-| 5. React Integration | 0/2 | Not started | - |
+| 4. Consensus + Shared Memory | 3/3 | Complete | - |
+| 5. React Integration | 0/3 | Planned | - |
 | 6. Validation + Tauri Transport | 0/2 | Not started | - |

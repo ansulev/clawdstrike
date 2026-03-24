@@ -1,8 +1,10 @@
 // PresenceSocket — WebSocket connection lifecycle manager for hushd /api/v1/presence.
 //
 // Uses the native browser WebSocket API (NOT tauri-plugin-websocket) because the
-// presence endpoint authenticates via ?token= query parameter. Modeled on
-// FleetEventStream but adapted for WebSocket with heartbeat and jittered backoff.
+// browser cannot attach Authorization headers to WebSocket handshakes. We
+// first mint a short-lived ticket over authenticated HTTP, then connect the
+// socket with that single-use ticket. Modeled on FleetEventStream but adapted
+// for WebSocket with heartbeat and jittered backoff.
 
 import { resolveProxyBase } from "@/components/workbench/editor/live-agent-tab";
 import type {
@@ -19,9 +21,21 @@ import { HEARTBEAT_INTERVAL_MS } from "./types";
 
 const BACKOFF_BASE_DELAYS = [1000, 2000, 4000, 8000, 16000];
 
+export function buildPresenceTicketUrl(
+  hushdUrl: string,
+  locationOrigin: string,
+  isDev = import.meta.env.DEV,
+): string {
+  const base = resolveProxyBase(hushdUrl, isDev);
+  const ticketUrl = new URL(base, locationOrigin);
+  ticketUrl.pathname = `${ticketUrl.pathname.replace(/\/$/, "")}/api/v1/presence/tickets`;
+  ticketUrl.search = "";
+  return ticketUrl.toString();
+}
+
 export function buildPresenceWebSocketUrl(
   hushdUrl: string,
-  apiKey: string,
+  ticket: string,
   locationOrigin: string,
   isDev = import.meta.env.DEV,
 ): string {
@@ -30,8 +44,39 @@ export function buildPresenceWebSocketUrl(
   wsUrl.protocol = wsUrl.protocol === "https:" ? "wss:" : "ws:";
   wsUrl.pathname = `${wsUrl.pathname.replace(/\/$/, "")}/api/v1/presence`;
   wsUrl.search = "";
-  wsUrl.searchParams.set("token", apiKey);
+  wsUrl.searchParams.set("ticket", ticket);
   return wsUrl.toString();
+}
+
+type PresenceTicketResponse = {
+  ticket?: string;
+};
+
+export async function issuePresenceWebSocketTicket(
+  hushdUrl: string,
+  apiKey: string,
+  locationOrigin: string,
+  signal?: AbortSignal,
+  isDev = import.meta.env.DEV,
+): Promise<string> {
+  const response = await fetch(buildPresenceTicketUrl(hushdUrl, locationOrigin, isDev), {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+    },
+    signal,
+  });
+
+  if (!response.ok) {
+    throw new Error(`Presence ticket request failed (${response.status})`);
+  }
+
+  const payload = (await response.json()) as PresenceTicketResponse;
+  if (!payload.ticket) {
+    throw new Error("Presence ticket response missing ticket");
+  }
+
+  return payload.ticket;
 }
 
 // ---------------------------------------------------------------------------
@@ -43,7 +88,9 @@ export class PresenceSocket {
   private ws: WebSocket | null = null;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+  private ticketRequestController: AbortController | null = null;
   private reconnectAttempt = 0;
+  private connectAttemptId = 0;
   private isReconnect = false;
   private disposed = false;
 
@@ -58,6 +105,7 @@ export class PresenceSocket {
    * Credentials are obtained fresh on every call via `opts.getApiKey()`.
    */
   connect(): void {
+    this.disposed = false;
     this.setState("connecting");
 
     const apiKey = this.opts.getApiKey();
@@ -67,28 +115,12 @@ export class PresenceSocket {
       return;
     }
 
-    // TODO(security): Browser WebSocket clients cannot send Authorization
-    // headers, so this currently uses a query token. Replace it with a
-    // short-lived ticket flow before presence traffic crosses URL-logging
-    // infrastructure.
-    const wsUrl = buildPresenceWebSocketUrl(
-      this.opts.hushdUrl,
-      apiKey,
-      window.location.origin,
-    );
+    const attemptId = ++this.connectAttemptId;
+    const controller = new AbortController();
+    this.ticketRequestController?.abort();
+    this.ticketRequestController = controller;
 
-    try {
-      const ws = new WebSocket(wsUrl);
-      this.ws = ws;
-
-      ws.onopen = () => this.onOpen();
-      ws.onmessage = (event: MessageEvent) => this.onMessage(event);
-      ws.onclose = () => this.onClose();
-      ws.onerror = () => this.onError();
-    } catch {
-      // Construction error (e.g. invalid URL) — schedule reconnect.
-      this.scheduleReconnect();
-    }
+    void this.openWithTicket(attemptId, apiKey, controller);
   }
 
   /**
@@ -96,12 +128,16 @@ export class PresenceSocket {
    */
   disconnect(): void {
     this.disposed = true;
+    this.connectAttemptId++;
     this.stopHeartbeat();
 
     if (this.reconnectTimer != null) {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
     }
+
+    this.ticketRequestController?.abort();
+    this.ticketRequestController = null;
 
     if (this.ws) {
       this.ws.onopen = null;
@@ -127,6 +163,61 @@ export class PresenceSocket {
   }
 
   // ---- Private handlers ----
+
+  private async openWithTicket(
+    attemptId: number,
+    apiKey: string,
+    controller: AbortController,
+  ): Promise<void> {
+    try {
+      const ticket = await issuePresenceWebSocketTicket(
+        this.opts.hushdUrl,
+        apiKey,
+        window.location.origin,
+        controller.signal,
+      );
+
+      if (
+        controller.signal.aborted ||
+        this.disposed ||
+        attemptId !== this.connectAttemptId
+      ) {
+        return;
+      }
+
+      const ws = new WebSocket(
+        buildPresenceWebSocketUrl(
+          this.opts.hushdUrl,
+          ticket,
+          window.location.origin,
+        ),
+      );
+
+      if (this.disposed || attemptId !== this.connectAttemptId) {
+        ws.close(1000);
+        return;
+      }
+
+      this.ws = ws;
+      ws.onopen = () => this.onOpen();
+      ws.onmessage = (event: MessageEvent) => this.onMessage(event);
+      ws.onclose = () => this.onClose();
+      ws.onerror = () => this.onError();
+    } catch {
+      if (
+        controller.signal.aborted ||
+        this.disposed ||
+        attemptId !== this.connectAttemptId
+      ) {
+        return;
+      }
+      this.scheduleReconnect();
+    } finally {
+      if (this.ticketRequestController === controller) {
+        this.ticketRequestController = null;
+      }
+    }
+  }
 
   private onOpen(): void {
     this.reconnectAttempt = 0;

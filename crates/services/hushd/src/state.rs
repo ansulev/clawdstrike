@@ -11,7 +11,7 @@ use hush_certification::webhooks::SqliteWebhookStore;
 use hush_core::{Keypair, PublicKey};
 use hush_multi_agent::InMemoryRevocationStore;
 
-use crate::api::presence::PresenceHub;
+use crate::api::presence::{PresenceHub, PresenceTicketStore};
 use crate::audit::forward::AuditForwarder;
 use crate::audit::{AuditEvent, AuditLedger};
 use crate::auth::AuthStore;
@@ -84,6 +84,7 @@ pub struct AppState {
     pub siem_manager: Arc<Mutex<Option<ExporterManager>>>,
     pub spine_publisher: Option<Arc<SpinePublisher>>,
     pub presence_hub: Arc<PresenceHub>,
+    pub presence_ticket_store: Arc<PresenceTicketStore>,
     pub shutdown: Arc<Notify>,
     pub broker_state: Arc<BrokerStateStore>,
     /// Without this, each call to `resolve_delegation_lineage` would create a
@@ -408,6 +409,7 @@ impl AppState {
 
         let (presence_hub, _presence_rx) = PresenceHub::new();
         let presence_hub = Arc::new(presence_hub);
+        let presence_ticket_store = Arc::new(PresenceTicketStore::new());
 
         let shutdown = Arc::new(Notify::new());
 
@@ -455,6 +457,7 @@ impl AppState {
             siem_manager: Arc::new(Mutex::new(siem_manager)),
             spine_publisher,
             presence_hub,
+            presence_ticket_store,
             shutdown,
             broker_state: Arc::new(BrokerStateStore::new()),
             delegation_revocations: Arc::new(InMemoryRevocationStore::default()),
@@ -488,7 +491,7 @@ impl AppState {
     }
 
     pub fn request_shutdown(&self) {
-        self.shutdown.notify_one();
+        self.shutdown.notify_waiters();
     }
 
     /// Record an audit event to the local ledger and optionally forward it to external sinks.
@@ -648,5 +651,43 @@ fn apply_siem_privacy(event: &mut SecurityEvent, privacy: &SiemPrivacyConfig) {
             }
             _ => {}
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn request_shutdown_wakes_all_waiters() {
+        let temp_dir = tempfile::tempdir().expect("tempdir");
+        let config = crate::config::Config {
+            cors_enabled: false,
+            audit_db: temp_dir.path().join("audit.db"),
+            control_db: Some(temp_dir.path().join("control.db")),
+            ..Default::default()
+        };
+        let state = AppState::new(config).await.expect("state");
+
+        let waiter_one = {
+            let shutdown = state.shutdown.clone();
+            tokio::spawn(async move { shutdown.notified().await })
+        };
+        let waiter_two = {
+            let shutdown = state.shutdown.clone();
+            tokio::spawn(async move { shutdown.notified().await })
+        };
+
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        state.request_shutdown();
+
+        tokio::time::timeout(std::time::Duration::from_secs(1), waiter_one)
+            .await
+            .expect("waiter one timeout")
+            .expect("waiter one join");
+        tokio::time::timeout(std::time::Duration::from_secs(1), waiter_two)
+            .await
+            .expect("waiter two timeout")
+            .expect("waiter two join");
     }
 }

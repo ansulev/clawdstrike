@@ -44,6 +44,17 @@ describe("capsule-renderer-registry", () => {
     expect(getCapsuleRenderer("disposable-kind")).toBeUndefined();
   });
 
+  it("stale dispose does not remove a newer renderer registration", () => {
+    const staleDispose = registerCapsuleRenderer("hmr-kind", TestRendererA);
+    expect(getCapsuleRenderer("hmr-kind")).toBe(TestRendererA);
+
+    unregisterCapsuleRenderer("hmr-kind");
+    disposers.push(registerCapsuleRenderer("hmr-kind", TestRendererB));
+
+    staleDispose();
+    expect(getCapsuleRenderer("hmr-kind")).toBe(TestRendererB);
+  });
+
   it("throws on duplicate kind registration", () => {
     disposers.push(registerCapsuleRenderer("dup-kind", TestRendererA));
     expect(() => registerCapsuleRenderer("dup-kind", TestRendererB)).toThrow(

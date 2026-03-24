@@ -58,6 +58,7 @@ pub use policy_scoping::{
     CreateAssignmentRequest, CreateScopedPolicyRequest, ListAssignmentsResponse,
     ListScopedPoliciesResponse, ResolvePolicyResponse, UpdateScopedPolicyRequest,
 };
+pub use presence::CreatePresenceTicketResponse;
 pub use rbac::{
     CreateRoleAssignmentResponse, DeleteRoleAssignmentResponse, DeleteRoleResponse,
     GetRoleResponse, ListRoleAssignmentsResponse, ListRolesResponse, UpsertRoleResponse,
@@ -372,6 +373,10 @@ pub fn create_router(state: AppState) -> Router {
         )
         .layer(middleware::from_fn_with_state(state.clone(), require_auth));
 
+    let presence_ticket_routes = Router::new()
+        .route("/api/v1/presence/tickets", post(presence::create_ticket))
+        .layer(middleware::from_fn_with_state(state.clone(), require_auth));
+
     // Admin routes - require auth + admin scope
     let admin_routes = Router::new()
         .route("/api/v1/policy", put(policy::update_policy))
@@ -464,6 +469,7 @@ pub fn create_router(state: AppState) -> Router {
         .nest("/v1", v1_routes)
         .merge(check_routes)
         .merge(read_routes)
+        .merge(presence_ticket_routes)
         .merge(admin_routes)
         .layer(middleware::from_fn_with_state(
             state.rate_limit.clone(),

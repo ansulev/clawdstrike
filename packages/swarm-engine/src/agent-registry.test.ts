@@ -273,7 +273,7 @@ describe("AgentRegistry", () => {
       registry.spawn(id);
       registry.assignTask(id, "tsk_test123");
       expect(() => registry.terminate(id)).toThrow(
-        "Cannot terminate agent with active task",
+        /Cannot terminate agent .+ with active task/,
       );
     });
   });

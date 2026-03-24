@@ -152,6 +152,10 @@ const usePresenceStoreBase = create<PresenceStoreState>()(
               if (analyst) {
                 // Remove from ALL files first (analyst may have been viewing another file)
                 removeFromAllFiles(state.viewersByFile, msg.fingerprint);
+                if (analyst.activeFile !== msg.file_path) {
+                  analyst.cursor = null;
+                  analyst.selection = null;
+                }
                 analyst.activeFile = msg.file_path;
                 addToFile(state.viewersByFile, msg.file_path, msg.fingerprint);
               }
@@ -162,6 +166,8 @@ const usePresenceStoreBase = create<PresenceStoreState>()(
               const analyst = state.analysts.get(msg.fingerprint);
               if (analyst) {
                 analyst.activeFile = null;
+                analyst.cursor = null;
+                analyst.selection = null;
                 removeFromFile(state.viewersByFile, msg.file_path, msg.fingerprint);
               }
               break;

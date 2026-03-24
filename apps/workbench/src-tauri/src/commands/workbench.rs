@@ -1694,7 +1694,8 @@ fn collect_search_files(
             }
             let path = entry.path();
             if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
-                if SEARCHABLE_EXTENSIONS.contains(&ext) {
+                let normalized_ext = ext.to_ascii_lowercase();
+                if SEARCHABLE_EXTENSIONS.contains(&normalized_ext.as_str()) {
                     files.push(path);
                 }
             }
@@ -1993,6 +1994,32 @@ guards:
             .collect();
 
         assert_eq!(matched_lines, vec!["foo", "bar"]);
+    }
+
+    #[tokio::test]
+    async fn search_in_project_includes_uppercase_searchable_extensions() {
+        let root = tempdir().unwrap();
+        std::fs::write(root.path().join("RULE.YAML"), "needle\n").unwrap();
+
+        let result = search_in_project(
+            root.path().to_string_lossy().to_string(),
+            "needle".to_string(),
+            true,
+            false,
+            false,
+            None,
+        )
+        .await
+        .unwrap();
+
+        let matched_files: Vec<_> = result
+            .matches
+            .iter()
+            .map(|entry| entry.file_path.as_str())
+            .collect();
+
+        assert_eq!(matched_files, vec!["RULE.YAML"]);
+        assert_eq!(result.file_count, 1);
     }
 
     #[tokio::test]

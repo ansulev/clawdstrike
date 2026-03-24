@@ -12,6 +12,8 @@ import {
 import { cn } from "@/lib/utils";
 import { secureStore } from "@/lib/workbench/secure-store";
 import { pluginRegistry } from "@/lib/plugins/plugin-registry";
+import { getThreatIntelSource } from "@/lib/workbench/threat-intel-registry";
+import { getBuiltinThreatIntelDescriptor } from "@/lib/plugins/threat-intel/catalog";
 import type { RegisteredPlugin } from "@/lib/plugins/types";
 import type { PluginSecretDeclaration } from "@/lib/plugins/types";
 
@@ -181,6 +183,9 @@ interface PluginCardProps {
 function PluginCard({ plugin }: PluginCardProps) {
   const { manifest } = plugin;
   const secrets = manifest.requiredSecrets ?? [];
+  const [testResult, setTestResult] = useState<"success" | "error" | null>(null);
+  const [testMessage, setTestMessage] = useState<string | null>(null);
+  const [isTesting, setIsTesting] = useState(false);
 
   // Fallback: if no requiredSecrets, derive from threatIntelSources contribution name
   const effectiveSecrets: PluginSecretDeclaration[] =
@@ -191,6 +196,54 @@ function PluginCard({ plugin }: PluginCardProps) {
           label: `${source.name} API Key`,
           description: `API key for ${source.name}`,
         })) ?? [];
+
+  const handleTestConnection = useCallback(async () => {
+    setIsTesting(true);
+    setTestResult(null);
+    setTestMessage(null);
+
+    try {
+      const builtinDescriptor = getBuiltinThreatIntelDescriptor(manifest.id);
+      let source = manifest.contributions?.threatIntelSources?.[0]
+        ? getThreatIntelSource(manifest.contributions.threatIntelSources[0].id)
+        : undefined;
+
+      if (builtinDescriptor) {
+        const secrets = await Promise.all(
+          builtinDescriptor.secretKeys.map((key) =>
+            secureStore.get(secretStoreKey(manifest.id, key)),
+          ),
+        );
+
+        if (secrets.some((secret) => !secret?.trim())) {
+          setTestResult("error");
+          setTestMessage("Save all required secrets before testing the connection.");
+          return;
+        }
+
+        source = builtinDescriptor.create(secrets);
+      }
+
+      if (!source?.healthCheck) {
+        setTestResult("error");
+        setTestMessage("Connection testing is not available for this plugin.");
+        return;
+      }
+
+      const result = await source.healthCheck();
+      setTestResult(result.healthy ? "success" : "error");
+      setTestMessage(
+        result.message ?? (result.healthy ? "Connection successful." : "Connection failed."),
+      );
+    } catch (error) {
+      setTestResult("error");
+      setTestMessage(
+        error instanceof Error ? error.message : "Connection test failed.",
+      );
+    } finally {
+      setIsTesting(false);
+    }
+  }, [manifest]);
 
   return (
     <div className="flex flex-col gap-4 p-4 rounded-lg border border-[#2d3240] bg-[#131721]/50">
@@ -217,11 +270,29 @@ function PluginCard({ plugin }: PluginCardProps) {
       <div className="pt-2 border-t border-[#2d3240]/40">
         <button
           data-testid={`test-${manifest.id}`}
+          onClick={handleTestConnection}
+          disabled={isTesting}
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[10px] font-medium border border-[#2d3240] bg-[#131721] text-[#ece7dc] hover:border-[#3dbf84]/40 hover:text-[#3dbf84] transition-colors"
         >
-          <IconPlugConnected size={12} stroke={1.5} />
+          {isTesting ? (
+            <IconLoader2 size={12} stroke={1.5} className="animate-spin" />
+          ) : (
+            <IconPlugConnected size={12} stroke={1.5} />
+          )}
           Test Connection
         </button>
+        {testResult === "success" && testMessage && (
+          <div className="mt-2 flex items-center gap-1.5 text-[10px] text-[#3dbf84]">
+            <IconCheck size={11} stroke={2} />
+            <span>{testMessage}</span>
+          </div>
+        )}
+        {testResult === "error" && testMessage && (
+          <div className="mt-2 flex items-center gap-1.5 text-[10px] text-[#c45c5c]">
+            <IconX size={11} stroke={2} />
+            <span>{testMessage}</span>
+          </div>
+        )}
       </div>
     </div>
   );

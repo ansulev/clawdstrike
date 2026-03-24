@@ -28,6 +28,18 @@ vi.mock("@/lib/plugins/plugin-registry", () => ({
   pluginRegistry: mockPluginRegistry,
 }));
 
+const mockThreatIntelCatalog = vi.hoisted(() => ({
+  getBuiltinThreatIntelDescriptor: vi.fn(() => undefined),
+}));
+
+vi.mock("@/lib/plugins/threat-intel/catalog", () => mockThreatIntelCatalog);
+
+const mockThreatIntelRegistry = vi.hoisted(() => ({
+  getThreatIntelSource: vi.fn(() => undefined),
+}));
+
+vi.mock("@/lib/workbench/threat-intel-registry", () => mockThreatIntelRegistry);
+
 // ---- Fixtures ----
 
 function makeIntelPlugin(
@@ -98,6 +110,8 @@ describe("PluginSecretsSettings", () => {
     vi.clearAllMocks();
     mockSecureStore.has.mockResolvedValue(false);
     mockSecureStore.get.mockResolvedValue(null);
+    mockThreatIntelCatalog.getBuiltinThreatIntelDescriptor.mockReturnValue(undefined);
+    mockThreatIntelRegistry.getThreatIntelSource.mockReturnValue(undefined);
   });
 
   afterEach(() => {
@@ -172,13 +186,28 @@ describe("PluginSecretsSettings", () => {
   });
 
   it("calls healthCheck and shows success on Test Connection", async () => {
-    // This test just verifies the Test Connection button exists
+    const user = userEvent.setup();
     mockPluginRegistry.getAll.mockReturnValue([VT_PLUGIN]);
+    mockSecureStore.get.mockImplementation(async (key: string) =>
+      key === "plugin:virustotal:api_key" ? "test-api-key-123" : null,
+    );
+    const healthCheck = vi.fn().mockResolvedValue({
+      healthy: true,
+      message: "VirusTotal credentials are valid",
+    });
+    mockThreatIntelCatalog.getBuiltinThreatIntelDescriptor.mockReturnValue({
+      secretKeys: ["api_key"],
+      create: vi.fn(() => ({ healthCheck })),
+    });
 
     render(<PluginSecretsSettings />);
 
-    // Test connection button should render
-    expect(screen.getByTestId("test-virustotal")).toBeInTheDocument();
+    await user.click(screen.getByTestId("test-virustotal"));
+
+    expect(healthCheck).toHaveBeenCalledTimes(1);
+    expect(
+      await screen.findByText("VirusTotal credentials are valid"),
+    ).toBeInTheDocument();
   });
 
   it("shows empty state message when no threat intel plugins are registered", () => {

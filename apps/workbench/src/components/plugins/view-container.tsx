@@ -6,105 +6,9 @@
  * 2. Lazy-loaded plugin components show an appropriate loading skeleton (Suspense)
  * 3. Slot-appropriate fallbacks (full-panel spinner vs. inline skeleton)
  */
-import { Component, Suspense } from "react";
-import type { ReactNode } from "react";
+import { Suspense } from "react";
 import type { ViewRegistration, ViewSlot } from "@/lib/plugins/view-registry";
-
-// ---------------------------------------------------------------------------
-// Default no-op storage
-// ---------------------------------------------------------------------------
-
-const NO_OP_STORAGE = {
-  get: (_key: string): unknown => undefined,
-  set: (_key: string, _value: unknown): void => {},
-};
-
-// ---------------------------------------------------------------------------
-// ViewErrorFallback (internal)
-// ---------------------------------------------------------------------------
-
-function ViewErrorFallback({
-  viewId,
-  error,
-  resetError,
-}: {
-  viewId: string;
-  error: Error;
-  resetError: () => void;
-}) {
-  return (
-    <div className="flex flex-col items-center justify-center gap-2 p-4 h-full">
-      <span className="text-[#c45c5c] text-sm font-medium">
-        Plugin view crashed
-      </span>
-      <span className="text-[#6f7f9a] text-xs max-w-md truncate">
-        {error.message}
-      </span>
-      <button
-        onClick={resetError}
-        className="text-[#d4a84b] text-xs hover:underline mt-1"
-      >
-        Reload View
-      </button>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// ViewErrorBoundary (class component)
-// ---------------------------------------------------------------------------
-
-interface ErrorBoundaryProps {
-  viewId: string;
-  children: ReactNode;
-}
-
-interface ErrorBoundaryState {
-  hasError: boolean;
-  error: Error | null;
-  resetKey: number;
-}
-
-class ViewErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
-  constructor(props: ErrorBoundaryProps) {
-    super(props);
-    this.state = { hasError: false, error: null, resetKey: 0 };
-  }
-
-  static getDerivedStateFromError(error: Error): Partial<ErrorBoundaryState> {
-    return { hasError: true, error };
-  }
-
-  componentDidCatch(_error: Error, _errorInfo: React.ErrorInfo): void {
-    // Error is already captured via getDerivedStateFromError.
-    // Could log to an external service here in the future.
-  }
-
-  private handleReset = () => {
-    this.setState((prev) => ({
-      hasError: false,
-      error: null,
-      resetKey: prev.resetKey + 1,
-    }));
-  };
-
-  render() {
-    const { hasError, error, resetKey } = this.state;
-    const { viewId, children } = this.props;
-
-    if (hasError && error) {
-      return (
-        <ViewErrorFallback
-          viewId={viewId}
-          error={error}
-          resetError={this.handleReset}
-        />
-      );
-    }
-
-    return <div key={resetKey}>{children}</div>;
-  }
-}
+import { NO_OP_VIEW_STORAGE, ViewErrorBoundary } from "./view-shell";
 
 // ---------------------------------------------------------------------------
 // ViewLoadingFallback (internal)
@@ -160,11 +64,11 @@ export function ViewContainer({
   storage,
 }: ViewContainerProps) {
   const effectiveSlotType = slotType ?? registration.slot;
-  const effectiveStorage = storage ?? NO_OP_STORAGE;
+  const effectiveStorage = storage ?? NO_OP_VIEW_STORAGE;
   const PluginComponent = registration.component;
 
   return (
-    <ViewErrorBoundary viewId={registration.id}>
+    <ViewErrorBoundary>
       <Suspense fallback={<ViewLoadingFallback slotType={effectiveSlotType} />}>
         <PluginComponent
           viewId={registration.id}

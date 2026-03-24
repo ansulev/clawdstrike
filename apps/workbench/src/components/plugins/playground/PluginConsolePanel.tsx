@@ -11,6 +11,7 @@ import {
   usePlaygroundConsole,
   clearConsole,
 } from "@/lib/plugins/playground/playground-store";
+import { formatConsoleTimestamp } from "@/lib/plugins/console/format-console-timestamp";
 import type { ConsoleEntry } from "@/lib/plugins/playground/playground-store";
 
 type LogLevel = ConsoleEntry["level"];
@@ -53,16 +54,6 @@ const LEVEL_CONFIGS: LevelConfig[] = [
     textClass: "text-[#f87171]",
   },
 ];
-
-/** Format a timestamp as HH:MM:SS.mmm. */
-function formatTimestamp(ts: number): string {
-  const d = new Date(ts);
-  const h = String(d.getHours()).padStart(2, "0");
-  const m = String(d.getMinutes()).padStart(2, "0");
-  const s = String(d.getSeconds()).padStart(2, "0");
-  const ms = String(d.getMilliseconds()).padStart(3, "0");
-  return `${h}:${m}:${s}.${ms}`;
-}
 
 function stringifyArg(arg: unknown): string {
   if (typeof arg === "string") return arg;
@@ -125,7 +116,7 @@ function ConsoleEntryRow({ entry }: { entry: ConsoleEntry }) {
     >
       <Icon className={`w-3.5 h-3.5 shrink-0 mt-0.5 ${config.textClass}`} />
       <span className="text-[#6f7f9a] shrink-0 tabular-nums">
-        {formatTimestamp(entry.timestamp)}
+        {formatConsoleTimestamp(entry.timestamp)}
       </span>
       <span className="whitespace-pre-wrap break-all">
         {stringifyArgs(entry.args)}

@@ -14,6 +14,7 @@ import {
   useDevConsoleFilter,
   devConsoleStore,
 } from '../../lib/plugins/dev/dev-console-store';
+import { formatConsoleTimestamp } from '../../lib/plugins/console/format-console-timestamp';
 import type { DevLifecycleEvent, DevLifecycleEventType } from '../../lib/plugins/dev/types';
 
 type SeverityCategory = 'log' | 'warn' | 'error' | 'lifecycle' | 'hmr';
@@ -34,16 +35,6 @@ const CATEGORY_TYPES: Record<SeverityCategory, DevLifecycleEventType[]> = {
 };
 
 const ALL_CATEGORIES: SeverityCategory[] = ['log', 'warn', 'error', 'lifecycle', 'hmr'];
-
-/** Format a timestamp as HH:MM:SS.mmm. */
-function formatTime(ts: number): string {
-  const d = new Date(ts);
-  const h = String(d.getHours()).padStart(2, '0');
-  const m = String(d.getMinutes()).padStart(2, '0');
-  const s = String(d.getSeconds()).padStart(2, '0');
-  const ms = String(d.getMilliseconds()).padStart(3, '0');
-  return `${h}:${m}:${s}.${ms}`;
-}
 
 function SeverityIcon({ type }: { type: DevLifecycleEventType }) {
   const size = 14;
@@ -194,7 +185,7 @@ function EventRow({ event }: { event: DevLifecycleEvent }) {
   return (
     <div className="flex items-start gap-2 py-1 px-2 border-b border-zinc-900 hover:bg-zinc-900/50 transition-colors">
       <span className="text-zinc-600 shrink-0 tabular-nums">
-        {formatTime(event.timestamp)}
+                  {formatConsoleTimestamp(event.timestamp)}
       </span>
 
       <SeverityIcon type={event.type} />

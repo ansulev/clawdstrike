@@ -102,7 +102,7 @@ export default createPlugin({
     version: "0.1.0",
     publisher: "${options.publisher}",
     categories: ["guards", "detection", "intel", "ui"],
-    trust: "community",
+    trust: "internal",
     activationEvents: ["onStartup"],
     main: "./dist/index.js",
     contributions: {

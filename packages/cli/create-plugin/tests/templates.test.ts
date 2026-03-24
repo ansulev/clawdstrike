@@ -50,8 +50,8 @@ describe("getSourceTemplate", () => {
       expect(output).toContain("FileTypeContribution");
     });
 
-    it("contains DetectionAdapterContribution type", () => {
-      expect(output).toContain("DetectionAdapterContribution");
+    it("does not advertise unsupported detection adapter scaffolding", () => {
+      expect(output).not.toContain("DetectionAdapterContribution");
     });
 
     it("contains ctx.fileTypes.register()", () => {
@@ -73,6 +73,10 @@ describe("getSourceTemplate", () => {
     it("contains ActivityBarItemContribution type", () => {
       expect(output).toContain("ActivityBarItemContribution");
     });
+
+    it("uses internal trust for host-rendered contributions", () => {
+      expect(output).toContain('trust: "internal"');
+    });
   });
 
   describe("intel template", () => {
@@ -89,6 +93,10 @@ describe("getSourceTemplate", () => {
     it("contains requiredSecrets", () => {
       expect(output).toContain("requiredSecrets");
     });
+
+    it("uses internal trust for host-side intel entrypoints", () => {
+      expect(output).toContain('trust: "internal"');
+    });
   });
 
   describe("compliance template", () => {
@@ -98,8 +106,8 @@ describe("getSourceTemplate", () => {
       expect(output).toContain("createPlugin");
     });
 
-    it("contains ComplianceFrameworkContribution type", () => {
-      expect(output).toContain("ComplianceFrameworkContribution");
+    it("does not advertise unsupported compliance framework scaffolding", () => {
+      expect(output).not.toContain("ComplianceFrameworkContribution");
     });
   });
 
@@ -118,8 +126,12 @@ describe("getSourceTemplate", () => {
       expect(output).toContain("GuardContribution");
       expect(output).toContain("FileTypeContribution");
       expect(output).toContain("ThreatIntelSourceContribution");
-      expect(output).toContain("ComplianceFrameworkContribution");
       expect(output).toContain("EditorTabContribution");
+      expect(output).not.toContain("ComplianceFrameworkContribution");
+    });
+
+    it("uses internal trust for the scaffolded host contribution mix", () => {
+      expect(output).toContain('trust: "internal"');
     });
   });
 

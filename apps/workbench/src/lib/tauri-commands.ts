@@ -670,7 +670,7 @@ export async function searchInProjectNative(
 }
 
 export async function cancelSearchInProjectNative(searchId: string): Promise<void> {
-  if (!isDesktop()) return;
+  if (!isDesktop() && !hasWorkbenchE2EInvoke()) return;
   try {
     await tauriInvoke("cancel_search_in_project", { searchId });
   } catch (err) {

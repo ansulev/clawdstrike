@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { searchInProjectNative } from "../tauri-commands";
+import { cancelSearchInProjectNative, searchInProjectNative } from "../tauri-commands";
 
 const bridgeMocks = vi.hoisted(() => ({
   invokeMock: vi.fn(),
@@ -48,5 +48,33 @@ describe("searchInProjectNative", () => {
     await expect(
       searchInProjectNative("/workspace/project", "[", false, false, true),
     ).rejects.toThrow("Invalid regex: unclosed character class");
+  });
+});
+
+describe("cancelSearchInProjectNative", () => {
+  beforeEach(() => {
+    bridgeMocks.invokeMock.mockReset();
+    bridgeMocks.isDesktop.mockReset();
+    bridgeMocks.isDesktop.mockReturnValue(false);
+    bridgeMocks.hasWorkbenchE2EInvoke.mockReset();
+    bridgeMocks.hasWorkbenchE2EInvoke.mockReturnValue(false);
+    bridgeMocks.getWorkbenchE2EBridge.mockReset();
+    bridgeMocks.getWorkbenchE2EBridge.mockReturnValue(null);
+  });
+
+  it("returns early when neither desktop nor the E2E bridge is available", async () => {
+    await expect(cancelSearchInProjectNative("search-1")).resolves.toBeUndefined();
+
+    expect(bridgeMocks.invokeMock).not.toHaveBeenCalled();
+  });
+
+  it("uses the E2E invoke bridge when available", async () => {
+    const invoke = vi.fn().mockResolvedValue(undefined);
+    bridgeMocks.hasWorkbenchE2EInvoke.mockReturnValue(true);
+    bridgeMocks.getWorkbenchE2EBridge.mockReturnValue({ invoke } as never);
+
+    await expect(cancelSearchInProjectNative("search-1")).resolves.toBeUndefined();
+
+    expect(invoke).toHaveBeenCalledWith("cancel_search_in_project", { searchId: "search-1" });
   });
 });

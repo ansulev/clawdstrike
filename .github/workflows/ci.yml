@@ -441,7 +441,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Install protoc
-        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler z3 libz3-dev
 
       - name: Build documentation
         run: cargo doc --no-deps --all-features

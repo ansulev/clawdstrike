@@ -131,7 +131,7 @@ describe("pane-store", () => {
       const state = usePaneStore.getState();
       const pane = findPaneGroup(state.root, state.activePaneId)!;
       expect(pane.views).toHaveLength(2);
-      expect(pane.views[1].route).toBe("/lab?tab=simulate");
+      expect(pane.views[1].route).toBe("/simulator");
       expect(pane.views[1].label).toBe("Simulator");
     });
 

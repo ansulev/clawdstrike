@@ -4,7 +4,7 @@
 //! fan-out so connected clients see who else is viewing the same files.
 
 use std::collections::HashSet;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use axum::{
@@ -437,8 +437,10 @@ async fn handle_ws(socket: WebSocket, state: AppState, authenticated_key: Option
     use futures::stream::SplitSink;
     let (sender, mut receiver): (SplitSink<WebSocket, Message>, _) = socket.split();
     let hub = &state.presence_hub;
+    let mut rx = hub.subscribe();
     let mut analyst_fingerprint: Option<String> = None;
     let connection_id = uuid::Uuid::new_v4().simple().to_string();
+    let local_analyst_fingerprint = Arc::new(Mutex::new(None::<String>));
 
     // Channel to forward messages to the WS sender task
     let (internal_tx, mut internal_rx) = tokio::sync::mpsc::channel::<ServerMessage>(64);
@@ -454,7 +456,25 @@ async fn handle_ws(socket: WebSocket, state: AppState, authenticated_key: Option
         }
     });
 
-    let mut forward_task: Option<tokio::task::JoinHandle<()>> = None;
+    let internal_tx_clone = internal_tx.clone();
+    let local_analyst_fingerprint_clone = local_analyst_fingerprint.clone();
+    let forward_task = tokio::spawn(async move {
+        while let Ok(msg) = rx.recv().await {
+            if let ServerMessage::AnalystJoined { analyst } = &msg {
+                let local_fingerprint = local_analyst_fingerprint_clone
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .clone();
+                if local_fingerprint.as_deref() == Some(analyst.fingerprint.as_str()) {
+                    continue;
+                }
+            }
+
+            if internal_tx_clone.send(msg).await.is_err() {
+                break;
+            }
+        }
+    });
 
     // Process incoming messages from client
     while let Some(msg_result) = StreamExt::next(&mut receiver).await {
@@ -483,6 +503,10 @@ async fn handle_ws(socket: WebSocket, state: AppState, authenticated_key: Option
                             &resolved_display_name,
                             &resolved_sigil,
                         );
+                        *local_analyst_fingerprint
+                            .lock()
+                            .unwrap_or_else(|e| e.into_inner()) =
+                            Some(resolved_fingerprint.clone());
                         analyst_fingerprint = Some(resolved_fingerprint.clone());
                         let _ = internal_tx
                             .send(ServerMessage::Welcome {
@@ -492,17 +516,6 @@ async fn handle_ws(socket: WebSocket, state: AppState, authenticated_key: Option
                             })
                             .await;
                         hub.broadcast(ServerMessage::AnalystJoined { analyst: info });
-                        if forward_task.is_none() {
-                            let mut rx = hub.subscribe();
-                            let internal_tx_clone = internal_tx.clone();
-                            forward_task = Some(tokio::spawn(async move {
-                                while let Ok(msg) = rx.recv().await {
-                                    if internal_tx_clone.send(msg).await.is_err() {
-                                        break;
-                                    }
-                                }
-                            }));
-                        }
                     }
                     ClientMessage::ViewFile { file_path } => {
                         if let Some(ref fp) = analyst_fingerprint {
@@ -583,9 +596,7 @@ async fn handle_ws(socket: WebSocket, state: AppState, authenticated_key: Option
         hub.leave(&fp);
         hub.broadcast(ServerMessage::AnalystLeft { fingerprint: fp });
     }
-    if let Some(forward_task) = forward_task {
-        forward_task.abort();
-    }
+    forward_task.abort();
     send_task.abort();
 }
 

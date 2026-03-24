@@ -1,46 +1,52 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { searchInProjectNative } from "../tauri-commands";
 
-const { invokeMock, isDesktopMock } = vi.hoisted(() => ({
+const bridgeMocks = vi.hoisted(() => ({
   invokeMock: vi.fn(),
-  isDesktopMock: vi.fn(),
+  isDesktop: vi.fn(() => false),
+  hasWorkbenchE2EInvoke: vi.fn(() => false),
+  getWorkbenchE2EBridge: vi.fn(() => null),
 }));
 
 vi.mock("../tauri-bridge", () => ({
-  isDesktop: isDesktopMock,
+  isDesktop: bridgeMocks.isDesktop,
 }));
 
 vi.mock("@tauri-apps/api/core", () => ({
-  invoke: invokeMock,
+  invoke: bridgeMocks.invokeMock,
 }));
 
-import { searchInProjectNative } from "../tauri-commands";
+vi.mock("@/lib/workbench/e2e-bridge", () => ({
+  hasWorkbenchE2EInvoke: bridgeMocks.hasWorkbenchE2EInvoke,
+  getWorkbenchE2EBridge: bridgeMocks.getWorkbenchE2EBridge,
+}));
 
 describe("searchInProjectNative", () => {
   beforeEach(() => {
-    invokeMock.mockReset();
-    isDesktopMock.mockReset();
-    isDesktopMock.mockReturnValue(true);
+    bridgeMocks.invokeMock.mockReset();
+    bridgeMocks.isDesktop.mockReset();
+    bridgeMocks.isDesktop.mockReturnValue(false);
+    bridgeMocks.hasWorkbenchE2EInvoke.mockReset();
+    bridgeMocks.hasWorkbenchE2EInvoke.mockReturnValue(false);
+    bridgeMocks.getWorkbenchE2EBridge.mockReset();
+    bridgeMocks.getWorkbenchE2EBridge.mockReturnValue(null);
   });
 
-  it("returns null outside desktop mode", async () => {
-    isDesktopMock.mockReturnValue(false);
-
+  it("returns null when neither desktop nor the E2E bridge is available", async () => {
     await expect(
-      searchInProjectNative("/workspace/alpha", "needle", false, false, false),
+      searchInProjectNative("/workspace/project", "needle", false, false, false),
     ).resolves.toBeNull();
 
-    expect(invokeMock).not.toHaveBeenCalled();
+    expect(bridgeMocks.invokeMock).not.toHaveBeenCalled();
   });
 
-  it("preserves tauri invocation errors for callers", async () => {
-    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-    invokeMock.mockRejectedValueOnce({ message: "invalid regex" });
+  it("rethrows search errors with the backend message intact", async () => {
+    const invoke = vi.fn().mockRejectedValue("Invalid regex: unclosed character class");
+    bridgeMocks.hasWorkbenchE2EInvoke.mockReturnValue(true);
+    bridgeMocks.getWorkbenchE2EBridge.mockReturnValue({ invoke } as never);
 
     await expect(
-      searchInProjectNative("/workspace/alpha", "needle(", false, false, true),
-    ).rejects.toThrow("invalid regex");
-
-    expect(consoleErrorSpy).toHaveBeenCalled();
-    consoleErrorSpy.mockRestore();
+      searchInProjectNative("/workspace/project", "[", false, false, true),
+    ).rejects.toThrow("Invalid regex: unclosed character class");
   });
 });

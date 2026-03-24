@@ -182,26 +182,32 @@ async function tauriInvoke<T>(cmd: string, args?: Record<string, unknown>): Prom
   return invoke<T>(cmd, args);
 }
 
-function coerceTauriError(err: unknown, fallback: string): Error {
+function normalizeTauriCommandError(command: string, err: unknown): Error {
   if (err instanceof Error) {
     return err;
+  }
+
+  if (
+    typeof err === "object" &&
+    err !== null &&
+    "message" in err &&
+    typeof err.message === "string" &&
+    err.message.trim()
+  ) {
+    return new Error(err.message);
+  }
+  if (typeof err === "object" && err !== null) {
+    const record = err as { error?: unknown };
+    if (typeof record.error === "string" && record.error.trim()) {
+      return new Error(record.error);
+    }
   }
 
   if (typeof err === "string" && err.trim()) {
     return new Error(err);
   }
 
-  if (typeof err === "object" && err !== null) {
-    const record = err as { message?: unknown; error?: unknown };
-    if (typeof record.message === "string" && record.message.trim()) {
-      return new Error(record.message);
-    }
-    if (typeof record.error === "string" && record.error.trim()) {
-      return new Error(record.error);
-    }
-  }
-
-  return new Error(fallback);
+  return new Error(`${command} failed`);
 }
 
 
@@ -635,7 +641,7 @@ export interface TauriSearchResult {
 /**
  * Search for text across all eligible files in a project directory.
  * Supports case-sensitive, whole-word, and regex modes.
- * Returns null when not running inside Tauri.
+ * Returns null when not running inside Tauri or the browser E2E bridge.
  */
 export async function searchInProjectNative(
   rootPath: string,
@@ -657,7 +663,7 @@ export async function searchInProjectNative(
     });
   } catch (err) {
     console.error("[tauri-commands] search_in_project failed:", err);
-    throw coerceTauriError(err, "Search failed");
+    throw normalizeTauriCommandError("search_in_project", err);
   }
 }
 

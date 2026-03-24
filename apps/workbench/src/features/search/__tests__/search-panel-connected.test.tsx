@@ -127,6 +127,45 @@ describe("SearchPanelConnected", () => {
     });
   });
 
+  it("preserves the real match columns when the preview line is truncated", async () => {
+    useSearchStore.setState({
+      resultGroups: [
+        {
+          rootPath: "/workspace/project",
+          filePath: "policies/example.yml",
+          matches: [
+            {
+              rootPath: "/workspace/project",
+              filePath: "policies/example.yml",
+              lineNumber: 27,
+              lineContent: "x".repeat(500),
+              matchStart: 612,
+              matchEnd: 618,
+            },
+          ],
+        },
+      ],
+      fileCount: 1,
+      totalMatches: 1,
+      truncated: false,
+    });
+
+    render(
+      <MemoryRouter>
+        <SearchPanelConnected />
+      </MemoryRouter>,
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: /27/i }));
+
+    expect(consumePendingEditorReveal("/workspace/project/policies/example.yml")).toEqual({
+      filePath: "/workspace/project/policies/example.yml",
+      lineNumber: 27,
+      startColumn: 613,
+      endColumn: 619,
+    });
+  });
+
   it("derives a real search root when the workspace uses a synthetic project path", async () => {
     useProjectStore.setState({
       project: {

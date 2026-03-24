@@ -1501,9 +1501,9 @@ pub struct SearchMatch {
     pub line_number: usize,
     /// Full line text (trimmed to 500 chars max).
     pub line_content: String,
-    /// Character offset of match start within `line_content`.
+    /// Character offset of match start within the full source line.
     pub match_start: usize,
-    /// Character offset of match end within `line_content`.
+    /// Character offset of match end within the full source line.
     pub match_end: usize,
 }
 
@@ -1829,17 +1829,16 @@ pub async fn search_in_project(
                         break;
                     }
 
-                    // Clamp match offsets to truncated line.
-                    let clamped_start = byte_index_to_char_index(&line_content, match_start);
-                    let clamped_end = byte_index_to_char_index(&line_content, match_end);
+                    let match_start_chars = byte_index_to_char_index(line, match_start);
+                    let match_end_chars = byte_index_to_char_index(line, match_end);
 
                     file_had_match = true;
                     all_matches.push(SearchMatch {
                         file_path: rel_path.clone(),
                         line_number,
                         line_content: line_content.clone(),
-                        match_start: clamped_start,
-                        match_end: clamped_end,
+                        match_start: match_start_chars,
+                        match_end: match_end_chars,
                     });
                 }
 
@@ -1975,7 +1974,7 @@ guards:
             MAX_LINE_CONTENT_LEN
         );
         assert_eq!(first_match.match_start, MAX_LINE_CONTENT_LEN);
-        assert_eq!(first_match.match_end, MAX_LINE_CONTENT_LEN);
+        assert_eq!(first_match.match_end, MAX_LINE_CONTENT_LEN + "needle".chars().count());
     }
 
     #[tokio::test]
@@ -2845,7 +2844,7 @@ guards: {}
             MAX_LINE_CONTENT_LEN
         );
         assert_eq!(first_match.match_start, MAX_LINE_CONTENT_LEN);
-        assert_eq!(first_match.match_end, MAX_LINE_CONTENT_LEN);
+        assert_eq!(first_match.match_end, MAX_LINE_CONTENT_LEN + "needle".chars().count());
     }
 
     // =======================================================================

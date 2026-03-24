@@ -17,9 +17,9 @@ export interface SearchMatch {
   lineNumber: number;
   /** Full line text. */
   lineContent: string;
-  /** Char offset of match start within lineContent. */
+  /** Char offset of match start within the full source line. */
   matchStart: number;
-  /** Char offset of match end within lineContent. */
+  /** Char offset of match end within the full source line. */
   matchEnd: number;
 }
 
@@ -57,9 +57,6 @@ interface SearchState {
   };
 }
 
-// ---- Helpers ----
-
-/** Convert snake_case TauriSearchMatch to camelCase SearchMatch. */
 function mapTauriMatch(rootPath: string, m: TauriSearchMatch): SearchMatch {
   return {
     rootPath,
@@ -71,7 +68,6 @@ function mapTauriMatch(rootPath: string, m: TauriSearchMatch): SearchMatch {
   };
 }
 
-/** Group flat matches by file path. */
 function groupByFile(matches: SearchMatch[]): SearchResultGroup[] {
   const map = new Map<string, SearchResultGroup>();
   for (const m of matches) {
@@ -90,17 +86,20 @@ function groupByFile(matches: SearchMatch[]): SearchResultGroup[] {
   return Array.from(map.values());
 }
 
-// ---- Store ----
-
 const DEFAULT_OPTIONS: SearchOptions = {
   caseSensitive: false,
   wholeWord: false,
   useRegex: false,
 };
 
-/** Tracks the in-flight search so a newer invocation can cancel a stale one. */
 let activeSearchController: AbortController | null = null;
 let activeSearchRequestId: string | null = null;
+let latestSearchRequestToken = 0;
+
+function nextSearchRequestToken(): number {
+  latestSearchRequestToken += 1;
+  return latestSearchRequestToken;
+}
 
 function finishSearch(searchRequestId: string): void {
   if (activeSearchRequestId !== searchRequestId) {
@@ -138,6 +137,7 @@ const useSearchStoreBase = create<SearchState>((set, get) => ({
   actions: {
     setQuery: (query: string) => {
       cancelActiveSearch();
+      nextSearchRequestToken();
       set({ query });
     },
 
@@ -149,6 +149,7 @@ const useSearchStoreBase = create<SearchState>((set, get) => ({
       let shouldSearch = false;
 
       cancelActiveSearch();
+      nextSearchRequestToken();
       set((state) => {
         if (state.options[key] === value) {
           return state;
@@ -166,6 +167,7 @@ const useSearchStoreBase = create<SearchState>((set, get) => ({
     },
 
     performSearch: async (rootPaths: string[]) => {
+      const requestToken = nextSearchRequestToken();
       const { query, options } = get();
 
       cancelActiveSearch();
@@ -178,20 +180,10 @@ const useSearchStoreBase = create<SearchState>((set, get) => ({
 
       set({ loading: true, error: null });
 
-      if (!query.trim()) {
-        finishSearch(searchRequestId);
-        set({
-          results: [],
-          resultGroups: [],
-          fileCount: 0,
-          totalMatches: 0,
-          truncated: false,
-          loading: false,
-        });
-        return;
-      }
-
-      if (rootPaths.length === 0) {
+      if (!query.trim() || rootPaths.length === 0) {
+        if (requestToken !== latestSearchRequestToken) {
+          return;
+        }
         finishSearch(searchRequestId);
         set({
           results: [],
@@ -218,8 +210,9 @@ const useSearchStoreBase = create<SearchState>((set, get) => ({
           ),
         );
 
-        // Discard results if this search was aborted by a newer invocation
-        if (controller.signal.aborted) return;
+        if (controller.signal.aborted || requestToken !== latestSearchRequestToken) {
+          return;
+        }
 
         const latestState = get();
         if (
@@ -265,10 +258,12 @@ const useSearchStoreBase = create<SearchState>((set, get) => ({
             loading: false,
           });
         }
+
         finishSearch(searchRequestId);
       } catch (err) {
-        // If aborted by a newer search, exit silently
-        if (controller.signal.aborted) return;
+        if (controller.signal.aborted || requestToken !== latestSearchRequestToken) {
+          return;
+        }
 
         set({
           results: [],
@@ -285,6 +280,7 @@ const useSearchStoreBase = create<SearchState>((set, get) => ({
 
     clearResults: () => {
       cancelActiveSearch();
+      nextSearchRequestToken();
       set({
         results: [],
         resultGroups: [],

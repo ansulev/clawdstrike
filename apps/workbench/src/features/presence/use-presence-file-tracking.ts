@@ -48,7 +48,6 @@ function deriveActiveFilePath(): string | null {
 export function usePresenceFileTracking(): void {
   const connectionState = usePresenceStore((s) => s.connectionState);
   const lastSentFileRef = useRef<string | null>(null);
-  const reconnectEpochRef = useRef(0);
 
   // --- Effect 1: Subscribe to pane store and send view_file/leave_file ---
   useEffect(() => {
@@ -108,23 +107,5 @@ export function usePresenceFileTracking(): void {
         lastSentFileRef.current = null;
       }
     };
-  }, [connectionState]);
-
-  // --- Effect 2: Re-send view_file on reconnect ---
-  useEffect(() => {
-    if (connectionState !== "connected") return;
-
-    // Skip the initial connection (only act on REconnect)
-    reconnectEpochRef.current++;
-    if (reconnectEpochRef.current <= 1) return;
-
-    const filePath = deriveActiveFilePath();
-    if (filePath) {
-      getPresenceSocket()?.send({
-        type: "view_file",
-        file_path: toPresencePath(filePath),
-      });
-      lastSentFileRef.current = filePath;
-    }
   }, [connectionState]);
 }

@@ -50,6 +50,7 @@ interface SearchState {
     setOption: <K extends keyof SearchOptions>(
       key: K,
       value: SearchOptions[K],
+      rootPaths: string[],
     ) => void;
     performSearch: (rootPaths: string[]) => Promise<void>;
     clearResults: () => void;
@@ -143,11 +144,25 @@ const useSearchStoreBase = create<SearchState>((set, get) => ({
     setOption: <K extends keyof SearchOptions>(
       key: K,
       value: SearchOptions[K],
+      rootPaths: string[],
     ) => {
+      let shouldSearch = false;
+
       cancelActiveSearch();
-      set((state) => ({
-        options: { ...state.options, [key]: value },
-      }));
+      set((state) => {
+        if (state.options[key] === value) {
+          return state;
+        }
+
+        shouldSearch = true;
+        return {
+          options: { ...state.options, [key]: value },
+        };
+      });
+
+      if (shouldSearch) {
+        void get().actions.performSearch(rootPaths);
+      }
     },
 
     performSearch: async (rootPaths: string[]) => {

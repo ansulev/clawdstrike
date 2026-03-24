@@ -197,4 +197,66 @@ describe("useSearchStore", () => {
     expect(state.query).toBe("newer");
     expect(state.results.map((match) => match.filePath)).toEqual(["shared/new.yaml"]);
   });
+
+  it("re-runs the active search when an option changes", async () => {
+    searchInProjectNativeMock
+      .mockImplementationOnce(
+        () =>
+          new Promise(() => {
+            // Keep the first search pending so the option toggle has to cancel it.
+          }),
+      )
+      .mockResolvedValueOnce({
+        matches: [
+          {
+            file_path: "shared/case-sensitive.yaml",
+            line_number: 9,
+            line_content: "Needle",
+            match_start: 0,
+            match_end: 6,
+          },
+        ],
+        file_count: 1,
+        total_matches: 1,
+        truncated: false,
+      });
+
+    const actions = useSearchStore.getState().actions;
+    const firstRun = actions.performSearch(["/workspace/alpha"]);
+    const firstSearchId = searchInProjectNativeMock.mock.calls[0]?.[5];
+
+    actions.setOption("caseSensitive", true, ["/workspace/alpha"]);
+
+    expect(cancelSearchInProjectNativeMock).toHaveBeenCalledWith(firstSearchId);
+    expect(searchInProjectNativeMock).toHaveBeenNthCalledWith(
+      2,
+      "/workspace/alpha",
+      "needle",
+      true,
+      false,
+      false,
+      expect.any(String),
+    );
+
+    await vi.waitFor(() => {
+      expect(useSearchStore.getState().loading).toBe(false);
+    });
+
+    const state = useSearchStore.getState();
+    expect(state.options.caseSensitive).toBe(true);
+    expect(state.results.map((match) => match.filePath)).toEqual(["shared/case-sensitive.yaml"]);
+
+    void firstRun;
+  });
+
+  it("surfaces native search failures instead of treating them as unsupported", async () => {
+    searchInProjectNativeMock.mockRejectedValueOnce(new Error("invalid regex"));
+
+    await useSearchStore.getState().actions.performSearch(["/workspace/alpha"]);
+
+    const state = useSearchStore.getState();
+    expect(state.error).toBe("invalid regex");
+    expect(state.loading).toBe(false);
+    expect(state.results).toEqual([]);
+  });
 });

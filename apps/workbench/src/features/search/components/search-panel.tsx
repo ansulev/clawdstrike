@@ -345,7 +345,7 @@ export function SearchPanelConnected() {
       loading={loading}
       error={error}
       onQueryChange={actions.setQuery}
-      onOptionToggle={(key) => actions.setOption(key, !options[key])}
+      onOptionToggle={(key) => actions.setOption(key, !options[key], projectRoots)}
       onSearch={() => actions.performSearch(projectRoots)}
       onResultClick={(match) => {
         const absolutePath = joinWorkspacePath(match.rootPath, match.filePath);

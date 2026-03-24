@@ -176,6 +176,28 @@ async function tauriInvoke<T>(cmd: string, args?: Record<string, unknown>): Prom
   return invoke<T>(cmd, args);
 }
 
+function coerceTauriError(err: unknown, fallback: string): Error {
+  if (err instanceof Error) {
+    return err;
+  }
+
+  if (typeof err === "string" && err.trim()) {
+    return new Error(err);
+  }
+
+  if (typeof err === "object" && err !== null) {
+    const record = err as { message?: unknown; error?: unknown };
+    if (typeof record.message === "string" && record.message.trim()) {
+      return new Error(record.message);
+    }
+    if (typeof record.error === "string" && record.error.trim()) {
+      return new Error(record.error);
+    }
+  }
+
+  return new Error(fallback);
+}
+
 
 /**
  * Validate policy YAML via the Rust policy engine.
@@ -629,7 +651,7 @@ export async function searchInProjectNative(
     });
   } catch (err) {
     console.error("[tauri-commands] search_in_project failed:", err);
-    return null;
+    throw coerceTauriError(err, "Search failed");
   }
 }
 

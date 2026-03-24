@@ -17,68 +17,14 @@ import {
 } from "@tabler/icons-react";
 import { cn } from "@/lib/utils";
 import { ClaudeCodeHint } from "@/components/workbench/shared/claude-code-hint";
-import { useWorkbench, useMultiPolicy } from "@/lib/workbench/multi-policy-store";
-import { useFleetConnection } from "@/lib/workbench/use-fleet-connection";
-import { useSentinels } from "@/lib/workbench/sentinel-store";
-import { useFindings } from "@/lib/workbench/finding-store";
+import { useWorkbenchState, usePolicyTabs } from "@/features/policy/hooks/use-policy-actions";
+import { useFleetConnection } from "@/features/fleet/use-fleet-connection";
+import { useSentinels } from "@/features/sentinels/stores/sentinel-store";
+import { useFindings } from "@/features/findings/stores/finding-store";
 import { GUARD_REGISTRY } from "@/lib/workbench/guard-registry";
 import { SEVERITY_COLORS } from "@/lib/workbench/finding-constants";
+import { type Posture, derivePosture, POSTURE_CONFIG } from "@/features/shared/posture-utils";
 import type { GuardId } from "@/lib/workbench/types";
-
-// ---------------------------------------------------------------------------
-// Posture — the dominant state of the system
-// ---------------------------------------------------------------------------
-
-type Posture = "nominal" | "attention" | "critical" | "offline";
-
-function derivePosture(
-  fleetConnected: boolean,
-  criticalFindings: number,
-  emergingFindings: number,
-  enabledGuards: number,
-): Posture {
-  if (!fleetConnected && enabledGuards === 0) return "offline";
-  if (criticalFindings > 0) return "critical";
-  if (emergingFindings > 0) return "attention";
-  return "nominal";
-}
-
-const POSTURE_CONFIG: Record<Posture, {
-  label: string;
-  color: string;
-  glow: string;
-  breathMs: number;
-  ringStroke: string;
-}> = {
-  nominal: {
-    label: "NOMINAL",
-    color: "#4ade80",
-    glow: "rgba(74,222,128,0.15)",
-    breathMs: 5000,
-    ringStroke: "#4ade80",
-  },
-  attention: {
-    label: "ATTENTION",
-    color: "#d4a84b",
-    glow: "rgba(212,168,75,0.2)",
-    breathMs: 2800,
-    ringStroke: "#d4a84b",
-  },
-  critical: {
-    label: "CRITICAL",
-    color: "#ef4444",
-    glow: "rgba(239,68,68,0.25)",
-    breathMs: 1600,
-    ringStroke: "#ef4444",
-  },
-  offline: {
-    label: "OFFLINE",
-    color: "#6f7f9a",
-    glow: "rgba(111,127,154,0.08)",
-    breathMs: 0,
-    ringStroke: "#6f7f9a",
-  },
-};
 
 // ---------------------------------------------------------------------------
 // Scan line — animated horizontal sweep across the viewport
@@ -534,8 +480,8 @@ function QuickStartStrip({
 // ---------------------------------------------------------------------------
 
 export function HomePage() {
-  const { state } = useWorkbench();
-  const { tabs } = useMultiPolicy();
+  const { state } = useWorkbenchState();
+  const { tabs } = usePolicyTabs();
   const { connection } = useFleetConnection();
   const { activePolicy, validation, dirty } = state;
 

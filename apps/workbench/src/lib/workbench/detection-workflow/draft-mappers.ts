@@ -14,6 +14,8 @@ import type {
   HuntPattern,
   PatternStep,
 } from "../hunt-types";
+import type { Finding, Enrichment } from "../finding-engine";
+import type { Signal } from "../signal-pipeline";
 import type { CoverageGapCandidate, DraftSeed, DraftSeedKind } from "./shared-types";
 
 // ---- Options ----
@@ -308,6 +310,119 @@ export function mapPatternToDraftSeed(
 }
 
 /**
+ * Map a confirmed Finding (with its correlated signals) to a DraftSeed.
+ *
+ * Extracts:
+ * - Technique hints from MITRE ATT&CK enrichments + signal data
+ * - Data source hints from signal action types
+ * - IOC indicators from ioc_extraction enrichments
+ */
+export function mapFindingToDraftSeed(
+  finding: Finding,
+  signals: Signal[],
+  selectedGap?: CoverageGapCandidate,
+): DraftSeed {
+  // 1. Filter signals belonging to this finding
+  const findingSignals = signals.filter((s) =>
+    finding.signalIds.includes(s.id),
+  );
+
+  // 2. Extract technique hints from MITRE enrichments
+  const mitreEnrichments = finding.enrichments.filter(
+    (e) => e.type === "mitre_attack",
+  );
+  const enrichmentTechniques: string[] = [];
+  for (const e of mitreEnrichments) {
+    const techniques = (e.data.techniques ?? []) as Array<{ id: string }>;
+    for (const t of techniques) {
+      enrichmentTechniques.push(t.id);
+    }
+  }
+
+  // 3. Extract data source hints from signal action types
+  const dataSourceHints: string[] = [];
+  for (const s of findingSignals) {
+    if (s.data.actionType) {
+      const mapped = ACTION_TO_DATA_SOURCE[s.data.actionType];
+      if (mapped) {
+        for (const h of mapped) {
+          if (!dataSourceHints.includes(h)) dataSourceHints.push(h);
+        }
+      }
+    }
+  }
+
+  // 4. Extract IOC indicators from ioc_extraction enrichments
+  const iocEnrichments = finding.enrichments.filter(
+    (e) => e.type === "ioc_extraction",
+  );
+  const iocIndicators: Array<{ indicator: string; iocType: string }> = [];
+  for (const e of iocEnrichments) {
+    const indicators = (e.data.indicators ?? []) as Array<{
+      indicator: string;
+      iocType: string;
+    }>;
+    iocIndicators.push(...indicators);
+  }
+
+  // 5. Extract technique hints from signal data (summaries, targets)
+  const signalTexts: string[] = [];
+  for (const s of findingSignals) {
+    if (s.data.summary) signalTexts.push(s.data.summary);
+    if (s.data.target) signalTexts.push(s.data.target as string);
+  }
+  const signalTechniqueHints = inferTechniqueHintsFromText(signalTexts);
+
+  // 6. Build DraftSeed
+  const techniqueHints = uniqueStrings([
+    ...enrichmentTechniques,
+    ...signalTechniqueHints,
+    ...(selectedGap?.techniqueHints ?? []),
+  ]);
+
+  const mergedDataSourceHints = uniqueStrings([
+    ...dataSourceHints,
+    ...(selectedGap?.dataSourceHints ?? []),
+  ]);
+
+  // Source event IDs from signals
+  const sourceEventIds = findingSignals
+    .map((s) => s.data.sourceEventId)
+    .filter((id): id is string => typeof id === "string" && id.length > 0);
+
+  const seed: DraftSeed = {
+    id: crypto.randomUUID(),
+    kind: "finding",
+    sourceEventIds: uniqueStrings(sourceEventIds),
+    findingId: finding.id,
+    preferredFormats: selectedGap?.suggestedFormats ?? [],
+    techniqueHints,
+    dataSourceHints: mergedDataSourceHints,
+    extractedFields: {
+      title: finding.title,
+      severity: finding.severity,
+      status: finding.status,
+      confidence: finding.confidence,
+      signalCount: finding.signalCount,
+      agentIds: finding.scope.agentIds,
+      sessionIds: finding.scope.sessionIds,
+      timeRange: finding.scope.timeRange,
+      verdict: finding.verdict,
+      ...(iocIndicators.length > 0 ? { iocIndicators } : {}),
+    },
+    createdAt: new Date().toISOString(),
+    confidence: finding.confidence,
+  };
+
+  // Infer preferred formats if none from gap
+  if (seed.preferredFormats.length === 0) {
+    seed.preferredFormats = recommendFormats(seed);
+  }
+
+  return seed;
+}
+
+/**
  * Infer data source family from AgentEvent action types.
  */
 export function inferDataSourceHints(events: AgentEvent[]): string[] {
@@ -416,6 +531,11 @@ export function recommendFormats(seed: DraftSeed): FileType[] {
 
   // Tool or prompt -> OCSF for normalization, Sigma fallback
   if (hasTool || hasPrompt) {
+    return ["ocsf_event", "sigma_rule"];
+  }
+
+  // Finding -> OCSF for event normalization, Sigma for detection
+  if (seed.kind === "finding") {
     return ["ocsf_event", "sigma_rule"];
   }
 

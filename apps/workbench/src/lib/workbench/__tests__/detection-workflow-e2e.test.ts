@@ -1057,6 +1057,7 @@ describe("Scenario: Publication SHA-256 integrity across all adapters", () => {
       "    enabled: true",
       "settings: {}",
     ].join("\n"),
+    swarm_bundle: "",
   };
 
   for (const fileType of adaptersToTest) {

@@ -37,6 +37,7 @@ import {
   SEVERITY_ORDER,
   STATUS_CONFIG,
 } from "@/lib/workbench/finding-constants";
+import { EnrichmentBadges } from "./enrichment-badges";
 
 interface FindingsListProps {
   findings: Finding[];
@@ -365,6 +366,7 @@ export function FindingsList({
         <span className={cn(TH_CELL, "w-[90px]")}>Status</span>
         <span className={cn(TH_CELL, "w-[60px] text-right")}>Signals</span>
         <span className={cn(TH_CELL, "w-[80px] text-right")}>Confidence</span>
+        <span className={cn(TH_CELL, "w-[100px]")}>Intel</span>
         <span className={cn(TH_CELL, "w-[70px] text-right")}>Age</span>
         <span className={cn(TH_CELL, "w-[100px]")}>Sentinel</span>
         <span className={cn(TH_CELL, "w-[200px] text-right")}>Actions</span>
@@ -532,6 +534,10 @@ function FindingRow({
           {confidencePct}%
         </span>
       </button>
+
+      <div className="w-[100px] shrink-0 flex items-center gap-0.5 flex-wrap">
+        <EnrichmentBadges enrichments={finding.enrichments} />
+      </div>
 
       <button
         type="button"

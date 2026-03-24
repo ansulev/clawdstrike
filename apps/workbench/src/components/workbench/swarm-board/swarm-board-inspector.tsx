@@ -22,8 +22,8 @@ import {
   IconFileCode,
 } from "@tabler/icons-react";
 import { cn } from "@/lib/utils";
-import { useSwarmBoard } from "@/lib/workbench/swarm-board-store";
-import type { SwarmBoardNodeData, SwarmNodeType, DetectionArtifactKind } from "@/lib/workbench/swarm-board-types";
+import { useSwarmBoard } from "@/features/swarm/stores/swarm-board-store";
+import type { SwarmBoardNodeData, SwarmNodeType, DetectionArtifactKind } from "@/features/swarm/swarm-board-types";
 import { FILE_TYPE_REGISTRY, type FileType } from "@/lib/workbench/file-type-registry";
 import type { EvidencePack, LabRun, PublicationManifest } from "@/lib/workbench/detection-workflow/shared-types";
 import { getEvidencePackStore } from "@/lib/workbench/detection-workflow/evidence-pack-store";
@@ -158,7 +158,21 @@ function InspectorContent({
 // Footer with action hierarchy
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Editor URL builder — constructs /editor with file/document context
+// ---------------------------------------------------------------------------
+
+function buildEditorUrl(opts: { filePath?: string; documentId?: string }): string {
+  const params = new URLSearchParams();
+  if (opts.filePath) params.set("file", opts.filePath);
+  if (opts.documentId) params.set("doc", opts.documentId);
+  const qs = params.toString();
+  return qs ? `/editor?${qs}` : "/editor";
+}
+
 function InspectorFooter({ nodeType, data }: { nodeType: SwarmNodeType; data?: SwarmBoardNodeData }) {
+  const navigate = useNavigate();
+
   // Detection artifact footers
   if (data?.artifactKind) {
     return <DetectionArtifactFooter data={data} />;
@@ -175,6 +189,12 @@ function InspectorFooter({ nodeType, data }: { nodeType: SwarmNodeType; data?: S
             <IconTerminal2 size={10} stroke={1.5} />
             Terminal
           </button>
+          {data?.filesTouched && data.filesTouched.length > 0 && (
+            <TextAction
+              label="Open in Editor"
+              onClick={() => navigate(buildEditorUrl({ filePath: data.filesTouched![0] }))}
+            />
+          )}
           <TextAction label="Receipts" />
           <TextAction label="Diff" />
         </div>
@@ -192,16 +212,27 @@ function InspectorFooter({ nodeType, data }: { nodeType: SwarmNodeType; data?: S
           <TextAction label="Full Receipt" />
         </div>
       );
-    case "diff":
+    case "diff": {
+      const firstDiffFile = data?.diffSummary?.files?.[0];
       return (
         <div className="flex items-center gap-3 px-4 py-2.5 border-t border-[#0e1018] shrink-0">
           <TextAction label="Open Diff View" />
+          {firstDiffFile && (
+            <TextAction
+              label="Open in Editor"
+              onClick={() => navigate(buildEditorUrl({ filePath: firstDiffFile }))}
+            />
+          )}
         </div>
       );
+    }
     case "artifact":
       return (
         <div className="flex items-center gap-3 px-4 py-2.5 border-t border-[#0e1018] shrink-0">
-          <TextAction label="Open File" />
+          <TextAction
+            label="Open File"
+            onClick={() => navigate(buildEditorUrl({ filePath: data?.filePath, documentId: data?.documentId }))}
+          />
         </div>
       );
     default:
@@ -265,7 +296,10 @@ function DetectionArtifactFooter({ data }: { data: SwarmBoardNodeData }) {
       return (
         <div className="px-4 py-2.5 border-t border-[#0e1018] shrink-0">
           <div className="flex items-center gap-3">
-            <TextAction label="Open in Editor" onClick={() => navigate("/editor")} />
+            <TextAction
+              label="Open in Editor"
+              onClick={() => navigate(buildEditorUrl({ filePath: data.filePath, documentId: data.documentId }))}
+            />
             <TextAction label="Run Lab" onClick={() => navigate("/lab")} />
           </div>
         </div>
@@ -274,7 +308,10 @@ function DetectionArtifactFooter({ data }: { data: SwarmBoardNodeData }) {
       return (
         <div className="px-4 py-2.5 border-t border-[#0e1018] shrink-0">
           <div className="flex items-center gap-3">
-            <TextAction label="Edit Pack" onClick={() => navigate("/editor")} />
+            <TextAction
+              label="Edit Pack"
+              onClick={() => navigate(buildEditorUrl({ documentId: data.documentId }))}
+            />
             <TextAction label="Run Lab" onClick={() => navigate("/lab")} />
           </div>
         </div>
@@ -284,7 +321,10 @@ function DetectionArtifactFooter({ data }: { data: SwarmBoardNodeData }) {
         <div className="px-4 py-2.5 border-t border-[#0e1018] shrink-0">
           <div className="flex items-center gap-3">
             <TextAction label="View in Lab" onClick={() => navigate("/lab")} />
-            <TextAction label="Open in Editor" onClick={() => navigate("/editor")} />
+            <TextAction
+              label="Open in Editor"
+              onClick={() => navigate(buildEditorUrl({ documentId: data.documentId }))}
+            />
           </div>
         </div>
       );

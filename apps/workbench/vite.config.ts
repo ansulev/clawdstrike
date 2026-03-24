@@ -1,6 +1,7 @@
 import react from "@vitejs/plugin-react";
 import { resolve } from "path";
 import { defineConfig } from "vite";
+import { pluginEvalMiddleware } from "./src/lib/plugins/playground/playground-eval-server";
 
 const host = process.env.TAURI_DEV_HOST;
 const hushdProxyTarget =
@@ -30,11 +31,27 @@ function forwardAuthorizationHeader(proxy: any, fallbackAuthorization?: string) 
 }
 
 export default defineConfig({
-  plugins: [react()],
-  resolve: {
-    alias: {
-      "@": resolve(__dirname, "src"),
+  plugins: [
+    react(),
+    {
+      name: "clawdstrike-plugin-eval",
+      configureServer(server) {
+        server.middlewares.use("/__plugin-eval", pluginEvalMiddleware);
+      },
     },
+  ],
+  resolve: {
+    alias: [
+      { find: /^@\//, replacement: `${resolve(__dirname, "src")}/` },
+      {
+        find: /^@clawdstrike\/plugin-sdk$/,
+        replacement: resolve(__dirname, "../../packages/sdk/plugin-sdk/src/index.ts"),
+      },
+      {
+        find: /^@clawdstrike\/plugin-sdk\/testing$/,
+        replacement: resolve(__dirname, "../../packages/sdk/plugin-sdk/src/testing.ts"),
+      },
+    ],
   },
   clearScreen: false,
   server: {
@@ -51,6 +68,7 @@ export default defineConfig({
       "/_proxy/hushd": {
         target: hushdProxyTarget,
         changeOrigin: true,
+        ws: true,
         rewrite: (path) => path.replace(/^\/_proxy\/hushd/, ""),
         configure: (proxy) => forwardAuthorizationHeader(proxy, hushdProxyAuthorization),
       },

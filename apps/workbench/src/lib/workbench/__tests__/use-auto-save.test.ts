@@ -2,7 +2,8 @@ import React from "react";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import YAML from "yaml";
-import { MultiPolicyProvider, useMultiPolicy } from "../multi-policy-store";
+import { PolicyBootstrapProvider } from "@/features/policy/hooks/use-policy-bootstrap";
+import { usePolicyTabs } from "@/features/policy/hooks/use-policy-actions";
 import {
   clearAutosave,
   readAutosave,
@@ -54,7 +55,7 @@ afterEach(() => {
 
 function AutosaveHarness() {
   useAutoSave();
-  const { multiDispatch, tabs } = useMultiPolicy();
+  const { multiDispatch, tabs } = usePolicyTabs();
 
   return React.createElement(
     "div",
@@ -285,7 +286,7 @@ describe("useAutoSave", () => {
 
     render(
       React.createElement(
-        MultiPolicyProvider,
+        PolicyBootstrapProvider,
         null,
         React.createElement(AutosaveHarness),
       ),
@@ -309,7 +310,7 @@ describe("useAutoSave", () => {
 
     render(
       React.createElement(
-        MultiPolicyProvider,
+        PolicyBootstrapProvider,
         null,
         React.createElement(AutosaveHarness),
       ),

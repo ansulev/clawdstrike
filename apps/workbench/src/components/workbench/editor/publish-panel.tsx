@@ -29,8 +29,8 @@ import {
   type PublishGateStatus,
 } from "@/lib/workbench/detection-workflow/use-publication";
 import { getPublicationStore } from "@/lib/workbench/detection-workflow/publication-store";
-import { useFleetConnection } from "@/lib/workbench/use-fleet-connection";
-import { deployPolicy } from "@/lib/workbench/fleet-client";
+import { useFleetConnection } from "@/features/fleet/use-fleet-connection";
+import { deployPolicy } from "@/features/fleet/fleet-client";
 
 // ---- Target Labels ----
 

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 
 vi.mock("@/lib/tauri-bridge", () => ({
   isDesktop: vi.fn(() => false),
@@ -9,7 +9,7 @@ vi.mock("@/lib/tauri-bridge", () => ({
   closeWindow: vi.fn(),
 }));
 
-vi.mock("@/lib/workbench/secure-store", () => ({
+vi.mock("@/features/settings/secure-store", () => ({
   secureStore: {
     init: vi.fn().mockResolvedValue(undefined),
   },
@@ -21,8 +21,13 @@ vi.mock("@/lib/workbench/http-transport", () => ({
   httpFetch: vi.fn().mockResolvedValue(new Response()),
 }));
 
+vi.mock("@/components/workbench/identity/identity-prompt", () => ({
+  IdentityPrompt: () => null,
+}));
+
 describe("App error boundary", () => {
   afterEach(() => {
+    cleanup();
     vi.resetModules();
     vi.clearAllMocks();
     window.location.hash = "";
@@ -31,24 +36,10 @@ describe("App error boundary", () => {
   it("catches provider initialization errors before the route tree mounts", async () => {
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 
-    vi.doMock("@/lib/workbench/use-fleet-connection", () => ({
-      FleetConnectionProvider: () => {
+    vi.doMock("@/features/fleet/use-fleet-connection", () => ({
+      useFleetConnection: () => {
         throw new Error("fleet init failed");
       },
-      useFleetConnection: () => ({
-        connection: { connected: false },
-        isConnecting: false,
-        error: null,
-        agents: [],
-        remotePolicyInfo: null,
-        connect: vi.fn(),
-        disconnect: vi.fn(),
-        testConnection: vi.fn(),
-        refreshAgents: vi.fn(),
-        refreshRemotePolicy: vi.fn(),
-        getCredentials: () => ({ apiKey: "", controlApiToken: "" }),
-        getAuthenticatedConnection: () => ({ connected: false, hushdUrl: "", controlApiUrl: "", apiKey: "", controlApiToken: "", hushdHealth: null, agentCount: 0 }),
-      }),
     }));
 
     try {

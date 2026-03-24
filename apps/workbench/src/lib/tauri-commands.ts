@@ -176,6 +176,28 @@ async function tauriInvoke<T>(cmd: string, args?: Record<string, unknown>): Prom
   return invoke<T>(cmd, args);
 }
 
+function coerceTauriError(err: unknown, fallback: string): Error {
+  if (err instanceof Error) {
+    return err;
+  }
+
+  if (typeof err === "string" && err.trim()) {
+    return new Error(err);
+  }
+
+  if (typeof err === "object" && err !== null) {
+    const record = err as { message?: unknown; error?: unknown };
+    if (typeof record.message === "string" && record.message.trim()) {
+      return new Error(record.message);
+    }
+    if (typeof record.error === "string" && record.error.trim()) {
+      return new Error(record.error);
+    }
+  }
+
+  return new Error(fallback);
+}
+
 
 /**
  * Validate policy YAML via the Rust policy engine.
@@ -583,6 +605,62 @@ export async function convertSigmaRuleNative(
   } catch (err) {
     console.warn("[tauri-commands] convert_sigma_rule failed:", err);
     return null;
+  }
+}
+
+
+// ---- Global Search Types ----
+
+export interface TauriSearchMatch {
+  file_path: string;
+  line_number: number;
+  line_content: string;
+  match_start: number;
+  match_end: number;
+}
+
+export interface TauriSearchResult {
+  matches: TauriSearchMatch[];
+  file_count: number;
+  total_matches: number;
+  truncated: boolean;
+}
+
+/**
+ * Search for text across all eligible files in a project directory.
+ * Supports case-sensitive, whole-word, and regex modes.
+ * Returns null when not running inside Tauri.
+ */
+export async function searchInProjectNative(
+  rootPath: string,
+  query: string,
+  caseSensitive: boolean,
+  wholeWord: boolean,
+  useRegex: boolean,
+  searchId?: string,
+): Promise<TauriSearchResult | null> {
+  if (!isDesktop()) return null;
+  try {
+    return await tauriInvoke<TauriSearchResult>("search_in_project", {
+      rootPath,
+      query,
+      caseSensitive,
+      wholeWord,
+      useRegex,
+      searchId,
+    });
+  } catch (err) {
+    console.error("[tauri-commands] search_in_project failed:", err);
+    throw coerceTauriError(err, "Search failed");
+  }
+}
+
+export async function cancelSearchInProjectNative(searchId: string): Promise<void> {
+  if (!isDesktop()) return;
+  try {
+    await tauriInvoke("cancel_search_in_project", { searchId });
+  } catch (err) {
+    console.warn("[tauri-commands] cancel_search_in_project failed:", err);
   }
 }
 

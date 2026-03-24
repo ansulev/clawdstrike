@@ -1,6 +1,5 @@
 import { useState, useMemo } from "react";
 import { motion } from "motion/react";
-import { useWorkbench } from "@/lib/workbench/multi-policy-store";
 import {
   scoreFramework,
   COMPLIANCE_FRAMEWORKS,
@@ -13,6 +12,8 @@ import {
   IconCreditCard,
 } from "@tabler/icons-react";
 import { ClaudeCodeHint } from "@/components/workbench/shared/claude-code-hint";
+import { usePolicyTabsStore } from "@/features/policy/stores/policy-tabs-store";
+import { usePolicyEditStore } from "@/features/policy/stores/policy-edit-store";
 
 const frameworkIcons: Record<ComplianceFramework, typeof IconHeartbeat> = {
   hipaa: IconHeartbeat,
@@ -81,8 +82,10 @@ function FrameworkCard({
   frameworkId: ComplianceFramework;
   onClick: () => void;
 }) {
-  const { state } = useWorkbench();
-  const { activePolicy } = state;
+  const activeTabId = usePolicyTabsStore(s => s.activeTabId);
+  const activeTab = usePolicyTabsStore(s => s.tabs.find(t => t.id === s.activeTabId));
+  const editState = usePolicyEditStore(s => s.editStates.get(activeTabId));
+  const activePolicy = editState?.policy ?? { version: "1.1.0", name: "", description: "", guards: {}, settings: {} };
 
   const framework = COMPLIANCE_FRAMEWORKS.find((f) => f.id === frameworkId);
   const result = useMemo(

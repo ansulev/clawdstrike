@@ -1,26 +1,16 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { OriginMatch, OriginProfile } from "@/lib/workbench/types";
+import type { OriginMatch, OriginProfile, OriginsConfig, WorkbenchPolicy } from "@/lib/workbench/types";
 import { OriginEditor } from "../origin-editor";
+import { usePolicyTabsStore } from "@/features/policy/stores/policy-tabs-store";
+import { usePolicyEditStore } from "@/features/policy/stores/policy-edit-store";
 
-const dispatch = vi.fn();
-
-let activePolicy: {
-  version: string;
-  origins: {
-    default_behavior: "deny";
-    profiles: OriginProfile[];
-  };
-};
-
-vi.mock("@/lib/workbench/multi-policy-store", () => ({
-  useWorkbench: () => ({
-    state: { activePolicy },
-    dispatch,
-  }),
-}));
+vi.mock("@/features/policy/stores/policy-store", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/features/policy/stores/policy-store")>();
+  return { ...actual };
+});
 
 function makeProfile(
   metadata?: Record<string, unknown>,
@@ -34,20 +24,54 @@ function makeProfile(
   };
 }
 
+function makeV14Policy(origins: OriginsConfig): WorkbenchPolicy {
+  return {
+    version: "1.4.0",
+    name: "Test v1.4 Policy",
+    description: "",
+    guards: {},
+    settings: { fail_fast: false, verbose_logging: false, session_timeout_secs: 3600 },
+    origins,
+  };
+}
+
+/** Set up the Zustand stores with a v1.4.0 policy containing the given origins. */
+function setupStoreWithOrigins(origins: OriginsConfig): string {
+  const policy = makeV14Policy(origins);
+  const tabId = usePolicyTabsStore.getState().newTab({ policy })!;
+  return tabId;
+}
+
+/** Read the current origins from the edit store for the active tab. */
+function getStoredOrigins(): OriginsConfig | undefined {
+  const activeTabId = usePolicyTabsStore.getState().activeTabId;
+  const editState = usePolicyEditStore.getState().editStates.get(activeTabId);
+  return editState?.policy.origins;
+}
+
+/** Update the origins directly in the edit store (simulates upstream changes). */
+function updateStoreOrigins(origins: OriginsConfig): void {
+  const activeTabId = usePolicyTabsStore.getState().activeTabId;
+  const activeTab = usePolicyTabsStore.getState().tabs.find(t => t.id === activeTabId);
+  usePolicyEditStore.getState().updateOrigins(
+    activeTabId,
+    origins,
+    activeTab?.fileType ?? "clawdstrike_policy",
+  );
+}
+
 describe("OriginEditor", () => {
   beforeEach(() => {
-    dispatch.mockReset();
-    activePolicy = {
-      version: "1.4.0",
-      origins: {
-        default_behavior: "deny",
-        profiles: [makeProfile({ region: "us-east-1" })],
-      },
-    };
+    usePolicyTabsStore.getState()._reset();
   });
 
   it("resyncs profile metadata text when the selected profile changes upstream", async () => {
     const user = userEvent.setup();
+    setupStoreWithOrigins({
+      default_behavior: "deny",
+      profiles: [makeProfile({ region: "us-east-1" })],
+    });
+
     const { rerender } = render(<OriginEditor />);
 
     await user.click(screen.getByText("profile-alpha"));
@@ -57,13 +81,12 @@ describe("OriginEditor", () => {
       JSON.stringify({ region: "us-east-1" }, null, 2),
     );
 
-    activePolicy = {
-      ...activePolicy,
-      origins: {
-        ...activePolicy.origins,
+    act(() => {
+      updateStoreOrigins({
+        default_behavior: "deny",
         profiles: [makeProfile({ region: "eu-west-1", posture: "restricted" })],
-      },
-    };
+      });
+    });
 
     rerender(<OriginEditor />);
 
@@ -80,6 +103,11 @@ describe("OriginEditor", () => {
 
   it("preserves in-progress metadata edits across unrelated profile updates", async () => {
     const user = userEvent.setup();
+    setupStoreWithOrigins({
+      default_behavior: "deny",
+      profiles: [makeProfile({ region: "us-east-1" })],
+    });
+
     const { rerender } = render(<OriginEditor />);
 
     await user.click(screen.getByText("profile-alpha"));
@@ -89,18 +117,17 @@ describe("OriginEditor", () => {
       target: { value: '{\n  "region": "draft"\n}' },
     });
 
-    activePolicy = {
-      ...activePolicy,
-      origins: {
-        ...activePolicy.origins,
+    act(() => {
+      updateStoreOrigins({
+        default_behavior: "deny",
         profiles: [
           {
-            ...activePolicy.origins.profiles[0],
+            ...makeProfile({ region: "us-east-1" }),
             explanation: "updated elsewhere",
           },
         ],
-      },
-    };
+      });
+    });
 
     rerender(<OriginEditor />);
 
@@ -109,13 +136,10 @@ describe("OriginEditor", () => {
 
   it("keeps custom provider inputs in custom mode when cleared", async () => {
     const user = userEvent.setup();
-    activePolicy = {
-      ...activePolicy,
-      origins: {
-        ...activePolicy.origins,
-        profiles: [makeProfile(undefined, { provider: "custom-provider" })],
-      },
-    };
+    setupStoreWithOrigins({
+      default_behavior: "deny",
+      profiles: [makeProfile(undefined, { provider: "custom-provider" })],
+    });
 
     const { rerender } = render(<OriginEditor />);
 
@@ -127,26 +151,16 @@ describe("OriginEditor", () => {
     await user.clear(providerInput);
     expect(providerInput).toHaveValue("");
 
-    expect(dispatch).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        type: "UPDATE_ORIGINS",
-        origins: expect.objectContaining({
-          profiles: [
-            expect.objectContaining({
-              match_rules: expect.not.objectContaining({ provider: expect.anything() }),
-            }),
-          ],
-        }),
-      }),
-    );
+    // Verify the store was updated: provider should have been cleared
+    const origins = getStoredOrigins();
+    expect(origins?.profiles[0].match_rules.provider).toBeUndefined();
 
-    activePolicy = {
-      ...activePolicy,
-      origins: {
-        ...activePolicy.origins,
+    act(() => {
+      updateStoreOrigins({
+        default_behavior: "deny",
         profiles: [makeProfile(undefined, {})],
-      },
-    };
+      });
+    });
 
     rerender(<OriginEditor />);
 
@@ -157,6 +171,11 @@ describe("OriginEditor", () => {
 
   it("clears the stored provider when switching an existing provider to custom mode", async () => {
     const user = userEvent.setup();
+    setupStoreWithOrigins({
+      default_behavior: "deny",
+      profiles: [makeProfile(undefined, { provider: "slack" })],
+    });
+
     render(<OriginEditor />);
 
     await user.click(screen.getByText("profile-alpha"));
@@ -169,31 +188,17 @@ describe("OriginEditor", () => {
       ).toHaveValue("slack");
     });
 
-    expect(dispatch).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        type: "UPDATE_ORIGINS",
-        origins: expect.objectContaining({
-          profiles: [
-            expect.objectContaining({
-              match_rules: expect.not.objectContaining({
-                provider: expect.anything(),
-              }),
-            }),
-          ],
-        }),
-      }),
-    );
+    // Verify the store was updated: provider should have been cleared
+    const origins = getStoredOrigins();
+    expect(origins?.profiles[0].match_rules.provider).toBeUndefined();
   });
 
   it("keeps custom space type inputs in custom mode when cleared", async () => {
     const user = userEvent.setup();
-    activePolicy = {
-      ...activePolicy,
-      origins: {
-        ...activePolicy.origins,
-        profiles: [makeProfile(undefined, { space_type: "custom-space" })],
-      },
-    };
+    setupStoreWithOrigins({
+      default_behavior: "deny",
+      profiles: [makeProfile(undefined, { space_type: "custom-space" })],
+    });
 
     const { rerender } = render(<OriginEditor />);
 
@@ -205,26 +210,16 @@ describe("OriginEditor", () => {
     await user.clear(spaceTypeInput);
     expect(spaceTypeInput).toHaveValue("");
 
-    expect(dispatch).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        type: "UPDATE_ORIGINS",
-        origins: expect.objectContaining({
-          profiles: [
-            expect.objectContaining({
-              match_rules: expect.not.objectContaining({ space_type: expect.anything() }),
-            }),
-          ],
-        }),
-      }),
-    );
+    // Verify the store was updated: space_type should have been cleared
+    const origins = getStoredOrigins();
+    expect(origins?.profiles[0].match_rules.space_type).toBeUndefined();
 
-    activePolicy = {
-      ...activePolicy,
-      origins: {
-        ...activePolicy.origins,
+    act(() => {
+      updateStoreOrigins({
+        default_behavior: "deny",
         profiles: [makeProfile(undefined, {})],
-      },
-    };
+      });
+    });
 
     rerender(<OriginEditor />);
 
@@ -235,13 +230,10 @@ describe("OriginEditor", () => {
 
   it("clears the stored space type when switching an existing space type to custom mode", async () => {
     const user = userEvent.setup();
-    activePolicy = {
-      ...activePolicy,
-      origins: {
-        ...activePolicy.origins,
-        profiles: [makeProfile(undefined, { provider: "slack", space_type: "channel" })],
-      },
-    };
+    setupStoreWithOrigins({
+      default_behavior: "deny",
+      profiles: [makeProfile(undefined, { provider: "slack", space_type: "channel" })],
+    });
 
     render(<OriginEditor />);
 
@@ -255,19 +247,8 @@ describe("OriginEditor", () => {
       ).toHaveValue("channel");
     });
 
-    expect(dispatch).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        type: "UPDATE_ORIGINS",
-        origins: expect.objectContaining({
-          profiles: [
-            expect.objectContaining({
-              match_rules: expect.not.objectContaining({
-                space_type: expect.anything(),
-              }),
-            }),
-          ],
-        }),
-      }),
-    );
+    // Verify the store was updated: space_type should have been cleared
+    const origins = getStoredOrigins();
+    expect(origins?.profiles[0].match_rules.space_type).toBeUndefined();
   });
 });

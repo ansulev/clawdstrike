@@ -13,9 +13,9 @@ import { tags } from "@lezer/highlight";
 import { searchKeymap, highlightSelectionMatches } from "@codemirror/search";
 import { python } from "@codemirror/lang-python";
 import { javascript } from "@codemirror/lang-javascript";
-import { useWorkbench, useMultiPolicy } from "@/lib/workbench/multi-policy-store";
+import { useWorkbenchState, usePolicyTabs } from "@/features/policy/hooks/use-policy-actions";
 import { useToast } from "@/components/ui/toast";
-import { policyToYaml } from "@/lib/workbench/yaml-utils";
+import { policyToYaml } from "@/features/policy/yaml-utils";
 import { isDesktop, savePolicyFile } from "@/lib/tauri-bridge";
 import { cn } from "@/lib/utils";
 import { SubTabBar, type SubTab } from "../shared/sub-tab-bar";
@@ -362,8 +362,8 @@ function useCodeEditor(
 
 
 export function SdkIntegrationTab() {
-  const { state } = useWorkbench();
-  const { activeTab } = useMultiPolicy();
+  const { state } = useWorkbenchState();
+  const { activeTab } = usePolicyTabs();
   const { toast } = useToast();
 
   // Framework tab state

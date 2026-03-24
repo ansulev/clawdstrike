@@ -1,11 +1,11 @@
 import { useState, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import type { TestScenario, SimulationResult, TestActionType, Verdict, GuardSimResult, EvaluationPathStep, PostureReport, PostureBudget } from "@/lib/workbench/types";
-import { useWorkbench, useMultiPolicy } from "@/lib/workbench/multi-policy-store";
+import { useWorkbenchState, usePolicyTabs } from "@/features/policy/hooks/use-policy-actions";
 import { useToast } from "@/components/ui/toast";
 import { simulatePolicy } from "@/lib/workbench/simulation-engine";
 import { PRE_BUILT_SCENARIOS } from "@/lib/workbench/pre-built-scenarios";
-import { policyToYaml } from "@/lib/workbench/yaml-utils";
+import { policyToYaml } from "@/features/policy/yaml-utils";
 import { isDesktop } from "@/lib/tauri-bridge";
 import { emitAuditEvent } from "@/lib/workbench/local-audit";
 import {
@@ -304,8 +304,8 @@ function SimulatorStatusIndicators({
 
 
 export function SimulatorLayout() {
-  const { state } = useWorkbench();
-  const { activeTab: activeTabObj } = useMultiPolicy();
+  const { state } = useWorkbenchState();
+  const { activeTab: activeTabObj } = usePolicyTabs();
   const { toast } = useToast();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<SimulatorTab>("scenarios");

@@ -15,11 +15,14 @@ import {
   TextArea,
   SelectInput,
 } from "./shared-form-fields";
+import type { DetectionVisualPanelProps } from "@/lib/workbench/detection-workflow/shared-types";
+import { registerVisualPanel } from "@/lib/workbench/detection-workflow/visual-panels";
 
 
 // ---- Constants ----
 
-const ACCENT = "#5cc5c4";
+/** Default accent color for OCSF panels (used by internal subcomponents). */
+const DEFAULT_ACCENT = "#5cc5c4";
 
 const CLASS_UID_OPTIONS = [
   { value: 1001, label: "1001 — File Activity" },
@@ -77,11 +80,7 @@ const REQUIRED_FIELDS = ["class_uid", "activity_id", "severity_id", "time", "met
 
 // ---- Props ----
 
-interface OcsfVisualPanelProps {
-  json: string;
-  onJsonChange: (json: string) => void;
-  readOnly?: boolean;
-}
+type OcsfVisualPanelProps = DetectionVisualPanelProps;
 
 
 // ---- OCSF-specific Field Components ----
@@ -115,7 +114,7 @@ function NumberInput({
         }}
         placeholder={placeholder}
         readOnly={readOnly}
-        style={focused ? { borderColor: `${ACCENT}80` } : undefined}
+        style={focused ? { borderColor: `${DEFAULT_ACCENT}80` } : undefined}
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}
         className={cn(
@@ -183,7 +182,9 @@ function deepSet(obj: Record<string, unknown>, path: string[], value: unknown): 
 
 // ---- Main Panel ----
 
-export function OcsfVisualPanel({ json, onJsonChange, readOnly }: OcsfVisualPanelProps) {
+export function OcsfVisualPanel(props: OcsfVisualPanelProps) {
+  const { source: json, onSourceChange: onJsonChange, readOnly, accentColor } = props;
+  const ACCENT = accentColor ?? "#5cc5c4";
   const { event, parseError } = useMemo(() => {
     try {
       const parsed = JSON.parse(json || "{}");
@@ -557,3 +558,7 @@ export function OcsfVisualPanel({ json, onJsonChange, readOnly }: OcsfVisualPane
     </ScrollArea>
   );
 }
+
+// ---- Self-registration ----
+// Register OcsfVisualPanel in the visual panel registry at module load.
+registerVisualPanel("ocsf_event", OcsfVisualPanel);

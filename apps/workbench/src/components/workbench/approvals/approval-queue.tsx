@@ -26,9 +26,9 @@ import {
   SelectContent,
   SelectItem,
 } from "@/components/ui/select";
-import { fleetClient } from "@/lib/workbench/fleet-client";
-import { useFleetConnection } from "@/lib/workbench/use-fleet-connection";
-import { useOperator } from "@/lib/workbench/operator-store";
+import { fleetClient } from "@/features/fleet/fleet-client";
+import { useFleetConnection } from "@/features/fleet/use-fleet-connection";
+import { useOperator } from "@/features/operator/stores/operator-store";
 import type {
   ApprovalRequest,
   ApprovalDecision,

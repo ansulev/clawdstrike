@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo, useCallback, memo } from "react";
 import { formatRelativeTime } from "@/lib/workbench/format-utils";
 import {
   IconChevronDown,
@@ -13,12 +13,24 @@ import {
   IconInfoCircle,
   IconFlask,
   IconShieldCheck,
+  IconAlertTriangle,
+  IconX,
+  IconExternalLink,
 } from "@tabler/icons-react";
 import type { Enrichment } from "@/lib/workbench/finding-engine";
+import type { EnrichmentSourceStatus } from "@/lib/plugins/threat-intel/enrichment-bridge";
+import { useEnrichmentRenderer } from "@/lib/plugins/enrichment-type-registry";
+import { extractRelatedIndicators } from "@/lib/workbench/pivot-enrichment";
+import { IOC_TYPE_COLORS } from "@/lib/workbench/ioc-constants";
+import { RelatedIndicatorsSection } from "./related-indicators-section";
 
 interface EnrichmentSidebarProps {
   enrichments: Enrichment[];
   onRunEnrichment?: () => void;
+  onPivotEnrich?: (type: string, value: string) => void;
+  sourceStatuses?: EnrichmentSourceStatus[];
+  isEnriching?: boolean;
+  onCancel?: () => void;
 }
 
 const ENRICHMENT_TYPE_CONFIG: Record<
@@ -33,18 +45,8 @@ const ENRICHMENT_TYPE_CONFIG: Record<
   reputation: { icon: IconShieldCheck, color: "#6b9b8b", label: "Reputation" },
   geolocation: { icon: IconMapPin, color: "#a78bfa", label: "Geolocation" },
   whois: { icon: IconWorld, color: "#8b9dc3", label: "WHOIS" },
+  threat_intel: { icon: IconShieldCheck, color: "#d4a84b", label: "Threat Intel" },
   custom: { icon: IconInfoCircle, color: "#6f7f9a", label: "Custom" },
-};
-
-const IOC_TYPE_COLORS: Record<string, string> = {
-  sha256: "#c45c5c",
-  sha1: "#c45c5c",
-  md5: "#c45c5c",
-  domain: "#6ea8d9",
-  ip: "#d4784b",
-  url: "#d4a84b",
-  email: "#a78bfa",
-  filepath: "#6b9b8b",
 };
 
 const SPIDER_SENSE_VERDICT_CONFIG: Record<
@@ -56,6 +58,16 @@ const SPIDER_SENSE_VERDICT_CONFIG: Record<
   allow: { color: "#3dbf84", bg: "#3dbf8420", label: "ALLOW" },
 };
 
+const THREAT_VERDICT_CONFIG: Record<
+  string,
+  { color: string; bg: string; label: string }
+> = {
+  malicious: { color: "#c45c5c", bg: "#c45c5c20", label: "MALICIOUS" },
+  suspicious: { color: "#d4a84b", bg: "#d4a84b20", label: "SUSPICIOUS" },
+  benign: { color: "#3dbf84", bg: "#3dbf8420", label: "BENIGN" },
+  unknown: { color: "#6f7f9a", bg: "#6f7f9a20", label: "UNKNOWN" },
+};
+
 const KILL_CHAIN_DEPTH_LABELS: Record<number, { label: string; color: string }> = {
   1: { label: "Initial", color: "#6b9b8b" },
   2: { label: "Establishing", color: "#d4a84b" },
@@ -64,11 +76,24 @@ const KILL_CHAIN_DEPTH_LABELS: Record<number, { label: string; color: string }> 
   5: { label: "Full Chain", color: "#c45c5c" },
 };
 
-export function EnrichmentSidebar({
+export const EnrichmentSidebar = memo(function EnrichmentSidebar({
   enrichments,
   onRunEnrichment,
+  onPivotEnrich,
+  sourceStatuses,
+  isEnriching,
+  onCancel,
 }: EnrichmentSidebarProps) {
-  const grouped = groupByType(enrichments);
+  const grouped = useMemo(() => groupByType(enrichments), [enrichments]);
+  const hasStreamingStatuses = sourceStatuses && sourceStatuses.length > 0;
+  const relatedIndicators = useMemo(
+    () => extractRelatedIndicators(enrichments),
+    [enrichments],
+  );
+  const handlePivotEnrich = useCallback(
+    (ind: { type: string; value: string }) => onPivotEnrich?.(ind.type, ind.value),
+    [onPivotEnrich],
+  );
 
   return (
     <div className="flex flex-col h-full">
@@ -77,7 +102,17 @@ export function EnrichmentSidebar({
           <h2 className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[#6f7f9a]/50">
             Enrichment
           </h2>
-          {onRunEnrichment && (
+          {isEnriching && onCancel ? (
+            <button
+              onClick={onCancel}
+              aria-label="Cancel enrichment"
+              className="flex items-center gap-1 rounded-md px-2.5 py-1 text-[10px] font-medium text-[#c45c5c] bg-[#c45c5c]/10 border border-[#c45c5c]/20 hover:bg-[#c45c5c]/20 transition-colors"
+              data-testid="cancel-enrichment"
+            >
+              <IconX size={11} stroke={1.5} />
+              Cancel
+            </button>
+          ) : onRunEnrichment ? (
             <button
               onClick={onRunEnrichment}
               className="flex items-center gap-1 rounded-md px-2.5 py-1 text-[10px] font-medium text-[#d4a84b] bg-[#d4a84b]/10 border border-[#d4a84b]/20 hover:bg-[#d4a84b]/20 transition-colors"
@@ -85,7 +120,7 @@ export function EnrichmentSidebar({
               <IconFlask size={11} stroke={1.5} />
               Run Enrichment
             </button>
-          )}
+          ) : null}
         </div>
         {enrichments.length > 0 && (
           <span className="text-[9px] font-mono text-[#6f7f9a]/30 mt-0.5 block">
@@ -95,7 +130,38 @@ export function EnrichmentSidebar({
       </div>
 
       <div className="flex-1 overflow-y-auto">
-        {enrichments.length === 0 ? (
+        {hasStreamingStatuses && (
+          <div className="border-b border-[#2d3240]/40">
+            <div className="flex items-center gap-2 px-4 py-2.5">
+              <IconShieldCheck
+                size={13}
+                stroke={1.5}
+                style={{ color: "#d4a84b" }}
+                className="shrink-0"
+              />
+              <span
+                className="text-[10px] font-semibold uppercase tracking-[0.04em]"
+                style={{ color: "#d4a84b" }}
+              >
+                Threat Intel Sources
+              </span>
+              <span className="text-[9px] font-mono text-[#6f7f9a]/30 ml-auto">
+                {sourceStatuses!.length}
+              </span>
+            </div>
+
+            <div className="px-4 pb-3 flex flex-col gap-2">
+              {sourceStatuses!.map((sourceStatus) => (
+                <SourceStatusCard
+                  key={sourceStatus.sourceId}
+                  sourceStatus={sourceStatus}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {enrichments.length === 0 && !hasStreamingStatuses ? (
           <div className="flex flex-col items-center justify-center h-48 px-4">
             <IconFlask size={24} className="text-[#6f7f9a]/15 mb-2" stroke={1.5} />
             <span className="text-[11px] text-[#6f7f9a]/30 text-center">
@@ -108,8 +174,161 @@ export function EnrichmentSidebar({
             {Object.entries(grouped).map(([type, items]) => (
               <EnrichmentSection key={type} type={type} enrichments={items} />
             ))}
+            {relatedIndicators.length > 0 && (
+              <RelatedIndicatorsSection
+                indicators={relatedIndicators}
+                onEnrich={handlePivotEnrich}
+              />
+            )}
           </div>
         )}
+      </div>
+    </div>
+  );
+});
+
+function SourceStatusCard({
+  sourceStatus,
+}: {
+  sourceStatus: EnrichmentSourceStatus;
+}) {
+  if (sourceStatus.status === "idle") return null;
+
+  if (sourceStatus.status === "loading") {
+    return (
+      <div
+        role="status"
+        aria-live="polite"
+        className="rounded-lg border border-[#2d3240]/40 bg-[#131721] p-3"
+        data-testid={`skeleton-${sourceStatus.sourceId}`}
+      >
+        <div className="flex items-center gap-2 mb-2">
+          <span className="text-[10px] font-medium text-[#ece7dc]/50">
+            {sourceStatus.sourceName}
+          </span>
+          <span className="text-[9px] text-[#6f7f9a]/30 ml-auto">loading...</span>
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <div className="h-3 rounded bg-[#2d3240]/40 animate-pulse" />
+          <div className="h-3 rounded bg-[#2d3240]/40 animate-pulse w-3/4" />
+          <div className="h-3 rounded bg-[#2d3240]/40 animate-pulse w-1/2" />
+        </div>
+      </div>
+    );
+  }
+
+  if (sourceStatus.status === "error") {
+    return (
+      <div
+        role="status"
+        aria-live="polite"
+        className="rounded-lg border border-[#c45c5c]/20 bg-[#c45c5c]/5 p-3"
+        data-testid={`error-${sourceStatus.sourceId}`}
+      >
+        <div className="flex items-center gap-2">
+          <IconAlertTriangle size={12} className="text-[#c45c5c] shrink-0" stroke={1.5} />
+          <span className="text-[10px] font-medium text-[#c45c5c]">
+            {sourceStatus.sourceName}
+          </span>
+        </div>
+        {sourceStatus.error && (
+          <p className="mt-1.5 text-[10px] text-[#c45c5c]/70 leading-relaxed">
+            {sourceStatus.error}
+          </p>
+        )}
+      </div>
+    );
+  }
+
+  if (sourceStatus.status === "done" && sourceStatus.result) {
+    return (
+      <div
+        role="status"
+        aria-live="polite"
+        className="rounded-lg border border-[#2d3240]/40 bg-[#131721] p-3"
+        data-testid={`result-${sourceStatus.sourceId}`}
+      >
+        <div className="flex items-center gap-2 mb-2">
+          <IconShieldCheck size={12} className="text-[#3dbf84] shrink-0" stroke={1.5} />
+          <span className="text-[10px] font-medium text-[#ece7dc]/70">
+            {sourceStatus.sourceName}
+          </span>
+        </div>
+        <ThreatIntelContent result={sourceStatus.result} />
+      </div>
+    );
+  }
+
+  return null;
+}
+
+function ThreatIntelContent({
+  result,
+}: {
+  result: {
+    verdict: {
+      classification: string;
+      confidence: number;
+      summary: string;
+    };
+    permalink?: string;
+    sourceName: string;
+  };
+}) {
+  const verdictConfig = THREAT_VERDICT_CONFIG[result.verdict.classification] ??
+    THREAT_VERDICT_CONFIG.unknown;
+  const confidencePct = Math.round(result.verdict.confidence * 100);
+
+  return (
+    <div>
+      <div className="flex items-center gap-2 mb-2">
+        <span
+          className="rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase border"
+          style={{
+            color: verdictConfig.color,
+            borderColor: verdictConfig.color + "30",
+            backgroundColor: verdictConfig.bg,
+          }}
+        >
+          {verdictConfig.label}
+        </span>
+      </div>
+
+      <div className="flex items-center gap-2 mb-2">
+        <span className="text-[9px] text-[#6f7f9a]/40 shrink-0">Confidence</span>
+        <div className="flex-1 h-1.5 rounded-full bg-[#2d3240]/30 overflow-hidden">
+          <div
+            className="h-full rounded-full transition-all duration-300"
+            style={{
+              width: `${confidencePct}%`,
+              backgroundColor: verdictConfig.color,
+            }}
+          />
+        </div>
+        <span className="font-mono text-[9px] text-[#ece7dc]/40 shrink-0">
+          {confidencePct}%
+        </span>
+      </div>
+
+      <p className="text-[10px] text-[#ece7dc]/60 leading-relaxed mb-1.5">
+        {result.verdict.summary}
+      </p>
+
+      <div className="flex items-center gap-2 pt-1.5 border-t border-[#2d3240]/30">
+        {result.permalink && (
+          <a
+            href={result.permalink}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1 text-[9px] text-[#6ea8d9]/60 hover:text-[#6ea8d9] transition-colors"
+          >
+            <IconExternalLink size={10} stroke={1.5} />
+            View on {result.sourceName}
+          </a>
+        )}
+        <span className="text-[8px] text-[#6f7f9a]/20 ml-auto">
+          via {result.sourceName}
+        </span>
       </div>
     </div>
   );
@@ -139,6 +358,8 @@ function EnrichmentSection({
     <div className="border-b border-[#2d3240]/40">
       <button
         onClick={() => setCollapsed(!collapsed)}
+        aria-expanded={!collapsed}
+        aria-controls={`enrichment-section-${type}`}
         className="flex items-center gap-2 w-full px-4 py-2.5 text-left hover:bg-[#131721]/40 transition-colors"
       >
         {collapsed ? (
@@ -164,7 +385,7 @@ function EnrichmentSection({
       </button>
 
       {!collapsed && (
-        <div className="px-4 pb-3">
+        <div id={`enrichment-section-${type}`} className="px-4 pb-3">
           {enrichments.map((enrichment) => (
             <div key={enrichment.id} className="mb-2 last:mb-0">
               <EnrichmentContent enrichment={enrichment} />
@@ -183,6 +404,14 @@ function EnrichmentSection({
 }
 
 function EnrichmentContent({ enrichment }: { enrichment: Enrichment }) {
+  const CustomRenderer = useEnrichmentRenderer(enrichment.type);
+
+  // If a plugin registered a custom renderer for this type, use it
+  if (CustomRenderer) {
+    return <CustomRenderer enrichment={enrichment} data={enrichment.data} />;
+  }
+
+  // Built-in renderers
   switch (enrichment.type) {
     case "mitre_attack":
       return <MitreAttackContent data={enrichment.data} />;
@@ -277,11 +506,11 @@ function IocExtractionContent({ data }: { data: Record<string, unknown> }) {
   return (
     <div className="rounded-lg border border-[#2d3240]/40 bg-[#131721] p-3">
       <div className="flex flex-col gap-1.5">
-        {indicators.map((ioc, idx) => {
+        {indicators.map((ioc) => {
           const typeColor = IOC_TYPE_COLORS[ioc.iocType] ?? "#6f7f9a";
           return (
             <div
-              key={`${ioc.indicator}-${idx}`}
+              key={`${ioc.iocType}:${ioc.indicator}`}
               className="flex items-center gap-2"
             >
               <span
@@ -370,7 +599,7 @@ function SpiderSenseContent({ data }: { data: Record<string, unknown> }) {
           </span>
           {topMatches.map((match, idx) => (
             <div
-              key={`${match.label}-${idx}`}
+              key={`${match.category}:${match.label}`}
               className="flex items-center gap-2 rounded border border-[#2d3240]/20 bg-[#05060a] px-2 py-1"
             >
               <span className="text-[9px] text-[#d4a84b]/60 shrink-0">
@@ -500,7 +729,7 @@ function formatValue(value: unknown): string {
   if (value === null || value === undefined) return "-";
   if (typeof value === "string") return value;
   if (typeof value === "number") return value.toLocaleString();
-  if (typeof value === "boolean") return value ? "true" : "false";
+  if (typeof value === "boolean") return String(value);
   if (Array.isArray(value)) return `[${value.length} items]`;
   if (typeof value === "object") return JSON.stringify(value);
   return String(value);

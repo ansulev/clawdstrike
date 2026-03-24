@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { FILE_TYPE_REGISTRY } from "@/lib/workbench/file-type-registry";
+import { FILE_TYPE_REGISTRY, getDescriptor } from "@/lib/workbench/file-type-registry";
 import type { FileType } from "@/lib/workbench/file-type-registry";
+import { getTranslatableTargets } from "@/lib/workbench/detection-workflow/translations";
 
 // ---- Types ----
 
@@ -14,12 +15,16 @@ interface CommandPaletteProps {
   onValidate: () => void;
   onToggleCoverage: () => void;
   onDraftDetectionFromHunt?: () => void;
+  onTranslate?: (targetFileType: FileType) => void;
+  currentFileType?: FileType;
 }
+
+type CommandCategory = "File" | "Navigate" | "Format" | "Hunt" | "Translate";
 
 interface Command {
   id: string;
   label: string;
-  category: "File" | "Navigate" | "Format" | "Hunt";
+  category: CommandCategory;
   shortcut?: string;
   /** Hex color for the format dot (new-file commands). */
   dotColor?: string;
@@ -28,7 +33,7 @@ interface Command {
 
 // ---- Helpers ----
 
-const CATEGORY_ORDER = ["File", "Navigate", "Hunt", "Format"] as const;
+const CATEGORY_ORDER = ["File", "Navigate", "Hunt", "Format", "Translate"] as const;
 
 function buildCommands(
   onNewTab: (ft: FileType) => void,
@@ -38,6 +43,8 @@ function buildCommands(
   onToggleCoverage: () => void,
   onClose: () => void,
   onDraftDetectionFromHunt?: () => void,
+  onTranslate?: (targetFileType: FileType) => void,
+  currentFileType?: FileType,
 ): Command[] {
   const reg = FILE_TYPE_REGISTRY;
   return [
@@ -154,6 +161,21 @@ function buildCommands(
       category: "Format",
       action: () => { onToggleCoverage(); onClose(); },
     },
+
+    // Translate
+    ...(onTranslate && currentFileType
+      ? getTranslatableTargets(currentFileType).map((target) => {
+          let desc: { label: string; iconColor: string } | undefined;
+          try { desc = getDescriptor(target); } catch { /* unknown file type */ }
+          return {
+            id: `translate-to-${target}`,
+            label: `Translate to ${desc?.label ?? target}`,
+            category: "Translate" as CommandCategory,
+            dotColor: desc?.iconColor,
+            action: () => { onTranslate(target); onClose(); },
+          };
+        })
+      : []),
   ];
 }
 
@@ -168,6 +190,8 @@ export function CommandPalette({
   onValidate,
   onToggleCoverage,
   onDraftDetectionFromHunt,
+  onTranslate,
+  currentFileType,
 }: CommandPaletteProps) {
   const [query, setQuery] = useState("");
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -175,8 +199,8 @@ export function CommandPalette({
   const listRef = useRef<HTMLDivElement>(null);
 
   const commands = useMemo(
-    () => buildCommands(onNewTab, onNavigate, onOpenFile, onValidate, onToggleCoverage, onClose, onDraftDetectionFromHunt),
-    [onNewTab, onNavigate, onOpenFile, onValidate, onToggleCoverage, onClose, onDraftDetectionFromHunt],
+    () => buildCommands(onNewTab, onNavigate, onOpenFile, onValidate, onToggleCoverage, onClose, onDraftDetectionFromHunt, onTranslate, currentFileType),
+    [onNewTab, onNavigate, onOpenFile, onValidate, onToggleCoverage, onClose, onDraftDetectionFromHunt, onTranslate, currentFileType],
   );
 
   // Filter commands by query

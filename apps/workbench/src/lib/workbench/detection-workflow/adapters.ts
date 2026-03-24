@@ -55,8 +55,20 @@ export interface DetectionWorkflowAdapter {
 
 const adapters = new Map<FileType, DetectionWorkflowAdapter>();
 
-export function registerAdapter(adapter: DetectionWorkflowAdapter): void {
+/**
+ * Register an adapter for a file type.
+ * Returns a dispose function that unregisters the adapter.
+ */
+export function registerAdapter(adapter: DetectionWorkflowAdapter): () => void {
   adapters.set(adapter.fileType, adapter);
+  return () => unregisterAdapter(adapter.fileType);
+}
+
+/**
+ * Remove a previously registered adapter for the given file type.
+ */
+export function unregisterAdapter(fileType: FileType): void {
+  adapters.delete(fileType);
 }
 
 export function getAdapter(fileType: FileType): DetectionWorkflowAdapter | null {

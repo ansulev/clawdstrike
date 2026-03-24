@@ -8,7 +8,7 @@
 import { memo, useMemo } from "react";
 import { Handle, Position, NodeResizer, type NodeProps } from "@xyflow/react";
 import { cn } from "@/lib/utils";
-import type { SwarmBoardNodeData, SessionStatus } from "@/lib/workbench/swarm-board-types";
+import type { SwarmBoardNodeData, SessionStatus } from "@/features/swarm/swarm-board-types";
 
 // ---------------------------------------------------------------------------
 // Status styles — restrained, functional colors
@@ -20,6 +20,7 @@ const STATUS_CONFIG: Record<SessionStatus, { color: string; label: string }> = {
   blocked: { color: "#c49a3c", label: "WAIT" },
   completed: { color: "#5580cc", label: "DONE" },
   failed: { color: "#b85450", label: "FAIL" },
+  evaluating: { color: "#d4a84b", label: "EVAL" },
 };
 
 // ---------------------------------------------------------------------------

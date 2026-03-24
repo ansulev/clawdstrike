@@ -1,8 +1,8 @@
 import { useCallback, useMemo } from "react";
 import { motion } from "motion/react";
-import { useMultiPolicy, useWorkbench } from "@/lib/workbench/multi-policy-store";
-import type { PolicyTab } from "@/lib/workbench/multi-policy-store";
-import { getRecentFiles } from "@/lib/workbench/policy-store";
+import { usePolicyTabsStore, pushRecentFile, type TabMeta } from "@/features/policy/stores/policy-tabs-store";
+import { usePolicyEditStore } from "@/features/policy/stores/policy-edit-store";
+import { getRecentFiles } from "@/features/policy/stores/policy-store";
 import {
   FILE_TYPE_REGISTRY,
   type FileType,
@@ -11,7 +11,7 @@ import { SIGMA_TEMPLATES } from "@/lib/workbench/sigma-templates";
 import type { SigmaTemplate } from "@/lib/workbench/sigma-templates";
 import { YARA_TEMPLATES } from "@/lib/workbench/yara-templates";
 import type { YaraTemplate } from "@/lib/workbench/yara-templates";
-import { isDesktop } from "@/lib/tauri-bridge";
+import { isDesktop, openDetectionFile, readDetectionFileByPath } from "@/lib/tauri-bridge";
 import { cn } from "@/lib/utils";
 import {
   IconArrowRight,
@@ -23,6 +23,7 @@ import {
   IconRadar2,
   IconBug,
   IconSchema,
+  IconHexagons,
 } from "@tabler/icons-react";
 
 // ---------------------------------------------------------------------------
@@ -51,22 +52,25 @@ function fileName(path: string): string {
   return parts[parts.length - 1] || path;
 }
 
-function guardCount(tab: PolicyTab): number {
+function guardCount(tab: TabMeta, editStates: Map<string, import("@/features/policy/stores/policy-edit-store").TabEditState>): number {
   if (tab.fileType !== "clawdstrike_policy") return 0;
-  return Object.keys(tab.policy.guards).filter(
+  const editState = editStates.get(tab.id);
+  if (!editState) return 0;
+  return Object.keys(editState.policy.guards).filter(
     (key) =>
-      (tab.policy.guards as Record<string, { enabled?: boolean }>)[key]?.enabled === true,
+      (editState.policy.guards as Record<string, { enabled?: boolean }>)[key]?.enabled === true,
   ).length;
 }
 
-function tabStatus(tab: PolicyTab): string {
-  if (!tab.validation.valid) {
-    const issueCount = tab.validation.errors.length;
+function tabStatus(tab: TabMeta, editStates: Map<string, import("@/features/policy/stores/policy-edit-store").TabEditState>): string {
+  const editState = editStates.get(tab.id);
+  if (editState && !editState.validation.valid) {
+    const issueCount = editState.validation.errors.length;
     return `${issueCount} issue${issueCount === 1 ? "" : "s"}`;
   }
   switch (tab.fileType) {
     case "clawdstrike_policy": {
-      const guards = guardCount(tab);
+      const guards = guardCount(tab, editStates);
       return `${guards} guard${guards === 1 ? "" : "s"}`;
     }
     case "sigma_rule":
@@ -85,6 +89,7 @@ const FORMAT_ICONS: Record<FileType, typeof IconShieldLock> = {
   sigma_rule: IconRadar2,
   yara_rule: IconBug,
   ocsf_event: IconSchema,
+  swarm_bundle: IconHexagons,
 };
 
 // ---------------------------------------------------------------------------
@@ -93,12 +98,14 @@ const FORMAT_ICONS: Record<FileType, typeof IconShieldLock> = {
 
 function DocumentRow({
   tab,
+  editStates,
   isActive,
   onSwitch,
   onClose,
   delay,
 }: {
-  tab: PolicyTab;
+  tab: TabMeta;
+  editStates: Map<string, import("@/features/policy/stores/policy-edit-store").TabEditState>;
   isActive: boolean;
   onSwitch: () => void;
   onClose: () => void;
@@ -142,7 +149,7 @@ function DocumentRow({
         <div className="text-[9px] font-mono text-[#6f7f9a]/60 mt-0.5 flex items-center gap-1.5">
           <span style={{ color: `${desc.iconColor}80` }}>{desc.shortLabel}</span>
           <span>&middot;</span>
-          <span>{tabStatus(tab)}</span>
+          <span>{tabStatus(tab, editStates)}</span>
           {tab.filePath && (
             <>
               <span>&middot;</span>
@@ -276,8 +283,10 @@ export function EditorHomeTab({
 }: {
   onNavigateToTab: () => void;
 }) {
-  const { tabs, multiDispatch, multiState, canAddTab } = useMultiPolicy();
-  const { openFile, openFileByPath } = useWorkbench();
+  const tabs = usePolicyTabsStore(s => s.tabs);
+  const activeTabId = usePolicyTabsStore(s => s.activeTabId);
+  const editStates = usePolicyEditStore(s => s.editStates);
+  const canAddTab = tabs.length < 25;
   const desktop = isDesktop();
   const recentFiles = useMemo(
     () => (desktop ? getRecentFiles() : []),
@@ -285,18 +294,18 @@ export function EditorHomeTab({
   );
 
   const activeTab = useMemo(
-    () => tabs.find((tab) => tab.id === multiState.activeTabId) ?? tabs[0] ?? null,
-    [tabs, multiState.activeTabId],
+    () => tabs.find((tab) => tab.id === activeTabId) ?? tabs[0] ?? null,
+    [tabs, activeTabId],
   );
 
   const visibleRecentFiles = recentFiles.slice(0, 6);
 
   const handleSwitchToTab = useCallback(
     (tabId: string) => {
-      multiDispatch({ type: "SWITCH_TAB", tabId });
+      usePolicyTabsStore.getState().switchTab(tabId);
       onNavigateToTab();
     },
-    [multiDispatch, onNavigateToTab],
+    [onNavigateToTab],
   );
 
   const handleCloseTab = useCallback(
@@ -306,38 +315,59 @@ export function EditorHomeTab({
         const confirmed = window.confirm(`"${tab.name}" has unsaved changes. Close anyway?`);
         if (!confirmed) return;
       }
-      multiDispatch({ type: "CLOSE_TAB", tabId });
+      usePolicyTabsStore.getState().closeTab(tabId);
     },
-    [tabs, multiDispatch],
+    [tabs],
   );
 
   const handleCreateFile = useCallback(
     (fileType: FileType) => {
       if (!canAddTab) return;
-      multiDispatch({ type: "NEW_TAB", fileType });
+      usePolicyTabsStore.getState().newTab({ fileType });
       onNavigateToTab();
     },
-    [canAddTab, multiDispatch, onNavigateToTab],
+    [canAddTab, onNavigateToTab],
   );
 
   const handleOpenFile = useCallback(async () => {
-    await openFile();
-    onNavigateToTab();
-  }, [openFile, onNavigateToTab]);
+    try {
+      const result = await openDetectionFile();
+      if (!result) return;
+      usePolicyTabsStore.getState().openTabOrSwitch(
+        result.path,
+        result.fileType,
+        result.content,
+      );
+      pushRecentFile(result.path);
+      onNavigateToTab();
+    } catch (err) {
+      console.error("[editor-home-tab] Failed to open file:", err);
+    }
+  }, [onNavigateToTab]);
 
   const handleOpenRecentFile = useCallback(
     async (filePath: string) => {
-      await openFileByPath(filePath);
-      onNavigateToTab();
+      try {
+        const result = await readDetectionFileByPath(filePath);
+        if (!result) return;
+        usePolicyTabsStore.getState().openTabOrSwitch(
+          result.path,
+          result.fileType,
+          result.content,
+        );
+        pushRecentFile(result.path);
+        onNavigateToTab();
+      } catch (err) {
+        console.error("[editor-home-tab] Failed to open file by path:", err);
+      }
     },
-    [openFileByPath, onNavigateToTab],
+    [onNavigateToTab],
   );
 
   const handleLoadTemplate = useCallback(
     (template: TemplateEntry) => {
       if (!canAddTab) return;
-      multiDispatch({
-        type: "NEW_TAB",
+      usePolicyTabsStore.getState().newTab({
         policy: {
           version: "1.2.0",
           name: `my-${template.name}-policy`,
@@ -349,25 +379,25 @@ export function EditorHomeTab({
       });
       onNavigateToTab();
     },
-    [canAddTab, multiDispatch, onNavigateToTab],
+    [canAddTab, onNavigateToTab],
   );
 
   const handleLoadSigmaTemplate = useCallback(
     (template: SigmaTemplate) => {
       if (!canAddTab) return;
-      multiDispatch({ type: "NEW_TAB", fileType: "sigma_rule", yaml: template.content });
+      usePolicyTabsStore.getState().newTab({ fileType: "sigma_rule", yaml: template.content });
       onNavigateToTab();
     },
-    [canAddTab, multiDispatch, onNavigateToTab],
+    [canAddTab, onNavigateToTab],
   );
 
   const handleLoadYaraTemplate = useCallback(
     (template: YaraTemplate) => {
       if (!canAddTab) return;
-      multiDispatch({ type: "NEW_TAB", fileType: "yara_rule", yaml: template.content });
+      usePolicyTabsStore.getState().newTab({ fileType: "yara_rule", yaml: template.content });
       onNavigateToTab();
     },
-    [canAddTab, multiDispatch, onNavigateToTab],
+    [canAddTab, onNavigateToTab],
   );
 
   const featuredSigmaTemplate = SIGMA_TEMPLATES[0] ?? null;
@@ -389,7 +419,7 @@ export function EditorHomeTab({
       <div className="w-full px-8 py-6 flex flex-col gap-6 max-w-7xl">
 
         {/* ================================================================ */}
-        {/* Header — compact workstation briefing                           */}
+        {/* Header -- compact workstation briefing                           */}
         {/* ================================================================ */}
         <motion.div
           className="flex items-center justify-between gap-4"
@@ -447,7 +477,7 @@ export function EditorHomeTab({
         </motion.div>
 
         {/* ================================================================ */}
-        {/* Main grid — documents left, create/templates right              */}
+        {/* Main grid -- documents left, create/templates right              */}
         {/* ================================================================ */}
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-4 min-h-0">
 
@@ -472,6 +502,7 @@ export function EditorHomeTab({
                   <DocumentRow
                     key={tab.id}
                     tab={tab}
+                    editStates={editStates}
                     isActive={tab.id === activeTab?.id}
                     onSwitch={() => handleSwitchToTab(tab.id)}
                     onClose={() => handleCloseTab(tab.id)}

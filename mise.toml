@@ -181,3 +181,13 @@ run = "./formal/scripts/regenerate-aeneas.sh --check"
 [tasks.verify-all]
 description = "Run all formal verification checks (policies + diff tests + Lean build)"
 depends = ["verify-policies", "diff-test", "verify-lean"]
+
+# ---------------------------------------------------------------------------
+# Documentation tasks
+# ---------------------------------------------------------------------------
+
+[tasks."docs:plugin-api"]
+description = "Generate TypeDoc API reference for @clawdstrike/plugin-sdk"
+run = """
+cd packages/sdk/plugin-sdk && npm install --ignore-scripts && npx typedoc
+"""

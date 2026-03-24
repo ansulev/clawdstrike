@@ -3,12 +3,12 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { screen, within, act, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "@/test/test-helpers";
-import { fleetClient } from "@/lib/workbench/fleet-client";
+import { fleetClient } from "@/features/fleet/fleet-client";
 import { ApprovalQueue } from "../approval-queue";
 
 
 // Mock fleet-client so no real HTTP calls happen
-vi.mock("@/lib/workbench/fleet-client", () => ({
+vi.mock("@/features/fleet/fleet-client", () => ({
   fleetClient: {
     healthCheck: vi.fn().mockResolvedValue(false),
     fetchApprovals: vi.fn().mockResolvedValue({ requests: [], decisions: [] }),
@@ -48,9 +48,9 @@ const mockCredentials = {
   controlApiToken: "",
 };
 
-vi.mock("@/lib/workbench/use-fleet-connection", async () => {
-  const actual = await vi.importActual<typeof import("@/lib/workbench/use-fleet-connection")>(
-    "@/lib/workbench/use-fleet-connection",
+vi.mock("@/features/fleet/use-fleet-connection", async () => {
+  const actual = await vi.importActual<typeof import("@/features/fleet/use-fleet-connection")>(
+    "@/features/fleet/use-fleet-connection",
   );
   return {
     ...actual,

@@ -1,7 +1,9 @@
 import { useCallback } from "react";
+import { usePolicyTabsStore } from "@/features/policy/stores/policy-tabs-store";
+import { usePolicyEditStore } from "@/features/policy/stores/policy-edit-store";
 import { WobbleCard } from "@/components/ui/wobble-card";
-import { useWorkbench } from "@/lib/workbench/multi-policy-store";
-import { yamlToPolicy } from "@/lib/workbench/yaml-utils";
+import { yamlToPolicy } from "@/features/policy/yaml-utils";
+import { isPolicyFileType } from "@/lib/workbench/file-type-registry";
 import { cn } from "@/lib/utils";
 import { IconEye, IconDownload, IconTrash } from "@tabler/icons-react";
 
@@ -26,7 +28,8 @@ export function PolicyCard({
   isBuiltin,
   onViewYaml,
 }: PolicyCardProps) {
-  const { loadPolicy, dispatch } = useWorkbench();
+  const activeTabId = usePolicyTabsStore(s => s.activeTabId);
+  const activeTab = usePolicyTabsStore(s => s.tabs.find(t => t.id === s.activeTabId));
 
   // Count guards from yaml if not provided
   const effectiveGuardCount = guardCount ?? countGuards(yaml);
@@ -35,13 +38,18 @@ export function PolicyCard({
   const handleLoad = useCallback(() => {
     const [policy] = yamlToPolicy(yaml);
     if (policy) {
-      loadPolicy(policy);
+      if (activeTab && isPolicyFileType(activeTab.fileType)) {
+        usePolicyEditStore.getState().updatePolicy(activeTabId, policy, activeTab.fileType);
+        usePolicyTabsStore.getState().setDirty(activeTabId, true);
+      } else {
+        usePolicyTabsStore.getState().newTab({ policy });
+      }
     }
-  }, [yaml, loadPolicy]);
+  }, [yaml, activeTabId, activeTab?.fileType]);
 
   const handleDelete = useCallback(() => {
-    dispatch({ type: "DELETE_SAVED_POLICY", id });
-  }, [id, dispatch]);
+    usePolicyTabsStore.getState().deleteSavedPolicy(id);
+  }, [id]);
 
   if (isBuiltin) {
     return (

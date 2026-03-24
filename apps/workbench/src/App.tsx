@@ -1,145 +1,21 @@
-import { Component, lazy, Suspense, useEffect } from "react";
+import { Component, Suspense, useEffect, useRef } from "react";
 import type { ErrorInfo, ReactNode } from "react";
-import { HashRouter, Routes, Route, Navigate } from "react-router-dom";
-import { MultiPolicyProvider } from "@/lib/workbench/multi-policy-store";
-import { ProjectProvider } from "@/lib/workbench/project-store";
-import { FleetConnectionProvider } from "@/lib/workbench/use-fleet-connection";
-import { GeneralSettingsProvider } from "@/lib/workbench/use-general-settings";
-import { HintSettingsProvider } from "@/lib/workbench/use-hint-settings";
-import { SwarmProvider } from "@/lib/workbench/swarm-store";
-import { SentinelProvider } from "@/lib/workbench/sentinel-store";
-import { FindingProvider } from "@/lib/workbench/finding-store";
-import { SignalProvider } from "@/lib/workbench/signal-store";
-import { IntelProvider } from "@/lib/workbench/intel-store";
-import { MissionProvider } from "@/lib/workbench/mission-store";
-import { OperatorProvider } from "@/lib/workbench/operator-store";
-import { ReputationProvider } from "@/lib/workbench/reputation-store";
-import { SwarmFeedProvider } from "@/lib/workbench/swarm-feed-store";
+import { HashRouter, useRoutes } from "react-router-dom";
 import { ToastProvider } from "@/components/ui/toast";
 import { DesktopLayout } from "@/components/desktop/desktop-layout";
 import { IdentityPrompt } from "@/components/workbench/identity/identity-prompt";
-import { secureStore, migrateCredentialsToStronghold } from "@/lib/workbench/secure-store";
-
-
-const PolicyEditor = lazy(() =>
-  import("@/components/workbench/editor/policy-editor").then((m) => ({
-    default: m.PolicyEditor,
-  })),
-);
-
-const LabLayout = lazy(() =>
-  import("@/components/workbench/lab/lab-layout").then((m) => ({
-    default: m.LabLayout,
-  })),
-);
-
-const TopologyLayout = lazy(() =>
-  import("@/components/workbench/topology/topology-layout").then((m) => ({
-    default: m.TopologyLayout,
-  })),
-);
-
-const ComplianceDashboard = lazy(() =>
-  import("@/components/workbench/compliance/compliance-dashboard").then(
-    (m) => ({ default: m.ComplianceDashboard }),
-  ),
-);
-
-const ReceiptInspector = lazy(() =>
-  import("@/components/workbench/receipts/receipt-inspector").then((m) => ({
-    default: m.ReceiptInspector,
-  })),
-);
-
-const LibraryGallery = lazy(() =>
-  import("@/components/workbench/library/library-gallery").then((m) => ({
-    default: m.LibraryGallery,
-  })),
-);
-
-const SettingsPage = lazy(() =>
-  import("@/components/workbench/settings/settings-page").then((m) => ({
-    default: m.SettingsPage,
-  })),
-);
-
-const ApprovalQueue = lazy(() =>
-  import("@/components/workbench/approvals/approval-queue").then((m) => ({
-    default: m.ApprovalQueue,
-  })),
-);
-
-const FleetDashboard = lazy(() =>
-  import("@/components/workbench/fleet/fleet-dashboard").then((m) => ({
-    default: m.FleetDashboard,
-  })),
-);
-
-const AuditLog = lazy(() =>
-  import("@/components/workbench/audit/audit-log").then((m) => ({
-    default: m.AuditLog,
-  })),
-);
-
-const HomePage = lazy(() =>
-  import("@/components/workbench/home/home-page").then((m) => ({
-    default: m.HomePage,
-  })),
-);
-
-const SentinelsPage = lazy(() =>
-  import("@/components/workbench/sentinel-swarm-pages").then((m) => ({
-    default: m.SentinelsPage,
-  })),
-);
-
-const SentinelCreatePage = lazy(() =>
-  import("@/components/workbench/sentinel-swarm-pages").then((m) => ({
-    default: m.SentinelCreatePage,
-  })),
-);
-
-const SentinelDetailPage = lazy(() =>
-  import("@/components/workbench/sentinel-swarm-pages").then((m) => ({
-    default: m.SentinelDetailPage,
-  })),
-);
-
-const FindingsPage = lazy(() =>
-  import("@/components/workbench/sentinel-swarm-pages").then((m) => ({
-    default: m.FindingsPage,
-  })),
-);
-
-const FindingDetailPage = lazy(() =>
-  import("@/components/workbench/sentinel-swarm-pages").then((m) => ({
-    default: m.FindingDetailPage,
-  })),
-);
-
-const IntelDetailPage = lazy(() =>
-  import("@/components/workbench/sentinel-swarm-pages").then((m) => ({
-    default: m.IntelDetailPage,
-  })),
-);
-
-const SwarmPage = lazy(() =>
-  import("@/components/workbench/swarms/swarm-page").then((m) => ({
-    default: m.SwarmPage,
-  })),
-);
-
-const SwarmDetail = lazy(() =>
-  import("@/components/workbench/swarms/swarm-detail").then((m) => ({
-    default: m.SwarmDetail,
-  })),
-);
-
-const MissionControlPage = lazy(() =>
-  import("@/components/workbench/missions/mission-control-page").then((m) => ({
-    default: m.MissionControlPage,
-  })),
-);
+import { useOperator } from "@/features/operator/stores/operator-store";
+import { useFleetConnection } from "@/features/fleet/use-fleet-connection";
+import { usePresenceConnection } from "@/features/presence/use-presence-connection";
+import { usePresenceFileTracking } from "@/features/presence/use-presence-file-tracking";
+import { HintSettingsProvider, useHintSettingsSafe } from "@/features/settings/use-hint-settings";
+import { usePolicyBootstrap } from "@/features/policy/hooks/use-policy-bootstrap";
+import { secureStore, migrateCredentialsToStronghold } from "@/features/settings/secure-store";
+import { bootstrapThreatIntelPlugins } from "@/lib/plugins/threat-intel/bootstrap";
+import { useProjectStore } from "@/features/project/stores/project-store";
+import { useToast } from "@/components/ui/toast";
+import { usePaneStore } from "@/features/panes/pane-store";
+import { useSignalCorrelator } from "@/features/findings/hooks/use-signal-correlator";
 
 function LoadingFallback() {
   return (
@@ -189,6 +65,113 @@ function LoadingFallback() {
       `}</style>
     </div>
   );
+}
+
+/**
+ * Bootstrap the workspace on first launch or restore persisted roots.
+ *
+ * - Always ensures ~/.clawdstrike/workspace/ exists (creates it if missing).
+ * - If persisted roots exist (subsequent launches), restores them. If the
+ *   default workspace path is not among the persisted roots it is added
+ *   automatically so the Explorer never shows the raw ~/.clawdstrike config
+ *   directory.
+ * - If no roots exist (first launch), scaffolds the default workspace
+ *   at ~/.clawdstrike/workspace/ and mounts it.
+ *
+ * Fire-and-forget: errors are logged but never thrown.
+ */
+function useWorkspaceBootstrap(toastRef: React.RefObject<ReturnType<typeof useToast>["toast"] | null>) {
+  useEffect(() => {
+    async function init() {
+      const { isDesktop } = await import("@/lib/tauri-bridge");
+      if (!isDesktop()) return;
+
+      const store = useProjectStore.getState();
+      store.actions.setLoading(true);
+
+      try {
+        // Always ensure the default workspace directory structure exists.
+        const { bootstrapDefaultWorkspace, getDefaultWorkspacePath } = await import(
+          "@/features/project/workspace-bootstrap"
+        );
+        const workspacePath = await bootstrapDefaultWorkspace();
+        const defaultPath = workspacePath ?? await getDefaultWorkspacePath();
+
+        const roots = store.projectRoots;
+
+        if (roots.length > 0) {
+          // Restore persisted workspace roots.
+          await store.actions.initFromPersistedRoots();
+
+          // If the default workspace path is missing from persisted roots,
+          // add it so the user always sees the workspace (not the raw config dir).
+          const currentRoots = useProjectStore.getState().projectRoots;
+          if (!currentRoots.includes(defaultPath)) {
+            store.actions.addRoot(defaultPath);
+          }
+        } else {
+          // First launch: mount the default workspace.
+          store.actions.addRoot(defaultPath);
+          await store.actions.loadRoot(defaultPath);
+        }
+
+        // Safety net: if after all bootstrap paths the projects Map is still
+        // empty (e.g. stale persisted roots pointing to deleted directories),
+        // ensure the default workspace is loaded as a fallback.
+        const finalProjects = useProjectStore.getState().projects;
+        if (finalProjects.size === 0) {
+          const finalRoots = useProjectStore.getState().projectRoots;
+          if (!finalRoots.includes(defaultPath)) {
+            store.actions.addRoot(defaultPath);
+          }
+          await store.actions.loadRoot(defaultPath);
+        }
+      } finally {
+        useProjectStore.getState().actions.setLoading(false);
+      }
+
+      // Restore the previous pane session AFTER workspace roots are loaded
+      // so that restored file panes can resolve against mounted projects.
+      const count = usePaneStore.getState().restoreSession();
+      if (count > 0 && toastRef.current) {
+        toastRef.current({
+          type: "info",
+          title: `Restored ${count} file${count === 1 ? "" : "s"}`,
+          description: "Your previous session has been restored",
+          duration: 3000,
+        });
+      }
+    }
+    init().catch((err) => {
+      console.warn("[workspace-bootstrap] Init failed:", err);
+      useProjectStore.getState().actions.setLoading(false);
+    });
+  }, []);
+}
+
+function WorkbenchBootstraps() {
+  const { toast } = useToast();
+  const toastRef = useRef<typeof toast | null>(null);
+  toastRef.current = toast;
+
+  useOperator();
+  useFleetConnection();
+  usePresenceConnection();
+  usePresenceFileTracking();
+  useHintSettingsSafe();
+  usePolicyBootstrap();
+  useSignalCorrelator();
+  useWorkspaceBootstrap(toastRef);
+  return null;
+}
+
+function WorkbenchRouter() {
+  return useRoutes([
+    {
+      path: "*",
+      element: <DesktopLayout />,
+    },
+  ]);
 }
 
 
@@ -287,35 +270,9 @@ class ErrorBoundary extends Component<{ children: ReactNode }, ErrorBoundaryStat
 
 function AppProviders({ children }: { children: ReactNode }) {
   return (
-    <OperatorProvider>
-      <ReputationProvider>
-        <ToastProvider>
-          <GeneralSettingsProvider>
-            <HintSettingsProvider>
-              <ProjectProvider>
-                <MultiPolicyProvider>
-                  <SentinelProvider>
-                    <FindingProvider>
-                      <SignalProvider>
-                        <IntelProvider>
-                          <MissionProvider>
-                            <SwarmFeedProvider>
-                              <SwarmProvider>
-                                <FleetConnectionProvider>{children}</FleetConnectionProvider>
-                              </SwarmProvider>
-                            </SwarmFeedProvider>
-                          </MissionProvider>
-                        </IntelProvider>
-                      </SignalProvider>
-                    </FindingProvider>
-                  </SentinelProvider>
-                </MultiPolicyProvider>
-              </ProjectProvider>
-            </HintSettingsProvider>
-          </GeneralSettingsProvider>
-        </ToastProvider>
-      </ReputationProvider>
-    </OperatorProvider>
+    <ToastProvider>
+      <HintSettingsProvider>{children}</HintSettingsProvider>
+    </ToastProvider>
   );
 }
 
@@ -326,10 +283,27 @@ function AppProviders({ children }: { children: ReactNode }) {
  * support HTML5 history pushState).
  */
 export function App() {
-  // Initialise Stronghold vault + migrate legacy localStorage credentials on first launch.
+  // Initialise Stronghold vault, migrate legacy credentials, then bootstrap threat intel plugins.
   useEffect(() => {
-    secureStore.init().then(() => migrateCredentialsToStronghold()).catch((err) => {
-      console.warn("[secure-store] Stronghold init failed:", err);
+    async function bootstrapSecureStore() {
+      try {
+        await secureStore.init();
+      } catch (err) {
+        console.warn("[secure-store] Startup init failed:", err);
+        return;
+      }
+
+      try {
+        await migrateCredentialsToStronghold();
+      } catch (err) {
+        console.warn("[secure-store] Credential migration failed (non-fatal):", err);
+      }
+
+      await bootstrapThreatIntelPlugins();
+    }
+
+    bootstrapSecureStore().catch((err) => {
+      console.warn("[plugins] Threat intel bootstrap failed:", err);
     });
   }, []);
 
@@ -338,106 +312,9 @@ export function App() {
       <ErrorBoundary>
         <AppProviders>
           <Suspense fallback={<LoadingFallback />}>
+            <WorkbenchBootstraps />
             <IdentityPrompt />
-            <Routes>
-              <Route element={<DesktopLayout />}>
-                {/* Default redirect */}
-                <Route index element={<Navigate to="/home" replace />} />
-
-                {/* Core pages */}
-                <Route path="home" element={<HomePage />} />
-                <Route path="editor" element={<PolicyEditor />} />
-                <Route path="compliance" element={<ComplianceDashboard />} />
-                <Route path="receipts" element={<ReceiptInspector />} />
-                <Route path="library" element={<LibraryGallery />} />
-                <Route path="settings" element={<SettingsPage />} />
-                <Route path="approvals" element={<ApprovalQueue />} />
-                <Route path="fleet" element={<FleetDashboard />} />
-                <Route path="audit" element={<AuditLog />} />
-
-                {/* Sentinel Swarm pages */}
-                <Route path="sentinels" element={<SentinelsPage />} />
-                <Route path="sentinels/create" element={<SentinelCreatePage />} />
-                <Route path="sentinels/:id" element={<SentinelDetailPage />} />
-                <Route path="findings" element={<FindingsPage />} />
-                <Route path="findings/:id" element={<FindingDetailPage />} />
-                <Route path="intel/:id" element={<IntelDetailPage />} />
-                <Route path="missions" element={<MissionControlPage />} />
-                <Route path="swarms" element={<SwarmPage />} />
-                <Route path="swarms/:id" element={<SwarmDetail />} />
-                <Route path="swarm-board" element={<Navigate to="/lab" replace />} />
-
-                {/* Merged pages */}
-                <Route path="lab" element={<LabLayout />} />
-                <Route path="topology" element={<TopologyLayout />} />
-
-                {/* Redirects for bookmark compatibility */}
-                <Route
-                  path="intel"
-                  element={
-                    <Navigate
-                      to={{ pathname: "/findings", search: "?tab=intel" }}
-                      replace
-                    />
-                  }
-                />
-                <Route
-                  path="hunt"
-                  element={
-                    <Navigate to={{ pathname: "/lab", search: "?tab=hunt" }} replace />
-                  }
-                />
-                <Route
-                  path="simulator"
-                  element={
-                    <Navigate
-                      to={{ pathname: "/lab", search: "?tab=simulate" }}
-                      replace
-                    />
-                  }
-                />
-                <Route
-                  path="guards"
-                  element={
-                    <Navigate
-                      to={{ pathname: "/editor", search: "?panel=guards" }}
-                      replace
-                    />
-                  }
-                />
-                <Route
-                  path="compare"
-                  element={
-                    <Navigate
-                      to={{ pathname: "/editor", search: "?panel=compare" }}
-                      replace
-                    />
-                  }
-                />
-                <Route
-                  path="delegation"
-                  element={
-                    <Navigate
-                      to={{ pathname: "/topology", search: "?tab=delegation" }}
-                      replace
-                    />
-                  }
-                />
-                <Route
-                  path="hierarchy"
-                  element={
-                    <Navigate
-                      to={{ pathname: "/topology", search: "?tab=hierarchy" }}
-                      replace
-                    />
-                  }
-                />
-                <Route path="overview" element={<Navigate to="/home" replace />} />
-
-                {/* Catch-all */}
-                <Route path="*" element={<Navigate to="/home" replace />} />
-              </Route>
-            </Routes>
+            <WorkbenchRouter />
           </Suspense>
         </AppProviders>
       </ErrorBoundary>

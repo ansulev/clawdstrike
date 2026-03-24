@@ -443,6 +443,9 @@ jobs:
       - name: Install protoc
         run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
 
+      - name: Install Z3 toolchain for all-features docs
+        run: sudo apt-get update && sudo apt-get install -y z3 libz3-dev clang libclang-dev
+
       - name: Build documentation
         run: cargo doc --no-deps --all-features
         env:
@@ -1081,9 +1084,8 @@ jobs:
             and .checks.pluginStatusLoaded
             and .checks.hookPreflightPresent
             and .checks.hookCuaPresent
-            and .checks.chatSendStarted
-            and .checks.historyHasMessages
-            and .checks.assistantBlockSignal
+            and .checks.policyCheckCallOk
+            and .checks.policyCheckDenied
             and .checks.targetFileAbsent
           ' artifacts/openclaw-runtime-blocked-e2e-${{ matrix.openclaw_version }}/summary.json >/dev/null
 
@@ -1178,10 +1180,12 @@ jobs:
           - name: Adapter Core
             dir: packages/adapters/clawdstrike-adapter-core
             bootstrap_adapter_core: false
+            bootstrap_broker_client: false
             bootstrap_sdk: false
           - name: Hush CLI Engine
             dir: packages/adapters/clawdstrike-hush-cli-engine
             bootstrap_adapter_core: true
+            bootstrap_broker_client: false
             bootstrap_sdk: false
             bootstrap_hush: true
           - name: OpenAI

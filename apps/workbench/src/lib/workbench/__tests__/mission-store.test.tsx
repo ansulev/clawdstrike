@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { MissionProvider, useMissions } from "../mission-store";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { useMissions, useMissionStore } from "../mission-store";
 
 const STORAGE_KEY = "clawdstrike_workbench_missions";
 
@@ -41,14 +41,25 @@ function MissionSnapshot() {
   );
 }
 
+beforeEach(() => {
+  // Reset the Zustand store to initial empty state before each test
+  useMissionStore.setState({
+    missions: [],
+    activeMissionId: null,
+    loading: false,
+  });
+});
+
 afterEach(() => {
   vi.useRealTimers();
+  localStorage.clear();
 });
 
 describe("mission-store", () => {
   it("repairs drifted active missions into an advanceable shape before persisting them", () => {
     vi.useFakeTimers();
 
+    // Seed localStorage with a legacy mission that needs repair
     localStorage.setItem(
       STORAGE_KEY,
       JSON.stringify({
@@ -63,11 +74,12 @@ describe("mission-store", () => {
       }),
     );
 
-    render(
-      <MissionProvider>
-        <MissionSnapshot />
-      </MissionProvider>,
-    );
+    // Rehydrate the store from localStorage (triggers normalization + repair)
+    act(() => {
+      useMissionStore.getState().actions._rehydrate();
+    });
+
+    render(<MissionSnapshot />);
 
     const snapshot = JSON.parse(screen.getByTestId("snapshot").textContent ?? "{}");
 

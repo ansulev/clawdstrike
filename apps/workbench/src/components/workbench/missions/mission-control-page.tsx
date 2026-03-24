@@ -19,7 +19,7 @@ import {
 import { ClaudeCodeHint } from "@/components/workbench/shared/claude-code-hint";
 import { cn } from "@/lib/utils";
 import { assessMissionLaunch, executeMissionDriver } from "@/lib/workbench/mission-control";
-import { useMissions } from "@/lib/workbench/mission-store";
+import { useMissions } from "@/features/missions/stores/mission-store";
 import type {
   MissionEvidence,
   MissionLaunchContext,
@@ -28,11 +28,11 @@ import type {
   MissionStatus,
 } from "@/lib/workbench/mission-types";
 import { correlateSignals } from "@/lib/workbench/signal-pipeline";
-import { useSignals } from "@/lib/workbench/signal-store";
-import { useFindings } from "@/lib/workbench/finding-store";
+import { useSignals } from "@/features/findings/stores/signal-store";
+import { useFindings } from "@/features/findings/stores/finding-store";
 import { getSentinelDriverDefinition, getSentinelExecutionModeConfig } from "@/lib/workbench/sentinel-manager";
-import { useSentinels } from "@/lib/workbench/sentinel-store";
-import { useFleetConnection } from "@/lib/workbench/use-fleet-connection";
+import { useSentinels } from "@/features/sentinels/stores/sentinel-store";
+import { useFleetConnection } from "@/features/fleet/use-fleet-connection";
 import { useMcpStatus } from "@/lib/workbench/use-mcp-status";
 import { signReceiptNative, signReceiptPersistentNative } from "@/lib/tauri-commands";
 import { generateId } from "@/lib/workbench/sentinel-types";

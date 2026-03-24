@@ -20,6 +20,7 @@ fn main() {
         .plugin(tauri_plugin_window_state::Builder::new().build())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_http::init())
+        .plugin(tauri_plugin_opener::init())
         .plugin({
             // Register tauri-plugin-stronghold for JS-side capabilities/permissions.
             // The actual Stronghold instance is managed by our StrongholdState below.
@@ -156,6 +157,8 @@ fn main() {
             worktree::worktree_remove,
             worktree::worktree_list,
             worktree::worktree_status,
+            workbench::cancel_search_in_project,
+            workbench::search_in_project,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

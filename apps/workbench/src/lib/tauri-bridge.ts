@@ -13,6 +13,8 @@ import {
   type FileType,
 } from "@/lib/workbench/file-type-registry";
 
+const TAURI_FS_SPECIFIER = "@tauri-apps/plugin-fs";
+const TAURI_OPENER_SPECIFIER = "@tauri-apps/plugin-opener";
 
 /** Returns true when running inside a Tauri webview. */
 export function isDesktop(): boolean {
@@ -25,6 +27,13 @@ export function isMacOS(): boolean {
   return /Mac/i.test(navigator.platform);
 }
 
+async function importTauriFs() {
+  return import(/* @vite-ignore */ TAURI_FS_SPECIFIER);
+}
+
+async function importTauriOpener() {
+  return import(/* @vite-ignore */ TAURI_OPENER_SPECIFIER);
+}
 
 async function getWindow() {
   const { getCurrentWindow } = await import("@tauri-apps/api/window");
@@ -137,6 +146,7 @@ const FILE_TYPE_FILTERS: Record<FileType, { name: string; extensions: string[] }
   sigma_rule: { name: "Sigma Rule", extensions: ["yaml", "yml"] },
   yara_rule: { name: "YARA Rule", extensions: ["yar", "yara"] },
   ocsf_event: { name: "OCSF Event", extensions: ["json"] },
+  swarm_bundle: { name: "Swarm Bundle", extensions: ["swarm"] },
 };
 
 function resolveLegacySaveType(value: FileType | string): FileType {
@@ -237,10 +247,302 @@ export async function readPolicyFileByPath(filePath: string): Promise<OpenFileRe
   return readDetectionFileByPath(filePath);
 }
 
+/**
+ * Create a new detection file with default content in the given directory.
+ *
+ * @param dirPath  - Absolute path to the parent directory.
+ * @param fileName - The file name (e.g. "my-policy.yaml").
+ * @param fileType - The detection file type to determine default content.
+ * @returns The saved file path, or null on failure / non-desktop.
+ */
+export async function createDetectionFile(
+  dirPath: string,
+  fileName: string,
+  fileType: FileType,
+): Promise<string | null> {
+  if (!isDesktop()) return null;
+
+  try {
+    const fullPath = `${dirPath}/${fileName}`;
+    const defaultContent = FILE_TYPE_REGISTRY[fileType].defaultContent;
+    return await saveDetectionFile(defaultContent, fileType, fullPath);
+  } catch (err) {
+    console.error("[tauri-bridge] Failed to create file:", err);
+    return null;
+  }
+}
+
+/**
+ * Rename a file on disk.
+ *
+ * @param oldPath - Current absolute path.
+ * @param newPath - Desired absolute path.
+ * @returns true on success, false on failure / non-desktop.
+ */
+export async function renameDetectionFile(
+  oldPath: string,
+  newPath: string,
+): Promise<boolean> {
+  if (!isDesktop()) return false;
+
+  try {
+    const { rename } = await importTauriFs();
+    await rename(oldPath, newPath);
+    return true;
+  } catch (err) {
+    console.error("[tauri-bridge] Failed to rename file:", oldPath, "->", newPath, err);
+    return false;
+  }
+}
+
+/**
+ * Delete a file from disk.
+ *
+ * @param filePath - Absolute path to remove.
+ * @returns true on success, false on failure / non-desktop.
+ */
+export async function deleteDetectionFile(
+  filePath: string,
+): Promise<boolean> {
+  if (!isDesktop()) return false;
+
+  try {
+    const { remove } = await importTauriFs();
+    await remove(filePath);
+    return true;
+  } catch (err) {
+    console.error("[tauri-bridge] Failed to delete file:", filePath, err);
+    return false;
+  }
+}
+
 export async function savePolicyFile(
   content: string,
   filePath?: string | null,
   _format?: string,
 ): Promise<string | null> {
   return saveDetectionFile(content, "clawdstrike_policy", filePath, "policy");
+}
+
+/**
+ * Reveal a file or directory in the OS file manager (Finder on macOS).
+ * Falls back to opening the parent directory if the path cannot be revealed.
+ */
+export async function revealInFinder(path: string): Promise<void> {
+  if (!isDesktop()) return;
+  try {
+    const { revealItemInDir } = await importTauriOpener();
+    await revealItemInDir(path);
+  } catch (err) {
+    console.error("[tauri-bridge] Failed to reveal in Finder:", path, err);
+  }
+}
+
+/**
+ * Create a directory on disk (recursive).
+ * @returns true on success, false on failure / non-desktop.
+ */
+export async function createDirectory(dirPath: string): Promise<boolean> {
+  if (!isDesktop()) return false;
+  try {
+    const { mkdir } = await importTauriFs();
+    await mkdir(dirPath, { recursive: true });
+    return true;
+  } catch (err) {
+    console.error("[tauri-bridge] Failed to create directory:", dirPath, err);
+    return false;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// .swarm bundle helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Read a .swarm bundle's manifest.json and board.json files.
+ * Returns the parsed data, or null if not found / not desktop.
+ */
+export async function readSwarmBundle(bundlePath: string): Promise<{
+  manifest: Record<string, unknown> | null;
+  board: Record<string, unknown> | null;
+} | null> {
+  if (!isDesktop()) return null;
+  try {
+    const { readTextFile, exists } = await importTauriFs();
+    const manifestPath = `${bundlePath}/manifest.json`;
+    const manifest = (await exists(manifestPath))
+      ? JSON.parse(await readTextFile(manifestPath))
+      : null;
+    const boardPath = `${bundlePath}/board.json`;
+    const board = (await exists(boardPath))
+      ? JSON.parse(await readTextFile(boardPath))
+      : null;
+    return { manifest, board };
+  } catch (err) {
+    console.error("[tauri-bridge] readSwarmBundle failed:", bundlePath, err);
+    return null;
+  }
+}
+
+/**
+ * Write board.json inside a .swarm bundle directory.
+ * Creates the file if it doesn't exist. Returns true on success.
+ */
+export async function writeSwarmBoardJson(
+  bundlePath: string,
+  board: Record<string, unknown>,
+): Promise<boolean> {
+  if (!isDesktop()) return false;
+  try {
+    const { writeTextFile } = await importTauriFs();
+    await writeTextFile(
+      `${bundlePath}/board.json`,
+      JSON.stringify(board, null, 2),
+    );
+    return true;
+  } catch (err) {
+    console.error("[tauri-bridge] writeSwarmBoardJson failed:", bundlePath, err);
+    return false;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Policy-aware .swarm bundle creation
+// ---------------------------------------------------------------------------
+
+export interface CreateSwarmFromPolicyOptions {
+  parentDir: string;
+  policyFileName: string;
+  policyFilePath: string;
+  sentinels: Array<{ id: string; name: string; mode: string }>;
+}
+
+/**
+ * Create a .swarm bundle pre-configured for a specific policy file.
+ *
+ * The manifest includes a `policyRef` pointing to the active policy, and
+ * the board is pre-seeded with `agentSession` nodes for each active sentinel.
+ * Bundle naming: {policyFileName}-{date}.swarm
+ *
+ * @returns The absolute bundle path on success, or null on failure.
+ */
+export async function createSwarmBundleFromPolicy(
+  opts: CreateSwarmFromPolicyOptions,
+): Promise<string | null> {
+  if (!isDesktop()) return null;
+  try {
+    const { mkdir, writeTextFile } = await importTauriFs();
+
+    // Bundle naming: {policyFileName}-{timestamp}.swarm per user decision
+    const timestamp = new Date().toISOString().slice(0, 10);
+    const stem = opts.policyFileName.replace(/\.(ya?ml|json)$/i, "");
+    const safeName = `${stem}-${timestamp}`.replace(/[<>:"/\\|?*]/g, "_");
+    const bundlePath = `${opts.parentDir}/${safeName}.swarm`;
+    await mkdir(bundlePath, { recursive: true });
+
+    // Manifest with policyRef (SWARM-03)
+    const now = new Date().toISOString();
+    const manifest: Record<string, unknown> = {
+      version: "1.0.0",
+      name: safeName,
+      created: now,
+      modified: now,
+      policyRef: opts.policyFilePath,
+      agents: opts.sentinels.map((s) => s.name),
+      status: "draft",
+    };
+    await writeTextFile(
+      `${bundlePath}/manifest.json`,
+      JSON.stringify(manifest, null, 2),
+    );
+
+    // Board with pre-seeded sentinel agent nodes (SWARM-03)
+    // Grid layout: 3 columns, 420px horizontal spacing, 320px vertical spacing
+    const COL_COUNT = 3;
+    const X_START = 80;
+    const Y_START = 60;
+    const X_GAP = 420;
+    const Y_GAP = 320;
+    const nodes = opts.sentinels.map((s, i) => ({
+      id: `sentinel-${s.id}`,
+      type: "agentSession",
+      position: {
+        x: X_START + (i % COL_COUNT) * X_GAP,
+        y: Y_START + Math.floor(i / COL_COUNT) * Y_GAP,
+      },
+      data: {
+        title: s.name,
+        status: "idle",
+        nodeType: "agentSession",
+        createdAt: Date.now(),
+        agentModel: s.mode,
+        policyMode: "enforce",
+      },
+      width: 380,
+      height: 280,
+    }));
+
+    const board = {
+      boardId: `board-${Date.now().toString(36)}`,
+      repoRoot: opts.parentDir,
+      nodes,
+      edges: [],
+      viewport: { x: 0, y: 0, zoom: 1 },
+    };
+    await writeTextFile(
+      `${bundlePath}/board.json`,
+      JSON.stringify(board, null, 2),
+    );
+
+    return bundlePath;
+  } catch (err) {
+    console.error("[tauri-bridge] createSwarmBundleFromPolicy failed:", err);
+    return null;
+  }
+}
+
+/**
+ * Create a new .swarm bundle directory with manifest.json and empty board.json.
+ * Returns the absolute bundle path on success, or null on failure.
+ */
+export async function createSwarmBundle(
+  parentDir: string,
+  name: string,
+): Promise<string | null> {
+  if (!isDesktop()) return null;
+  try {
+    const { mkdir, writeTextFile } = await importTauriFs();
+    const safeName = name.replace(/[<>:"/\\|?*]/g, "_").replace(/\.swarm$/, "");
+    const bundlePath = `${parentDir}/${safeName}.swarm`;
+    await mkdir(bundlePath, { recursive: true });
+
+    const now = new Date().toISOString();
+    const manifest = {
+      version: "1.0.0",
+      name: safeName,
+      created: now,
+      modified: now,
+    };
+    await writeTextFile(
+      `${bundlePath}/manifest.json`,
+      JSON.stringify(manifest, null, 2),
+    );
+
+    const board = {
+      boardId: `board-${Date.now().toString(36)}`,
+      repoRoot: "",
+      nodes: [],
+      edges: [],
+      viewport: { x: 0, y: 0, zoom: 1 },
+    };
+    await writeTextFile(
+      `${bundlePath}/board.json`,
+      JSON.stringify(board, null, 2),
+    );
+
+    return bundlePath;
+  } catch (err) {
+    console.error("[tauri-bridge] createSwarmBundle failed:", err);
+    return null;
+  }
 }

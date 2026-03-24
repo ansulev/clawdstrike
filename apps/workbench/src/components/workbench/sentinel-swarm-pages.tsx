@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { fetchSwarmHubConfig, publishSwarmFinding } from "@/lib/workbench/fleet-client";
-import { useSentinels } from "@/lib/workbench/sentinel-store";
-import { useFindings } from "@/lib/workbench/finding-store";
-import { useIntel } from "@/lib/workbench/intel-store";
+import { fetchSwarmHubConfig, publishSwarmFinding } from "@/features/fleet/fleet-client";
+import { useSentinels } from "@/features/sentinels/stores/sentinel-store";
+import { useFindings } from "@/features/findings/stores/finding-store";
+import { useIntel } from "@/features/findings/stores/intel-store";
 import { promoteToIntel, signIntel } from "@/lib/workbench/intel-forge";
 import {
   FINDING_ENVELOPE_SCHEMA,
@@ -11,11 +11,11 @@ import {
   type FindingEnvelope,
   type HeadAnnouncement,
   type ProtocolSeverity,
-} from "@/lib/workbench/swarm-protocol";
-import { useSwarms } from "@/lib/workbench/swarm-store";
-import { useSwarmFeed } from "@/lib/workbench/swarm-feed-store";
-import { useOperator } from "@/lib/workbench/operator-store";
-import { useFleetConnection } from "@/lib/workbench/use-fleet-connection";
+} from "@/features/swarm/swarm-protocol";
+import { useSwarms } from "@/features/swarm/stores/swarm-store";
+import { useSwarmFeed } from "@/features/swarm/stores/swarm-feed-store";
+import { useOperator } from "@/features/operator/stores/operator-store";
+import { useFleetConnection } from "@/features/fleet/use-fleet-connection";
 import type { OperatorIdentity } from "@/lib/workbench/operator-types";
 import type { SentinelMutablePatch } from "@/lib/workbench/sentinel-manager";
 import {
@@ -24,8 +24,12 @@ import {
   fetchVerifiedFindingBlob,
   requestSwarmBlobPin,
   type SwarmBlobPinResponse,
-} from "@/lib/workbench/swarm-blob-client";
-import { FAIL_CLOSED_HUB_TRUST_POLICY } from "@/lib/workbench/swarm-trust-policy";
+} from "@/features/swarm/swarm-blob-client";
+import { FAIL_CLOSED_HUB_TRUST_POLICY } from "@/features/swarm/swarm-trust-policy";
+import { usePolicyTabs } from "@/features/policy/hooks/use-policy-actions";
+import { useDraftDetection } from "@/lib/workbench/detection-workflow/use-draft-detection";
+import { useSignalStore } from "@/features/findings/stores/signal-store";
+import { usePaneStore } from "@/features/panes/pane-store";
 import { SentinelList } from "./sentinels/sentinel-list";
 import { SentinelCreate } from "./sentinels/sentinel-create";
 import { SentinelDetail } from "./sentinels/sentinel-detail";
@@ -37,7 +41,7 @@ import type {
   IntelShareability,
   Sentinel,
 } from "@/lib/workbench/sentinel-types";
-import type { FindingBlobRef } from "@/lib/workbench/swarm-protocol";
+import type { FindingBlobRef } from "@/features/swarm/swarm-protocol";
 
 const PROTOCOL_SEVERITY_TAGS: readonly ProtocolSeverity[] = [
   "info",
@@ -532,6 +536,24 @@ export function FindingDetailPage() {
   const navigate = useNavigate();
   const finding = findings.find((f) => f.id === id);
 
+  // Draft detection wiring
+  const { multiDispatch } = usePolicyTabs();
+  const allSignals = useSignalStore.use.signals();
+  const { draftFromFinding } = useDraftDetection({
+    dispatch: multiDispatch,
+    onNavigateToEditor: async () => {
+      // Open the newly created detection file tab
+      const { usePolicyTabsStore } = await import("@/features/policy/stores/policy-tabs-store");
+      const activeTab = usePolicyTabsStore.getState().getActiveTab();
+      if (activeTab) {
+        const route = activeTab.filePath
+          ? `/file/${activeTab.filePath}`
+          : `/file/__new__/${activeTab.id}`;
+        usePaneStore.getState().openApp(route, activeTab.name || "Detection");
+      }
+    },
+  });
+
   const promoteFinding = useCallback(
     (findingId: string) => {
       const targetFinding = findings.find((entry) => entry.id === findingId);
@@ -546,6 +568,29 @@ export function FindingDetailPage() {
       promote(findingId, "operator", intel.id);
     },
     [findings, promote, upsertLocalIntel],
+  );
+
+  const handleDraftDetection = useCallback(
+    (findingId: string) => {
+      const targetFinding = findings.find((entry) => entry.id === findingId);
+      if (!targetFinding) return;
+      void draftFromFinding(targetFinding, allSignals);
+    },
+    [findings, allSignals, draftFromFinding],
+  );
+
+  const handleDraftGuard = useCallback(
+    (findingId: string) => {
+      const targetFinding = findings.find((entry) => entry.id === findingId);
+      if (!targetFinding) return;
+      // Force policy format by passing a gap hint that prefers clawdstrike_policy
+      void draftFromFinding(targetFinding, allSignals, {
+        techniqueHints: [],
+        dataSourceHints: [],
+        suggestedFormats: ["clawdstrike_policy"],
+      } as any);
+    },
+    [findings, allSignals, draftFromFinding],
   );
 
   if (!finding) {
@@ -573,6 +618,8 @@ export function FindingDetailPage() {
           createdAt: new Date().toISOString(),
         })
       }
+      onDraftDetection={handleDraftDetection}
+      onDraftGuard={handleDraftGuard}
       onBack={() => navigate("/findings")}
     />
   );

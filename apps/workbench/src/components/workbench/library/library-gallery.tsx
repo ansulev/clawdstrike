@@ -1,8 +1,9 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
-import { useWorkbench, useMultiPolicy } from "@/lib/workbench/multi-policy-store";
-import { getRecentFiles } from "@/lib/workbench/policy-store";
-import { BUILTIN_RULESETS, type BuiltinRuleset } from "@/lib/workbench/builtin-rulesets";
+import { useWorkbenchState } from "@/features/policy/hooks/use-policy-actions";
+import { usePolicyTabsStore } from "@/features/policy/stores/policy-tabs-store";
+import { usePaneStore } from "@/features/panes/pane-store";
+import { getRecentFiles } from "@/features/policy/stores/policy-store";
+import { BUILTIN_RULESETS, type BuiltinRuleset } from "@/features/policy/builtin-rulesets";
 import {
   listBuiltinRulesets,
   loadBuiltinRuleset,
@@ -10,7 +11,7 @@ import {
 import { isDesktop } from "@/lib/tauri-bridge";
 import { cn } from "@/lib/utils";
 import { SubTabBar, type SubTab } from "../shared/sub-tab-bar";
-import { useHintSettingsSafe, type HintId } from "@/lib/workbench/use-hint-settings";
+import { useHintSettingsSafe, type HintId } from "@/features/settings/use-hint-settings";
 import {
   IconFile,
   IconFolderOpen,
@@ -33,10 +34,11 @@ import { ImportExport } from "./import-export";
 import { YamlViewDialog } from "./yaml-view-dialog";
 import { CatalogBrowser } from "./catalog-browser";
 import { SigmaHQBrowser } from "./sigmahq-browser";
+import { PluginsBrowser } from "./plugins-browser";
 
 const MCP_LAUNCH_COMMAND = "bun run apps/workbench/mcp-server/index.ts";
 
-type LibraryTab = "my-policies" | "catalog" | "sigmahq";
+type LibraryTab = "my-policies" | "catalog" | "sigmahq" | "plugins";
 
 /**
  * Merge native rulesets from the Rust engine with the client-side fallback list.
@@ -196,9 +198,7 @@ function LibraryCopyableCard({ label, prompt }: { label: string; prompt: string 
 }
 
 export function LibraryGallery() {
-  const { state, openFile, openFileByPath } = useWorkbench();
-  const { multiDispatch } = useMultiPolicy();
-  const navigate = useNavigate();
+  const { state, openFile, openFileByPath } = useWorkbenchState();
   const [viewYaml, setViewYaml] = useState<{ name: string; yaml: string } | null>(null);
   const { rulesets, loading, nativeAvailable } = useBuiltinRulesets();
   const [activeTab, setActiveTab] = useState<LibraryTab>("my-policies");
@@ -237,6 +237,7 @@ export function LibraryGallery() {
             { id: "my-policies", label: "My Policies", icon: IconBooks },
             { id: "catalog", label: "Catalog", icon: IconLayoutGrid },
             { id: "sigmahq", label: "SigmaHQ", icon: IconShieldCheck },
+            { id: "plugins", label: "Plugins", icon: IconPlugConnected },
           ] satisfies SubTab[]}
           activeTab={activeTab}
           onTabChange={(id) => setActiveTab(id as LibraryTab)}
@@ -244,17 +245,20 @@ export function LibraryGallery() {
       </div>
 
       {/* Tab content */}
-      {activeTab === "catalog" ? (
+      {activeTab === "plugins" ? (
+        <PluginsBrowser />
+      ) : activeTab === "catalog" ? (
         <CatalogBrowser />
       ) : activeTab === "sigmahq" ? (
         <SigmaHQBrowser
           onImport={(yaml) => {
-            multiDispatch({
-              type: "NEW_TAB",
+            const newTabId = usePolicyTabsStore.getState().newTab({
               fileType: "sigma_rule",
               yaml,
             });
-            navigate("/editor");
+            if (newTabId) {
+              usePaneStore.getState().openApp(`/file/__new__/${newTabId}`, "Sigma Rule");
+            }
           }}
         />
       ) : (

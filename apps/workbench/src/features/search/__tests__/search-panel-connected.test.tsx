@@ -12,23 +12,17 @@ import { DEFAULT_POLICY } from "@/features/policy/stores/policy-store";
 import { consumePendingEditorReveal } from "@/lib/workbench/editor-reveal";
 
 const openFileByPath = vi.fn<(...args: [string]) => Promise<void>>();
-const { searchInProjectNative, mockedWorkbenchState } = vi.hoisted(() => ({
+const { searchInProjectNative } = vi.hoisted(() => ({
   searchInProjectNative: vi.fn(),
-  mockedWorkbenchState: {
-    tabs: [] as Array<{ filePath?: string | null }>,
-  },
 }));
 
 vi.mock("@/lib/tauri-commands", () => ({
   searchInProjectNative,
 }));
 
-vi.mock("@/features/policy/stores/policy-store", () => ({
-  useWorkbench: () => ({
+vi.mock("@/features/policy/hooks/use-policy-actions", () => ({
+  useWorkbenchState: () => ({
     openFileByPath,
-  }),
-  useMultiPolicy: () => ({
-    tabs: mockedWorkbenchState.tabs,
   }),
 }));
 
@@ -115,10 +109,6 @@ describe("SearchPanelConnected", () => {
       total_matches: 0,
       truncated: false,
     });
-    mockedWorkbenchState.tabs = [
-      { filePath: "/workspace/project/policies/example.yml" },
-      { filePath: "/workspace/project/rules/other.yml" },
-    ];
     seedOpenDocument("/workspace/project/policies/example.yml", 12, "  name: needle");
     usePaneStore.getState()._reset();
     useProjectStore.setState({
@@ -350,14 +340,12 @@ describe("SearchPanelConnected", () => {
         false,
         false,
         false,
+        expect.any(String),
       );
     });
   });
 
   it("keeps the workspace root when only one absolute tab is open", async () => {
-    mockedWorkbenchState.tabs = [
-      { filePath: "/workspace/project/policies/example.yml" },
-    ];
     useProjectStore.setState({
       project: {
         rootPath: "workspace",
@@ -384,6 +372,7 @@ describe("SearchPanelConnected", () => {
         false,
         false,
         false,
+        expect.any(String),
       );
     });
   });
@@ -404,6 +393,7 @@ describe("SearchPanelConnected", () => {
         true,
         false,
         false,
+        expect.any(String),
       );
     });
   });

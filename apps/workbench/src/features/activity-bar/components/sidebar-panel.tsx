@@ -5,7 +5,7 @@ import { useProjectStore } from "@/features/project/stores/project-store";
 import { getProjectFileStatusKey } from "@/features/project/stores/project-store";
 import type { DetectionProject, ProjectFile } from "@/features/project/stores/project-store";
 import { usePaneStore, getActivePaneRoute } from "@/features/panes/pane-store";
-import { useWorkbench } from "@/features/policy/stores/policy-store";
+import { useWorkbenchState } from "@/features/policy/hooks/use-policy-actions";
 import { HeartbeatPanel } from "../panels/heartbeat-panel";
 import { SentinelPanel } from "../panels/sentinel-panel";
 import { FindingsPanel } from "../panels/findings-panel";
@@ -40,7 +40,7 @@ function ExplorerPanelConnected() {
   const formatFilter = useProjectStore.use.formatFilter();
   const fileStatuses = useProjectStore.use.fileStatuses();
   const actions = useProjectStore.use.actions();
-  const { openFileByPath } = useWorkbench();
+  const { openFileByPath } = useWorkbenchState();
 
   // Build ordered projects array from roots.
   // When loading is true, roots may exist but projects Map is not yet populated,

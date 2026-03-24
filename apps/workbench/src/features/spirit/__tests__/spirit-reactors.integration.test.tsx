@@ -6,10 +6,14 @@ import { useSpiritEvolutionStore } from "../stores/spirit-evolution-store";
 import { useSpiritStore } from "../stores/spirit-store";
 import { useObservatoryStore } from "@/features/observatory/stores/observatory-store";
 
-vi.mock("@/features/policy/stores/multi-policy-store", () => ({
-  useMultiPolicy: () => ({
-    tabs: [],
-  }),
+vi.mock("@/features/policy/stores/policy-tabs-store", () => ({
+  usePolicyTabsStore: (selector: (state: { tabs: [] }) => unknown) =>
+    selector({ tabs: [] }),
+}));
+
+vi.mock("@/features/policy/stores/policy-edit-store", () => ({
+  usePolicyEditStore: (selector: (state: { editStates: Map<string, unknown> }) => unknown) =>
+    selector({ editStates: new Map() }),
 }));
 
 const initialSpiritState = useSpiritStore.getState();

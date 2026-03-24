@@ -1,15 +1,25 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { SearchPanelConnected } from "../search-panel";
 import { usePaneStore } from "@/features/panes/pane-store";
 import { useProjectStore } from "@/features/project/stores/project-store";
 import { useSearchStore } from "@/features/search/stores/search-store";
+
+const openFileByPath = vi.fn<(...args: [string]) => Promise<void>>();
+
+vi.mock("@/features/policy/hooks/use-policy-actions", () => ({
+  useWorkbenchState: () => ({
+    openFileByPath,
+  }),
+}));
 
 describe("SearchPanelConnected", () => {
   beforeEach(() => {
     const projectActions = useProjectStore.getState().actions;
     const searchActions = useSearchStore.getState().actions;
 
+    openFileByPath.mockReset();
+    openFileByPath.mockResolvedValue();
     usePaneStore.getState()._reset();
     useProjectStore.setState({
       project: null,
@@ -62,7 +72,7 @@ describe("SearchPanelConnected", () => {
     ]);
   });
 
-  it("opens search results against the owning workspace root", () => {
+  it("opens search results against the owning workspace root", async () => {
     const openFile = vi.fn();
 
     usePaneStore.setState({ openFile });
@@ -79,6 +89,8 @@ describe("SearchPanelConnected", () => {
               lineContent: "needle in bravo",
               matchStart: 0,
               matchEnd: 6,
+              sourceMatchStart: 0,
+              sourceMatchEnd: 6,
             },
           ],
         },
@@ -91,6 +103,8 @@ describe("SearchPanelConnected", () => {
           lineContent: "needle in bravo",
           matchStart: 0,
           matchEnd: 6,
+          sourceMatchStart: 0,
+          sourceMatchEnd: 6,
         },
       ],
       fileCount: 1,
@@ -101,9 +115,12 @@ describe("SearchPanelConnected", () => {
 
     fireEvent.click(screen.getByText("shared/default.yaml"));
 
-    expect(openFile).toHaveBeenCalledWith(
-      "/workspace/bravo/shared/default.yaml",
-      "default.yaml",
-    );
+    await waitFor(() => {
+      expect(openFileByPath).toHaveBeenCalledWith("/workspace/bravo/shared/default.yaml");
+      expect(openFile).toHaveBeenCalledWith(
+        "/workspace/bravo/shared/default.yaml",
+        "default.yaml",
+      );
+    });
   });
 });

@@ -14,7 +14,8 @@ import { useEffect, useRef } from "react";
 import { useSpiritStore } from "../stores/spirit-store";
 import { useSpiritEvolutionStore } from "../stores/spirit-evolution-store";
 import { useObservatoryStore } from "@/features/observatory/stores/observatory-store";
-import { useMultiPolicy } from "@/features/policy/stores/multi-policy-store";
+import { usePolicyTabsStore } from "@/features/policy/stores/policy-tabs-store";
+import { usePolicyEditStore } from "@/features/policy/stores/policy-edit-store";
 
 const PROBE_XP = 10;
 const LINT_PASS_XP = 5;
@@ -23,8 +24,12 @@ const COOLDOWN_MS = 10_000;
 export function SpiritExperienceTracker() {
   const kind = useSpiritStore.use.kind();
   const activeProbes = useObservatoryStore((state) => state.seamSummary.activeProbes);
-  const { tabs } = useMultiPolicy();
-  const hasLintErrors = tabs.some((t) => t.validation.errors.length > 0);
+  const tabs = usePolicyTabsStore((state) => state.tabs);
+  const editStates = usePolicyEditStore((state) => state.editStates);
+  const hasLintErrors = tabs.some((tab) => {
+    const validation = editStates.get(tab.id)?.validation;
+    return (validation?.errors.length ?? 0) > 0;
+  });
 
   const prevActiveProbesRef = useRef<number>(activeProbes);
   const prevHasLintErrorsRef = useRef<boolean>(hasLintErrors);

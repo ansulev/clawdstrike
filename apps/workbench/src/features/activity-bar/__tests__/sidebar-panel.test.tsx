@@ -16,8 +16,8 @@ const renameFile = vi.fn<(...args: [string, string]) => Promise<boolean>>();
 const deleteFile = vi.fn<(...args: [string]) => Promise<boolean>>();
 const setFileStatus = vi.fn<(...args: [string, FileStatus]) => void>();
 
-vi.mock("@/features/policy/stores/policy-store", () => ({
-  useWorkbench: () => ({
+vi.mock("@/features/policy/hooks/use-policy-actions", () => ({
+  useWorkbenchState: () => ({
     openFileByPath,
   }),
 }));
@@ -185,6 +185,18 @@ describe("SidebarPanel explorer wiring", () => {
     createFile.mockResolvedValueOnce("C:\\workspace\\project\\policies\\new.yml");
     useProjectStore.setState((state) => ({
       ...state,
+      projectRoots: ["C:\\workspace\\project"],
+      projects: new Map([
+        [
+          "C:\\workspace\\project",
+          {
+            rootPath: "C:\\workspace\\project",
+            name: "project",
+            files: [],
+            expandedDirs: new Set<string>(),
+          },
+        ],
+      ]),
       project: {
         rootPath: "C:\\workspace\\project",
         name: "project",
@@ -227,6 +239,6 @@ describe("SidebarPanel explorer wiring", () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByText("Findings Panel")).toBeInTheDocument();
+    expect(screen.getByText("Findings Panel")).toBeTruthy();
   });
 });

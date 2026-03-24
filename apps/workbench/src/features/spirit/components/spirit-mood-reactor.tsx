@@ -12,16 +12,20 @@
 import { useEffect, useRef } from "react";
 import { useSpiritStore } from "../stores/spirit-store";
 import { useObservatoryStore } from "@/features/observatory/stores/observatory-store";
-import { useMultiPolicy } from "@/features/policy/stores/multi-policy-store";
+import { usePolicyTabsStore } from "@/features/policy/stores/policy-tabs-store";
+import { usePolicyEditStore } from "@/features/policy/stores/policy-edit-store";
 import { deriveSpiritMood } from "../mood";
 
 export function SpiritMoodReactor() {
   const kind = useSpiritStore.use.kind();
   const setMood = useSpiritStore.use.actions().setMood;
   const activeProbes = useObservatoryStore((state) => state.seamSummary.activeProbes);
-  const { tabs } = useMultiPolicy();
-
-  const hasLintErrors = tabs.some((t) => t.validation.errors.length > 0);
+  const tabs = usePolicyTabsStore((state) => state.tabs);
+  const editStates = usePolicyEditStore((state) => state.editStates);
+  const hasLintErrors = tabs.some((tab) => {
+    const validation = editStates.get(tab.id)?.validation;
+    return (validation?.errors.length ?? 0) > 0;
+  });
   const derived = deriveSpiritMood({ kind, hasLintErrors, probeActive: activeProbes > 0 });
 
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);

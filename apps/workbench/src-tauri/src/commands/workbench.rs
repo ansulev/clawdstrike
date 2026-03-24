@@ -2000,7 +2000,12 @@ guards:
             MAX_LINE_CONTENT_LEN
         );
         assert_eq!(first_match.match_start, MAX_LINE_CONTENT_LEN);
-        assert_eq!(first_match.match_end, MAX_LINE_CONTENT_LEN + "needle".chars().count());
+        assert_eq!(first_match.match_end, MAX_LINE_CONTENT_LEN);
+        assert_eq!(first_match.source_match_start, MAX_LINE_CONTENT_LEN + 10);
+        assert_eq!(
+            first_match.source_match_end,
+            MAX_LINE_CONTENT_LEN + 10 + "needle".chars().count()
+        );
     }
 
     #[tokio::test]
@@ -2815,6 +2820,7 @@ guards: {}
             false,
             true,
             false,
+            None,
         )
         .await
         .unwrap();
@@ -2856,6 +2862,7 @@ guards: {}
             true,
             false,
             false,
+            None,
         )
         .await
         .unwrap();

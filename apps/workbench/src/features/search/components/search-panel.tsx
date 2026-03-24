@@ -11,7 +11,7 @@ import type {
 import { useProjectStore } from "@/features/project/stores/project-store";
 import { resolveProjectPath } from "@/features/project/utils/resolve-project-path";
 import { usePaneStore } from "@/features/panes/pane-store";
-import { useWorkbench } from "@/features/policy/stores/policy-store";
+import { useWorkbenchState } from "@/features/policy/hooks/use-policy-actions";
 import { usePolicyEditStore } from "@/features/policy/stores/policy-edit-store";
 import { usePolicyTabsStore } from "@/features/policy/stores/policy-tabs-store";
 import { requestEditorReveal } from "@/lib/workbench/editor-reveal";
@@ -344,7 +344,7 @@ export function SearchPanelConnected() {
   const error = useSearchStore.use.error();
   const actions = useSearchStore.use.actions();
   const projectRoots = useProjectStore.use.projectRoots();
-  const { openFileByPath } = useWorkbench();
+  const { openFileByPath } = useWorkbenchState();
 
   return (
     <SearchPanel

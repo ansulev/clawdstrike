@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { createSelectors } from "@/lib/create-selectors";
 import {
+  cancelSearchInProjectNative,
   searchInProjectNative,
   type TauriSearchMatch,
 } from "@/lib/tauri-commands";
@@ -98,6 +99,30 @@ const DEFAULT_OPTIONS: SearchOptions = {
 
 /** Tracks the in-flight search so a newer invocation can cancel a stale one. */
 let activeSearchController: AbortController | null = null;
+let activeSearchRequestId: string | null = null;
+
+function finishSearch(searchRequestId: string): void {
+  if (activeSearchRequestId !== searchRequestId) {
+    return;
+  }
+
+  activeSearchController = null;
+  activeSearchRequestId = null;
+}
+
+function cancelActiveSearch(): void {
+  if (activeSearchController) {
+    activeSearchController.abort();
+    activeSearchController = null;
+  }
+
+  const searchRequestId = activeSearchRequestId;
+  activeSearchRequestId = null;
+
+  if (searchRequestId) {
+    void cancelSearchInProjectNative(searchRequestId);
+  }
+}
 
 const useSearchStoreBase = create<SearchState>((set, get) => ({
   query: "",
@@ -110,12 +135,16 @@ const useSearchStoreBase = create<SearchState>((set, get) => ({
   loading: false,
   error: null,
   actions: {
-    setQuery: (query: string) => set({ query }),
+    setQuery: (query: string) => {
+      cancelActiveSearch();
+      set({ query });
+    },
 
     setOption: <K extends keyof SearchOptions>(
       key: K,
       value: SearchOptions[K],
     ) => {
+      cancelActiveSearch();
       set((state) => ({
         options: { ...state.options, [key]: value },
       }));
@@ -124,18 +153,18 @@ const useSearchStoreBase = create<SearchState>((set, get) => ({
     performSearch: async (rootPaths: string[]) => {
       const { query, options } = get();
 
-      // Cancel any in-flight search before starting a new one
-      if (activeSearchController) {
-        activeSearchController.abort();
-      }
+      cancelActiveSearch();
       const controller = new AbortController();
       activeSearchController = controller;
+      const searchRequestId = crypto.randomUUID();
+      activeSearchRequestId = searchRequestId;
       const queryAtDispatch = query;
+      const optionsAtDispatch = { ...options };
 
       set({ loading: true, error: null });
 
       if (!query.trim()) {
-        activeSearchController = null;
+        finishSearch(searchRequestId);
         set({
           results: [],
           resultGroups: [],
@@ -148,7 +177,7 @@ const useSearchStoreBase = create<SearchState>((set, get) => ({
       }
 
       if (rootPaths.length === 0) {
-        activeSearchController = null;
+        finishSearch(searchRequestId);
         set({
           results: [],
           resultGroups: [],
@@ -169,14 +198,23 @@ const useSearchStoreBase = create<SearchState>((set, get) => ({
               options.caseSensitive,
               options.wholeWord,
               options.useRegex,
+              searchRequestId,
             ).then((result) => ({ rootPath, result })),
           ),
         );
 
         // Discard results if this search was aborted by a newer invocation
         if (controller.signal.aborted) return;
-        // Staleness guard: query changed while we were waiting
-        if (queryAtDispatch !== get().query) return;
+
+        const latestState = get();
+        if (
+          queryAtDispatch !== latestState.query ||
+          optionsAtDispatch.caseSensitive !== latestState.options.caseSensitive ||
+          optionsAtDispatch.wholeWord !== latestState.options.wholeWord ||
+          optionsAtDispatch.useRegex !== latestState.options.useRegex
+        ) {
+          return;
+        }
 
         const resolvedResults = results.filter(
           ({ result }) => result !== null,
@@ -212,7 +250,7 @@ const useSearchStoreBase = create<SearchState>((set, get) => ({
             loading: false,
           });
         }
-        activeSearchController = null;
+        finishSearch(searchRequestId);
       } catch (err) {
         // If aborted by a newer search, exit silently
         if (controller.signal.aborted) return;
@@ -226,11 +264,12 @@ const useSearchStoreBase = create<SearchState>((set, get) => ({
           error: err instanceof Error ? err.message : "Search failed",
           loading: false,
         });
-        activeSearchController = null;
+        finishSearch(searchRequestId);
       }
     },
 
-    clearResults: () =>
+    clearResults: () => {
+      cancelActiveSearch();
       set({
         results: [],
         resultGroups: [],
@@ -238,7 +277,8 @@ const useSearchStoreBase = create<SearchState>((set, get) => ({
         totalMatches: 0,
         truncated: false,
         error: null,
-      }),
+      });
+    },
   },
 }));
 

@@ -53,6 +53,10 @@ export class PresenceSocket {
     }
 
     const base = resolveProxyBase(this.opts.hushdUrl);
+    // TODO(security): Browser WebSocket clients cannot send Authorization
+    // headers, so this currently uses a query token. Replace it with a
+    // short-lived ticket flow before presence traffic crosses URL-logging
+    // infrastructure.
     const wsUrl =
       base.replace(/^http/, "ws") +
       "/api/v1/presence?token=" +

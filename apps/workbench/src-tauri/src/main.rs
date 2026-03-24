@@ -157,6 +157,7 @@ fn main() {
             worktree::worktree_remove,
             worktree::worktree_list,
             worktree::worktree_status,
+            workbench::cancel_search_in_project,
             workbench::search_in_project,
         ])
         .build(tauri::generate_context!())

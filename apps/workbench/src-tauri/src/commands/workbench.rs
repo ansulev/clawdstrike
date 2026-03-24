@@ -3,9 +3,11 @@
 //! These commands integrate directly with the `clawdstrike` and `hush-core` crates
 //! without requiring a running daemon. All evaluation happens in-process.
 
+use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Instant;
 
 #[cfg(unix)]
@@ -1534,6 +1536,67 @@ const SEARCHABLE_EXTENSIONS: &[&str] = &[
 /// Directory names to skip during search.
 const SKIP_DIRS: &[&str] = &["node_modules", "target", ".git"];
 
+#[derive(Debug)]
+struct SearchCancellationEntry {
+    flag: Arc<AtomicBool>,
+    refs: usize,
+}
+
+fn search_cancellation_registry() -> &'static Mutex<HashMap<String, SearchCancellationEntry>> {
+    static REGISTRY: OnceLock<Mutex<HashMap<String, SearchCancellationEntry>>> = OnceLock::new();
+    REGISTRY.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn register_search_cancellation(search_id: &str) -> Arc<AtomicBool> {
+    let mut registry = search_cancellation_registry()
+        .lock()
+        .expect("search cancellation registry poisoned");
+
+    if let Some(entry) = registry.get_mut(search_id) {
+        entry.refs += 1;
+        return entry.flag.clone();
+    }
+
+    let flag = Arc::new(AtomicBool::new(false));
+    registry.insert(
+        search_id.to_string(),
+        SearchCancellationEntry {
+            flag: flag.clone(),
+            refs: 1,
+        },
+    );
+    flag
+}
+
+fn cancel_registered_search(search_id: &str) {
+    let flag = search_cancellation_registry()
+        .lock()
+        .expect("search cancellation registry poisoned")
+        .get(search_id)
+        .map(|entry| entry.flag.clone());
+
+    if let Some(flag) = flag {
+        flag.store(true, Ordering::Relaxed);
+    }
+}
+
+fn unregister_search_cancellation(search_id: &str) {
+    let mut registry = search_cancellation_registry()
+        .lock()
+        .expect("search cancellation registry poisoned");
+
+    if let Some(entry) = registry.get_mut(search_id) {
+        entry.refs -= 1;
+        if entry.refs == 0 {
+            registry.remove(search_id);
+        }
+    }
+}
+
+fn is_search_cancelled(cancellation_flag: Option<&AtomicBool>) -> bool {
+    cancellation_flag.is_some_and(|flag| flag.load(Ordering::Relaxed))
+}
+
 /// Check whether a character is a word boundary delimiter (not alphanumeric or underscore).
 fn is_word_boundary_char(c: char) -> bool {
     !c.is_alphanumeric() && c != '_'
@@ -1571,12 +1634,26 @@ fn byte_index_to_char_index(line: &str, byte_index: usize) -> usize {
 }
 
 /// Walk a directory tree recursively, collecting file paths that are eligible for search.
-fn collect_search_files(root: &Path, dir: &Path, files: &mut Vec<PathBuf>) {
+///
+/// Returns `false` when the active search was cancelled.
+fn collect_search_files(
+    dir: &Path,
+    files: &mut Vec<PathBuf>,
+    cancellation_flag: Option<&AtomicBool>,
+) -> bool {
+    if is_search_cancelled(cancellation_flag) {
+        return false;
+    }
+
     let entries = match std::fs::read_dir(dir) {
         Ok(e) => e,
-        Err(_) => return,
+        Err(_) => return true,
     };
     for entry in entries {
+        if is_search_cancelled(cancellation_flag) {
+            return false;
+        }
+
         let entry = match entry {
             Ok(e) => e,
             Err(_) => continue,
@@ -1589,19 +1666,28 @@ fn collect_search_files(root: &Path, dir: &Path, files: &mut Vec<PathBuf>) {
             continue;
         }
 
-        // Use metadata() (follows symlinks) to get the canonical type.
-        let meta = match entry.metadata() {
-            Ok(m) => m,
+        let file_type = match entry.file_type() {
+            Ok(file_type) => file_type,
             Err(_) => continue,
         };
 
-        if meta.is_dir() {
+        if file_type.is_symlink() {
+            continue;
+        }
+
+        if file_type.is_dir() {
             // Skip well-known large directories.
             if SKIP_DIRS.contains(&name_str.as_ref()) {
                 continue;
             }
-            collect_search_files(root, &entry.path(), files);
-        } else if meta.is_file() {
+            if !collect_search_files(&entry.path(), files, cancellation_flag) {
+                return false;
+            }
+        } else if file_type.is_file() {
+            let meta = match entry.metadata() {
+                Ok(meta) => meta,
+                Err(_) => continue,
+            };
             // Only include files with searchable extensions.
             if meta.len() > MAX_SEARCH_FILE_SIZE {
                 continue;
@@ -1614,6 +1700,8 @@ fn collect_search_files(root: &Path, dir: &Path, files: &mut Vec<PathBuf>) {
             }
         }
     }
+
+    true
 }
 
 /// Search for a pattern in all eligible files under `root_path`.
@@ -1624,6 +1712,7 @@ pub async fn search_in_project(
     case_sensitive: bool,
     whole_word: bool,
     use_regex: bool,
+    search_id: Option<String>,
 ) -> Result<SearchResult, String> {
     // Validate root path.
     let root = validate_file_path(&root_path)?;
@@ -1641,7 +1730,12 @@ pub async fn search_in_project(
     }
 
     let query_clone = query.clone();
-    tokio::task::spawn_blocking(move || {
+    let cancellation_flag = search_id.as_deref().map(register_search_cancellation);
+    let search_result = tokio::task::spawn_blocking(move || {
+        if is_search_cancelled(cancellation_flag.as_deref()) {
+            return Err("Search canceled".into());
+        }
+
         // Build the regex or prepare the literal query.
         let compiled_regex = if use_regex {
             let pattern = if whole_word {
@@ -1664,13 +1758,20 @@ pub async fn search_in_project(
 
         // Collect eligible files.
         let mut file_paths = Vec::new();
-        collect_search_files(&root, &root, &mut file_paths);
+        if !collect_search_files(&root, &mut file_paths, cancellation_flag.as_deref()) {
+            return Err("Search canceled".into());
+        }
 
         let mut all_matches: Vec<SearchMatch> = Vec::new();
         let mut files_with_matches = 0usize;
         let mut truncated = false;
+        let mut search_limit_hit = false;
 
-        'outer: for file_path in &file_paths {
+        for file_path in &file_paths {
+            if is_search_cancelled(cancellation_flag.as_deref()) {
+                return Err("Search canceled".into());
+            }
+
             let content = match std::fs::read_to_string(file_path) {
                 Ok(c) => c,
                 Err(_) => continue, // skip binary/unreadable files
@@ -1685,6 +1786,10 @@ pub async fn search_in_project(
             let mut file_had_match = false;
 
             for (line_idx, line) in content.lines().enumerate() {
+                if is_search_cancelled(cancellation_flag.as_deref()) {
+                    return Err("Search canceled".into());
+                }
+
                 let line_number = line_idx + 1;
 
                 // Collect matches for this line.
@@ -1702,14 +1807,22 @@ pub async fn search_in_project(
                     })
                     .collect();
 
+                if line_matches.is_empty() {
+                    continue;
+                }
+
+                let line_content = truncate_line_content(line).to_string();
+
                 for (match_start, match_end) in line_matches {
-                    if all_matches.len() >= MAX_SEARCH_MATCHES {
-                        truncated = true;
-                        break 'outer;
+                    if is_search_cancelled(cancellation_flag.as_deref()) {
+                        return Err("Search canceled".into());
                     }
 
-                    // Truncate line content to MAX_LINE_CONTENT_LEN.
-                    let line_content = truncate_line_content(line).to_string();
+                    if all_matches.len() >= MAX_SEARCH_MATCHES {
+                        truncated = true;
+                        search_limit_hit = true;
+                        break;
+                    }
 
                     // Clamp match offsets to truncated line.
                     let clamped_start = byte_index_to_char_index(&line_content, match_start);
@@ -1719,15 +1832,23 @@ pub async fn search_in_project(
                     all_matches.push(SearchMatch {
                         file_path: rel_path.clone(),
                         line_number,
-                        line_content,
+                        line_content: line_content.clone(),
                         match_start: clamped_start,
                         match_end: clamped_end,
                     });
+                }
+
+                if search_limit_hit {
+                    break;
                 }
             }
 
             if file_had_match {
                 files_with_matches += 1;
+            }
+
+            if search_limit_hit {
+                break;
             }
         }
 
@@ -1743,7 +1864,24 @@ pub async fn search_in_project(
     .map_err(|e| {
         eprintln!("[workbench] search task join error: {e}");
         "Search failed".to_string()
-    })?
+    });
+
+    if let Some(search_id) = search_id.as_deref() {
+        unregister_search_cancellation(search_id);
+    }
+
+    search_result?
+}
+
+#[tauri::command]
+pub fn cancel_search_in_project(search_id: String) -> Result<(), String> {
+    let trimmed = search_id.trim();
+    if trimmed.is_empty() {
+        return Err("Search id is required".into());
+    }
+
+    cancel_registered_search(trimmed);
+    Ok(())
 }
 
 // Tests
@@ -1753,6 +1891,8 @@ mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used)]
 
     use super::*;
+    #[cfg(unix)]
+    use std::os::unix::fs::symlink;
     use tempfile::{tempdir, NamedTempFile};
 
     /// A minimal valid policy YAML string for testing.
@@ -1779,6 +1919,31 @@ guards:
         assert_eq!(byte_index_to_char_index(line, byte_end), 8);
     }
 
+    #[test]
+    fn shared_search_ids_reuse_one_cancellation_flag() {
+        let search_id = "shared-search-id";
+        let flag1 = register_search_cancellation(search_id);
+        let flag2 = register_search_cancellation(search_id);
+
+        assert!(Arc::ptr_eq(&flag1, &flag2));
+        assert!(!flag1.load(Ordering::Relaxed));
+
+        cancel_registered_search(search_id);
+        assert!(flag1.load(Ordering::Relaxed));
+        assert!(flag2.load(Ordering::Relaxed));
+
+        unregister_search_cancellation(search_id);
+        assert!(search_cancellation_registry()
+            .lock()
+            .expect("search cancellation registry poisoned")
+            .contains_key(search_id));
+        unregister_search_cancellation(search_id);
+        assert!(!search_cancellation_registry()
+            .lock()
+            .expect("search cancellation registry poisoned")
+            .contains_key(search_id));
+    }
+
     #[tokio::test]
     async fn search_in_project_truncates_multibyte_lines_without_panicking() {
         let root = tempdir().unwrap();
@@ -1792,6 +1957,7 @@ guards:
             false,
             false,
             false,
+            None,
         )
         .await
         .unwrap();
@@ -1815,6 +1981,7 @@ guards:
             false,
             true,
             true,
+            None,
         )
         .await
         .unwrap();
@@ -1826,6 +1993,66 @@ guards:
             .collect();
 
         assert_eq!(matched_lines, vec!["foo", "bar"]);
+    }
+
+    #[tokio::test]
+    async fn search_in_project_counts_the_file_that_hits_the_match_limit() {
+        let root = tempdir().unwrap();
+        let file_path = root.path().join("many-matches.txt");
+        let content = std::iter::repeat_n("needle\n", MAX_SEARCH_MATCHES + 1).collect::<String>();
+        std::fs::write(&file_path, content).unwrap();
+
+        let result = search_in_project(
+            root.path().to_string_lossy().to_string(),
+            "needle".to_string(),
+            true,
+            false,
+            false,
+            None,
+        )
+        .await
+        .unwrap();
+
+        assert!(result.truncated);
+        assert_eq!(result.file_count, 1);
+        assert_eq!(result.total_matches, MAX_SEARCH_MATCHES);
+        assert_eq!(result.matches.len(), MAX_SEARCH_MATCHES);
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn search_in_project_skips_symlinked_directories() {
+        let root = tempdir().unwrap();
+        let outside_root = tempdir().unwrap();
+        let real_dir = root.path().join("real");
+        let external_dir = outside_root.path().join("external");
+        let symlink_dir = root.path().join("linked");
+
+        std::fs::create_dir_all(&real_dir).unwrap();
+        std::fs::create_dir_all(&external_dir).unwrap();
+        std::fs::write(real_dir.join("inside.yaml"), "needle\n").unwrap();
+        std::fs::write(external_dir.join("outside.yaml"), "needle\n").unwrap();
+        symlink(&external_dir, &symlink_dir).unwrap();
+
+        let result = search_in_project(
+            root.path().to_string_lossy().to_string(),
+            "needle".to_string(),
+            true,
+            false,
+            false,
+            None,
+        )
+        .await
+        .unwrap();
+
+        let matched_files: Vec<_> = result
+            .matches
+            .iter()
+            .map(|entry| entry.file_path.as_str())
+            .collect();
+
+        assert_eq!(matched_files, vec!["real/inside.yaml"]);
+        assert_eq!(result.file_count, 1);
     }
 
     // =======================================================================

@@ -615,6 +615,7 @@ export async function searchInProjectNative(
   caseSensitive: boolean,
   wholeWord: boolean,
   useRegex: boolean,
+  searchId?: string,
 ): Promise<TauriSearchResult | null> {
   if (!isDesktop()) return null;
   try {
@@ -624,10 +625,20 @@ export async function searchInProjectNative(
       caseSensitive,
       wholeWord,
       useRegex,
+      searchId,
     });
   } catch (err) {
     console.error("[tauri-commands] search_in_project failed:", err);
     return null;
+  }
+}
+
+export async function cancelSearchInProjectNative(searchId: string): Promise<void> {
+  if (!isDesktop()) return;
+  try {
+    await tauriInvoke("cancel_search_in_project", { searchId });
+  } catch (err) {
+    console.warn("[tauri-commands] cancel_search_in_project failed:", err);
   }
 }
 

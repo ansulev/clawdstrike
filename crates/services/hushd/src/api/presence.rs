@@ -437,7 +437,6 @@ async fn handle_ws(socket: WebSocket, state: AppState, authenticated_key: Option
     use futures::stream::SplitSink;
     let (sender, mut receiver): (SplitSink<WebSocket, Message>, _) = socket.split();
     let hub = &state.presence_hub;
-    let mut rx = hub.subscribe();
     let mut analyst_fingerprint: Option<String> = None;
     let connection_id = uuid::Uuid::new_v4().simple().to_string();
 
@@ -455,15 +454,7 @@ async fn handle_ws(socket: WebSocket, state: AppState, authenticated_key: Option
         }
     });
 
-    // Forward broadcast messages to this client's internal channel
-    let internal_tx_clone = internal_tx.clone();
-    let forward_task = tokio::spawn(async move {
-        while let Ok(msg) = rx.recv().await {
-            if internal_tx_clone.send(msg).await.is_err() {
-                break;
-            }
-        }
-    });
+    let mut forward_task: Option<tokio::task::JoinHandle<()>> = None;
 
     // Process incoming messages from client
     while let Some(msg_result) = StreamExt::next(&mut receiver).await {
@@ -501,6 +492,17 @@ async fn handle_ws(socket: WebSocket, state: AppState, authenticated_key: Option
                             })
                             .await;
                         hub.broadcast(ServerMessage::AnalystJoined { analyst: info });
+                        if forward_task.is_none() {
+                            let mut rx = hub.subscribe();
+                            let internal_tx_clone = internal_tx.clone();
+                            forward_task = Some(tokio::spawn(async move {
+                                while let Ok(msg) = rx.recv().await {
+                                    if internal_tx_clone.send(msg).await.is_err() {
+                                        break;
+                                    }
+                                }
+                            }));
+                        }
                     }
                     ClientMessage::ViewFile { file_path } => {
                         if let Some(ref fp) = analyst_fingerprint {
@@ -581,7 +583,9 @@ async fn handle_ws(socket: WebSocket, state: AppState, authenticated_key: Option
         hub.leave(&fp);
         hub.broadcast(ServerMessage::AnalystLeft { fingerprint: fp });
     }
-    forward_task.abort();
+    if let Some(forward_task) = forward_task {
+        forward_task.abort();
+    }
     send_task.abort();
 }
 
@@ -996,8 +1000,12 @@ mod tests {
         let welcome = recv_text(&mut socket).await;
         assert!(welcome.contains(r#""type":"welcome""#));
         assert!(welcome.contains(r#""analyst_id":"fp1""#));
-        let joined = recv_text(&mut socket).await;
-        assert!(joined.contains(r#""type":"analyst_joined""#));
+        let echoed_join =
+            tokio::time::timeout(Duration::from_millis(100), recv_text(&mut socket)).await;
+        assert!(
+            echoed_join.is_err(),
+            "joining client should not receive its own AnalystJoined event"
+        );
 
         socket
             .send(tokio_tungstenite::tungstenite::Message::Text(

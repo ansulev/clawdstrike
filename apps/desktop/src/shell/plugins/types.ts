@@ -151,5 +151,18 @@ export const PLUGIN_ICONS: Record<string, string> = new Proxy(
     has(_target, prop: string) {
       return pluginIconMap.has(prop);
     },
+    set(target, prop: string, value: string, receiver: unknown) {
+      if (typeof prop === "symbol") {
+        return Reflect.set(target, prop, value, receiver);
+      }
+      pluginIconMap.set(prop, value);
+      return true;
+    },
+    deleteProperty(target, prop: string) {
+      if (typeof prop === "symbol") {
+        return Reflect.deleteProperty(target, prop);
+      }
+      return pluginIconMap.delete(prop);
+    },
   },
 );

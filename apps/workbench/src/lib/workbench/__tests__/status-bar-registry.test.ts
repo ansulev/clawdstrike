@@ -84,6 +84,20 @@ describe("status-bar-registry", () => {
     expect(after).not.toBe(before);
   });
 
+  it("refreshes snapshots after a same-size replacement", () => {
+    disposers.push(registerStatusBarItem(makeItem({ id: "replace-before" })));
+    const before = getStatusBarItems("left");
+    expect(before.some((item) => item.id === "replace-before")).toBe(true);
+
+    unregisterStatusBarItem("replace-before");
+    disposers.push(registerStatusBarItem(makeItem({ id: "replace-after" })));
+
+    const after = getStatusBarItems("left");
+    expect(after).not.toBe(before);
+    expect(after.some((item) => item.id === "replace-before")).toBe(false);
+    expect(after.some((item) => item.id === "replace-after")).toBe(true);
+  });
+
   it("notifies listeners on register", () => {
     const listener = vi.fn();
     const unsub = onStatusBarChange(listener);

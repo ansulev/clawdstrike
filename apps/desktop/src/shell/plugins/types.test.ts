@@ -21,4 +21,14 @@ describe("desktop plugin icon registry", () => {
     expect(typeof PLUGIN_ICONS.toString).toBe("function");
     expect(String(PLUGIN_ICONS)).toBe("[object Object]");
   });
+
+  it("keeps compatibility with direct PLUGIN_ICONS assignments", () => {
+    PLUGIN_ICONS.custom = "M1 1h22v22";
+
+    expect(getPluginIconPath("custom")).toBe("M1 1h22v22");
+    expect(PLUGIN_ICONS.custom).toBe("M1 1h22v22");
+
+    delete PLUGIN_ICONS.custom;
+    expect(getPluginIconPath("custom")).toBeUndefined();
+  });
 });

@@ -1538,7 +1538,7 @@ const SEARCHABLE_EXTENSIONS: &[&str] = &[
 ];
 
 /// Directory names to skip during search.
-const SKIP_DIRS: &[&str] = &["node_modules", "target", ".git"];
+const SKIP_DIRS: &[&str] = &["node_modules", "target"];
 
 #[derive(Debug)]
 struct SearchCancellationEntry {
@@ -1654,10 +1654,11 @@ struct SearchLinePreview {
 }
 
 fn truncate_search_line(line: &str) -> SearchLinePreview {
-    if line.chars().count() <= MAX_LINE_CONTENT_LEN {
+    let char_len = line.chars().count();
+    if char_len <= MAX_LINE_CONTENT_LEN {
         return SearchLinePreview {
             content: line.to_string(),
-            char_len: line.chars().count(),
+            char_len,
         };
     }
 

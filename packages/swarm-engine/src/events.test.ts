@@ -398,6 +398,7 @@ describe("SwarmEngineEvent", () => {
         case "task.status_changed":
         case "task.completed":
         case "task.failed":
+        case "task.progress":
           return "task";
         case "topology.updated":
         case "topology.rebalanced":
@@ -413,6 +414,10 @@ describe("SwarmEngineEvent", () => {
         case "hooks.triggered":
         case "hooks.completed":
           return "hooks";
+        case "guard.evaluated":
+        case "action.denied":
+        case "action.completed":
+          return "guard";
         default: {
           const _exhaustive: never = event;
           return _exhaustive;

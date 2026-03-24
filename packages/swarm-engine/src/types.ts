@@ -913,8 +913,9 @@ export function isTask(value: unknown): value is Task {
   );
 }
 
-// TODO(01-02): enhance with full event type import
-export function isSwarmEngineEvent(value: unknown): value is { kind: string; timestamp: number } {
+export function isSwarmEngineEvent(
+  value: unknown,
+): value is import("./events.js").SwarmEngineEvent {
   return (
     typeof value === "object" &&
     value !== null &&
@@ -925,19 +926,22 @@ export function isSwarmEngineEvent(value: unknown): value is { kind: string; tim
   );
 }
 
-// TODO(01-02): enhance with full envelope type import
 export function isSwarmEngineEnvelope(
   value: unknown,
-): value is { version: 1; type: string; payload: unknown; ttl: number; created: number } {
+): value is import("./events.js").SwarmEngineEnvelope {
   return (
     typeof value === "object" &&
     value !== null &&
     "version" in value &&
     (value as { version: unknown }).version === 1 &&
     "type" in value &&
+    typeof (value as { type: unknown }).type === "string" &&
     "payload" in value &&
+    typeof (value as { payload: unknown }).payload === "object" &&
     "ttl" in value &&
-    "created" in value
+    typeof (value as { ttl: unknown }).ttl === "number" &&
+    "created" in value &&
+    typeof (value as { created: unknown }).created === "number"
   );
 }
 

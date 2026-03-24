@@ -609,7 +609,6 @@ describe("SwarmOrchestrator", () => {
   describe("background timers", () => {
     it("heartbeat timer runs at configured interval", () => {
       orchestrator.initialize();
-      const heartbeatSpy = vi.spyOn(registry, "heartbeat");
 
       // Register and spawn an agent so heartbeat has something to do
       const agentId = registry.register({

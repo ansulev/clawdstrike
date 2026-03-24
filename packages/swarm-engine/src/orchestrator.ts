@@ -38,7 +38,6 @@ import type {
   SwarmEngineStatus,
   TopologyConfig,
 } from "./types.js";
-import { SWARM_ENGINE_CONSTANTS } from "./types.js";
 
 // ============================================================================
 // Configuration

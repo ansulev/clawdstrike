@@ -19,6 +19,21 @@ import { HEARTBEAT_INTERVAL_MS } from "./types";
 
 const BACKOFF_BASE_DELAYS = [1000, 2000, 4000, 8000, 16000];
 
+export function buildPresenceWebSocketUrl(
+  hushdUrl: string,
+  apiKey: string,
+  locationOrigin: string,
+  isDev = import.meta.env.DEV,
+): string {
+  const base = resolveProxyBase(hushdUrl, isDev);
+  const wsUrl = new URL(base, locationOrigin);
+  wsUrl.protocol = wsUrl.protocol === "https:" ? "wss:" : "ws:";
+  wsUrl.pathname = `${wsUrl.pathname.replace(/\/$/, "")}/api/v1/presence`;
+  wsUrl.search = "";
+  wsUrl.searchParams.set("token", apiKey);
+  return wsUrl.toString();
+}
+
 // ---------------------------------------------------------------------------
 // PresenceSocket
 // ---------------------------------------------------------------------------
@@ -52,15 +67,15 @@ export class PresenceSocket {
       return;
     }
 
-    const base = resolveProxyBase(this.opts.hushdUrl);
     // TODO(security): Browser WebSocket clients cannot send Authorization
     // headers, so this currently uses a query token. Replace it with a
     // short-lived ticket flow before presence traffic crosses URL-logging
     // infrastructure.
-    const wsUrl =
-      base.replace(/^http/, "ws") +
-      "/api/v1/presence?token=" +
-      encodeURIComponent(apiKey);
+    const wsUrl = buildPresenceWebSocketUrl(
+      this.opts.hushdUrl,
+      apiKey,
+      window.location.origin,
+    );
 
     try {
       const ws = new WebSocket(wsUrl);

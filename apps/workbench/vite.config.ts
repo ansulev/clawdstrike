@@ -51,6 +51,7 @@ export default defineConfig({
       "/_proxy/hushd": {
         target: hushdProxyTarget,
         changeOrigin: true,
+        ws: true,
         rewrite: (path) => path.replace(/^\/_proxy\/hushd/, ""),
         configure: (proxy) => forwardAuthorizationHeader(proxy, hushdProxyAuthorization),
       },

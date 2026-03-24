@@ -24,6 +24,15 @@ export function PresenceTabDots({ route }: PresenceTabDotsProps) {
   const viewerSet = usePresenceStore((s) => filePath ? s.viewersByFile.get(filePath) : undefined);
   const localAnalystId = usePresenceStore((s) => s.localAnalystId);
   const analysts = usePresenceStore((s) => s.analysts);
+  const handleDotClick = useCallback(
+    (e: React.MouseEvent, analyst: AnalystPresence) => {
+      e.stopPropagation(); // Prevent tab activation from the parent button
+      if (!analyst.activeFile) return; // No-op when analyst has no active file
+      const label = analyst.activeFile.split("/").pop() ?? analyst.activeFile;
+      usePaneStore.getState().openFile(analyst.activeFile, label);
+    },
+    [],
+  );
 
   // Presence dots only apply to file tabs.
   if (!filePath) return null;
@@ -41,17 +50,6 @@ export function PresenceTabDots({ route }: PresenceTabDotsProps) {
   if (remoteViewers.length === 0) return null;
 
   const overflow = Math.max(0, remoteViewers.length - MAX_VISIBLE_DOTS);
-
-  const handleDotClick = useCallback(
-    (e: React.MouseEvent, analyst: AnalystPresence) => {
-      e.stopPropagation(); // Prevent tab activation from the parent button
-      if (!analyst.activeFile) return; // No-op when analyst has no active file
-      const label = analyst.activeFile.split("/").pop() ?? analyst.activeFile;
-      usePaneStore.getState().openFile(analyst.activeFile, label);
-    },
-    [],
-  );
-
   return (
     <span className="flex items-center gap-0.5 ml-1 shrink-0">
       {remoteViewers.slice(0, MAX_VISIBLE_DOTS).map((analyst) => (

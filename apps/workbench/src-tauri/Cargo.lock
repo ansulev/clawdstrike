@@ -769,23 +769,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "clawdstrike-logos"
-version = "0.2.7"
-dependencies = [
- "clawdstrike",
- "glob",
- "hush-core",
- "hush-proxy",
- "logos-ffi",
- "regex",
- "regex-syntax",
- "serde",
- "serde_json",
- "thiserror 2.0.18",
- "tracing",
-]
-
-[[package]]
 name = "clawdstrike-ocsf"
 version = "0.2.7"
 dependencies = [
@@ -803,7 +786,6 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "clawdstrike",
- "clawdstrike-logos",
  "clawdstrike-ocsf",
  "dirs-next",
  "getrandom 0.2.17",
@@ -3223,18 +3205,6 @@ name = "log"
 version = "0.4.29"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5e5032e24019045c762d3c0f28f5b6b8bbf38563a65908389bf7978758920897"
-
-[[package]]
-name = "logos-ffi"
-version = "0.2.7"
-dependencies = [
- "chrono",
- "hex",
- "serde",
- "serde_json",
- "sha2",
- "thiserror 2.0.18",
-]
 
 [[package]]
 name = "lru-slab"

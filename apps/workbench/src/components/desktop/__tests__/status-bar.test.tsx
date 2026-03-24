@@ -1,11 +1,12 @@
 import React from "react";
-import { beforeEach, describe, it, expect, vi } from "vitest";
+import { afterEach, beforeEach, describe, it, expect, vi } from "vitest";
 import { fireEvent, screen } from "@testing-library/react";
 import { StatusBar } from "../status-bar";
 import { renderWithProviders } from "@/test/test-helpers";
 import { GUARD_REGISTRY } from "@/lib/workbench/guard-registry";
 import { usePolicyTabs, useWorkbenchState } from "@/features/policy/hooks/use-policy-actions";
 import { isDesktop } from "@/lib/tauri-bridge";
+import { usePaneStore } from "@/features/panes/pane-store";
 
 vi.mock("@/lib/tauri-bridge", () => ({
   isDesktop: vi.fn(() => false),
@@ -94,6 +95,10 @@ beforeEach(() => {
   vi.mocked(isDesktop).mockReturnValue(false);
 });
 
+afterEach(() => {
+  usePaneStore.getState()._reset();
+});
+
 describe("StatusBar", () => {
   it("shows 'Valid' status when there are no errors or warnings", () => {
     renderWithProviders(<StatusBar />);
@@ -127,6 +132,14 @@ describe("StatusBar", () => {
     renderWithProviders(<StatusBar />);
 
     expect(screen.getByText("unsaved")).toBeInTheDocument();
+  });
+
+  it("hides the unsaved file-path segment for unsaved file routes", () => {
+    usePaneStore.getState().syncRoute("/file/__new__/draft-policy");
+
+    renderWithProviders(<StatusBar />);
+
+    expect(screen.queryByText("unsaved")).not.toBeInTheDocument();
   });
 
   it("renders as a footer element", () => {

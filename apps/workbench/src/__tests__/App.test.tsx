@@ -193,6 +193,10 @@ vi.mock("@/features/fleet/use-fleet-connection", () => ({
   ),
 }));
 
+vi.mock("@/features/presence/use-presence-file-tracking", () => ({
+  usePresenceFileTracking: () => {},
+}));
+
 vi.mock("@/features/settings/use-hint-settings", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/features/settings/use-hint-settings")>();
   return {
@@ -202,8 +206,18 @@ vi.mock("@/features/settings/use-hint-settings", async (importOriginal) => {
 });
 
 vi.mock("@/features/settings/secure-store", () => ({
-  secureStore: { init: () => Promise.resolve() },
+  secureStore: {
+    init: () => Promise.resolve(),
+    get: () => Promise.resolve(null),
+    set: () => Promise.resolve(),
+    delete: () => Promise.resolve(),
+    has: () => Promise.resolve(false),
+  },
   migrateCredentialsToStronghold: () => Promise.resolve(),
+}));
+
+vi.mock("@/lib/plugins/threat-intel/bootstrap", () => ({
+  bootstrapThreatIntelPlugins: () => Promise.resolve(),
 }));
 
 vi.mock("@/features/findings/hooks/use-signal-correlator", () => ({

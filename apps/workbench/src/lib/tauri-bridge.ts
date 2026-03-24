@@ -13,6 +13,8 @@ import {
   type FileType,
 } from "@/lib/workbench/file-type-registry";
 
+const TAURI_FS_SPECIFIER = "@tauri-apps/plugin-fs";
+const TAURI_OPENER_SPECIFIER = "@tauri-apps/plugin-opener";
 
 /** Returns true when running inside a Tauri webview. */
 export function isDesktop(): boolean {
@@ -25,6 +27,13 @@ export function isMacOS(): boolean {
   return /Mac/i.test(navigator.platform);
 }
 
+async function importTauriFs() {
+  return import(/* @vite-ignore */ TAURI_FS_SPECIFIER);
+}
+
+async function importTauriOpener() {
+  return import(/* @vite-ignore */ TAURI_OPENER_SPECIFIER);
+}
 
 async function getWindow() {
   const { getCurrentWindow } = await import("@tauri-apps/api/window");
@@ -277,7 +286,7 @@ export async function renameDetectionFile(
   if (!isDesktop()) return false;
 
   try {
-    const { rename } = await import("@tauri-apps/plugin-fs");
+    const { rename } = await importTauriFs();
     await rename(oldPath, newPath);
     return true;
   } catch (err) {
@@ -298,7 +307,7 @@ export async function deleteDetectionFile(
   if (!isDesktop()) return false;
 
   try {
-    const { remove } = await import("@tauri-apps/plugin-fs");
+    const { remove } = await importTauriFs();
     await remove(filePath);
     return true;
   } catch (err) {
@@ -322,7 +331,7 @@ export async function savePolicyFile(
 export async function revealInFinder(path: string): Promise<void> {
   if (!isDesktop()) return;
   try {
-    const { revealItemInDir } = await import("@tauri-apps/plugin-opener");
+    const { revealItemInDir } = await importTauriOpener();
     await revealItemInDir(path);
   } catch (err) {
     console.error("[tauri-bridge] Failed to reveal in Finder:", path, err);
@@ -336,7 +345,7 @@ export async function revealInFinder(path: string): Promise<void> {
 export async function createDirectory(dirPath: string): Promise<boolean> {
   if (!isDesktop()) return false;
   try {
-    const { mkdir } = await import("@tauri-apps/plugin-fs");
+    const { mkdir } = await importTauriFs();
     await mkdir(dirPath, { recursive: true });
     return true;
   } catch (err) {
@@ -359,7 +368,7 @@ export async function readSwarmBundle(bundlePath: string): Promise<{
 } | null> {
   if (!isDesktop()) return null;
   try {
-    const { readTextFile, exists } = await import("@tauri-apps/plugin-fs");
+    const { readTextFile, exists } = await importTauriFs();
     const manifestPath = `${bundlePath}/manifest.json`;
     const manifest = (await exists(manifestPath))
       ? JSON.parse(await readTextFile(manifestPath))
@@ -385,7 +394,7 @@ export async function writeSwarmBoardJson(
 ): Promise<boolean> {
   if (!isDesktop()) return false;
   try {
-    const { writeTextFile } = await import("@tauri-apps/plugin-fs");
+    const { writeTextFile } = await importTauriFs();
     await writeTextFile(
       `${bundlePath}/board.json`,
       JSON.stringify(board, null, 2),
@@ -422,7 +431,7 @@ export async function createSwarmBundleFromPolicy(
 ): Promise<string | null> {
   if (!isDesktop()) return null;
   try {
-    const { mkdir, writeTextFile } = await import("@tauri-apps/plugin-fs");
+    const { mkdir, writeTextFile } = await importTauriFs();
 
     // Bundle naming: {policyFileName}-{timestamp}.swarm per user decision
     const timestamp = new Date().toISOString().slice(0, 10);
@@ -502,7 +511,7 @@ export async function createSwarmBundle(
 ): Promise<string | null> {
   if (!isDesktop()) return null;
   try {
-    const { mkdir, writeTextFile } = await import("@tauri-apps/plugin-fs");
+    const { mkdir, writeTextFile } = await importTauriFs();
     const safeName = name.replace(/[<>:"/\\|?*]/g, "_").replace(/\.swarm$/, "");
     const bundlePath = `${parentDir}/${safeName}.swarm`;
     await mkdir(bundlePath, { recursive: true });

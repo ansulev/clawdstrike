@@ -11,6 +11,7 @@ import { usePresenceFileTracking } from "@/features/presence/use-presence-file-t
 import { HintSettingsProvider, useHintSettingsSafe } from "@/features/settings/use-hint-settings";
 import { usePolicyBootstrap } from "@/features/policy/hooks/use-policy-bootstrap";
 import { secureStore, migrateCredentialsToStronghold } from "@/features/settings/secure-store";
+import { bootstrapThreatIntelPlugins } from "@/lib/plugins/threat-intel/bootstrap";
 import { useProjectStore } from "@/features/project/stores/project-store";
 import { useToast } from "@/components/ui/toast";
 import { usePaneStore } from "@/features/panes/pane-store";
@@ -282,10 +283,27 @@ function AppProviders({ children }: { children: ReactNode }) {
  * support HTML5 history pushState).
  */
 export function App() {
-  // Initialise Stronghold vault + migrate legacy localStorage credentials on first launch.
+  // Initialise Stronghold vault, migrate legacy credentials, then bootstrap threat intel plugins.
   useEffect(() => {
-    secureStore.init().then(() => migrateCredentialsToStronghold()).catch((err) => {
-      console.warn("[secure-store] Stronghold init failed:", err);
+    async function bootstrapSecureStore() {
+      try {
+        await secureStore.init();
+      } catch (err) {
+        console.warn("[secure-store] Startup init failed:", err);
+        return;
+      }
+
+      try {
+        await migrateCredentialsToStronghold();
+      } catch (err) {
+        console.warn("[secure-store] Credential migration failed (non-fatal):", err);
+      }
+
+      await bootstrapThreatIntelPlugins();
+    }
+
+    bootstrapSecureStore().catch((err) => {
+      console.warn("[plugins] Threat intel bootstrap failed:", err);
     });
   }, []);
 

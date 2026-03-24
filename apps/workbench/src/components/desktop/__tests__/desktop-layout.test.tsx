@@ -1,10 +1,12 @@
 import React from "react";
 import { afterEach, describe, it, expect, vi } from "vitest";
-import { screen } from "@testing-library/react";
+import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { cleanup, render } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, useNavigate } from "react-router-dom";
 import { DesktopLayout } from "../desktop-layout";
 import { usePolicyTabsStore } from "@/features/policy/stores/policy-tabs-store";
+import { setActivePluginView } from "../active-plugin-view";
+import { registerView } from "@/lib/plugins/view-registry";
 
 vi.mock("@/lib/tauri-bridge", () => ({
   isDesktop: vi.fn(() => false),
@@ -117,8 +119,19 @@ vi.mock("@/features/panes/pane-root", () => ({
 
 afterEach(() => {
   usePolicyTabsStore.getState()._reset();
+  setActivePluginView(null);
   cleanup();
 });
+
+function NavigateHarness() {
+  const navigate = useNavigate();
+
+  return (
+    <button type="button" onClick={() => navigate("/guards")}>
+      navigate-guards
+    </button>
+  );
+}
 
 function renderLayout(route = "/editor", withDirtyBackgroundTab = false) {
   if (withDirtyBackgroundTab) {
@@ -201,5 +214,34 @@ describe("DesktopLayout", () => {
     window.dispatchEvent(event);
 
     expect(preventDefault).toHaveBeenCalled();
+  });
+
+  it("clears the active plugin panel when navigation changes routes", async () => {
+    const disposeView = registerView({
+      id: "test-plugin.panel",
+      slot: "activityBarPanel",
+      label: "Plugin Panel",
+      component: () => <div data-testid="plugin-view">Plugin View</div>,
+    });
+    setActivePluginView("test-plugin.panel");
+
+    render(
+      <MemoryRouter initialEntries={["/home"]}>
+        <NavigateHarness />
+        <DesktopLayout />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByTestId("plugin-view")).toBeInTheDocument();
+    expect(screen.queryByTestId("pane-root")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "navigate-guards" }));
+
+    await waitFor(() => {
+      expect(screen.queryByTestId("plugin-view")).not.toBeInTheDocument();
+    });
+    expect(screen.getByTestId("pane-root")).toBeInTheDocument();
+
+    disposeView();
   });
 });

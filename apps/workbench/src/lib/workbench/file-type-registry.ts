@@ -1,30 +1,34 @@
 // ---- File Type Registry ----
 // Central registry mapping detection-engineering file types to their
 // language support, validation backend, icons, and colors.
+// Supports dynamic registration of plugin file types at runtime.
 
-/** Discriminated union of all supported file types. */
-export type FileType = "clawdstrike_policy" | "sigma_rule" | "yara_rule" | "ocsf_event" | "swarm_bundle";
+export type FileType = string;
 
-/** Descriptor for a registered file type. */
+export const BUILTIN_FILE_TYPES = [
+  "clawdstrike_policy",
+  "sigma_rule",
+  "yara_rule",
+  "ocsf_event",
+  "swarm_bundle",
+] as const;
+
+export type BuiltinFileType = (typeof BUILTIN_FILE_TYPES)[number];
+
 export interface FileTypeDescriptor {
   id: FileType;
-  /** Human-readable label, e.g. "ClawdStrike Policy". */
   label: string;
-  /** Short label for compact UI, e.g. "Policy". */
   shortLabel: string;
-  /** Associated file extensions (lowercase, with leading dot). */
   extensions: string[];
-  /** Hex color for tab dots and explorer icons. */
   iconColor: string;
-  /** Template content for new file creation. */
   defaultContent: string;
-  /** Whether this format supports the test runner. */
   testable: boolean;
-  /** File types this format can be converted to. */
   convertibleTo: FileType[];
 }
 
-// ---- Default content templates ----
+export interface FileTypeRegistrationOptions extends FileTypeDescriptor {
+  detect?: (filename: string, content: string) => boolean;
+}
 
 const POLICY_DEFAULT_CONTENT = `version: "1.2.0"
 name: Untitled Policy
@@ -82,36 +86,35 @@ const YARA_DEFAULT_CONTENT = `rule untitled_rule {
 }
 `;
 
-const OCSF_DEFAULT_CONTENT = JSON.stringify(
-  {
-    class_uid: 2004,
-    category_uid: 2,
-    activity_id: 1,
-    severity_id: 1,
-    status_id: 1,
-    time: 0,
-    message: "",
-    metadata: {
-      version: "1.4.0",
-      product: {
-        name: "ClawdStrike",
-        uid: "clawdstrike",
-        vendor_name: "Backbay Labs",
+const OCSF_DEFAULT_CONTENT =
+  JSON.stringify(
+    {
+      class_uid: 2004,
+      category_uid: 2,
+      activity_id: 1,
+      severity_id: 1,
+      status_id: 1,
+      time: 0,
+      message: "",
+      metadata: {
+        version: "1.4.0",
+        product: {
+          name: "ClawdStrike",
+          uid: "clawdstrike",
+          vendor_name: "Backbay Labs",
+        },
+      },
+      finding_info: {
+        uid: "",
+        title: "",
       },
     },
-    finding_info: {
-      uid: "",
-      title: "",
-    },
-  },
-  null,
-  2,
-) + "\n";
+    null,
+    2,
+  ) + "\n";
 
-// ---- Registry ----
-
-export const FILE_TYPE_REGISTRY: Record<FileType, FileTypeDescriptor> = {
-  clawdstrike_policy: {
+const BUILTIN_FILE_TYPE_DESCRIPTORS: FileTypeDescriptor[] = [
+  {
     id: "clawdstrike_policy",
     label: "ClawdStrike Policy",
     shortLabel: "Policy",
@@ -121,7 +124,7 @@ export const FILE_TYPE_REGISTRY: Record<FileType, FileTypeDescriptor> = {
     testable: true,
     convertibleTo: ["sigma_rule"],
   },
-  sigma_rule: {
+  {
     id: "sigma_rule",
     label: "Sigma Rule",
     shortLabel: "Sigma",
@@ -131,7 +134,7 @@ export const FILE_TYPE_REGISTRY: Record<FileType, FileTypeDescriptor> = {
     testable: true,
     convertibleTo: ["clawdstrike_policy", "yara_rule"],
   },
-  yara_rule: {
+  {
     id: "yara_rule",
     label: "YARA Rule",
     shortLabel: "YARA",
@@ -141,7 +144,7 @@ export const FILE_TYPE_REGISTRY: Record<FileType, FileTypeDescriptor> = {
     testable: true,
     convertibleTo: ["sigma_rule"],
   },
-  ocsf_event: {
+  {
     id: "ocsf_event",
     label: "OCSF Event",
     shortLabel: "OCSF",
@@ -151,7 +154,7 @@ export const FILE_TYPE_REGISTRY: Record<FileType, FileTypeDescriptor> = {
     testable: false,
     convertibleTo: [],
   },
-  swarm_bundle: {
+  {
     id: "swarm_bundle",
     label: "Swarm Bundle",
     shortLabel: "Swarm",
@@ -161,17 +164,75 @@ export const FILE_TYPE_REGISTRY: Record<FileType, FileTypeDescriptor> = {
     testable: false,
     convertibleTo: [],
   },
-};
+];
 
-// ---- Detection helpers ----
+const fileTypeMap = new Map<string, FileTypeDescriptor>();
+const customDetectors = new Map<string, (filename: string, content: string) => boolean>();
+
+for (const descriptor of BUILTIN_FILE_TYPE_DESCRIPTORS) {
+  fileTypeMap.set(descriptor.id, descriptor);
+}
+
+export function registerFileType(options: FileTypeRegistrationOptions): () => void {
+  const { detect, ...descriptor } = options;
+  if (fileTypeMap.has(descriptor.id)) {
+    throw new Error(`File type "${descriptor.id}" is already registered`);
+  }
+
+  fileTypeMap.set(descriptor.id, descriptor);
+  if (detect) {
+    customDetectors.set(descriptor.id, detect);
+  }
+
+  return () => {
+    fileTypeMap.delete(descriptor.id);
+    customDetectors.delete(descriptor.id);
+  };
+}
+
+export function unregisterFileType(id: string): void {
+  fileTypeMap.delete(id);
+  customDetectors.delete(id);
+}
+
+export function getAllFileTypes(): FileTypeDescriptor[] {
+  return Array.from(fileTypeMap.values());
+}
+
+export const FILE_TYPE_REGISTRY: Record<string, FileTypeDescriptor> = new Proxy(
+  {} as Record<string, FileTypeDescriptor>,
+  {
+    get(_target, prop: string) {
+      if (typeof prop === "symbol") return undefined;
+      return fileTypeMap.get(prop);
+    },
+    ownKeys() {
+      return Array.from(fileTypeMap.keys());
+    },
+    getOwnPropertyDescriptor(_target, prop: string) {
+      if (typeof prop === "symbol") return undefined;
+      if (!fileTypeMap.has(prop)) return undefined;
+      return {
+        configurable: true,
+        enumerable: true,
+        value: fileTypeMap.get(prop),
+      };
+    },
+    has(_target, prop: string) {
+      if (typeof prop === "symbol") return false;
+      return fileTypeMap.has(prop);
+    },
+  },
+);
 
 export function isPolicyFileType(fileType: FileType): boolean {
   return fileType === "clawdstrike_policy";
 }
 
 export function getPrimaryExtension(fileType: FileType): string {
-  const [primary] = FILE_TYPE_REGISTRY[fileType].extensions;
-  return primary ?? ".yaml";
+  const descriptor = fileTypeMap.get(fileType);
+  if (!descriptor) return ".yaml";
+  return descriptor.extensions[0] ?? ".yaml";
 }
 
 export function sanitizeFilenameStem(name: string, fallback: string): string {
@@ -185,11 +246,6 @@ export function sanitizeFilenameStem(name: string, fallback: string): string {
   return cleaned || fallback;
 }
 
-/**
- * Returns the file type based solely on file extension, or null if
- * the extension is ambiguous (e.g. `.yaml` could be policy or sigma,
- * `.json` could be an OCSF event or a policy export).
- */
 export function getFileTypeByExtension(filename: string): FileType | null {
   const lower = filename.toLowerCase();
 
@@ -199,18 +255,26 @@ export function getFileTypeByExtension(filename: string): FileType | null {
   if (lower.endsWith(".swarm")) {
     return "swarm_bundle";
   }
-  // .yaml / .yml are ambiguous between policy and sigma.
-  // .json is ambiguous between policy exports, OCSF events, and
-  // arbitrary JSON files that should fall back to content heuristics.
+
+  for (const [id, descriptor] of fileTypeMap) {
+    if ((BUILTIN_FILE_TYPES as readonly string[]).includes(id)) continue;
+    for (const extension of descriptor.extensions) {
+      if (lower.endsWith(extension.toLowerCase())) {
+        return id;
+      }
+    }
+  }
+
   return null;
 }
 
 function parseJsonObject(content: string): Record<string, unknown> | null {
   try {
     const parsed = JSON.parse(content) as unknown;
-    return parsed !== null && typeof parsed === "object" && !Array.isArray(parsed)
-      ? (parsed as Record<string, unknown>)
-      : null;
+    if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return null;
+    }
+    return parsed as Record<string, unknown>;
   } catch {
     return null;
   }
@@ -222,9 +286,7 @@ function isInteger(value: unknown): value is number {
 
 function looksLikePolicyJson(content: string): boolean {
   const parsed = parseJsonObject(content);
-  if (!parsed) {
-    return false;
-  }
+  if (!parsed) return false;
 
   return typeof parsed.schema_version === "string" || typeof parsed.guards === "object";
 }
@@ -242,22 +304,12 @@ function looksLikeOcsfJson(content: string): boolean {
   );
 }
 
-/**
- * Detect the file type from a filename and its content.
- *
- * 1. Unambiguous extensions resolve immediately (.yar/.yara -> yara_rule).
- * 2. Content heuristics disambiguate JSON policy exports / OCSF events.
- * 3. YAML content heuristics disambiguate policy vs sigma.
- * 4. Unknown extensions fall back to clawdstrike_policy.
- */
 export function detectFileType(filename: string, content: string): FileType {
-  // Step 1 -- unambiguous extensions
-  const byExt = getFileTypeByExtension(filename);
-  if (byExt !== null) {
-    return byExt;
+  const byExtension = getFileTypeByExtension(filename);
+  if (byExtension !== null) {
+    return byExtension;
   }
 
-  // Step 2 -- JSON heuristics
   if (looksLikePolicyJson(content)) {
     return "clawdstrike_policy";
   }
@@ -265,7 +317,6 @@ export function detectFileType(filename: string, content: string): FileType {
     return "ocsf_event";
   }
 
-  // Step 3 -- content heuristics (for YAML or unknown extensions)
   if (content.includes("guards:") || content.includes("schema_version:")) {
     return "clawdstrike_policy";
   }
@@ -276,20 +327,25 @@ export function detectFileType(filename: string, content: string): FileType {
     return "sigma_rule";
   }
 
-  // Step 4 -- default fallback
+  for (const [id, detect] of customDetectors) {
+    if (detect(filename, content)) {
+      return id;
+    }
+  }
+
   return "clawdstrike_policy";
 }
 
-/**
- * Returns the descriptor for a given FileType. Since the registry is
- * exhaustive over the FileType union this always succeeds.
- */
 export function getDescriptor(fileType: FileType): FileTypeDescriptor {
-  return FILE_TYPE_REGISTRY[fileType];
+  const descriptor = fileTypeMap.get(fileType);
+  if (!descriptor) {
+    throw new Error(`Unknown file type: ${fileType}`);
+  }
+  return descriptor;
 }
 
 export function isRegisteredFileType(value: unknown): value is FileType {
-  return typeof value === "string" && value in FILE_TYPE_REGISTRY;
+  return typeof value === "string" && fileTypeMap.has(value);
 }
 
 export function coerceFileType(
@@ -299,13 +355,9 @@ export function coerceFileType(
   return isRegisteredFileType(value) ? value : fallback;
 }
 
-/**
- * Extract the filename (basename) from a file path, normalizing
- * backslashes for cross-platform paths. Returns null for empty/null input.
- */
 export function basenameFromPath(filePath: string | null | undefined): string | null {
   if (!filePath) return null;
   const normalized = filePath.replace(/\\/g, "/");
-  const base = normalized.split("/").pop() ?? "";
-  return base || null;
+  const basename = normalized.split("/").pop() ?? "";
+  return basename || null;
 }

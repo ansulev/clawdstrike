@@ -12,6 +12,8 @@
 import { isDesktop } from "@/lib/tauri-bridge";
 import { BUILTIN_RULESETS } from "@/features/policy/builtin-rulesets";
 
+const TAURI_FS_SPECIFIER = "@tauri-apps/plugin-fs";
+
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
@@ -110,6 +112,10 @@ Use the "Add Folder" button at the bottom of the Explorer panel to mount
 additional directories as workspace roots.
 `;
 
+async function importTauriFs() {
+  return import(/* @vite-ignore */ TAURI_FS_SPECIFIER);
+}
+
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
@@ -146,9 +152,7 @@ export async function bootstrapDefaultWorkspace(): Promise<string | null> {
   try {
     const workspacePath = await getDefaultWorkspacePath();
 
-    const { exists, mkdir, writeTextFile } = await import(
-      "@tauri-apps/plugin-fs"
-    );
+    const { exists, mkdir, writeTextFile } = await importTauriFs();
 
     // Check if workspace has already been fully scaffolded by looking for
     // the sentinel file (README.md).  The directory itself may exist (e.g.

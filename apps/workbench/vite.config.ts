@@ -1,6 +1,7 @@
 import react from "@vitejs/plugin-react";
 import { resolve } from "path";
 import { defineConfig } from "vite";
+import { pluginEvalMiddleware } from "./src/lib/plugins/playground/playground-eval-server";
 
 const host = process.env.TAURI_DEV_HOST;
 const hushdProxyTarget =
@@ -30,7 +31,15 @@ function forwardAuthorizationHeader(proxy: any, fallbackAuthorization?: string) 
 }
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [
+    react(),
+    {
+      name: "clawdstrike-plugin-eval",
+      configureServer(server) {
+        server.middlewares.use("/__plugin-eval", pluginEvalMiddleware);
+      },
+    },
+  ],
   resolve: {
     alias: {
       "@": resolve(__dirname, "src"),

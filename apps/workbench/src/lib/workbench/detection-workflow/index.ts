@@ -23,9 +23,22 @@ export type {
   CoverageGapCandidate,
   ExplainabilityTrace,
   EvaluationPathStep,
+  DetectionVisualPanelProps,
+  TranslationProvider,
+  TranslationRequest,
+  TranslationResult,
+  TranslationDiagnostic,
+  FieldMapping,
+  PublishTargetDescriptor,
 } from "./shared-types";
 
-export { createEmptyDatasets } from "./shared-types";
+export {
+  createEmptyDatasets,
+  BUILTIN_PUBLISH_TARGETS,
+  registerPublishTarget,
+  getPublishTarget,
+  getAllPublishTargets,
+} from "./shared-types";
 
 export type {
   DetectionExecutionRequest,
@@ -42,15 +55,70 @@ export type {
 export type { DetectionWorkflowAdapter } from "./adapters";
 export {
   registerAdapter,
+  unregisterAdapter,
   getAdapter,
   hasAdapter,
   getRegisteredFileTypes,
 } from "./adapters";
 
+// Visual panel registry
+export {
+  registerVisualPanel,
+  getVisualPanel,
+  getRegisteredVisualPanelTypes,
+} from "./visual-panels";
+
+// Translation provider registry
+export {
+  registerTranslationProvider,
+  getTranslationPath,
+  getAllTranslationProviders,
+  getTranslatableTargets,
+  chainTranslation,
+} from "./translations";
+
+// Field mapping registry
+export type { FieldMappingEntry, FieldMappingTarget } from "./field-mappings";
+export {
+  BUILTIN_FIELD_MAPPINGS,
+  registerFieldMappings,
+  getFieldMapping,
+  translateField,
+  getAllFieldMappings,
+  getFieldMappingsByCategory,
+} from "./field-mappings";
+
 export { policyAdapter } from "./policy-adapter";
 export { sigmaAdapter } from "./sigma-adapter";
 export { yaraAdapter } from "./yara-adapter";
 export { ocsfAdapter } from "./ocsf-adapter";
+export { eqlAdapter } from "./eql-adapter";
+export { yaralAdapter } from "./yaral-adapter";
+export { kqlAdapter } from "./kql-adapter";
+export { kqlTranslationProvider } from "./kql-translation";
+export { eqlTranslationProvider } from "./eql-translation";
+export { yaralTranslationProvider } from "./yaral-translation";
+
+// YARA-L parser types
+export type { YaralEventPredicate, ParsedYaralRule } from "./yaral-adapter";
+
+// YARA-L parser functions
+export { parseYaralRule } from "./yaral-adapter";
+
+export { splAdapter } from "./spl-adapter";
+export { splTranslationProvider } from "./spl-translation-provider";
+
+// SPL parser types
+export type { SplCommand, SplFieldCondition } from "./spl-parser";
+
+// SPL parser functions
+export { parseSplPipeChain, parseSplFieldConditions, matchSplConditions, buildSplFromSeed } from "./spl-parser";
+
+// KQL parser types
+export type { KqlParsedQuery, KqlWhereClause } from "./kql-adapter";
+
+// KQL parser functions
+export { parseKqlQuery, extractKqlWhereFields, clientSideKqlMatch } from "./kql-adapter";
 
 // ---- Stores ----
 
@@ -146,6 +214,9 @@ export {
   buildDraftFromSeed,
 } from "./use-draft-detection";
 
+export type { UseTranslationReturn } from "./use-translation";
+export { useTranslation } from "./use-translation";
+
 export type { ImportFailure, ImportResult } from "./use-evidence-packs";
 export { useEvidencePacks } from "./use-evidence-packs";
 
@@ -208,3 +279,11 @@ import "./policy-adapter";
 import "./sigma-adapter";
 import "./yara-adapter";
 import "./ocsf-adapter";
+import "./eql-adapter";
+import "./yaral-adapter";
+import "./kql-adapter";
+import "./kql-translation";
+import "./eql-translation";
+import "./yaral-translation";
+import "./spl-adapter";
+import "./spl-translation-provider";

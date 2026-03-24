@@ -23,7 +23,9 @@
     "packages/adapters/clawdstrike-hushd-engine",
     "apps/control-console",
     "apps/workbench",
-    "packages/sdk/clawdstrike-hunt"
+    "packages/sdk/clawdstrike-hunt",
+    "packages/sdk/plugin-sdk",
+    "packages/cli/create-plugin"
   ],
   "devDependencies": {
     "@biomejs/biome": "^2.4.4"

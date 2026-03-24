@@ -12,6 +12,8 @@ import {
   resolveWorkspaceRootPath,
 } from "@/lib/workbench/path-utils";
 
+const TAURI_FS_SPECIFIER = "@tauri-apps/plugin-fs";
+
 // ---- Types ----
 
 export interface ProjectFile {
@@ -146,12 +148,16 @@ function persistRoots(roots: string[]): void {
   }
 }
 
+async function importTauriFs() {
+  return import(/* @vite-ignore */ TAURI_FS_SPECIFIER);
+}
+
 /**
  * Recursively scan a directory via Tauri fs readDir and collect relative paths.
  * Directories get a trailing "/" to distinguish them from files.
  */
 async function scanDir(dirPath: string, basePath: string): Promise<string[]> {
-  const { readDir } = await import("@tauri-apps/plugin-fs");
+  const { readDir } = await importTauriFs();
   const entries = await readDir(dirPath);
   const paths: string[] = [];
   for (const entry of entries) {

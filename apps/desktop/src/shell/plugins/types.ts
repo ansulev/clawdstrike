@@ -20,7 +20,6 @@ export const BUILTIN_APP_IDS = [
   "network-map",
   "security-overview",
 ] as const;
-export type BuiltinAppId = (typeof BUILTIN_APP_IDS)[number];
 
 export interface PluginRoute {
   path: string;
@@ -64,7 +63,6 @@ export const BUILTIN_PLUGIN_ICONS = [
   "dashboard",
   "river",
 ] as const;
-export type BuiltinPluginIcon = (typeof BUILTIN_PLUGIN_ICONS)[number];
 
 export interface PluginRegistry {
   getPlugins: () => AppPlugin[];

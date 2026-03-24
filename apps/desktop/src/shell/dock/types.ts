@@ -20,7 +20,6 @@ export const BUILTIN_CAPSULE_KINDS = [
   "season_pass", // Optional: future
   "kernel_agent", // Optional: future
 ] as const;
-export type BuiltinCapsuleKind = (typeof BUILTIN_CAPSULE_KINDS)[number];
 
 export type ActionPriority = "critical" | "high" | "normal" | "low";
 export type ActionType = "decision" | "question" | "approval" | "input" | "review";
@@ -107,7 +106,6 @@ export interface SessionItem {
 export type ShelfMode = string;
 
 export const BUILTIN_SHELF_MODES = ["events", "output", "artifacts"] as const;
-export type BuiltinShelfMode = (typeof BUILTIN_SHELF_MODES)[number];
 
 export interface ShelfState {
   isOpen: boolean;

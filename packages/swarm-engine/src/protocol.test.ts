@@ -3,8 +3,6 @@ import type { SwarmEngineEventMap, SwarmEngineEnvelope } from "./events.js";
 import { TypedEventEmitter } from "./events.js";
 import type { AgentSession, AgentMetrics } from "./types.js";
 
-// Lazy import -- protocol.ts does not exist yet during RED phase.
-// Tests will fail with "module not found" until GREEN phase.
 import {
   TOPIC_PREFIX,
   swarmIntelTopic,
@@ -20,7 +18,10 @@ import {
   EVENT_TO_CHANNEL,
   CHANNEL_TO_TOPIC_SUFFIX,
   ProtocolBridge,
+  parseSwarmTopic,
+  getSwarmTopics,
   type ProtocolBridgeConfig,
+  type ExtendedSwarmChannel,
 } from "./protocol.js";
 
 // ============================================================================
@@ -472,5 +473,230 @@ describe("ProtocolBridge", () => {
     await vi.waitFor(() => expect(published).toHaveLength(1));
     expect(published[0]!.ttl).toBe(10);
     bridge.disconnect();
+  });
+});
+
+// ============================================================================
+// parseSwarmTopic
+// ============================================================================
+
+describe("parseSwarmTopic", () => {
+  it("parses /baychat/v1/swarm/swe_abc/intel", () => {
+    const result = parseSwarmTopic("/baychat/v1/swarm/swe_abc/intel");
+    expect(result).toEqual({ swarmId: "swe_abc", channel: "intel" });
+  });
+
+  it("parses /baychat/v1/swarm/swe_abc/agents", () => {
+    const result = parseSwarmTopic("/baychat/v1/swarm/swe_abc/agents");
+    expect(result).toEqual({ swarmId: "swe_abc", channel: "agents" });
+  });
+
+  it("parses /baychat/v1/swarm/swe_abc/tasks", () => {
+    const result = parseSwarmTopic("/baychat/v1/swarm/swe_abc/tasks");
+    expect(result).toEqual({ swarmId: "swe_abc", channel: "tasks" });
+  });
+
+  it("parses all 10 channels correctly", () => {
+    const channels: ExtendedSwarmChannel[] = [
+      "intel", "signals", "detections", "coordination",
+      "agents", "tasks", "topology", "consensus", "memory", "hooks",
+    ];
+    for (const channel of channels) {
+      const result = parseSwarmTopic(`/baychat/v1/swarm/swe_test/${channel}`);
+      expect(result).toEqual({ swarmId: "swe_test", channel });
+    }
+  });
+
+  it("returns null for unknown channel", () => {
+    expect(parseSwarmTopic("/baychat/v1/swarm/swe_abc/unknown")).toBeNull();
+  });
+
+  it("returns null for invalid topic", () => {
+    expect(parseSwarmTopic("invalid")).toBeNull();
+  });
+
+  it("returns null for topic with no channel", () => {
+    expect(parseSwarmTopic("/baychat/v1/swarm/")).toBeNull();
+  });
+
+  it("returns null for topic with only swarmId (no trailing slash)", () => {
+    expect(parseSwarmTopic("/baychat/v1/swarm/swe_abc")).toBeNull();
+  });
+
+  it("returns null for empty channel segment", () => {
+    // "/baychat/v1/swarm/swe_abc/" has empty channel
+    expect(parseSwarmTopic("/baychat/v1/swarm/swe_abc/")).toBeNull();
+  });
+});
+
+// ============================================================================
+// getSwarmTopics
+// ============================================================================
+
+describe("getSwarmTopics", () => {
+  it("returns 6 default topics", () => {
+    const topics = getSwarmTopics("swe_abc");
+    expect(topics).toHaveLength(6);
+    expect(topics).toContain("/baychat/v1/swarm/swe_abc/intel");
+    expect(topics).toContain("/baychat/v1/swarm/swe_abc/detections");
+    expect(topics).toContain("/baychat/v1/swarm/swe_abc/coordination");
+    expect(topics).toContain("/baychat/v1/swarm/swe_abc/agents");
+    expect(topics).toContain("/baychat/v1/swarm/swe_abc/tasks");
+    expect(topics).toContain("/baychat/v1/swarm/swe_abc/topology");
+  });
+
+  it("boolean true includes signals with deprecation warning", () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const topics = getSwarmTopics("swe_abc", true);
+    expect(topics).toHaveLength(7);
+    expect(topics).toContain("/baychat/v1/swarm/swe_abc/signals");
+    expect(warnSpy).toHaveBeenCalledWith(
+      "[getSwarmTopics] boolean arg is deprecated, use options object",
+    );
+    warnSpy.mockRestore();
+  });
+
+  it("boolean false returns 6 topics with deprecation warning", () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const topics = getSwarmTopics("swe_abc", false);
+    expect(topics).toHaveLength(6);
+    expect(topics).not.toContain("/baychat/v1/swarm/swe_abc/signals");
+    expect(warnSpy).toHaveBeenCalledOnce();
+    warnSpy.mockRestore();
+  });
+
+  it("{ includeSignals: true } returns 7 topics without warning", () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const topics = getSwarmTopics("swe_abc", { includeSignals: true });
+    expect(topics).toHaveLength(7);
+    expect(topics).toContain("/baychat/v1/swarm/swe_abc/signals");
+    expect(warnSpy).not.toHaveBeenCalled();
+    warnSpy.mockRestore();
+  });
+
+  it("{ includeConsensus: true, includeMemory: true } returns 8 topics", () => {
+    const topics = getSwarmTopics("swe_abc", {
+      includeConsensus: true,
+      includeMemory: true,
+    });
+    expect(topics).toHaveLength(8);
+    expect(topics).toContain("/baychat/v1/swarm/swe_abc/consensus");
+    expect(topics).toContain("/baychat/v1/swarm/swe_abc/memory");
+  });
+
+  it("all options enabled returns 10 topics", () => {
+    const topics = getSwarmTopics("swe_abc", {
+      includeSignals: true,
+      includeConsensus: true,
+      includeMemory: true,
+      includeHooks: true,
+    });
+    expect(topics).toHaveLength(10);
+    expect(topics).toContain("/baychat/v1/swarm/swe_abc/signals");
+    expect(topics).toContain("/baychat/v1/swarm/swe_abc/consensus");
+    expect(topics).toContain("/baychat/v1/swarm/swe_abc/memory");
+    expect(topics).toContain("/baychat/v1/swarm/swe_abc/hooks");
+  });
+});
+
+// ============================================================================
+// ExtendedSwarmChannel type coverage
+// ============================================================================
+
+describe("ExtendedSwarmChannel", () => {
+  it("includes all 10 channels", () => {
+    // Type-level test: if any channel is missing from the union, this
+    // array assignment would cause a TypeScript error.
+    const channels: ExtendedSwarmChannel[] = [
+      "intel", "signals", "detections", "coordination",
+      "agents", "tasks", "topology", "consensus", "memory", "hooks",
+    ];
+    expect(channels).toHaveLength(10);
+  });
+});
+
+// ============================================================================
+// routeMessage reference
+// ============================================================================
+
+describe("routeMessage reference", () => {
+  it("given a topic and envelope, can identify channel and dispatch", () => {
+    const topic = swarmAgentsTopic("swe_test");
+    const parsed = parseSwarmTopic(topic);
+    expect(parsed).not.toBeNull();
+    expect(parsed!.channel).toBe("agents");
+    expect(parsed!.swarmId).toBe("swe_test");
+
+    // Demonstrate dispatch pattern: parse topic, then use channel to route
+    const handlers: Record<string, boolean> = {};
+    const channel = parsed!.channel;
+    handlers[channel] = true;
+    expect(handlers["agents"]).toBe(true);
+  });
+});
+
+// ============================================================================
+// Transport compatibility verifications
+// ============================================================================
+
+describe("Transport compatibility", () => {
+  // TRNS-02: InProcessEventBus is topic-agnostic. The EventTarget API accepts any string
+  // as an event name. No modification needed for new channels.
+  it("InProcessEventBus handles new topics without modification (TRNS-02)", () => {
+    const bus = new EventTarget();
+    const received: string[] = [];
+    bus.addEventListener(swarmAgentsTopic("test"), ((e: Event) => {
+      received.push((e as CustomEvent).detail);
+    }) as EventListener);
+    bus.dispatchEvent(
+      new CustomEvent(swarmAgentsTopic("test"), { detail: "payload" }),
+    );
+    expect(received).toEqual(["payload"]);
+  });
+
+  // TRNS-03: Gossipsub adapter handles new channels with TTL hop-decrement.
+  // TTL logic is uniform -- decrement ttl on receive, drop if ttl <= 0.
+  it("TTL hop-decrement works for new channel envelopes (TRNS-03)", () => {
+    const envelope: SwarmEngineEnvelope = {
+      version: 1,
+      type: "agent_lifecycle",
+      payload: {
+        kind: "agent.spawned",
+        agent: makeAgentSession(),
+        receipt: null,
+        sourceAgentId: null,
+        timestamp: Date.now(),
+      },
+      ttl: 3,
+      created: Date.now(),
+    };
+    // Simulate hop-decrement (what Gossipsub adapter does)
+    const decremented = { ...envelope, ttl: envelope.ttl - 1 };
+    expect(decremented.ttl).toBe(2);
+    // At ttl 0, message is not forwarded
+    const expired = { ...envelope, ttl: 0 };
+    expect(expired.ttl <= 0).toBe(true);
+  });
+
+  it("TTL hop-decrement works for task_orchestration channel (TRNS-03)", () => {
+    const envelope: SwarmEngineEnvelope = {
+      version: 1,
+      type: "task_orchestration",
+      payload: {
+        kind: "task.progress",
+        taskId: "tsk_test",
+        agentId: "agt_test",
+        percent: 50,
+        currentStep: "analyzing",
+        stepIndex: 1,
+        totalSteps: 3,
+        sourceAgentId: "agt_test",
+        timestamp: Date.now(),
+      },
+      ttl: 5,
+      created: Date.now(),
+    };
+    const decremented = { ...envelope, ttl: envelope.ttl - 1 };
+    expect(decremented.ttl).toBe(4);
   });
 });

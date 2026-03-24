@@ -199,3 +199,111 @@ export class ProtocolBridge {
     this.disconnect();
   }
 }
+
+// ============================================================================
+// ExtendedSwarmChannel
+// ============================================================================
+
+/**
+ * All valid swarm topic channel suffixes.
+ * Superset: 4 existing ClawdStrike channels + 6 new orchestration channels.
+ */
+export type ExtendedSwarmChannel =
+  | "intel" | "signals" | "detections" | "coordination"  // existing
+  | "agents" | "tasks" | "topology" | "consensus"        // new
+  | "memory" | "hooks";                                    // new
+
+// ============================================================================
+// ParsedSwarmTopic
+// ============================================================================
+
+/**
+ * Result of parsing a swarm topic string.
+ */
+export interface ParsedSwarmTopic {
+  swarmId: string;
+  channel: ExtendedSwarmChannel;
+}
+
+// ============================================================================
+// VALID_CHANNELS
+// ============================================================================
+
+/** O(1) lookup set for valid channel suffixes. */
+const VALID_CHANNELS = new Set<ExtendedSwarmChannel>([
+  "intel", "signals", "detections", "coordination",
+  "agents", "tasks", "topology", "consensus", "memory", "hooks",
+]);
+
+// ============================================================================
+// parseSwarmTopic
+// ============================================================================
+
+/**
+ * Parse a topic string into its swarmId and channel components.
+ *
+ * Returns null for invalid topics or unrecognized channels.
+ * Recognizes all 10 channels (4 existing + 6 new).
+ */
+export function parseSwarmTopic(topic: string): ParsedSwarmTopic | null {
+  const prefix = `${TOPIC_PREFIX}/swarm/`;
+  if (!topic.startsWith(prefix)) return null;
+  const remainder = topic.slice(prefix.length);
+  const slashIdx = remainder.indexOf("/");
+  if (slashIdx === -1) return null;
+  const swarmId = remainder.slice(0, slashIdx);
+  const channel = remainder.slice(slashIdx + 1);
+  if (!swarmId || !channel) return null;
+  if (!VALID_CHANNELS.has(channel as ExtendedSwarmChannel)) return null;
+  return { swarmId, channel: channel as ExtendedSwarmChannel };
+}
+
+// ============================================================================
+// getSwarmTopics
+// ============================================================================
+
+/**
+ * Options for getSwarmTopics.
+ */
+export interface GetSwarmTopicsOptions {
+  includeSignals?: boolean;
+  includeConsensus?: boolean;
+  includeMemory?: boolean;
+  includeHooks?: boolean;
+}
+
+/**
+ * Build topic strings for subscribing to a swarm's channels.
+ *
+ * Default: 6 topics (intel, detections, coordination, agents, tasks, topology).
+ * Optional: signals, consensus, memory, hooks (opt-in via options).
+ *
+ * Backward-compatible: accepts a boolean second argument (deprecated).
+ * When a boolean is passed, a console.warn is emitted and it is treated as
+ * `{ includeSignals: arg }`.
+ */
+export function getSwarmTopics(
+  swarmId: string,
+  optionsOrLegacyBoolean?: boolean | GetSwarmTopicsOptions,
+): string[] {
+  let options: GetSwarmTopicsOptions | undefined;
+  if (typeof optionsOrLegacyBoolean === "boolean") {
+    console.warn("[getSwarmTopics] boolean arg is deprecated, use options object");
+    options = { includeSignals: optionsOrLegacyBoolean };
+  } else {
+    options = optionsOrLegacyBoolean;
+  }
+  const topics = [
+    swarmIntelTopic(swarmId),
+    swarmDetectionTopic(swarmId),
+    swarmCoordinationTopic(swarmId),
+    swarmAgentsTopic(swarmId),
+    swarmTasksTopic(swarmId),
+    swarmTopologyTopic(swarmId),
+  ];
+  if (options?.includeSignals) topics.push(swarmSignalTopic(swarmId));
+  if (options?.includeConsensus) topics.push(swarmConsensusTopic(swarmId));
+  if (options?.includeMemory) topics.push(swarmMemoryTopic(swarmId));
+  if (options?.includeHooks) topics.push(swarmHooksTopic(swarmId));
+  return topics;
+}

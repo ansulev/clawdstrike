@@ -2,8 +2,6 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { TypedEventEmitter, type SwarmEngineEventMap } from "./events.js";
 import type {
   TopologyConfig,
-  TopologyNode,
-  TopologyNodeRole,
   TopologyState,
 } from "./types.js";
 import { TopologyManager, type AdaptiveThresholds } from "./topology.js";
@@ -30,10 +28,9 @@ function makeManager(
 
 describe("TopologyManager - mesh mode", () => {
   let manager: TopologyManager;
-  let events: TypedEventEmitter<SwarmEngineEventMap>;
 
   beforeEach(() => {
-    ({ manager, events } = makeManager({ type: "mesh" }));
+    ({ manager } = makeManager({ type: "mesh" }));
   });
 
   it("addNode creates a peer node in mesh mode", () => {

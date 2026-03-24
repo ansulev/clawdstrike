@@ -26,10 +26,10 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Task Orchestration
 
-- [ ] **TASK-01**: TaskGraph (DAG) extracted from ruflo TaskOrchestrator (605 lines) with dependency resolution, cycle detection, topological ordering
+- [x] **TASK-01**: TaskGraph (DAG) extracted from ruflo TaskOrchestrator (605 lines) with dependency resolution, cycle detection, topological ordering
 - [x] **TASK-02**: Priority queue with 5 levels (critical/high/normal/low/background) using extracted Deque/PriorityQueue from ruflo MessageBus
-- [ ] **TASK-03**: Task lifecycle state machine (9 states: created through timeout)
-- [ ] **TASK-04**: Auto-assignment matching Task.type against AgentCapabilities
+- [x] **TASK-03**: Task lifecycle state machine (9 states: created through timeout)
+- [x] **TASK-04**: Auto-assignment matching Task.type against AgentCapabilities
 - [x] **TASK-05**: Task timeout with configurable max retries and error categorization (guard_denied, timeout, runtime_error, dependency_failed, cancelled)
 - [x] **TASK-06**: Task progress reporting (percent, currentStep, stepIndex/totalSteps) as guard-exempt events
 
@@ -157,10 +157,10 @@ Deferred to future release. Tracked but not in current roadmap.
 | AGNT-04 | Phase 2 | Complete |
 | AGNT-05 | Phase 2 | Complete |
 | AGNT-06 | Phase 2 | Complete |
-| TASK-01 | Phase 2 | Pending |
+| TASK-01 | Phase 2 | Complete |
 | TASK-02 | Phase 2 | Complete |
-| TASK-03 | Phase 2 | Pending |
-| TASK-04 | Phase 2 | Pending |
+| TASK-03 | Phase 2 | Complete |
+| TASK-04 | Phase 2 | Complete |
 | TASK-05 | Phase 2 | Complete |
 | TASK-06 | Phase 2 | Complete |
 | TOPO-01 | Phase 2 | Complete |

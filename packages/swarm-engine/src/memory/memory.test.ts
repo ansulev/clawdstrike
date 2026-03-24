@@ -6,13 +6,12 @@
  * namespace scoping, tag search, TTL expiration, guarded writes.
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { HnswLite, cosineSimilarity } from "./hnsw.js";
 import { KnowledgeGraph } from "./graph.js";
 import type { Entity, Relation } from "./graph.js";
 import { IdbBackend } from "./idb-backend.js";
 import { SharedMemory } from "./shared-memory.js";
-import type { MemoryEntry } from "./shared-memory.js";
 import { TypedEventEmitter } from "../events.js";
 import type { SwarmEngineEventMap } from "../events.js";
 import type {
@@ -38,9 +37,11 @@ function makeAllowEvaluator(): GuardEvaluator {
         guardResults: [],
         receipt: {
           id: "r_test",
-          timestamp: Date.now(),
+          timestamp: new Date().toISOString(),
+          verdict: "allow",
+          guard: "test-guard",
           valid: true,
-          policyId: "test-policy",
+          policyName: "test-policy",
           action: { type: action.actionType, target: action.target },
           evidence: {},
           signature: "sig_test",
@@ -62,9 +63,11 @@ function makeDenyEvaluator(): GuardEvaluator {
         guardResults: [],
         receipt: {
           id: "r_deny",
-          timestamp: Date.now(),
+          timestamp: new Date().toISOString(),
+          verdict: "deny",
+          guard: "test-guard",
           valid: false,
-          policyId: "test-policy",
+          policyName: "test-policy",
           action: { type: action.actionType, target: action.target },
           evidence: {},
           signature: "sig_deny",
@@ -283,9 +286,6 @@ describe("shared", () => {
 
     const results = memory.search("ns", { tags: ["beta"] });
     expect(results).toHaveLength(2);
-    const keys = results.map(
-      (r) => `${r.namespace}:${(r as MemoryEntry & { _key?: string })._key ?? ""}`,
-    );
     // Both k1 and k2 have "beta" tag
     expect(results.every((r) => r.tags.includes("beta"))).toBe(true);
   });
@@ -377,9 +377,11 @@ describe("guarded", () => {
           guardResults: [],
           receipt: {
             id: "r_spy",
-            timestamp: Date.now(),
+            timestamp: new Date().toISOString(),
+            verdict: "allow",
+            guard: "spy-guard",
             valid: true,
-            policyId: "test",
+            policyName: "test",
             action: { type: action.actionType, target: action.target },
             evidence: {},
             signature: "sig",

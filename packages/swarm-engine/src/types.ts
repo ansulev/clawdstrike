@@ -232,6 +232,44 @@ export interface HealthCheckStatus {
 }
 
 // ---------------------------------------------------------------------------
+// Task error categorization
+// ---------------------------------------------------------------------------
+
+/** Error categorization for failed tasks (TASK-05). */
+export type TaskErrorCategory =
+  | "guard_denied"
+  | "timeout"
+  | "runtime_error"
+  | "dependency_failed"
+  | "cancelled";
+
+// ---------------------------------------------------------------------------
+// Task submission (input to TaskGraph.submit)
+// ---------------------------------------------------------------------------
+
+/** Task submission input for TaskGraph. */
+export interface TaskSubmission {
+  /** Task classification. */
+  type: TaskType;
+  /** Human-readable task name. */
+  name: string;
+  /** Detailed description or prompt for the agent. */
+  description: string;
+  /** Execution priority. Defaults to "normal". */
+  priority?: TaskPriority;
+  /** Task IDs that must complete before this task can start. */
+  dependencies?: string[];
+  /** Input data for the task. */
+  input?: Record<string, unknown>;
+  /** Timeout in milliseconds. 0 means no timeout. */
+  timeoutMs?: number;
+  /** Maximum retry attempts before permanent failure. */
+  maxRetries?: number;
+  /** Arbitrary tags for filtering and routing. */
+  tags?: string[];
+}
+
+// ---------------------------------------------------------------------------
 // Guard receipt summary
 // ---------------------------------------------------------------------------
 

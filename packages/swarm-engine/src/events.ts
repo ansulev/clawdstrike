@@ -213,6 +213,30 @@ export interface TaskFailedEvent extends SwarmEngineEventBase {
 }
 
 // ============================================================================
+// Task Progress Events
+// ============================================================================
+
+/**
+ * Task progress report event (TASK-06).
+ *
+ * Emitted by agents to report incremental progress on a task.
+ * Guard-exempt: progress reporting does not trigger guard evaluation.
+ */
+export interface TaskProgressEvent extends SwarmEngineEventBase {
+  kind: "task.progress";
+  taskId: string;
+  agentId: string;
+  /** Completion percentage (0-100). */
+  percent: number;
+  /** Human-readable description of the current step. */
+  currentStep: string;
+  /** Zero-based index of the current step. */
+  stepIndex: number;
+  /** Total number of steps in the task. */
+  totalSteps: number;
+}
+
+// ============================================================================
 // Topology Events
 // ============================================================================
 
@@ -328,6 +352,7 @@ export type SwarmEngineEvent =
   | TaskStatusChangedEvent
   | TaskCompletedEvent
   | TaskFailedEvent
+  | TaskProgressEvent
   // Topology
   | TopologyUpdatedEvent
   | TopologyRebalancedEvent
@@ -361,6 +386,7 @@ export type SwarmEngineEventMap = {
   "task.status_changed": TaskStatusChangedEvent;
   "task.completed": TaskCompletedEvent;
   "task.failed": TaskFailedEvent;
+  "task.progress": TaskProgressEvent;
   "topology.updated": TopologyUpdatedEvent;
   "topology.rebalanced": TopologyRebalancedEvent;
   "topology.leader_elected": LeaderElectedEvent;

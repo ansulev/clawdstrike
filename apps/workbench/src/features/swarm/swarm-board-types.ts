@@ -76,6 +76,12 @@ export interface SwarmBoardNodeData {
   evidencePackId?: string;
   labRunId?: string;
   publicationId?: string;
+  /** Engine-managed agent ID (from @clawdstrike/swarm-engine AgentRegistry). */
+  agentId?: string;
+  /** Engine-managed task ID (from @clawdstrike/swarm-engine TaskGraph). */
+  taskId?: string;
+  /** True if this node was created by the engine bridge (not manual). */
+  engineManaged?: boolean;
   format?: FileType;
   publishState?: "draft" | "validated" | "published" | "deployed";
   coverageDelta?: { added: string[]; removed: string[] };
@@ -93,7 +99,7 @@ export interface SwarmBoardEdge {
   source: string;
   target: string;
   label?: string;
-  type?: "handoff" | "spawned" | "artifact" | "receipt";
+  type?: "handoff" | "spawned" | "artifact" | "receipt" | "topology";
 }
 
 // ---------------------------------------------------------------------------

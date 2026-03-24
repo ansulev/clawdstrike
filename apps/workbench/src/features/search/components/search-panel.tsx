@@ -356,8 +356,8 @@ export function SearchPanelConnected() {
         requestEditorReveal({
           filePath,
           lineNumber: match.lineNumber,
-          startColumn: match.matchStart + 1,
-          endColumn: match.matchEnd + 1,
+          startColumn: match.sourceMatchStart + 1,
+          endColumn: match.sourceMatchEnd + 1,
         });
         usePaneStore
           .getState()

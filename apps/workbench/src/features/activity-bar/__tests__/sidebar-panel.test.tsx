@@ -5,12 +5,16 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { SidebarPanel } from "../components/sidebar-panel";
 import { useActivityBarStore } from "../stores/activity-bar-store";
 import { usePaneStore } from "@/features/panes/pane-store";
-import { useProjectStore } from "@/features/project/stores/project-store";
+import {
+  useProjectStore,
+  type FileStatus,
+} from "@/features/project/stores/project-store";
 
 const openFileByPath = vi.fn<(...args: [string]) => Promise<void>>();
 const createFile = vi.fn<(...args: [string, string, string]) => Promise<string | null>>();
 const renameFile = vi.fn<(...args: [string, string]) => Promise<boolean>>();
 const deleteFile = vi.fn<(...args: [string]) => Promise<boolean>>();
+const setFileStatus = vi.fn<(...args: [string, FileStatus]) => void>();
 
 vi.mock("@/features/policy/stores/policy-store", () => ({
   useWorkbench: () => ({
@@ -103,6 +107,7 @@ describe("SidebarPanel explorer wiring", () => {
     renameFile.mockResolvedValue(true);
     deleteFile.mockReset();
     deleteFile.mockResolvedValue(true);
+    setFileStatus.mockReset();
 
     usePaneStore.getState()._reset();
     useActivityBarStore.setState({
@@ -135,6 +140,7 @@ describe("SidebarPanel explorer wiring", () => {
         createFile,
         renameFile,
         deleteFile,
+        setFileStatus,
       },
     }));
   });
@@ -173,6 +179,39 @@ describe("SidebarPanel explorer wiring", () => {
       "renamed.yml",
     );
     expect(deleteFile).toHaveBeenCalledWith("/workspace/project/policies/example.yml");
+  });
+
+  it("normalizes created-file status keys for Windows project paths", async () => {
+    createFile.mockResolvedValueOnce("C:\\workspace\\project\\policies\\new.yml");
+    useProjectStore.setState((state) => ({
+      ...state,
+      project: {
+        rootPath: "C:\\workspace\\project",
+        name: "project",
+        files: [],
+        expandedDirs: new Set<string>(),
+      },
+      actions: {
+        ...state.actions,
+        createFile,
+        renameFile,
+        deleteFile,
+        setFileStatus,
+      },
+    }));
+
+    render(
+      <MemoryRouter>
+        <SidebarPanel />
+      </MemoryRouter>,
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "create file" }));
+
+    await waitFor(() => {
+      expect(setFileStatus).toHaveBeenCalledWith("policies/new.yml", { modified: true });
+    });
+    expect(openFileByPath).toHaveBeenCalledWith("C:\\workspace\\project\\policies\\new.yml");
   });
 
   it("renders the findings panel for the hunt activity-bar entry", () => {

@@ -184,6 +184,8 @@ describe("useSearchStore", () => {
         lineContent: "second",
         matchStart: 0,
         matchEnd: 6,
+        sourceMatchStart: 0,
+        sourceMatchEnd: 6,
       },
     ]);
 
@@ -212,6 +214,8 @@ describe("useSearchStore", () => {
         lineContent: "second",
         matchStart: 0,
         matchEnd: 6,
+        sourceMatchStart: 0,
+        sourceMatchEnd: 6,
       },
     ]);
   });

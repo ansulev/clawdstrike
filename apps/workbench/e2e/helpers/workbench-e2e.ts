@@ -139,6 +139,8 @@ export async function seedWorkbench(page: Page, options: SeedWorkbenchOptions): 
           line_content: string;
           match_start: number;
           match_end: number;
+          source_match_start: number;
+          source_match_end: number;
         }> = [];
         const rootPrefix = `${normalizePath(rootPath)}/`;
 
@@ -160,6 +162,8 @@ export async function seedWorkbench(page: Page, options: SeedWorkbenchOptions): 
                 line_content: line,
                 match_start: match.index,
                 match_end: match.index + value.length,
+                source_match_start: match.index,
+                source_match_end: match.index + value.length,
               });
 
               if (value.length === 0) {

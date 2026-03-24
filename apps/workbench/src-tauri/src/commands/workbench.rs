@@ -1499,12 +1499,16 @@ pub struct SearchMatch {
     pub file_path: String,
     /// 1-indexed line number.
     pub line_number: usize,
-    /// Full line text (trimmed to 500 chars max).
+    /// Preview line text (trimmed to 500 chars max).
     pub line_content: String,
-    /// Character offset of match start within the full source line.
+    /// Character offset of match start within `line_content`.
     pub match_start: usize,
-    /// Character offset of match end within the full source line.
+    /// Character offset of match end within `line_content`.
     pub match_end: usize,
+    /// Character offset of match start within the full source line.
+    pub source_match_start: usize,
+    /// Character offset of match end within the full source line.
+    pub source_match_end: usize,
 }
 
 /// Aggregate search results.
@@ -1644,10 +1648,28 @@ fn build_search_regex(
         .map_err(|e| format!("Invalid regex: {e}"))
 }
 
-fn truncate_line_content(line: &str) -> &str {
-    match line.char_indices().nth(MAX_LINE_CONTENT_LEN) {
-        Some((idx, _)) => &line[..idx],
-        None => line,
+struct SearchLinePreview {
+    content: String,
+    char_len: usize,
+}
+
+fn truncate_search_line(line: &str) -> SearchLinePreview {
+    if line.chars().count() <= MAX_LINE_CONTENT_LEN {
+        return SearchLinePreview {
+            content: line.to_string(),
+            char_len: line.chars().count(),
+        };
+    }
+
+    let truncate_at = line
+        .char_indices()
+        .nth(MAX_LINE_CONTENT_LEN)
+        .map(|(idx, _)| idx)
+        .unwrap_or(line.len());
+
+    SearchLinePreview {
+        content: line[..truncate_at].to_string(),
+        char_len: MAX_LINE_CONTENT_LEN,
     }
 }
 
@@ -1816,7 +1838,8 @@ pub async fn search_in_project(
                     continue;
                 }
 
-                let line_content = truncate_line_content(line).to_string();
+                // Truncate line content once per line; every match on the line shares it.
+                let line_preview = truncate_search_line(line);
 
                 for (match_start, match_end) in line_matches {
                     if is_search_cancelled(cancellation_flag.as_deref()) {
@@ -1831,14 +1854,19 @@ pub async fn search_in_project(
 
                     let match_start_chars = byte_index_to_char_index(line, match_start);
                     let match_end_chars = byte_index_to_char_index(line, match_end);
+                    let preview_match_start = match_start_chars.min(line_preview.char_len);
+                    let preview_match_end =
+                        match_end_chars.clamp(preview_match_start, line_preview.char_len);
 
                     file_had_match = true;
                     all_matches.push(SearchMatch {
                         file_path: rel_path.clone(),
                         line_number,
-                        line_content: line_content.clone(),
-                        match_start: match_start_chars,
-                        match_end: match_end_chars,
+                        line_content: line_preview.content.clone(),
+                        match_start: preview_match_start,
+                        match_end: preview_match_end,
+                        source_match_start: match_start_chars,
+                        source_match_end: match_end_chars,
                     });
                 }
 
@@ -2803,6 +2831,8 @@ guards: {}
         assert_eq!(first_match.line_content, "foo ẞ bar");
         assert_eq!(first_match.match_start, 4);
         assert_eq!(first_match.match_end, 5);
+        assert_eq!(first_match.source_match_start, 4);
+        assert_eq!(first_match.source_match_end, 5);
     }
 
     #[test]
@@ -2844,7 +2874,12 @@ guards: {}
             MAX_LINE_CONTENT_LEN
         );
         assert_eq!(first_match.match_start, MAX_LINE_CONTENT_LEN);
-        assert_eq!(first_match.match_end, MAX_LINE_CONTENT_LEN + "needle".chars().count());
+        assert_eq!(first_match.match_end, MAX_LINE_CONTENT_LEN);
+        assert_eq!(first_match.source_match_start, MAX_LINE_CONTENT_LEN);
+        assert_eq!(
+            first_match.source_match_end,
+            MAX_LINE_CONTENT_LEN + "needle".chars().count()
+        );
     }
 
     // =======================================================================

@@ -629,6 +629,8 @@ export interface TauriSearchMatch {
   line_content: string;
   match_start: number;
   match_end: number;
+  source_match_start?: number;
+  source_match_end?: number;
 }
 
 export interface TauriSearchResult {

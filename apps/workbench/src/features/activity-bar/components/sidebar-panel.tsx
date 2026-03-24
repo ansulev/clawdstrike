@@ -141,12 +141,10 @@ function ExplorerPanelConnected() {
         const savedPath = await actions.createFile(parentPath, fileName, "clawdstrike_policy");
         if (savedPath) {
           const rootPath = resolveWorkspaceRootPath(projectRoots, savedPath);
-          if (rootPath) {
-            actions.setFileStatus(
-              getProjectFileStatusKey(rootPath, relativeWorkspacePath(rootPath, savedPath)),
-              { modified: true },
-            );
-          }
+          actions.setFileStatus(
+            rootPath ? relativeWorkspacePath(rootPath, savedPath) : fileName,
+            { modified: true },
+          );
           await openFileByPath(savedPath);
           usePaneStore.getState().openFile(savedPath, fileName);
         }

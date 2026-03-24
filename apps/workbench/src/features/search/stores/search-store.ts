@@ -15,12 +15,16 @@ export interface SearchMatch {
   filePath: string;
   /** 1-indexed line number. */
   lineNumber: number;
-  /** Full line text. */
+  /** Preview line text. */
   lineContent: string;
-  /** Char offset of match start within the full source line. */
+  /** Char offset of match start within `lineContent`. */
   matchStart: number;
-  /** Char offset of match end within the full source line. */
+  /** Char offset of match end within `lineContent`. */
   matchEnd: number;
+  /** Char offset of match start within the full source line. */
+  sourceMatchStart: number;
+  /** Char offset of match end within the full source line. */
+  sourceMatchEnd: number;
 }
 
 export interface SearchOptions {
@@ -65,6 +69,8 @@ function mapTauriMatch(rootPath: string, m: TauriSearchMatch): SearchMatch {
     lineContent: m.line_content,
     matchStart: m.match_start,
     matchEnd: m.match_end,
+    sourceMatchStart: m.source_match_start ?? m.match_start,
+    sourceMatchEnd: m.source_match_end ?? m.match_end,
   };
 }
 

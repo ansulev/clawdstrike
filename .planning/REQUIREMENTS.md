@@ -45,16 +45,16 @@ Requirements for initial release. Each maps to roadmap phases.
 
 - [ ] **ORCH-01**: SwarmOrchestrator facade composing AgentRegistry, TaskGraph, TopologyManager, AgentPool, and optional ConsensusEngine
 - [ ] **ORCH-02**: Full lifecycle (initialize, shutdown, pause, resume) with dispose() cleanup
-- [ ] **ORCH-03**: GuardEvaluator interface injected by host environment — engine calls evaluate() before every mutable action
-- [ ] **ORCH-04**: Guard pipeline flow: action → evaluate → receipt → allow/deny/warn → emit event
+- [x] **ORCH-03**: GuardEvaluator interface injected by host environment — engine calls evaluate() before every mutable action
+- [x] **ORCH-04**: Guard pipeline flow: action → evaluate → receipt → allow/deny/warn → emit event
 - [ ] **ORCH-05**: SwarmEngineState root type combining all subsystem state, serializable to JSON
 - [ ] **ORCH-06**: SwarmEngineMetrics (uptime, active agents, task stats, guard evaluations, denial rate)
 
 ### Agent Pool
 
-- [ ] **POOL-01**: AgentPool extracted from ruflo (476 lines) with acquire/release, auto-scaling, health checks
-- [ ] **POOL-02**: Scale up/down with configurable thresholds and cooldown, LRU-based eviction
-- [ ] **POOL-03**: Health-check-driven circuit breaker — unhealthy agents removed from rotation
+- [x] **POOL-01**: AgentPool extracted from ruflo (476 lines) with acquire/release, auto-scaling, health checks
+- [x] **POOL-02**: Scale up/down with configurable thresholds and cooldown, LRU-based eviction
+- [x] **POOL-03**: Health-check-driven circuit breaker — unhealthy agents removed from rotation
 
 ### Protocol
 
@@ -170,13 +170,13 @@ Deferred to future release. Tracked but not in current roadmap.
 | TOPO-05 | Phase 2 | Complete |
 | ORCH-01 | Phase 3 | Pending |
 | ORCH-02 | Phase 3 | Pending |
-| ORCH-03 | Phase 3 | Pending |
-| ORCH-04 | Phase 3 | Pending |
+| ORCH-03 | Phase 3 | Complete |
+| ORCH-04 | Phase 3 | Complete |
 | ORCH-05 | Phase 3 | Pending |
 | ORCH-06 | Phase 3 | Pending |
-| POOL-01 | Phase 3 | Pending |
-| POOL-02 | Phase 3 | Pending |
-| POOL-03 | Phase 3 | Pending |
+| POOL-01 | Phase 3 | Complete |
+| POOL-02 | Phase 3 | Complete |
+| POOL-03 | Phase 3 | Complete |
 | PROT-01 | Phase 3 | Complete |
 | PROT-02 | Phase 3 | Complete |
 | PROT-03 | Phase 3 | Complete |

@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: in_progress
-stopped_at: Completed 03-02-PLAN.md
-last_updated: "2026-03-24T22:33:22Z"
-last_activity: 2026-03-24 -- Completed 03-02 (protocol bridge)
+stopped_at: Completed 03-01-PLAN.md
+last_updated: "2026-03-24T22:37:36Z"
+last_activity: 2026-03-24 -- Completed 03-01 (guard types + agent pool)
 progress:
   total_phases: 6
   completed_phases: 2
   total_plans: 9
-  completed_plans: 7
-  percent: 78
+  completed_plans: 8
+  percent: 89
 ---
 
 # Project State
@@ -26,18 +26,18 @@ See: .planning/PROJECT.md (updated 2026-03-24)
 ## Current Position
 
 Phase: 3 of 6 (Orchestrator + Protocol)
-Plan: 2 of 3 in current phase
+Plan: 2 of 3 in current phase (03-01, 03-02 complete; 03-03 remaining)
 Status: In Progress
-Last activity: 2026-03-24 -- Completed 03-02 (protocol bridge)
+Last activity: 2026-03-24 -- Completed 03-01 (guard types + agent pool)
 
-Progress: [████████░░] 78%
+Progress: [█████████░] 89%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 7
-- Average duration: 5.9 min
-- Total execution time: 0.69 hours
+- Total plans completed: 8
+- Average duration: 6.4 min
+- Total execution time: 0.85 hours
 
 **By Phase:**
 
@@ -45,10 +45,10 @@ Progress: [████████░░] 78%
 |-------|-------|-------|----------|
 | 01-foundation | 2 | 10 min | 5 min |
 | 02-core-subsystems | 4 | 25 min | 6.3 min |
-| 03-orchestrator-+-protocol | 1 | 6 min | 6 min |
+| 03-orchestrator-+-protocol | 2 | 16 min | 8 min |
 
 **Recent Trend:**
-- Last 5 plans: 02-01 (4 min), 02-02 (5 min), 02-04 (7 min), 02-03 (7 min), 03-02 (6 min)
+- Last 5 plans: 02-02 (5 min), 02-04 (7 min), 02-03 (7 min), 03-02 (6 min), 03-01 (10 min)
 - Trend: stable
 
 *Updated after each plan completion*
@@ -58,6 +58,7 @@ Progress: [████████░░] 78%
 | Phase 02 P04 | 7 | 1 tasks | 3 files |
 | Phase 02 P03 | 7min | 1 task | 3 files |
 | Phase 03 P02 | 6min | 2 tasks | 2 files |
+| Phase 03 P01 | 10min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -88,6 +89,10 @@ Recent decisions affecting current work:
 - [Phase 03-02]: CHANNEL_TO_TOPIC_SUFFIX includes all 11 envelope types (including status) for completeness
 - [Phase 03-02]: getSwarmTopics defaults to 6 topics; signals, consensus, memory, hooks are opt-in
 - [Phase 03-02]: parseSwarmTopic validates empty channel/swarmId as null (stricter than spec)
+- [Phase 03-01]: Pool getEvents() accessor exposes shared emitter for orchestrator coordination
+- [Phase 03-01]: Pool does not emit agent.spawned/terminated (AgentRegistry responsibility)
+- [Phase 03-01]: Synchronous acquire/release/add/remove/scale -- no async for logical pool state
+- [Phase 03-01]: Health check threshold uses strict greater-than (not >=) for consistency
 
 ### Pending Todos
 
@@ -102,6 +107,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-24T22:33:22Z
-Stopped at: Completed 03-02-PLAN.md
+Last session: 2026-03-24T22:37:36Z
+Stopped at: Completed 03-01-PLAN.md
 Resume file: None

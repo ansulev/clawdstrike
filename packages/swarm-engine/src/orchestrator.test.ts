@@ -485,7 +485,7 @@ describe("SwarmOrchestrator", () => {
 
     it("tasks is Record from taskGraph.getState()", () => {
       orchestrator.initialize();
-      const taskId = taskGraph.addTask({
+      const task = taskGraph.addTask({
         type: "coding",
         name: "test-task",
         description: "A test task",
@@ -493,8 +493,8 @@ describe("SwarmOrchestrator", () => {
       });
 
       const state = orchestrator.getState();
-      expect(state.tasks[taskId]).toBeDefined();
-      expect(state.tasks[taskId]!.name).toBe("test-task");
+      expect(state.tasks[task.id]).toBeDefined();
+      expect(state.tasks[task.id]!.name).toBe("test-task");
     });
 
     it("topology is from topology.getState()", () => {

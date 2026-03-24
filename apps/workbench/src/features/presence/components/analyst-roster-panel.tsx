@@ -6,6 +6,8 @@
 import { useMemo, useCallback } from "react";
 import { usePresenceStore } from "../stores/presence-store";
 import { usePaneStore } from "@/features/panes/pane-store";
+import { useProjectStore } from "@/features/project/stores/project-store";
+import { fromPresencePath } from "../presence-paths";
 import type { AnalystPresence } from "../types";
 
 // ---------------------------------------------------------------------------
@@ -15,6 +17,7 @@ import type { AnalystPresence } from "../types";
 export function AnalystRosterPanel() {
   const analysts = usePresenceStore((s) => s.analysts);
   const localAnalystId = usePresenceStore((s) => s.localAnalystId);
+  const projectRoots = useProjectStore((s) => s.projectRoots);
 
   // Filter out the local analyst and sort remaining alphabetically by name.
   const remoteAnalysts = useMemo(() => {
@@ -27,10 +30,11 @@ export function AnalystRosterPanel() {
   const handleAnalystClick = useCallback(
     (analyst: AnalystPresence) => {
       if (!analyst.activeFile) return; // No-op when analyst has no active file
-      const label = analyst.activeFile.split("/").pop() ?? analyst.activeFile;
-      usePaneStore.getState().openFile(analyst.activeFile, label);
+      const filePath = fromPresencePath(analyst.activeFile, projectRoots);
+      const label = filePath.split("/").pop() ?? filePath;
+      usePaneStore.getState().openFile(filePath, label);
     },
-    [],
+    [projectRoots],
   );
 
   return (

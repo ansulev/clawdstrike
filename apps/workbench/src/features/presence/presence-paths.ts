@@ -1,3 +1,5 @@
+import { joinWorkspacePath, restoreFileRoutePath } from "@/lib/workbench/path-utils";
+
 /**
  * toPresencePath -- normalize a file path to the same format the server uses.
  *
@@ -21,4 +23,28 @@ export function toPresencePath(path: string): string {
     p = p.slice(1);
   }
   return p;
+}
+
+export function fromPresencePath(path: string, projectRoots: string[]): string {
+  const normalizedPath = toPresencePath(path);
+  const orderedRoots = projectRoots
+    .map((rootPath) => ({
+      rootPath,
+      normalizedRoot: toPresencePath(rootPath),
+    }))
+    .sort((a, b) => b.normalizedRoot.length - a.normalizedRoot.length);
+
+  const matchingRoot = orderedRoots.find(({ normalizedRoot }) =>
+    normalizedPath === normalizedRoot ||
+    normalizedPath.startsWith(`${normalizedRoot}/`),
+  );
+
+  if (matchingRoot) {
+    const relativePath = normalizedPath
+      .slice(matchingRoot.normalizedRoot.length)
+      .replace(/^\/+/, "");
+    return joinWorkspacePath(matchingRoot.rootPath, relativePath);
+  }
+
+  return restoreFileRoutePath(normalizedPath);
 }

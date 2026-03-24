@@ -5,7 +5,8 @@
 import { useCallback } from "react";
 import { usePresenceStore } from "../stores/presence-store";
 import { usePaneStore } from "@/features/panes/pane-store";
-import { toPresencePath } from "../presence-paths";
+import { useProjectStore } from "@/features/project/stores/project-store";
+import { fromPresencePath, toPresencePath } from "../presence-paths";
 import type { AnalystPresence } from "../types";
 
 interface PresenceTabDotsProps {
@@ -24,14 +25,16 @@ export function PresenceTabDots({ route }: PresenceTabDotsProps) {
   const viewerSet = usePresenceStore((s) => filePath ? s.viewersByFile.get(filePath) : undefined);
   const localAnalystId = usePresenceStore((s) => s.localAnalystId);
   const analysts = usePresenceStore((s) => s.analysts);
+  const projectRoots = useProjectStore((s) => s.projectRoots);
   const handleDotClick = useCallback(
     (e: React.MouseEvent, analyst: AnalystPresence) => {
       e.stopPropagation(); // Prevent tab activation from the parent button
       if (!analyst.activeFile) return; // No-op when analyst has no active file
-      const label = analyst.activeFile.split("/").pop() ?? analyst.activeFile;
-      usePaneStore.getState().openFile(analyst.activeFile, label);
+      const filePath = fromPresencePath(analyst.activeFile, projectRoots);
+      const label = filePath.split("/").pop() ?? filePath;
+      usePaneStore.getState().openFile(filePath, label);
     },
-    [],
+    [projectRoots],
   );
 
   // Presence dots only apply to file tabs.

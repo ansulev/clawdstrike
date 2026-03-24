@@ -2,9 +2,9 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: in-progress
-stopped_at: Completed 04-02-PLAN.md
-last_updated: "2026-03-24T23:21:26Z"
+status: executing
+stopped_at: Completed 04-01-PLAN.md
+last_updated: "2026-03-24T23:29:01.888Z"
 last_activity: 2026-03-24 -- Completed 04-02 (SharedMemory subsystem)
 progress:
   total_phases: 6
@@ -108,6 +108,10 @@ Recent decisions affecting current work:
 - [Phase 04-02]: Lazy TTL eviction on get() and search() rather than periodic cleanup timer
 - [Phase 04-02]: SharedMemory.dispose() does NOT call events.dispose() per Pitfall 7
 - [Phase 04-02]: Guard pipeline uses file_write actionType with memory:// URI scheme for memory writes
+- [Phase 04-01]: Internal Map<string, ConsensusVote> for O(1) dedup, serialized to ConsensusVote[] on public boundary
+- [Phase 04-01]: Event-driven Promise resolution in awaitConsensus instead of ruflo setInterval(10ms) polling
+- [Phase 04-01]: checkConsensus after self-vote in propose to handle single-node and small-cluster cases
+- [Phase 04-01]: Paxos throws Error('not yet implemented') instead of ruflo silent Raft fallback
 
 ### Pending Todos
 
@@ -122,6 +126,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-24T23:21:26Z
-Stopped at: Completed 04-02-PLAN.md
+Last session: 2026-03-24T23:29:01.883Z
+Stopped at: Completed 04-01-PLAN.md
 Resume file: None

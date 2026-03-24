@@ -68,11 +68,11 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Consensus
 
-- [ ] **CONS-01**: ConsensusEngine factory with algorithm selection (Raft, Byzantine/PBFT, Gossip)
-- [ ] **CONS-02**: Raft consensus — leader election via randomized timeout, proposal/vote, term management
-- [ ] **CONS-03**: Byzantine consensus — PBFT pre-prepare/prepare/commit phases, view change timeout
-- [ ] **CONS-04**: Gossip consensus — fanout, hop-limited propagation, convergence threshold
-- [ ] **CONS-05**: Typed proposal lifecycle (propose → vote → commit/abort) with quorum thresholds
+- [x] **CONS-01**: ConsensusEngine factory with algorithm selection (Raft, Byzantine/PBFT, Gossip)
+- [x] **CONS-02**: Raft consensus — leader election via randomized timeout, proposal/vote, term management
+- [x] **CONS-03**: Byzantine consensus — PBFT pre-prepare/prepare/commit phases, view change timeout
+- [x] **CONS-04**: Gossip consensus — fanout, hop-limited propagation, convergence threshold
+- [x] **CONS-05**: Typed proposal lifecycle (propose → vote → commit/abort) with quorum thresholds
 
 ### Shared Memory
 
@@ -186,11 +186,11 @@ Deferred to future release. Tracked but not in current roadmap.
 | PROT-07 | Phase 3 | Complete |
 | TRNS-02 | Phase 3 | Complete |
 | TRNS-03 | Phase 3 | Complete |
-| CONS-01 | Phase 4 | Pending |
-| CONS-02 | Phase 4 | Pending |
-| CONS-03 | Phase 4 | Pending |
-| CONS-04 | Phase 4 | Pending |
-| CONS-05 | Phase 4 | Pending |
+| CONS-01 | Phase 4 | Complete |
+| CONS-02 | Phase 4 | Complete |
+| CONS-03 | Phase 4 | Complete |
+| CONS-04 | Phase 4 | Complete |
+| CONS-05 | Phase 4 | Complete |
 | MEMO-01 | Phase 4 | Complete |
 | MEMO-02 | Phase 4 | Complete |
 | MEMO-03 | Phase 4 | Complete |

@@ -835,6 +835,110 @@ export interface GuardedActionRecord {
 }
 
 // ============================================================================
+// Section 9a: Guard Evaluator Interface
+// ============================================================================
+
+/**
+ * Guard evaluator interface for host injection.
+ *
+ * The host application (or test harness) injects a GuardEvaluator into the
+ * SwarmOrchestrator. When missing, the orchestrator falls back to a deny-all
+ * evaluator (fail-closed).
+ *
+ * @see ARCHITECTURE.md section 2.1
+ */
+export interface GuardEvaluator {
+  evaluate(action: GuardedAction): Promise<GuardEvaluationResult>;
+}
+
+// ============================================================================
+// Section 9b: Agent Pool Types
+// ============================================================================
+
+/**
+ * Configuration for the AgentPool.
+ *
+ * Ported from ruflo's AgentPoolConfig with browser-safe adaptations.
+ */
+export interface AgentPoolConfig {
+  /** Pool name identifier. */
+  name: string;
+  /** Minimum number of agents to maintain. */
+  minSize: number;
+  /** Maximum number of agents allowed. */
+  maxSize: number;
+  /** Utilization ratio (0-1) above which auto-scale-up triggers. Default: 0.8. */
+  scaleUpThreshold: number;
+  /** Utilization ratio (0-1) below which auto-scale-down triggers. Default: 0.2. */
+  scaleDownThreshold: number;
+  /** Cooldown period in ms between scale operations. Default: 30000. */
+  cooldownMs: number;
+  /** Interval in ms between health checks. Default: 10000. */
+  healthCheckIntervalMs: number;
+}
+
+/**
+ * Serializable snapshot of the AgentPool state.
+ *
+ * Uses Record instead of Map for JSON compatibility. The pool's internal
+ * state uses Map for O(1) lookups, but getState() converts to this shape.
+ */
+export interface AgentPoolState {
+  /** Current pool configuration. */
+  config: AgentPoolConfig;
+  /** All pooled agents, keyed by agent ID. */
+  agents: Record<
+    string,
+    {
+      agentId: string;
+      status: "available" | "busy" | "unhealthy";
+      lastUsed: number;
+      usageCount: number;
+      health: number;
+    }
+  >;
+  /** Number of available (idle) agents. */
+  availableCount: number;
+  /** Number of busy (acquired) agents. */
+  busyCount: number;
+  /** Current utilization ratio (busy / total). */
+  utilization: number;
+  /** Pending scale operation delta. */
+  pendingScale: number;
+  /** Timestamp of last scale operation, or null. */
+  lastScaleOperation: number | null;
+}
+
+// ============================================================================
+// Section 9c: Deny Notification
+// ============================================================================
+
+/**
+ * Deny notification published to the coordination channel when an envelope
+ * is denied by the guard pipeline.
+ *
+ * @see PROTOCOL-SPEC.md section 4.5
+ */
+export interface DenyNotification {
+  /** Always "envelope_denied". */
+  action: "envelope_denied";
+  /** Channel the denied envelope was targeting. */
+  originalChannel: SwarmEngineChannel;
+  /** Action type from the denied envelope's payload. */
+  originalAction: string;
+  /** Receipt ID for ledger lookup. */
+  receiptId: string;
+  /** Always "deny". */
+  verdict: "deny";
+  /** Guard that produced the deny verdict. */
+  decidingGuard: string;
+  /** Fingerprint of the agent that originated the denied envelope. */
+  sender: string;
+  /** Timestamp of the denial (Unix ms). */
+  timestamp: number;
+}
+
+// ============================================================================
 // Section 10: Swarm Engine State
 // ============================================================================
 

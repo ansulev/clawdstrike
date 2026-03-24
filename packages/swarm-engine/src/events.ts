@@ -21,6 +21,9 @@ import type {
   ConsensusVote,
   ConsensusResult,
   Receipt,
+  GuardedAction,
+  GuardEvaluationResult,
+  EnvelopeReceipt,
 } from "./types.js";
 
 // ============================================================================
@@ -328,6 +331,43 @@ export interface HookCompletedEvent extends SwarmEngineEventBase {
 }
 
 // ============================================================================
+// Guard Pipeline Events
+// ============================================================================
+
+/**
+ * Emitted after the guard pipeline evaluates an agent action.
+ * Contains the full evaluation result including individual guard verdicts.
+ */
+export interface GuardEvaluatedEvent extends SwarmEngineEventBase {
+  kind: "guard.evaluated";
+  action: GuardedAction;
+  result: GuardEvaluationResult;
+  durationMs: number;
+}
+
+/**
+ * Emitted when an agent action is denied by the guard pipeline.
+ * The receipt contains the deny verdict and deciding guard.
+ */
+export interface ActionDeniedEvent extends SwarmEngineEventBase {
+  kind: "action.denied";
+  action: GuardedAction;
+  receipt: EnvelopeReceipt;
+  reason: string;
+}
+
+/**
+ * Emitted when an agent action is allowed and completes execution.
+ * The receipt contains the allow/warn verdict.
+ */
+export interface ActionCompletedEvent extends SwarmEngineEventBase {
+  kind: "action.completed";
+  action: GuardedAction;
+  receipt: EnvelopeReceipt;
+  durationMs: number;
+}
+
+// ============================================================================
 // SwarmEngineEvent Discriminated Union
 // ============================================================================
 
@@ -366,7 +406,11 @@ export type SwarmEngineEvent =
   | MemorySearchEvent
   // Hooks
   | HookTriggeredEvent
-  | HookCompletedEvent;
+  | HookCompletedEvent
+  // Guard pipeline
+  | GuardEvaluatedEvent
+  | ActionDeniedEvent
+  | ActionCompletedEvent;
 
 // ============================================================================
 // SwarmEngineEventMap
@@ -397,6 +441,9 @@ export type SwarmEngineEventMap = {
   "memory.search": MemorySearchEvent;
   "hooks.triggered": HookTriggeredEvent;
   "hooks.completed": HookCompletedEvent;
+  "guard.evaluated": GuardEvaluatedEvent;
+  "action.denied": ActionDeniedEvent;
+  "action.completed": ActionCompletedEvent;
 };
 
 // ============================================================================

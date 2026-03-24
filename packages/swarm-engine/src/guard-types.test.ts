@@ -241,3 +241,21 @@ describe("ActionDeniedEvent", () => {
     expect(event.reason).toBe("Forbidden path access");
   });
 });
+
+describe("ActionCompletedEvent", () => {
+  it('has kind="action.completed", action, receipt, durationMs', () => {
+    const event: ActionCompletedEvent = {
+      kind: "action.completed",
+      sourceAgentId: "agt_01HXK8M3N2ABCDEFGHJKMNPQRS",
+      timestamp: Date.now(),
+      action: makeGuardedAction(),
+      receipt: makeReceipt(),
+      durationMs: 42,
+    };
+
+    expect(event.kind).toBe("action.completed");
+    expect(event.action.actionType).toBe("file_write");
+    expect(event.receipt.verdict).toBe("allow");
+    expect(event.durationMs).toBe(42);
+  });
+});

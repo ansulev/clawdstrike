@@ -1,5 +1,6 @@
 import { MemoryRouter } from "react-router-dom";
-import { render, screen, waitFor } from "@testing-library/react";
+import type { ReactNode } from "react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { SearchPanelConnected } from "../components/search-panel";
@@ -11,13 +12,23 @@ import { usePolicyTabsStore } from "@/features/policy/stores/policy-tabs-store";
 import { DEFAULT_POLICY } from "@/features/policy/stores/policy-store";
 import { consumePendingEditorReveal } from "@/lib/workbench/editor-reveal";
 
-const openFileByPath = vi.fn<(...args: [string]) => Promise<void>>();
+type OpenFileByPathOptions = {
+  shouldApply?: () => boolean;
+};
+
+const openFileByPath = vi.fn<
+  (filePath: string, options?: OpenFileByPathOptions) => Promise<void>
+>();
 const { searchInProjectNative } = vi.hoisted(() => ({
   searchInProjectNative: vi.fn(),
 }));
 
 vi.mock("@/lib/tauri-commands", () => ({
   searchInProjectNative,
+}));
+
+vi.mock("@/components/ui/scroll-area", () => ({
+  ScrollArea: ({ children }: { children: ReactNode }) => <div>{children}</div>,
 }));
 
 vi.mock("@/features/policy/hooks/use-policy-actions", () => ({
@@ -183,7 +194,12 @@ describe("SearchPanelConnected", () => {
     await userEvent.click(screen.getByRole("button", { name: /12/i }));
 
     await waitFor(() => {
-      expect(openFileByPath).toHaveBeenCalledWith("/workspace/project/policies/example.yml");
+      expect(openFileByPath).toHaveBeenCalledWith(
+        "/workspace/project/policies/example.yml",
+        expect.objectContaining({
+          shouldApply: expect.any(Function),
+        }),
+      );
     });
 
     expect(usePaneStore.getState().paneCount()).toBe(1);
@@ -396,5 +412,106 @@ describe("SearchPanelConnected", () => {
         expect.any(String),
       );
     });
+  });
+
+  it("ignores stale search clicks that resolve after a newer selection", async () => {
+    let resolveFirst: (() => void) | null = null;
+    let resolveSecond: (() => void) | null = null;
+
+    openFileByPath.mockImplementationOnce(
+      async (_filePath, options) =>
+        await new Promise<void>((resolve) => {
+          resolveFirst = () => {
+            if (options?.shouldApply?.()) {
+              resolve();
+              return;
+            }
+
+            resolve();
+          };
+        }),
+    );
+    openFileByPath.mockImplementationOnce(
+      async (_filePath, options) =>
+        await new Promise<void>((resolve) => {
+          resolveSecond = () => {
+            if (options?.shouldApply?.()) {
+              resolve();
+              return;
+            }
+
+            resolve();
+          };
+        }),
+    );
+
+    useSearchStore.setState({
+      resultGroups: [
+        {
+          rootPath: "/workspace/project",
+          filePath: "policies/example.yml",
+          matches: [
+            {
+              rootPath: "/workspace/project",
+              filePath: "policies/example.yml",
+              lineNumber: 12,
+              lineContent: "  name: first",
+              matchStart: 8,
+              matchEnd: 13,
+              sourceMatchStart: 8,
+              sourceMatchEnd: 13,
+            },
+          ],
+        },
+        {
+          rootPath: "/workspace/project",
+          filePath: "rules/other.yml",
+          matches: [
+            {
+              rootPath: "/workspace/project",
+              filePath: "rules/other.yml",
+              lineNumber: 3,
+              lineContent: "  name: second",
+              matchStart: 8,
+              matchEnd: 14,
+              sourceMatchStart: 8,
+              sourceMatchEnd: 14,
+            },
+          ],
+        },
+      ],
+      fileCount: 2,
+      totalMatches: 2,
+      truncated: false,
+    });
+    seedOpenDocument("/workspace/project/rules/other.yml", 3, "  name: second");
+
+    render(
+      <MemoryRouter>
+        <SearchPanelConnected />
+      </MemoryRouter>,
+    );
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: /12/i }));
+    await user.click(screen.getByRole("button", { name: /3/i }));
+
+    await act(async () => {
+      resolveSecond?.();
+    });
+
+    expect(consumePendingEditorReveal("/workspace/project/rules/other.yml")).toEqual({
+      filePath: "/workspace/project/rules/other.yml",
+      lineNumber: 3,
+      startColumn: 9,
+      endColumn: 15,
+    });
+
+    await act(async () => {
+      resolveFirst?.();
+    });
+
+    expect(consumePendingEditorReveal("/workspace/project/policies/example.yml")).toBeNull();
+    expect(usePaneStore.getState().paneCount()).toBe(1);
   });
 });

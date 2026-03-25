@@ -15,7 +15,7 @@ function normalizeModuleId(id: string) {
 function matchesNodeModulePackage(id: string, packageName: string) {
   const normalizedId = normalizeModuleId(id);
   const packageRoot = `/node_modules/${packageName}`;
-  const packageIndex = normalizedId.indexOf(packageRoot);
+  const packageIndex = normalizedId.lastIndexOf(packageRoot);
   if (packageIndex === -1) {
     return false;
   }

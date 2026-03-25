@@ -116,7 +116,12 @@ describe("SearchPanelConnected", () => {
     fireEvent.click(screen.getByText("shared/default.yaml"));
 
     await waitFor(() => {
-      expect(openFileByPath).toHaveBeenCalledWith("/workspace/bravo/shared/default.yaml");
+      expect(openFileByPath).toHaveBeenCalledWith(
+        "/workspace/bravo/shared/default.yaml",
+        expect.objectContaining({
+          shouldApply: expect.any(Function),
+        }),
+      );
       expect(openFile).toHaveBeenCalledWith(
         "/workspace/bravo/shared/default.yaml",
         "default.yaml",

@@ -46,6 +46,11 @@ describe("workbench chunking", () => {
         "/repo/apps/workbench/node_modules/three-stdlib/math/CurveModifier.js",
       ),
     ).toBe("vendor-r3f");
+    expect(
+      resolveWorkbenchManualChunk(
+        "/repo/apps/workbench/node_modules/three-stdlib/node_modules/three/build/three.module.js",
+      ),
+    ).toBe("vendor-three");
   });
 
   it("leaves unrelated modules ungrouped", () => {

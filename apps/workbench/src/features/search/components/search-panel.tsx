@@ -345,6 +345,7 @@ export function SearchPanelConnected() {
   const actions = useSearchStore.use.actions();
   const projectRoots = useProjectStore.use.projectRoots();
   const { openFileByPath } = useWorkbenchState();
+  const latestResultClickTokenRef = useRef(0);
 
   return (
     <SearchPanel
@@ -360,8 +361,15 @@ export function SearchPanelConnected() {
       onOptionToggle={(key) => actions.setOption(key, !options[key], projectRoots)}
       onSearch={() => actions.performSearch(projectRoots)}
       onResultClick={async (match) => {
+        latestResultClickTokenRef.current += 1;
+        const clickToken = latestResultClickTokenRef.current;
         const filePath = resolveProjectPath(match.rootPath, match.filePath);
-        await openFileByPath(filePath);
+        await openFileByPath(filePath, {
+          shouldApply: () => latestResultClickTokenRef.current === clickToken,
+        });
+        if (latestResultClickTokenRef.current !== clickToken) {
+          return;
+        }
         const sourceLine = getOpenDocumentLineText(filePath, match.lineNumber) ?? match.lineContent;
         const startColumn =
           characterOffsetToCodeUnitIndex(sourceLine, match.sourceMatchStart) + 1;

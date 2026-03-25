@@ -7,7 +7,6 @@ const {
   mockSpawnClaudeSession,
   mockSpawnWorktreeSession,
   mockKillSession,
-  mockRemoveNode,
   mockSpawnEngineSession,
   mockSpawnEngineClaudeSession,
   mockSpawnEngineWorktreeSession,
@@ -17,14 +16,13 @@ const {
   const mockSpawnClaudeSession = vi.fn();
   const mockSpawnWorktreeSession = vi.fn();
   const mockKillSession = vi.fn();
-  const mockRemoveNode = vi.fn();
   const mockSpawnEngineSession = vi.fn();
   const mockSpawnEngineClaudeSession = vi.fn();
   const mockSpawnEngineWorktreeSession = vi.fn();
 
   const mockUseSwarmBoardStore = Object.assign(
-    (selector: (state: { actions: { removeNode: typeof mockRemoveNode } }) => unknown) =>
-      selector({ actions: { removeNode: mockRemoveNode } }),
+    (selector: (state: { actions: { removeNode: ReturnType<typeof vi.fn> } }) => unknown) =>
+      selector({ actions: { removeNode: vi.fn() } }),
     {
       use: {
         repoRoot: () => "/repo",
@@ -38,7 +36,6 @@ const {
     mockSpawnClaudeSession,
     mockSpawnWorktreeSession,
     mockKillSession,
-    mockRemoveNode,
     mockSpawnEngineSession,
     mockSpawnEngineClaudeSession,
     mockSpawnEngineWorktreeSession,

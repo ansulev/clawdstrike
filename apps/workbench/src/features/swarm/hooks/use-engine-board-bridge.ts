@@ -342,7 +342,12 @@ export function useEngineBoardBridge(engine: SwarmOrchestrator | null): void {
 
       actions.topologyLayout(topoType, result.positions);
 
-      // Create topology edges from the topology state
+      // Reconcile topology edges: remove stale ones, add new ones
+      // First, remove all existing topology edges
+      const nonTopoEdges = edges.filter((e) => e.type !== "topology");
+      actions.setEdges(nonTopoEdges);
+
+      // Then add the current topology edges
       if (topologyState?.edges) {
         for (const topoEdge of topologyState.edges) {
           // Map topology node IDs to board node IDs via agentId matching

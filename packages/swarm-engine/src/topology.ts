@@ -779,7 +779,6 @@ export class TopologyManager {
     const coordinators = this.state.nodes.filter(
       (n) => n.role === "queen" || n.role === "coordinator",
     );
-    const coordinatorIdSet = new Set(coordinators.map((c) => c.agentId));
     const workers = this.state.nodes.filter(
       (n) => n.role === "worker" || n.role === "peer",
     );

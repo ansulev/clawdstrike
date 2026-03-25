@@ -48,7 +48,7 @@ const ACTIVITY_RECENCY_MS = 3000;
 // Edge type visual config — restrained, functional colors
 // ---------------------------------------------------------------------------
 
-type SwarmEdgeType = "handoff" | "spawned" | "artifact" | "receipt";
+type SwarmEdgeType = "handoff" | "spawned" | "artifact" | "receipt" | "topology";
 
 interface EdgeStyleConfig {
   color: string;
@@ -86,6 +86,13 @@ const EDGE_STYLES: Record<SwarmEdgeType, EdgeStyleConfig> = {
     animated: true,
     dotSize: 5,
   },
+  topology: {
+    color: "#3d4250",
+    strokeWidth: 0.75,
+    strokeDasharray: "3 6",
+    animated: false,
+    dotSize: 4,
+  },
 };
 
 const DEFAULT_STYLE: EdgeStyleConfig = {
@@ -118,7 +125,7 @@ export function SwarmEdge({
 
   // Resolve edge type from data or fall back to label heuristic
   const edgeType = (data?.edgeType as SwarmEdgeType) ?? undefined;
-  const config = edgeType ? EDGE_STYLES[edgeType] : DEFAULT_STYLE;
+  const config = (edgeType && EDGE_STYLES[edgeType]) ?? DEFAULT_STYLE;
 
   // Hover-reveal: check if this edge connects to the hovered or selected node
   const hoveredNodeId = data?.hoveredNodeId as string | null | undefined;

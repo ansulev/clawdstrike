@@ -86,10 +86,10 @@ Requirements for initial release. Each maps to roadmap phases.
 
 - [ ] **INTG-01**: SwarmEngineProvider wrapping SwarmBoardProvider with error/degraded state handling and manual mode fallback
 - [ ] **INTG-02**: Engine-to-board event bridge (use-engine-board-bridge.ts) mapping all engine events to Zustand store actions via getState()
-- [ ] **INTG-03**: Topology-driven React Flow layout using ported forceLayout.ts and Sugiyama algorithms (4 topology types)
+- [x] **INTG-03**: Topology-driven React Flow layout using ported forceLayout.ts and Sugiyama algorithms (4 topology types)
 - [ ] **INTG-04**: spawnEngineSession wrapping existing spawnSession with guard evaluation and receipt node creation
-- [ ] **INTG-05**: 3 new SwarmBoard actions (topologyLayout, engineSync, guardEvaluate) with dispatch shim
-- [ ] **INTG-06**: "topology" edge type added to SwarmBoardEdge.type union
+- [x] **INTG-05**: 3 new SwarmBoard actions (topologyLayout, engineSync, guardEvaluate) with dispatch shim
+- [x] **INTG-06**: "topology" edge type added to SwarmBoardEdge.type union
 - [ ] **INTG-07**: useSwarmEngine(), useAgentRegistry(), useTaskGraph(), useTopology() convenience hooks
 - [ ] **INTG-08**: Deduplication in bridge — check for existing nodes by agentId/taskId before creating duplicates
 - [ ] **INTG-09**: "evaluating" gold glow pulse (2s) on guard.evaluate events matching usePolicyEvalBoardBridge pattern
@@ -198,10 +198,10 @@ Deferred to future release. Tracked but not in current roadmap.
 | MEMO-05 | Phase 4 | Complete |
 | INTG-01 | Phase 5 | Pending |
 | INTG-02 | Phase 5 | Pending |
-| INTG-03 | Phase 5 | Pending |
+| INTG-03 | Phase 5 | Complete |
 | INTG-04 | Phase 5 | Pending |
-| INTG-05 | Phase 5 | Pending |
-| INTG-06 | Phase 5 | Pending |
+| INTG-05 | Phase 5 | Complete |
+| INTG-06 | Phase 5 | Complete |
 | INTG-07 | Phase 5 | Pending |
 | INTG-08 | Phase 5 | Pending |
 | INTG-09 | Phase 5 | Pending |

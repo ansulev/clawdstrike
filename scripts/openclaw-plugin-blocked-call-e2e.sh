@@ -14,6 +14,7 @@ openclaw_runtime_require_cmd curl
 
 TARGET_FILE="$OPENCLAW_RUNTIME_ROOT/destructive-target.txt"
 BLOCKED_COMMAND="touch $TARGET_FILE"
+POLICY_CHECK_RESOURCE="rm -rf /"
 IDEMPOTENCY_KEY="blocked-e2e-$(date +%s)"
 GATEWAY_LOG="$ARTIFACT_DIR/gateway.log"
 
@@ -183,8 +184,10 @@ if printf '%s\n' "$ASSISTANT_TEXT" | grep -Eq 'No API key found for provider'; t
   ASSISTANT_AUTH_MISSING=true
 fi
 
-# Probe the runtime-exposed policy tool directly so latest OpenClaw releases
-# that require model auth still prove deterministic deny behavior in clean-room CI.
+# Probe the runtime-exposed policy tool directly with a canonical denied
+# command. The chat probe above uses a side-effecting command so we can detect
+# execution bypasses, but that command is expected to rely on runtime approval
+# hooks rather than the policy_check tool's static deny list.
 POLICY_CHECK_CURL_RC=0
 openclaw_http_post_capture \
   "$ARTIFACT_DIR/policy-check.http.json" \
@@ -192,7 +195,7 @@ openclaw_http_post_capture \
   "http://127.0.0.1:$OPENCLAW_RUNTIME_GATEWAY_PORT/tools/invoke" \
   -H "Authorization: Bearer $OPENCLAW_RUNTIME_GATEWAY_TOKEN" \
   -H 'Content-Type: application/json' \
-  -d "{\"tool\":\"policy_check\",\"args\":{\"action\":\"command\",\"resource\":\"$BLOCKED_COMMAND\"}}" || POLICY_CHECK_CURL_RC=$?
+  -d "{\"tool\":\"policy_check\",\"args\":{\"action\":\"command\",\"resource\":\"$POLICY_CHECK_RESOURCE\"}}" || POLICY_CHECK_CURL_RC=$?
 
 POLICY_CHECK_HTTP_OK=false
 if [ "$POLICY_CHECK_CURL_RC" -eq 0 ] \
@@ -290,6 +293,7 @@ jq -n \
   --arg openclawVersion "$OPENCLAW_VERSION" \
   --arg artifactDir "$ARTIFACT_DIR" \
   --arg targetFile "$TARGET_FILE" \
+  --arg policyCheckResource "$POLICY_CHECK_RESOURCE" \
   --argjson pluginInfo "$PLUGIN_INFO_JSON" \
   --argjson gatewayHealthOk "$GATEWAY_HEALTH_OK" \
   --argjson pluginInfoJsonPresent "$PLUGIN_INFO_JSON_PRESENT" \
@@ -312,6 +316,7 @@ jq -n \
     openclawVersion: $openclawVersion,
     artifactDir: $artifactDir,
     targetFile: $targetFile,
+    policyCheckResource: $policyCheckResource,
     checks: {
       gatewayHealthOk: $gatewayHealthOk,
       pluginInfoJsonPresent: $pluginInfoJsonPresent,

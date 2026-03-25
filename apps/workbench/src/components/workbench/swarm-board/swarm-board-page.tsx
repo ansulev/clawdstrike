@@ -15,6 +15,8 @@ import { useCoordinatorBoardBridge } from "@/features/swarm/hooks/use-coordinato
 import { usePolicyEvalBoardBridge } from "@/features/swarm/hooks/use-policy-eval-board-bridge";
 import { useTrustGraphBridge } from "@/features/swarm/hooks/use-trust-graph-bridge";
 import { useReceiptFlowBridge, receiptEdgeTimestamps } from "@/features/swarm/hooks/use-receipt-flow-bridge";
+import { SwarmEngineProvider, useSwarmEngine } from "@/features/swarm/stores/swarm-engine-provider";
+import { useEngineBoardBridge } from "@/features/swarm/hooks/use-engine-board-bridge";
 import { getCoordinator } from "@/features/swarm/coordinator-instance";
 import {
   ReactFlow,
@@ -123,6 +125,10 @@ function SwarmBoardCanvas() {
 
   // Bridge feed store findings to receipt nodes on the board
   useReceiptFlowBridge();
+
+  // Bridge engine events to board store (live engine-managed nodes)
+  const engineCtx = useSwarmEngine();
+  useEngineBoardBridge(engineCtx.engine);
 
   // Coordinator status for stats bar
   const coordinatorConnected = coordinator?.isConnected ?? false;
@@ -827,11 +833,13 @@ export function SwarmBoardPage() {
   }, [location.pathname]);
 
   return (
-    <SwarmBoardProvider bundlePath={bundlePath}>
-      <ReactFlowProvider>
-        <SwarmBoardCanvas />
-      </ReactFlowProvider>
-    </SwarmBoardProvider>
+    <SwarmEngineProvider>
+      <SwarmBoardProvider bundlePath={bundlePath}>
+        <ReactFlowProvider>
+          <SwarmBoardCanvas />
+        </ReactFlowProvider>
+      </SwarmBoardProvider>
+    </SwarmEngineProvider>
   );
 }
 
@@ -845,7 +853,7 @@ export default SwarmBoardPage;
 function findEdgeType(
   edgeId: string,
   edges: Array<{ id: string; type?: string }>,
-): "handoff" | "spawned" | "artifact" | "receipt" | undefined {
+): "handoff" | "spawned" | "artifact" | "receipt" | "topology" | undefined {
   const found = edges.find((e) => e.id === edgeId);
-  return found?.type as "handoff" | "spawned" | "artifact" | "receipt" | undefined;
+  return found?.type as "handoff" | "spawned" | "artifact" | "receipt" | "topology" | undefined;
 }

@@ -2,7 +2,10 @@
 
 import { useEffect, useRef } from "react";
 import type { SwarmOrchestrator } from "@clawdstrike/swarm-engine";
-import { useSwarmBoardStore } from "@/features/swarm/stores/swarm-board-store";
+import {
+  createBoardNode,
+  useSwarmBoardStore,
+} from "@/features/swarm/stores/swarm-board-store";
 import type {
   SwarmBoardEdge,
   SwarmBoardNodeData,
@@ -293,24 +296,29 @@ export function useEngineBoardBridge(engine: SwarmOrchestrator | null): void {
           ? { x: parentNode.position.x, y: parentNode.position.y + 200 }
           : nextNodePosition(nodes);
 
-        const taskNode = actions.addNode({
-          nodeType: "terminalTask",
-          title: event.task.type ?? event.task.name ?? "Task",
-          position,
-          data: {
+        const taskNode = {
+          ...createBoardNode({
             nodeType: "terminalTask",
             title: event.task.type ?? event.task.name ?? "Task",
-            status: mapEngineStatus(event.task.status),
-            taskId: event.task.id,
-            agentId: event.task.assignedTo,
-            engineManaged: true,
-            taskPrompt: event.task.type,
-          },
-        });
+            position,
+            data: {
+              nodeType: "terminalTask",
+              title: event.task.type ?? event.task.name ?? "Task",
+              status: mapEngineStatus(event.task.status),
+              taskId: event.task.id,
+              agentId: event.task.assignedTo,
+              engineManaged: true,
+              taskPrompt: event.task.type,
+            },
+          }),
+          id: event.task.id,
+        };
+
+        actions.addNodeDirect(taskNode);
 
         if (parentNode) {
           actions.addEdge({
-            id: `edge-spawn-${taskNode.id}`,
+            id: `edge-spawn-${event.task.id}`,
             source: parentNode.id,
             target: taskNode.id,
             type: "spawned",
@@ -376,7 +384,7 @@ export function useEngineBoardBridge(engine: SwarmOrchestrator | null): void {
               !(edge.type === "spawned" && edge.target === taskNode.id),
           ),
           {
-            id: `edge-spawn-${taskNode.id}`,
+            id: `edge-spawn-${event.taskId}`,
             source: agentNode.id,
             target: taskNode.id,
             type: "spawned" as const,

@@ -456,6 +456,10 @@ describe("useEngineBoardBridge", () => {
         useSwarmBoardStore.getState().nodes.find((node) => node.data.taskId === "tsk_1")?.data.status,
       ).toBe("idle");
 
+      expect(
+        useSwarmBoardStore.getState().nodes.find((node) => node.data.taskId === "tsk_1")?.id,
+      ).toBe("tsk_1");
+
       act(() => {
         events.emit("task.assigned", {
           taskId: "tsk_1",
@@ -470,9 +474,9 @@ describe("useEngineBoardBridge", () => {
       expect(assignedTaskNode?.data.agentId).toBe("agt_pool_1");
       expect(assignedTaskNode?.position).toEqual({ x: 240, y: 320 });
       expect(useSwarmBoardStore.getState().edges).toContainEqual({
-        id: `edge-spawn-${assignedTaskNode?.id}`,
+        id: "edge-spawn-tsk_1",
         source: "agt_pool_1",
-        target: assignedTaskNode?.id,
+        target: "tsk_1",
         type: "spawned",
       });
 

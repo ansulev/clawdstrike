@@ -59,6 +59,11 @@ export interface SwarmEngineContextValue {
   ) => Promise<Node<SwarmBoardNodeData>>;
 }
 
+type SwarmEngineContextState = Omit<
+  SwarmEngineContextValue,
+  "spawnEngineSession" | "spawnEngineClaudeSession" | "spawnEngineWorktreeSession"
+>;
+
 const SwarmEngineContext = createContext<SwarmEngineContextValue | null>(null);
 
 const WORKBENCH_CONFIG: SwarmOrchestratorConfig = {
@@ -94,16 +99,7 @@ const WORKBENCH_CONFIG: SwarmOrchestratorConfig = {
   guardEvaluator: workbenchGuardEvaluator,
 };
 
-const manualSpawnEngineSession: SwarmEngineContextValue["spawnEngineSession"] =
-  (spawnFn, opts) => spawnFn(opts);
-const manualSpawnEngineClaudeSession:
-  SwarmEngineContextValue["spawnEngineClaudeSession"] =
-    (spawnFn, opts) => spawnFn(opts);
-const manualSpawnEngineWorktreeSession:
-  SwarmEngineContextValue["spawnEngineWorktreeSession"] =
-    (spawnFn, opts) => spawnFn(opts);
-
-const MANUAL_CONTEXT: SwarmEngineContextValue = {
+const MANUAL_CONTEXT_STATE: SwarmEngineContextState = {
   engine: null,
   agentRegistry: null,
   taskGraph: null,
@@ -111,9 +107,6 @@ const MANUAL_CONTEXT: SwarmEngineContextValue = {
   isReady: false,
   mode: "manual",
   error: null,
-  spawnEngineSession: manualSpawnEngineSession,
-  spawnEngineClaudeSession: manualSpawnEngineClaudeSession,
-  spawnEngineWorktreeSession: manualSpawnEngineWorktreeSession,
 };
 
 interface PositionedSpawnOptions {
@@ -224,14 +217,14 @@ export function SwarmEngineProvider({
   children,
   enabled = true,
 }: SwarmEngineProviderProps) {
-  const [contextValue, setContextValue] =
-    useState<SwarmEngineContextValue>(MANUAL_CONTEXT);
+  const [contextState, setContextState] =
+    useState<SwarmEngineContextState>(MANUAL_CONTEXT_STATE);
 
   const engineRef = useRef<SwarmOrchestrator | null>(null);
 
   useEffect(() => {
     if (!enabled) {
-      setContextValue(MANUAL_CONTEXT);
+      setContextState(MANUAL_CONTEXT_STATE);
       return;
     }
 
@@ -260,7 +253,7 @@ export function SwarmEngineProvider({
       }
 
       engineRef.current = orchestrator;
-      setContextValue({
+      setContextState({
         engine: orchestrator,
         agentRegistry: registry,
         taskGraph,
@@ -268,9 +261,6 @@ export function SwarmEngineProvider({
         isReady: true,
         mode: "engine",
         error: null,
-        spawnEngineSession: manualSpawnEngineSession,
-        spawnEngineClaudeSession: manualSpawnEngineClaudeSession,
-        spawnEngineWorktreeSession: manualSpawnEngineWorktreeSession,
       });
     } catch (err) {
       orchestrator?.shutdown();
@@ -282,7 +272,7 @@ export function SwarmEngineProvider({
         message,
       );
       engineRef.current = null;
-      setContextValue({
+      setContextState({
         engine: null,
         agentRegistry: null,
         taskGraph: null,
@@ -290,9 +280,6 @@ export function SwarmEngineProvider({
         isReady: false,
         mode: "error",
         error: message,
-        spawnEngineSession: manualSpawnEngineSession,
-        spawnEngineClaudeSession: manualSpawnEngineClaudeSession,
-        spawnEngineWorktreeSession: manualSpawnEngineWorktreeSession,
       });
     }
 
@@ -405,13 +392,13 @@ export function SwarmEngineProvider({
 
   const valueWithSpawn = useMemo(
     () => ({
-      ...contextValue,
+      ...contextState,
       spawnEngineSession,
       spawnEngineClaudeSession,
       spawnEngineWorktreeSession,
     }),
     [
-      contextValue,
+      contextState,
       spawnEngineSession,
       spawnEngineClaudeSession,
       spawnEngineWorktreeSession,

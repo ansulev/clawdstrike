@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { renderHook, cleanup, act } from "@testing-library/react";
 import { TypedEventEmitter } from "@clawdstrike/swarm-engine";
 import type {
@@ -301,5 +301,61 @@ describe("useEngineBoardBridge", () => {
     ).toBeLessThanOrEqual(240);
 
     unmount();
+  });
+
+  it("does not overwrite a newer node status when the guard glow expires", () => {
+    vi.useFakeTimers();
+
+    const events = new TypedEventEmitter<SwarmEngineEventMap>();
+    const engine = {
+      getState: () => makeEngineState(),
+      getEvents: () => events,
+    };
+
+    const { unmount } = renderHook(() =>
+      useEngineBoardBridge(engine as any),
+    );
+
+    try {
+      act(() => {
+        events.emit("guard.evaluated", {
+          action: { agentId: "agt_pool_1" },
+          result: {
+            verdict: "allow",
+            guardResults: [],
+            receipt: {
+              signature: "abcd".repeat(32),
+              publicKey: "1234".repeat(16),
+            },
+          },
+        } as any);
+      });
+
+      expect(
+        useSwarmBoardStore.getState().nodes.find((node) => node.id === "agt_pool_1")?.data.status,
+      ).toBe("evaluating");
+
+      act(() => {
+        events.emit("agent.terminated", {
+          agentId: "agt_pool_1",
+          exitCode: 0,
+        } as any);
+      });
+
+      expect(
+        useSwarmBoardStore.getState().nodes.find((node) => node.id === "agt_pool_1")?.data.status,
+      ).toBe("completed");
+
+      act(() => {
+        vi.advanceTimersByTime(2000);
+      });
+
+      expect(
+        useSwarmBoardStore.getState().nodes.find((node) => node.id === "agt_pool_1")?.data.status,
+      ).toBe("completed");
+    } finally {
+      unmount();
+      vi.useRealTimers();
+    }
   });
 });

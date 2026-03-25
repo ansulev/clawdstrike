@@ -437,6 +437,14 @@ export function useEngineBoardBridge(engine: SwarmOrchestrator | null): void {
             timeouts.delete(nodeId);
             const restoreTo = restoreStatuses.get(nodeId) ?? "running";
             restoreStatuses.delete(nodeId);
+            const currentNode = store().nodes.find((node) => node.id === nodeId);
+            const latestStatus = currentNode?.data.status;
+
+            // Do not overwrite fresher lifecycle updates that landed during the glow.
+            if (latestStatus !== "evaluating") {
+              return;
+            }
+
             actions.updateNode(nodeId, { status: restoreTo });
           }, EVAL_GLOW_DURATION_MS);
 

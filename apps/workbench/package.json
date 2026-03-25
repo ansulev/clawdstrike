@@ -79,7 +79,7 @@
     "wawa-vfx": "^1.2.10",
     "yaml": "^2.7.0",
     "zustand": "^5.0.12",
-    "@clawdstrike/swarm-engine": "*"
+    "@clawdstrike/swarm-engine": "file:../../packages/swarm-engine"
   },
   "devDependencies": {
     "@modelcontextprotocol/sdk": "^1.12.1",

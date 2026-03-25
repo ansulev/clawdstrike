@@ -1,19 +1,4 @@
-/**
- * Raft Consensus Implementation
- *
- * Leader election and log replication for distributed coordination.
- * Ported from ruflo v3 with TypedEventEmitter injection (no Node.js EventEmitter).
- *
- * Transforms applied:
- * - EventEmitter removed, TypedEventEmitter<SwarmEngineEventMap> injected via constructor
- * - NodeJS.Timeout -> ReturnType<typeof setTimeout> | null
- * - Date objects -> number (Unix ms via Date.now())
- * - proposal.votes: Map internal, ConsensusVote[] on public boundary
- * - generateSwarmId("csn") for proposal IDs
- * - Typed event emission (consensus.proposed, consensus.vote_cast, consensus.resolved, topology.leader_elected)
- *
- * @module
- */
+/** Raft consensus: leader election and log replication. */
 
 import type { TypedEventEmitter, SwarmEngineEventMap } from "../events.js";
 import type {
@@ -23,10 +8,6 @@ import type {
 } from "../types.js";
 import { SWARM_ENGINE_CONSTANTS } from "../types.js";
 import { generateSwarmId } from "../ids.js";
-
-// ============================================================================
-// Types
-// ============================================================================
 
 export type RaftState = "follower" | "candidate" | "leader";
 
@@ -57,16 +38,11 @@ export interface RaftConfig {
   heartbeatIntervalMs?: number;
 }
 
-// ============================================================================
-// RaftConsensus
-// ============================================================================
-
 export class RaftConsensus {
   private readonly events: TypedEventEmitter<SwarmEngineEventMap>;
   private readonly config: Required<RaftConfig>;
   private readonly node: RaftNode;
   private readonly peers: Map<string, RaftNode> = new Map();
-  /** Internal vote tracking: Map for O(1) dedup. Serialized to ConsensusVote[] on public boundary. */
   private readonly proposalVotes: Map<string, Map<string, ConsensusVote>> =
     new Map();
   private readonly proposals: Map<string, ConsensusProposal> = new Map();
@@ -102,8 +78,6 @@ export class RaftConsensus {
     };
   }
 
-  // ===== PUBLIC API =====
-
   initialize(): void {
     this.resetElectionTimeout();
   }
@@ -130,7 +104,6 @@ export class RaftConsensus {
 
     const proposalId = generateSwarmId("csn");
 
-    // Internal vote map for O(1) dedup
     const voteMap = new Map<string, ConsensusVote>();
     this.proposalVotes.set(proposalId, voteMap);
 
@@ -144,7 +117,6 @@ export class RaftConsensus {
       status: "pending",
     };
 
-    // Add to local log
     const logEntry: RaftLogEntry = {
       term: this.node.currentTerm,
       index: this.node.log.length + 1,
@@ -155,7 +127,6 @@ export class RaftConsensus {
 
     this.proposals.set(proposalId, proposal);
 
-    // Leader votes for itself
     const selfVote: ConsensusVote = {
       voterId: this.node.id,
       approve: true,
@@ -165,10 +136,8 @@ export class RaftConsensus {
     voteMap.set(this.node.id, selfVote);
     proposal.votes = Array.from(voteMap.values());
 
-    // Replicate to followers
     this.replicateToFollowers(logEntry);
 
-    // Emit typed event
     this.events.emit("consensus.proposed", {
       kind: "consensus.proposed",
       sourceAgentId: this.node.id,
@@ -176,7 +145,6 @@ export class RaftConsensus {
       proposal,
     });
 
-    // Check if self-vote alone meets threshold (e.g., small cluster)
     this.checkConsensus(proposalId);
 
     return proposal;
@@ -202,7 +170,6 @@ export class RaftConsensus {
       this.proposalVotes.set(proposalId, voteMap);
     }
 
-    // Derive voter identity from this node -- prevents vote spoofing
     const vote: ConsensusVote = {
       voterId: this.node.id,
       approve,
@@ -213,7 +180,6 @@ export class RaftConsensus {
     voteMap.set(vote.voterId, vote);
     proposal.votes = Array.from(voteMap.values());
 
-    // Emit vote_cast event
     this.events.emit("consensus.vote_cast", {
       kind: "consensus.vote_cast",
       sourceAgentId: vote.voterId,
@@ -222,7 +188,6 @@ export class RaftConsensus {
       vote,
     });
 
-    // Check if we have consensus
     this.checkConsensus(proposalId);
   }
 
@@ -236,13 +201,11 @@ export class RaftConsensus {
         return;
       }
 
-      // Already resolved
       if (proposal.status !== "pending") {
         resolve(this.createResult(proposal, Date.now() - startTime));
         return;
       }
 
-      // Event-driven resolution instead of setInterval polling
       const cleanup = this.events.on("consensus.resolved", (event) => {
         if (event.result.proposalId === proposalId) {
           cleanup();
@@ -253,7 +216,6 @@ export class RaftConsensus {
         }
       });
 
-      // Timeout fallback
       const timer = setTimeout(() => {
         cleanup();
         const p = this.proposals.get(proposalId);
@@ -288,8 +250,7 @@ export class RaftConsensus {
     const result: Record<string, ConsensusProposal> = {};
     for (const [id, proposal] of this.proposals) {
       if (proposal.status === "pending") {
-        // Serialize votes from internal Map to array
-        const voteMap = this.proposalVotes.get(id);
+            const voteMap = this.proposalVotes.get(id);
         if (voteMap) {
           proposal.votes = Array.from(voteMap.values());
         }
@@ -310,7 +271,6 @@ export class RaftConsensus {
     }
   }
 
-  // Handle vote request from another candidate
   handleVoteRequest(
     candidateId: string,
     term: number,
@@ -331,7 +291,6 @@ export class RaftConsensus {
       this.node.votedFor === undefined ||
       this.node.votedFor === candidateId
     ) {
-      // Check log is at least as up-to-date
       const lastEntry = this.node.log[this.node.log.length - 1];
       const myLastTerm = lastEntry?.term ?? 0;
       const myLastIndex = lastEntry?.index ?? 0;
@@ -349,7 +308,6 @@ export class RaftConsensus {
     return false;
   }
 
-  // Handle append entries from leader
   handleAppendEntries(
     leaderId: string,
     term: number,
@@ -369,18 +327,14 @@ export class RaftConsensus {
 
     this.node.votedFor = leaderId;
 
-    // Append entries
     this.node.log.push(...entries);
 
-    // Update commit index
     if (leaderCommit > this.node.commitIndex) {
       this.node.commitIndex = Math.min(leaderCommit, this.node.log.length);
     }
 
     return true;
   }
-
-  // ===== PRIVATE METHODS =====
 
   private resetElectionTimeout(): void {
     if (this.electionTimeout !== null) {
@@ -406,17 +360,14 @@ export class RaftConsensus {
 
     const electionStart = Date.now();
 
-    // Vote for self
     let votesReceived = 1;
     const votesNeeded = Math.floor((this.peers.size + 1) / 2) + 1;
 
-    // Check if self-vote alone is enough (e.g., single-node cluster)
     if (votesReceived >= votesNeeded) {
       this.becomeLeader(Date.now() - electionStart);
       return;
     }
 
-    // Request votes from peers
     for (const [peerId] of this.peers) {
       const granted = this.requestVote(peerId);
       if (granted) {
@@ -429,7 +380,6 @@ export class RaftConsensus {
       }
     }
 
-    // Election failed, reset to follower
     this.node.state = "follower";
     this.resetElectionTimeout();
   }
@@ -438,8 +388,6 @@ export class RaftConsensus {
     const peer = this.peers.get(peerId);
     if (!peer) return false;
 
-    // Local vote request - uses in-process peer state
-    // Grant vote if candidate's term is higher
     if (this.node.currentTerm > peer.currentTerm) {
       peer.votedFor = this.node.id;
       peer.currentTerm = this.node.currentTerm;
@@ -457,7 +405,6 @@ export class RaftConsensus {
       this.electionTimeout = null;
     }
 
-    // Start sending heartbeats
     this.heartbeatInterval = setInterval(() => {
       this.sendHeartbeats();
     }, this.config.heartbeatIntervalMs);
@@ -482,7 +429,6 @@ export class RaftConsensus {
     const peer = this.peers.get(peerId);
     if (!peer) return false;
 
-    // AppendEntries - local peer state update
     if (this.node.currentTerm >= peer.currentTerm) {
       peer.currentTerm = this.node.currentTerm;
       peer.state = "follower";
@@ -501,7 +447,6 @@ export class RaftConsensus {
       }
     }
 
-    // Check if majority replicated
     const majority = Math.floor((this.peers.size + 1) / 2) + 1;
     if (successCount + 1 >= majority) {
       this.node.commitIndex = entry.index;

@@ -1,17 +1,6 @@
 /**
- * SwarmEngineProvider -- React context provider that manages the lifecycle of a
- * SwarmOrchestrator instance from @clawdstrike/swarm-engine.
- *
- * Provides:
- * - Engine initialization on mount with error fallback (mode="error")
- * - Cleanup via shutdown() on unmount (NOT dispose -- Pitfall 8)
- * - React strict mode double-mount guard via `cancelled` boolean
- * - Convenience hooks: useSwarmEngine, useAgentRegistry, useTaskGraph, useTopology
- *
- * When `enabled` is false, the provider operates in manual mode: all hooks
- * return null and the existing SwarmBoard works as-is with no engine overhead.
- *
- * @module
+ * React context provider for SwarmOrchestrator lifecycle and guard-gated session spawning.
+ * When `enabled` is false, operates in manual mode with no engine overhead.
  */
 
 import {
@@ -45,17 +34,7 @@ import {
 } from "./swarm-board-store";
 import { workbenchGuardEvaluator } from "./workbench-guard-evaluator";
 
-// ---------------------------------------------------------------------------
-// Context value type
-// ---------------------------------------------------------------------------
-
 export interface SwarmEngineContextValue {
-  /**
-   * The SwarmOrchestrator is the primary API. All mutations should go through
-   * it so that the guard pipeline is enforced. Use the read-only accessors
-   * (getAgent, getTask, getTopologyState) for UI reads instead of touching
-   * raw subsystems directly.
-   */
   engine: SwarmOrchestrator | null;
   /** @deprecated Use engine.getState().agents instead. Kept for migration. */
   agentRegistry: AgentRegistry | null;
@@ -64,14 +43,8 @@ export interface SwarmEngineContextValue {
   /** @deprecated Use engine.getState().topology instead. Kept for migration. */
   topology: TopologyManager | null;
   isReady: boolean;
-  /** "engine" = orchestrator running, "manual" = fallback/disabled, "error" = init failed */
   mode: "engine" | "manual" | "error";
-  /** Non-null when mode === "error". Describes what went wrong. */
   error: string | null;
-  /**
-   * Wraps a spawnSession call with guard pipeline evaluation and receipt node creation.
-   * Falls back to calling spawnFn directly when engine is unavailable (manual/error mode).
-   */
   spawnEngineSession: (
     spawnFn: (opts: SpawnSessionOptions) => Promise<Node<SwarmBoardNodeData>>,
     opts: SpawnSessionOptions,
@@ -86,15 +59,7 @@ export interface SwarmEngineContextValue {
   ) => Promise<Node<SwarmBoardNodeData>>;
 }
 
-// ---------------------------------------------------------------------------
-// Context
-// ---------------------------------------------------------------------------
-
 const SwarmEngineContext = createContext<SwarmEngineContextValue | null>(null);
-
-// ---------------------------------------------------------------------------
-// Default config for the workbench orchestrator
-// ---------------------------------------------------------------------------
 
 const WORKBENCH_CONFIG: SwarmOrchestratorConfig = {
   namespace: "workbench",
@@ -129,10 +94,6 @@ const WORKBENCH_CONFIG: SwarmOrchestratorConfig = {
   guardEvaluator: workbenchGuardEvaluator,
 };
 
-// ---------------------------------------------------------------------------
-// Manual-mode passthrough: calls spawnFn directly (no guard evaluation)
-// ---------------------------------------------------------------------------
-
 const manualSpawnEngineSession: SwarmEngineContextValue["spawnEngineSession"] =
   (spawnFn, opts) => spawnFn(opts);
 const manualSpawnEngineClaudeSession:
@@ -141,10 +102,6 @@ const manualSpawnEngineClaudeSession:
 const manualSpawnEngineWorktreeSession:
   SwarmEngineContextValue["spawnEngineWorktreeSession"] =
     (spawnFn, opts) => spawnFn(opts);
-
-// ---------------------------------------------------------------------------
-// Initial context value (manual/disabled state)
-// ---------------------------------------------------------------------------
 
 const MANUAL_CONTEXT: SwarmEngineContextValue = {
   engine: null,
@@ -258,13 +215,8 @@ function buildSpawnGuardAction(
   };
 }
 
-// ---------------------------------------------------------------------------
-// Provider
-// ---------------------------------------------------------------------------
-
 export interface SwarmEngineProviderProps {
   children: ReactNode;
-  /** When false, no engine is created and all hooks return null (manual mode). */
   enabled?: boolean;
 }
 
@@ -283,7 +235,7 @@ export function SwarmEngineProvider({
       return;
     }
 
-    let cancelled = false; // React strict mode double-mount guard (PITFALL 2)
+    let cancelled = false;
 
     try {
       const events = new TypedEventEmitter<SwarmEngineEventMap>();
@@ -298,7 +250,7 @@ export function SwarmEngineProvider({
         topologyMgr,
         WORKBENCH_CONFIG,
       );
-      orchestrator.initialize(); // synchronous -- throws on failure (PITFALL 5)
+      orchestrator.initialize();
 
       if (cancelled) {
         orchestrator.shutdown();
@@ -314,7 +266,7 @@ export function SwarmEngineProvider({
         isReady: true,
         mode: "engine",
         error: null,
-        spawnEngineSession: manualSpawnEngineSession, // overridden by valueWithSpawn
+        spawnEngineSession: manualSpawnEngineSession,
         spawnEngineClaudeSession: manualSpawnEngineClaudeSession,
         spawnEngineWorktreeSession: manualSpawnEngineWorktreeSession,
       });
@@ -343,16 +295,11 @@ export function SwarmEngineProvider({
     return () => {
       cancelled = true;
       if (engineRef.current) {
-        engineRef.current.shutdown(); // NOT dispose -- Pitfall 8
+        engineRef.current.shutdown();
         engineRef.current = null;
       }
     };
   }, [enabled]);
-
-  // ---------------------------------------------------------------------------
-  // Engine spawn wrappers -- route mutable session creation through the guard
-  // pipeline and fail closed when evaluation errors.
-  // ---------------------------------------------------------------------------
 
   const finalizeAllowedSpawn = useCallback((
     nodeId: string,
@@ -452,7 +399,6 @@ export function SwarmEngineProvider({
     [runGuardedSpawn],
   );
 
-  // Merge engine spawn wrappers into the context value when they change
   const valueWithSpawn = useMemo(
     () => ({
       ...contextValue,
@@ -475,14 +421,7 @@ export function SwarmEngineProvider({
   );
 }
 
-// ---------------------------------------------------------------------------
-// Convenience hooks
-// ---------------------------------------------------------------------------
-
-/**
- * Returns the full SwarmEngine context value.
- * Throws if called outside of SwarmEngineProvider.
- */
+/** Throws if called outside SwarmEngineProvider. */
 export function useSwarmEngine(): SwarmEngineContextValue {
   const ctx = useContext(SwarmEngineContext);
   if (ctx === null) {
@@ -494,49 +433,24 @@ export function useSwarmEngine(): SwarmEngineContextValue {
   return ctx;
 }
 
-/**
- * Returns the engine context when present, otherwise null.
- * Use this in compatibility layers that must continue working without the
- * provider mounted.
- */
+/** Returns null if no provider is mounted (safe for compatibility layers). */
 export function useOptionalSwarmEngine(): SwarmEngineContextValue | null {
   return useContext(SwarmEngineContext);
 }
 
-/**
- * Returns a read-only snapshot of the agent registry state via the orchestrator.
- * Returns null if the engine is not ready. Does NOT expose the mutable
- * AgentRegistry -- all mutations must go through SwarmOrchestrator methods
- * so that the guard pipeline is enforced.
- *
- * @deprecated Prefer `useSwarmEngine().engine?.getState().agents` for one-off reads.
- */
+/** @deprecated Use `useSwarmEngine().engine?.getState().agents` instead. */
 export function useAgentRegistry(): ReturnType<AgentRegistry["getState"]> | null {
   const { engine } = useSwarmEngine();
   return engine?.getState().agents ?? null;
 }
 
-/**
- * Returns a read-only snapshot of the task graph state via the orchestrator.
- * Returns null if the engine is not ready. Does NOT expose the mutable
- * TaskGraph -- all mutations must go through SwarmOrchestrator methods
- * so that the guard pipeline is enforced.
- *
- * @deprecated Prefer `useSwarmEngine().engine?.getState().tasks` for one-off reads.
- */
+/** @deprecated Use `useSwarmEngine().engine?.getState().tasks` instead. */
 export function useTaskGraph(): ReturnType<TaskGraph["getState"]> | null {
   const { engine } = useSwarmEngine();
   return engine?.getState().tasks ?? null;
 }
 
-/**
- * Returns a read-only snapshot of the topology state via the orchestrator.
- * Returns null if the engine is not ready. Does NOT expose the mutable
- * TopologyManager -- all mutations must go through SwarmOrchestrator methods
- * so that the guard pipeline is enforced.
- *
- * @deprecated Prefer `useSwarmEngine().engine?.getState().topology` for one-off reads.
- */
+/** @deprecated Use `useSwarmEngine().engine?.getState().topology` instead. */
 export function useTopology(): SwarmEngineState["topology"] | null {
   const { engine } = useSwarmEngine();
   return engine?.getState().topology ?? null;

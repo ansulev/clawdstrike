@@ -1,19 +1,4 @@
-/**
- * AgentPool -- agent pooling, auto-scaling, and health checks.
- *
- * Ported from ruflo v3 `@claude-flow/swarm/src/agent-pool.ts` (476 lines)
- * with browser-safe adaptations:
- * - No `extends EventEmitter` -- TypedEventEmitter injected via constructor
- * - No `NodeJS.Timeout` -- uses `ReturnType<typeof setInterval>`
- * - No `new Date()` -- all timestamps are Unix ms numbers
- * - No `agent.id.id` -- flat string agent IDs via generateSwarmId('agt')
- * - No `createDefaultCapabilities()` -- pool creates minimal placeholders
- * - Synchronous acquire/release/add/remove/scale (no async needed)
- * - `getState()` returns Record-based AgentPoolState (not Map)
- * - `dispose()` is synchronous -- only clears timers
- *
- * @module
- */
+/** Agent pooling with auto-scaling and health checks. */
 
 import type { TypedEventEmitter } from "./events.js";
 import type { SwarmEngineEventMap } from "./events.js";
@@ -21,11 +6,6 @@ import { generateSwarmId } from "./ids.js";
 import type { AgentPoolConfig, AgentPoolState } from "./types.js";
 import { SWARM_ENGINE_CONSTANTS } from "./types.js";
 
-// ============================================================================
-// Internal Types
-// ============================================================================
-
-/** Internal representation of a pooled agent. Not exported. */
 interface PooledAgent {
   agentId: string;
   status: "available" | "busy" | "unhealthy";
@@ -34,10 +14,6 @@ interface PooledAgent {
   health: number;
   lastHeartbeatAt: number;
 }
-
-// ============================================================================
-// AgentPool
-// ============================================================================
 
 export class AgentPool {
   private readonly events: TypedEventEmitter<SwarmEngineEventMap>;
@@ -67,13 +43,7 @@ export class AgentPool {
     };
   }
 
-  // =========================================================================
-  // Lifecycle
-  // =========================================================================
-
-  /**
-   * Create minSize agents and start the health check timer.
-   */
+  /** Create minSize agents and start the health check timer. */
   initialize(): void {
     for (let i = 0; i < this.config.minSize; i++) {
       this.createPooledAgent();
@@ -81,9 +51,7 @@ export class AgentPool {
     this.startHealthChecks();
   }
 
-  /**
-   * Clear all agents and stop health checks. Async cleanup.
-   */
+  /** Clear all agents and stop health checks. */
   shutdown(): void {
     this.stopHealthChecks();
 
@@ -92,28 +60,16 @@ export class AgentPool {
     this.busy.clear();
   }
 
-  /**
-   * Synchronous timer cleanup only. Does NOT clear agents or dispose the
-   * shared emitter (per Phase 2 decision: shared emitter is NOT owned by
-   * any single subsystem).
-   */
+  /** Timer cleanup only. Does not clear agents or dispose the shared emitter. */
   dispose(): void {
     this.stopHealthChecks();
   }
 
-  // =========================================================================
-  // Acquire / Release
-  // =========================================================================
-
   /**
-   * Acquire an available agent from the pool.
-   *
-   * If no agents are available but the pool has capacity, a new agent is
-   * created and immediately acquired. Returns undefined when the pool is
-   * fully exhausted.
+   * Acquire an available agent. Creates a new one if the pool has capacity.
+   * Returns undefined when the pool is fully exhausted.
    */
   acquire(): string | undefined {
-    // Try to get an available agent
     const availableId = this.available.values().next().value as
       | string
       | undefined;
@@ -132,7 +88,6 @@ export class AgentPool {
       }
     }
 
-    // No available agents -- try to create one if below maxSize
     if (this.pooledAgents.size < this.config.maxSize) {
       const agentId = this.createPooledAgent();
       if (agentId) {
@@ -149,13 +104,10 @@ export class AgentPool {
       }
     }
 
-    // Pool exhausted
     return undefined;
   }
 
-  /**
-   * Release an acquired agent back to the available pool.
-   */
+  /** Release an acquired agent back to the available pool. */
   release(agentId: string): void {
     const pooled = this.pooledAgents.get(agentId);
     if (!pooled) return;
@@ -168,14 +120,7 @@ export class AgentPool {
     this.checkScaling();
   }
 
-  // =========================================================================
-  // Add / Remove
-  // =========================================================================
-
-  /**
-   * Add an external agent to the pool by ID.
-   * The pool creates a minimal placeholder entry.
-   */
+  /** Add an external agent to the pool by ID. */
   add(agentId: string): void {
     if (this.pooledAgents.size >= this.config.maxSize) {
       throw new Error(
@@ -196,9 +141,7 @@ export class AgentPool {
     this.available.add(agentId);
   }
 
-  /**
-   * Remove an agent from the pool.
-   */
+  /** Remove an agent from the pool. */
   remove(agentId: string): void {
     if (!this.pooledAgents.has(agentId)) return;
 
@@ -207,21 +150,13 @@ export class AgentPool {
     this.busy.delete(agentId);
   }
 
-  // =========================================================================
-  // Scaling
-  // =========================================================================
-
   /**
-   * Scale the pool by the given delta.
-   *
-   * Positive delta: create agents (up to maxSize).
-   * Negative delta: remove LRU available agents (down to minSize).
-   * Respects cooldown between operations.
+   * Scale the pool by delta. Positive creates agents (up to maxSize),
+   * negative removes LRU available agents (down to minSize).
    */
   scale(delta: number): void {
     const now = Date.now();
 
-    // Check cooldown
     if (this.lastScaleOperation !== null) {
       const timeSinceLastScale = now - this.lastScaleOperation;
       if (timeSinceLastScale < this.config.cooldownMs) {
@@ -230,7 +165,6 @@ export class AgentPool {
     }
 
     if (delta > 0) {
-      // Scale up
       const targetSize = Math.min(
         this.pooledAgents.size + delta,
         this.config.maxSize,
@@ -241,14 +175,12 @@ export class AgentPool {
         this.createPooledAgent();
       }
     } else if (delta < 0) {
-      // Scale down -- remove LRU available agents
       const targetSize = Math.max(
         this.pooledAgents.size + delta,
         this.config.minSize,
       );
       const toRemove = this.pooledAgents.size - targetSize;
 
-      // Sort available agents by lastUsed (ascending = LRU first)
       const sortedAvailable = Array.from(this.available)
         .map((id) => this.pooledAgents.get(id))
         .filter((p): p is PooledAgent => p !== undefined)
@@ -263,14 +195,7 @@ export class AgentPool {
     this.lastScaleOperation = now;
   }
 
-  // =========================================================================
-  // State Accessors
-  // =========================================================================
-
-  /**
-   * Returns a serializable snapshot of the pool state.
-   * Converts internal Map to Record for JSON compatibility.
-   */
+  /** Returns a serializable snapshot of the pool state. */
   getState(): AgentPoolState {
     const agents: AgentPoolState["agents"] = {};
     for (const [id, pooled] of this.pooledAgents) {
@@ -294,17 +219,13 @@ export class AgentPool {
     };
   }
 
-  /**
-   * Returns the current utilization ratio (busy / total).
-   */
+  /** Returns the current utilization ratio (busy / total). */
   getUtilization(): number {
     if (this.pooledAgents.size === 0) return 0;
     return this.busy.size / this.pooledAgents.size;
   }
 
-  /**
-   * Returns aggregate pool statistics.
-   */
+  /** Returns aggregate pool statistics. */
   getPoolStats(): {
     total: number;
     available: number;
@@ -333,25 +254,12 @@ export class AgentPool {
     };
   }
 
-  // =========================================================================
-  // Utility Methods
-  // =========================================================================
-
-  /**
-   * Returns the shared event emitter.
-   *
-   * The pool itself does not emit agent.spawned/agent.terminated events
-   * (that is AgentRegistry's responsibility), but the orchestrator may
-   * need the emitter reference for coordination.
-   */
+  /** Returns the shared event emitter. */
   getEvents(): TypedEventEmitter<SwarmEngineEventMap> {
     return this.events;
   }
 
-  /**
-   * Update the heartbeat timestamp for an agent.
-   * Slightly boosts health.
-   */
+  /** Update the heartbeat timestamp for an agent. */
   updateAgentHeartbeat(agentId: string): void {
     const pooled = this.pooledAgents.get(agentId);
     if (pooled) {
@@ -360,9 +268,7 @@ export class AgentPool {
     }
   }
 
-  /**
-   * Get a single pooled agent entry by ID.
-   */
+  /** Get a single pooled agent entry by ID. */
   getAgent(
     agentId: string,
   ):
@@ -378,14 +284,6 @@ export class AgentPool {
     };
   }
 
-  // =========================================================================
-  // Private Methods
-  // =========================================================================
-
-  /**
-   * Create a new pooled agent with a generated ID.
-   * Returns the agent ID or undefined if at max capacity.
-   */
   private createPooledAgent(): string | undefined {
     if (this.pooledAgents.size >= this.config.maxSize) {
       return undefined;
@@ -409,9 +307,7 @@ export class AgentPool {
     return agentId;
   }
 
-  /**
-   * Check utilization and auto-scale if thresholds are breached.
-   */
+  /** Check utilization and auto-scale if thresholds are breached. */
   private checkScaling(): void {
     const utilization = this.getUtilization();
 
@@ -432,18 +328,12 @@ export class AgentPool {
     }
   }
 
-  /**
-   * Start the periodic health check timer.
-   */
   private startHealthChecks(): void {
     this.healthCheckInterval = setInterval(() => {
       this.performHealthChecks();
     }, this.config.healthCheckIntervalMs);
   }
 
-  /**
-   * Stop the health check timer.
-   */
   private stopHealthChecks(): void {
     if (this.healthCheckInterval !== null) {
       clearInterval(this.healthCheckInterval);
@@ -451,11 +341,7 @@ export class AgentPool {
     }
   }
 
-  /**
-   * Run health checks on all pooled agents.
-   * Agents with no heartbeat beyond the unhealthy threshold get degraded.
-   * Agents at health <= 0 are replaced.
-   */
+  /** Degrade agents missing heartbeats; replace those at health <= 0. */
   private performHealthChecks(): void {
     const now = Date.now();
     const unhealthyThresholdMs = this.config.healthCheckIntervalMs * 3;
@@ -464,16 +350,13 @@ export class AgentPool {
       const timeSinceLastHeartbeat = now - pooled.lastHeartbeatAt;
 
       if (timeSinceLastHeartbeat > unhealthyThresholdMs) {
-        // Agent is unhealthy -- degrade health
         pooled.health = Math.max(0, pooled.health - 0.2);
         pooled.status = "unhealthy";
 
-        // If completely unhealthy, replace
         if (pooled.health <= 0) {
           this.replaceUnhealthyAgent(agentId);
         }
       } else {
-        // Agent is healthy -- recover
         pooled.health = Math.min(1.0, pooled.health + 0.1);
         if (pooled.status === "unhealthy") {
           pooled.status = this.busy.has(agentId) ? "busy" : "available";
@@ -482,14 +365,11 @@ export class AgentPool {
     }
   }
 
-  /**
-   * Remove an unhealthy agent and create a replacement if needed.
-   */
+  /** Remove an unhealthy agent and create a replacement if needed. */
   private replaceUnhealthyAgent(agentId: string): void {
     const wasBusy = this.busy.has(agentId);
     this.remove(agentId);
 
-    // Create replacement if below min size or was busy
     if (this.pooledAgents.size < this.config.minSize || wasBusy) {
       this.createPooledAgent();
     }

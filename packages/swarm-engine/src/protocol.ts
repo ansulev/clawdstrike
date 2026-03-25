@@ -1,9 +1,5 @@
 /**
- * Protocol bridge and topic utilities for the swarm engine.
- *
- * Maps engine events to SwarmEngineEnvelope on the correct channels,
- * builds topic strings for the /baychat/v1 protocol, and provides
- * parsing + routing utilities for the transport layer.
+ * Protocol bridge, topic builders, and routing utilities for the swarm engine.
  *
  * @module
  */
@@ -15,18 +11,7 @@ import type {
 } from "./events.js";
 import { TypedEventEmitter } from "./events.js";
 
-// ============================================================================
-// Constants
-// ============================================================================
-
-/** Baychat protocol topic prefix. */
 export const TOPIC_PREFIX = "/baychat/v1";
-
-// ============================================================================
-// Topic Builders (10 total: 4 existing + 6 new)
-// ============================================================================
-
-// -- Existing channel topics --
 
 export function swarmIntelTopic(swarmId: string): string {
   return `${TOPIC_PREFIX}/swarm/${swarmId}/intel`;
@@ -43,8 +28,6 @@ export function swarmDetectionTopic(swarmId: string): string {
 export function swarmCoordinationTopic(swarmId: string): string {
   return `${TOPIC_PREFIX}/swarm/${swarmId}/coordination`;
 }
-
-// -- New channel topics --
 
 export function swarmAgentsTopic(swarmId: string): string {
   return `${TOPIC_PREFIX}/swarm/${swarmId}/agents`;
@@ -70,14 +53,7 @@ export function swarmHooksTopic(swarmId: string): string {
   return `${TOPIC_PREFIX}/swarm/${swarmId}/hooks`;
 }
 
-// ============================================================================
-// EVENT_TO_CHANNEL Map
-// ============================================================================
-
-/**
- * Maps SwarmEngineEventMap event kind strings to SwarmEngineEnvelope type values.
- * Used by ProtocolBridge to determine which channel an engine event belongs to.
- */
+/** Maps event kind to envelope channel type. */
 export const EVENT_TO_CHANNEL: Record<string, SwarmEngineEnvelope["type"]> = {
   "agent.spawned": "agent_lifecycle",
   "agent.terminated": "agent_lifecycle",
@@ -104,21 +80,13 @@ export const EVENT_TO_CHANNEL: Record<string, SwarmEngineEnvelope["type"]> = {
   "action.completed": "coordination",
 };
 
-// ============================================================================
-// CHANNEL_TO_TOPIC_SUFFIX
-// ============================================================================
-
-/**
- * Maps envelope type to topic suffix for building topic strings.
- * Used by ProtocolBridge to construct the full topic for a given envelope type.
- */
+/** Maps envelope type to topic suffix. */
 export const CHANNEL_TO_TOPIC_SUFFIX: Record<SwarmEngineEnvelope["type"], string> = {
   intel: "intel",
   signal: "signals",
   detection: "detections",
   coordination: "coordination",
-  // Included for upstream SwarmEnvelope v1 compatibility — no engine event maps to this channel
-  status: "status",
+  status: "status", // upstream SwarmEnvelope v1 compat; no engine event maps here
   agent_lifecycle: "agents",
   task_orchestration: "tasks",
   topology: "topology",
@@ -127,40 +95,22 @@ export const CHANNEL_TO_TOPIC_SUFFIX: Record<SwarmEngineEnvelope["type"], string
   hooks: "hooks",
 };
 
-// ============================================================================
-// ProtocolBridge
-// ============================================================================
-
-/**
- * Configuration for the ProtocolBridge.
- */
 export interface ProtocolBridgeConfig {
-  /** Swarm engine instance ID used in topic construction. */
   swarmId: string;
-  /** Transport publish function. Called for every outgoing envelope. */
   publish: (topic: string, envelope: SwarmEngineEnvelope) => Promise<void>;
-  /** Default TTL in Gossipsub hops. Defaults to 5. */
   defaultTtl?: number;
 }
 
-/**
- * Bridges the engine's internal TypedEventEmitter to the external transport
- * layer by subscribing to all mapped events, wrapping them in SwarmEngineEnvelope,
- * and publishing to the appropriate topic.
- *
- * Transport errors are swallowed -- the host is responsible for retry logic.
- */
-/** Default replay window: 5 minutes. */
 const REPLAY_WINDOW_MS = 5 * 60 * 1000;
 
+/**
+ * Bridges internal events to the transport layer as SwarmEngineEnvelopes.
+ * Transport errors are swallowed; the host handles retry.
+ */
 export class ProtocolBridge {
   private readonly unsubscribers: Array<() => void> = [];
   private readonly defaultTtl: number;
-  /**
-   * Replay protection: tracks the most recent `created` timestamp per
-   * sourceAgentId (sender). Envelopes older than `lastSeen - REPLAY_WINDOW_MS`
-   * are silently dropped.
-   */
+  /** Replay protection: most recent `created` timestamp per sender. */
   private readonly lastSeen: Map<string, number> = new Map();
 
   constructor(
@@ -170,10 +120,6 @@ export class ProtocolBridge {
     this.defaultTtl = config.defaultTtl ?? 5;
   }
 
-  /**
-   * Subscribe to all mapped engine events and publish envelopes to transport.
-   * Call disconnect() to remove all subscriptions.
-   */
   connect(): void {
     for (const [eventKind, channel] of Object.entries(EVENT_TO_CHANNEL)) {
       const unsub = this.events.on(
@@ -187,7 +133,6 @@ export class ProtocolBridge {
             created: Date.now(),
           };
 
-          // Replay protection: drop envelopes older than the window
           const sender =
             (data as Record<string, unknown>)?.sourceAgentId as
               | string
@@ -199,7 +144,6 @@ export class ProtocolBridge {
               prev !== undefined &&
               envelope.created < prev - REPLAY_WINDOW_MS
             ) {
-              // Stale / replayed envelope -- skip
               return;
             }
             this.lastSeen.set(sender, envelope.created);
@@ -207,76 +151,39 @@ export class ProtocolBridge {
 
           const topicSuffix = CHANNEL_TO_TOPIC_SUFFIX[channel];
           const topic = `${TOPIC_PREFIX}/swarm/${this.config.swarmId}/${topicSuffix}`;
-          this.config.publish(topic, envelope).catch(() => {
-            // Transport error -- swallow. Host handles retry.
-          });
+          this.config.publish(topic, envelope).catch(() => {});
         },
       );
       this.unsubscribers.push(unsub);
     }
   }
 
-  /**
-   * Remove all event subscriptions. Safe to call multiple times.
-   */
   disconnect(): void {
     for (const unsub of this.unsubscribers) unsub();
     this.unsubscribers.length = 0;
   }
 
-  /**
-   * Alias for disconnect(). Follows the Disposable convention.
-   */
   dispose(): void {
     this.disconnect();
   }
 }
 
-// ============================================================================
-// ExtendedSwarmChannel
-// ============================================================================
-
-/**
- * All valid swarm topic channel suffixes.
- * Superset: 4 existing ClawdStrike channels + 6 new orchestration channels.
- */
 export type ExtendedSwarmChannel =
-  | "intel" | "signals" | "detections" | "coordination"  // existing
-  | "agents" | "tasks" | "topology" | "consensus"        // new
-  | "memory" | "hooks";                                    // new
+  | "intel" | "signals" | "detections" | "coordination"
+  | "agents" | "tasks" | "topology" | "consensus"
+  | "memory" | "hooks";
 
-// ============================================================================
-// ParsedSwarmTopic
-// ============================================================================
-
-/**
- * Result of parsing a swarm topic string.
- */
 export interface ParsedSwarmTopic {
   swarmId: string;
   channel: ExtendedSwarmChannel;
 }
 
-// ============================================================================
-// VALID_CHANNELS
-// ============================================================================
-
-/** O(1) lookup set for valid channel suffixes. */
 const VALID_CHANNELS = new Set<ExtendedSwarmChannel>([
   "intel", "signals", "detections", "coordination",
   "agents", "tasks", "topology", "consensus", "memory", "hooks",
 ]);
 
-// ============================================================================
-// parseSwarmTopic
-// ============================================================================
-
-/**
- * Parse a topic string into its swarmId and channel components.
- *
- * Returns null for invalid topics or unrecognized channels.
- * Recognizes all 10 channels (4 existing + 6 new).
- */
+/** Returns null for invalid topics or unrecognized channels. */
 export function parseSwarmTopic(topic: string): ParsedSwarmTopic | null {
   const prefix = `${TOPIC_PREFIX}/swarm/`;
   if (!topic.startsWith(prefix)) return null;
@@ -290,13 +197,6 @@ export function parseSwarmTopic(topic: string): ParsedSwarmTopic | null {
   return { swarmId, channel: channel as ExtendedSwarmChannel };
 }
 
-// ============================================================================
-// getSwarmTopics
-// ============================================================================
-
-/**
- * Options for getSwarmTopics.
- */
 export interface GetSwarmTopicsOptions {
   includeSignals?: boolean;
   includeConsensus?: boolean;
@@ -306,13 +206,7 @@ export interface GetSwarmTopicsOptions {
 
 /**
  * Build topic strings for subscribing to a swarm's channels.
- *
- * Default: 6 topics (intel, detections, coordination, agents, tasks, topology).
- * Optional: signals, consensus, memory, hooks (opt-in via options).
- *
- * Backward-compatible: accepts a boolean second argument (deprecated).
- * When a boolean is passed, a console.warn is emitted and it is treated as
- * `{ includeSignals: arg }`.
+ * Accepts a deprecated boolean second arg for backward compat.
  */
 export function getSwarmTopics(
   swarmId: string,

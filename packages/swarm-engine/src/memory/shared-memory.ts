@@ -1,16 +1,6 @@
 /**
- * SharedMemory -- unified memory manager wrapping HNSW, KnowledgeGraph, and
- * IdbBackend with namespace scoping, tag-based search, TTL expiration, and
- * ClawdStrike guard pipeline integration.
- *
- * Memory writes pass through the guard pipeline as `file_write` actions with
- * `memory://{namespace}/{key}` targets. Deny verdicts block the write and
- * return false. When no guard evaluator is configured, writes are denied
- * (fail-closed), consistent with the orchestrator's guard pipeline.
- *
- * Does NOT call events.dispose() on dispose (Pitfall 7).
- *
- * @module
+ * Unified memory manager wrapping HNSW, KnowledgeGraph, and IdbBackend.
+ * Writes are guarded via the ClawdStrike guard pipeline (fail-closed).
  */
 
 import { HnswLite } from "./hnsw.js";
@@ -20,10 +10,6 @@ import { IdbBackend } from "./idb-backend.js";
 import type { TypedEventEmitter } from "../events.js";
 import type { SwarmEngineEventMap } from "../events.js";
 import type { GuardEvaluator, GuardedAction } from "../types.js";
-
-// ============================================================================
-// Types
-// ============================================================================
 
 export interface SharedMemoryConfig {
   guardEvaluator?: GuardEvaluator;
@@ -39,7 +25,6 @@ export interface MemoryEntry {
   storedAt: number;
   namespace: string;
   vector?: Float32Array;
-  /** Internal key (namespace:key) for search result identification. */
   _key?: string;
 }
 
@@ -56,10 +41,6 @@ export interface SearchOptions {
   vector?: Float32Array;
   k?: number;
 }
-
-// ============================================================================
-// SharedMemory
-// ============================================================================
 
 export class SharedMemory {
   private readonly events: TypedEventEmitter<SwarmEngineEventMap>;
@@ -85,17 +66,13 @@ export class SharedMemory {
     }
   }
 
-  // --------------------------------------------------------------------------
-  // Store
-  // --------------------------------------------------------------------------
-
   async store(
     namespace: string,
     key: string,
     value: unknown,
     options?: StoreOptions,
   ): Promise<boolean> {
-    // Guard check -- fail-closed: no evaluator means deny all writes
+    // Fail-closed: no evaluator means deny
     if (!this.guardEvaluator) {
       return false;
     }
@@ -118,7 +95,6 @@ export class SharedMemory {
       return false;
     }
 
-    // Store entry
     const compositeKey = `${namespace}:${key}`;
     const entry: MemoryEntry = {
       value,
@@ -132,17 +108,14 @@ export class SharedMemory {
 
     this.data.set(compositeKey, entry);
 
-    // Index vector in HNSW if provided
     if (options?.vector) {
       this.hnsw.add(compositeKey, options.vector);
     }
 
-    // Persist to IDB if available
     if (this.idb?.isAvailable) {
       await this.idb.put(compositeKey, { ...entry, vector: undefined });
     }
 
-    // Emit event
     this.events.emit("memory.store", {
       kind: "memory.store",
       sourceAgentId: options?.agentId ?? null,
@@ -155,16 +128,11 @@ export class SharedMemory {
     return true;
   }
 
-  // --------------------------------------------------------------------------
-  // Get (with lazy TTL eviction)
-  // --------------------------------------------------------------------------
-
   get(namespace: string, key: string): MemoryEntry | undefined {
     const compositeKey = `${namespace}:${key}`;
     const entry = this.data.get(compositeKey);
     if (!entry) return undefined;
 
-    // Lazy TTL eviction
     if (entry.ttlMs !== null && Date.now() - entry.storedAt > entry.ttlMs) {
       this.data.delete(compositeKey);
       if (entry.vector) {
@@ -176,17 +144,12 @@ export class SharedMemory {
     return entry;
   }
 
-  // --------------------------------------------------------------------------
-  // Search
-  // --------------------------------------------------------------------------
-
   search(namespace: string, options: SearchOptions): MemoryEntry[] {
     const start = Date.now();
 
     let results: MemoryEntry[];
 
     if (options.vector) {
-      // Vector similarity search via HNSW
       const k = options.k ?? 10;
       const hnswResults = this.hnsw.search(options.vector, k);
 
@@ -196,7 +159,6 @@ export class SharedMemory {
         if (!entry) continue;
         if (entry.namespace !== namespace) continue;
 
-        // Lazy TTL eviction during search
         if (
           entry.ttlMs !== null &&
           Date.now() - entry.storedAt > entry.ttlMs
@@ -206,7 +168,6 @@ export class SharedMemory {
           continue;
         }
 
-        // Tag filter
         if (options.tags && options.tags.length > 0) {
           if (!options.tags.some((t) => entry.tags.includes(t))) continue;
         }
@@ -214,12 +175,10 @@ export class SharedMemory {
         results.push(entry);
       }
     } else {
-      // Tag-based or full-namespace scan
       results = [];
       for (const [_compositeKey, entry] of this.data) {
         if (entry.namespace !== namespace) continue;
 
-        // Lazy TTL eviction
         if (
           entry.ttlMs !== null &&
           Date.now() - entry.storedAt > entry.ttlMs
@@ -229,7 +188,6 @@ export class SharedMemory {
           continue;
         }
 
-        // Tag filter
         if (options.tags && options.tags.length > 0) {
           if (!options.tags.some((t) => entry.tags.includes(t))) continue;
         }
@@ -253,10 +211,6 @@ export class SharedMemory {
     return results;
   }
 
-  // --------------------------------------------------------------------------
-  // Delete
-  // --------------------------------------------------------------------------
-
   delete(namespace: string, key: string): void {
     const compositeKey = `${namespace}:${key}`;
     const entry = this.data.get(compositeKey);
@@ -265,10 +219,6 @@ export class SharedMemory {
     }
     this.data.delete(compositeKey);
   }
-
-  // --------------------------------------------------------------------------
-  // KnowledgeGraph delegation
-  // --------------------------------------------------------------------------
 
   addEntity(entity: Entity): void {
     this.graph.addEntity(entity);
@@ -284,10 +234,6 @@ export class SharedMemory {
   ): Entity[] {
     return this.graph.query(type, properties);
   }
-
-  // --------------------------------------------------------------------------
-  // State
-  // --------------------------------------------------------------------------
 
   getState(): {
     entries: Record<string, MemoryEntry>;
@@ -305,14 +251,6 @@ export class SharedMemory {
     };
   }
 
-  // --------------------------------------------------------------------------
-  // Dispose
-  // --------------------------------------------------------------------------
-
-  /**
-   * Release resources. Closes IDB, clears data.
-   * Does NOT call events.dispose() (Pitfall 7).
-   */
   dispose(): void {
     this.idb?.close();
     this.data.clear();

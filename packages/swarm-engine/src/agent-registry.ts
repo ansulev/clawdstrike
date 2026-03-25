@@ -1,16 +1,4 @@
-/**
- * AgentRegistry -- agent lifecycle management for the swarm engine.
- *
- * Ported from ruflo v3 `coordination/agent-registry.ts` (544 lines) with
- * browser-safe adaptations:
- * - No Node.js imports (uses setInterval/clearInterval directly)
- * - Synchronous TypedEventEmitter (ruflo's was async)
- * - Full AgentSession creation with all 30+ fields
- * - Record-based state accessors (never Map)
- * - No hardcoded default agents
- *
- * @module
- */
+/** Agent lifecycle management for the swarm engine. */
 
 import type { TypedEventEmitter, SwarmEngineEventMap } from "./events.js";
 import { generateSwarmId } from "./ids.js";
@@ -26,23 +14,12 @@ import type {
 } from "./types.js";
 import { SWARM_ENGINE_CONSTANTS } from "./types.js";
 
-// ============================================================================
-// Configuration
-// ============================================================================
-
-/**
- * Configuration for the AgentRegistry.
- */
 export interface AgentRegistryConfig {
   /** Interval between health checks in milliseconds. */
   healthCheckIntervalMs?: number;
   /** Number of consecutive missed heartbeats before marking agent as failed. */
   maxMissedHeartbeats?: number;
 }
-
-// ============================================================================
-// TaskType -> AgentCapabilities mapping
-// ============================================================================
 
 const TASK_TYPE_TO_CAPABILITY: Partial<Record<TaskType, keyof AgentCapabilities>> = {
   coding: "codeGeneration",
@@ -58,17 +35,6 @@ const TASK_TYPE_TO_CAPABILITY: Partial<Record<TaskType, keyof AgentCapabilities>
   guard_evaluation: "securityAnalysis",
 };
 
-// ============================================================================
-// AgentRegistry
-// ============================================================================
-
-/**
- * Agent lifecycle manager for the swarm engine.
- *
- * Manages agent registration, spawning, termination, health checks,
- * capability queries, and metrics tracking. All events are emitted
- * through the shared TypedEventEmitter.
- */
 export class AgentRegistry {
   private readonly registrations = new Map<string, AgentRegistration>();
   private readonly sessions = new Map<string, AgentSession>();
@@ -88,15 +54,7 @@ export class AgentRegistry {
     this.maxMissedHeartbeats = config.maxMissedHeartbeats ?? 3;
   }
 
-  // ==========================================================================
-  // Registration
-  // ==========================================================================
-
-  /**
-   * Register an agent definition. Returns the generated agent ID.
-   *
-   * @throws If name is empty.
-   */
+  /** Register an agent definition. Returns the generated agent ID. */
   register(registration: AgentRegistration): string {
     if (!registration.name) {
       throw new Error("Agent registration name must not be empty");
@@ -117,11 +75,7 @@ export class AgentRegistry {
     return id;
   }
 
-  /**
-   * Unregister an agent. Returns true if the agent was registered, false otherwise.
-   *
-   * @throws If the agent has an active session.
-   */
+  /** @throws If the agent has an active session. */
   unregister(agentId: string): boolean {
     if (this.sessions.has(agentId)) {
       throw new Error(
@@ -133,29 +87,15 @@ export class AgentRegistry {
     return this.registrations.delete(agentId);
   }
 
-  /**
-   * Get a registration by agent ID, or undefined if not registered.
-   */
   getRegistration(agentId: string): AgentRegistration | undefined {
     return this.registrations.get(agentId);
   }
 
-  /**
-   * Get all registrations as an array.
-   */
   getAllRegistrations(): AgentRegistration[] {
     return Array.from(this.registrations.values());
   }
 
-  // ==========================================================================
-  // Lifecycle
-  // ==========================================================================
-
-  /**
-   * Spawn an agent from its registration, creating a full AgentSession.
-   *
-   * @throws If agent is not registered or already spawned.
-   */
+  /** @throws If agent is not registered or already spawned. */
   spawn(agentId: string): AgentSession {
     const registration = this.registrations.get(agentId);
     if (!registration) {
@@ -169,7 +109,6 @@ export class AgentRegistry {
     const session = createDefaultAgentSession(agentId, registration);
     this.sessions.set(agentId, session);
 
-    // Update health check status
     const healthStatus = this.healthChecks.get(agentId);
     if (healthStatus) {
       healthStatus.healthy = true;
@@ -188,12 +127,7 @@ export class AgentRegistry {
     return session;
   }
 
-  /**
-   * Terminate an agent, removing its session.
-   *
-   * @returns true if the agent was terminated, false if it had no session.
-   * @throws If the agent has an active task.
-   */
+  /** @throws If the agent has an active task. */
   terminate(agentId: string): boolean {
     const session = this.sessions.get(agentId);
     if (!session) {
@@ -227,15 +161,7 @@ export class AgentRegistry {
     return true;
   }
 
-  // ==========================================================================
-  // State Management
-  // ==========================================================================
-
-  /**
-   * Update an agent's status and emit a status_changed event.
-   *
-   * @throws If the agent is not spawned.
-   */
+  /** @throws If the agent is not spawned. */
   updateStatus(
     agentId: string,
     status: AgentSessionStatus,
@@ -266,11 +192,7 @@ export class AgentRegistry {
     });
   }
 
-  /**
-   * Assign a task to an agent. Sets currentTaskId and status to "running".
-   *
-   * @throws If the agent is not spawned or already has a task.
-   */
+  /** @throws If the agent is not spawned or already has a task. */
   assignTask(agentId: string, taskId: string): void {
     const session = this.sessions.get(agentId);
     if (!session) {
@@ -287,11 +209,7 @@ export class AgentRegistry {
     this.updateStatus(agentId, "running");
   }
 
-  /**
-   * Mark a task as completed. Updates metrics and clears currentTaskId.
-   *
-   * @throws If the agent is not spawned or taskId doesn't match.
-   */
+  /** @throws If the agent is not spawned or taskId doesn't match. */
   completeTask(agentId: string, taskId: string, durationMs?: number): void {
     const session = this.sessions.get(agentId);
     if (!session) {
@@ -307,11 +225,9 @@ export class AgentRegistry {
     const metrics = session.metrics;
     metrics.tasksCompleted++;
 
-    // Recalculate success rate
     const total = metrics.tasksCompleted + metrics.tasksFailed;
     metrics.successRate = total > 0 ? metrics.tasksCompleted / total : 0;
 
-    // Update average execution time if duration provided
     if (durationMs !== undefined) {
       const prevTotal =
         metrics.averageExecutionTimeMs * (metrics.tasksCompleted - 1);
@@ -319,7 +235,6 @@ export class AgentRegistry {
         (prevTotal + durationMs) / metrics.tasksCompleted;
     }
 
-    // Update health based on success rate
     metrics.health = Math.max(
       0,
       Math.min(1, 0.5 + metrics.successRate * 0.5),
@@ -331,11 +246,7 @@ export class AgentRegistry {
     this.updateStatus(agentId, "idle");
   }
 
-  /**
-   * Mark a task as failed. Updates metrics and clears currentTaskId.
-   *
-   * @throws If the agent is not spawned or taskId doesn't match.
-   */
+  /** @throws If the agent is not spawned or taskId doesn't match. */
   failTask(agentId: string, taskId: string): void {
     const session = this.sessions.get(agentId);
     if (!session) {
@@ -351,7 +262,6 @@ export class AgentRegistry {
     const metrics = session.metrics;
     metrics.tasksFailed++;
 
-    // Recalculate success rate
     const total = metrics.tasksCompleted + metrics.tasksFailed;
     metrics.successRate = total > 0 ? metrics.tasksCompleted / total : 0;
 
@@ -361,59 +271,27 @@ export class AgentRegistry {
     this.updateStatus(agentId, "idle");
   }
 
-  // ==========================================================================
-  // Queries
-  // ==========================================================================
-
-  /**
-   * Get a single agent session, or undefined if not spawned.
-   */
   getAgentSession(agentId: string): AgentSession | undefined {
     return this.sessions.get(agentId);
   }
 
-  /**
-   * Get all agent sessions as a Record (not Map) for JSON serialization.
-   */
   getState(): Record<string, AgentSession> {
     return Object.fromEntries(this.sessions);
   }
 
-  /**
-   * Get agents currently in "running" status.
-   */
   getActiveAgents(): AgentSession[] {
     return Array.from(this.sessions.values()).filter(
       (s) => s.status === "running",
     );
   }
 
-  /**
-   * Get agents currently in "idle" status.
-   */
   getIdleAgents(): AgentSession[] {
     return Array.from(this.sessions.values()).filter(
       (s) => s.status === "idle",
     );
   }
 
-  /**
-   * Get agents whose capabilities match the requested task type.
-   *
-   * Maps TaskType to AgentCapabilities boolean fields:
-   * - coding -> codeGeneration
-   * - review -> codeReview
-   * - testing -> testing
-   * - documentation -> documentation
-   * - research -> research
-   * - analysis -> analysis
-   * - coordination -> coordination
-   * - detection -> securityAnalysis
-   * - hunt -> securityAnalysis
-   *
-   * For unmapped types (consensus, guard_evaluation, custom), checks
-   * capabilities.tools array.
-   */
+  /** Returns agents whose capabilities match the given task type. */
   getAgentsByCapability(taskType: TaskType): AgentSession[] {
     const capKey = TASK_TYPE_TO_CAPABILITY[taskType];
 
@@ -421,27 +299,15 @@ export class AgentRegistry {
       if (capKey) {
         return s.capabilities[capKey] === true;
       }
-      // Unmapped types: check tools array
       return s.capabilities.tools.includes(taskType);
     });
   }
 
-  /**
-   * Get the number of active sessions.
-   */
   getAgentCount(): number {
     return this.sessions.size;
   }
 
-  // ==========================================================================
-  // Health Management
-  // ==========================================================================
-
-  /**
-   * Record a heartbeat from an agent.
-   * Updates lastHeartbeatAt, resets consecutiveMisses, and emits
-   * agent.heartbeat event.
-   */
+  /** Record a heartbeat from an agent. */
   heartbeat(agentId: string): void {
     const now = Date.now();
 
@@ -470,10 +336,7 @@ export class AgentRegistry {
     }
   }
 
-  /**
-   * Start periodic health checks.
-   * Idempotent -- calling twice does not create duplicate timers.
-   */
+  /** Start periodic health checks. Idempotent. */
   startHealthChecks(): void {
     if (this.healthCheckTimer) {
       return;
@@ -485,9 +348,6 @@ export class AgentRegistry {
     );
   }
 
-  /**
-   * Stop periodic health checks.
-   */
   stopHealthChecks(): void {
     if (this.healthCheckTimer) {
       clearInterval(this.healthCheckTimer);
@@ -495,29 +355,14 @@ export class AgentRegistry {
     }
   }
 
-  /**
-   * Get health status for all registered agents as a Record.
-   */
   getHealthStatus(): Record<string, HealthCheckStatus> {
     return Object.fromEntries(this.healthChecks);
   }
 
-  // ==========================================================================
-  // Dispose
-  // ==========================================================================
-
-  /**
-   * Clean up resources. Stops health checks.
-   * Does NOT call events.dispose() -- the shared emitter is owned by
-   * the orchestrator (per Research Pitfall 7).
-   */
+  /** Stops health checks. Does not dispose the shared emitter. */
   dispose(): void {
     this.stopHealthChecks();
   }
-
-  // ==========================================================================
-  // Private
-  // ==========================================================================
 
   private performHealthCheck(): void {
     const now = Date.now();
@@ -542,14 +387,6 @@ export class AgentRegistry {
   }
 }
 
-// ============================================================================
-// Factory helper
-// ============================================================================
-
-/**
- * Create a default AgentSession with all 30+ fields initialized to
- * sensible defaults from the registration data.
- */
 function createDefaultAgentSession(
   id: string,
   registration: AgentRegistration,
@@ -581,7 +418,6 @@ function createDefaultAgentSession(
     role: registration.role,
     status: "idle",
 
-    // Orchestration
     capabilities: registration.capabilities,
     metrics,
     quality,
@@ -592,7 +428,6 @@ function createDefaultAgentSession(
     topologyRole: null,
     connections: [],
 
-    // Board fields
     worktreePath: null,
     branch: null,
     risk: "low",
@@ -606,13 +441,8 @@ function createDefaultAgentSession(
     confidence: null,
     guardResults: [],
 
-    // Guard integration
     receipt: null,
-
-    // Sentinel bridge
     sentinelId: null,
-
-    // Timestamps
     createdAt: now,
     updatedAt: now,
     exitCode: null,

@@ -1,16 +1,4 @@
-/**
- * TopologyManager -- manages swarm network topology across 5 modes.
- *
- * Ported from ruflo v3 topology-manager.ts (656 lines) with:
- * - TypedEventEmitter injection instead of Node.js EventEmitter inheritance
- * - Phase 1 type shapes (TopologyNode with positionX/Y/hierarchyDepth, TopologyPartition with nodeIds/leaderId)
- * - Date.now() timestamps instead of Date objects
- * - New adaptive mode with configurable thresholds
- * - EdgeType "topology" on all edges
- * - Synchronous API (no async -- browser-safe, no await needed)
- *
- * @module
- */
+/** Swarm network topology across 5 modes (mesh, hierarchical, centralized, hybrid, adaptive). */
 
 import type {
   TypedEventEmitter,
@@ -29,16 +17,6 @@ import type {
 
 import { SWARM_ENGINE_CONSTANTS } from "./types.js";
 
-// ============================================================================
-// Public types
-// ============================================================================
-
-/**
- * Thresholds for adaptive topology mode.
- * - Below meshMax: mesh
- * - Below hierarchicalMax: hierarchical
- * - At or above hierarchicalMax: hybrid
- */
 export interface AdaptiveThresholds {
   meshMax?: number;
   hierarchicalMax?: number;
@@ -48,10 +26,6 @@ const DEFAULT_ADAPTIVE_THRESHOLDS: Required<AdaptiveThresholds> = {
   meshMax: 5,
   hierarchicalMax: 20,
 };
-
-// ============================================================================
-// TopologyManager
-// ============================================================================
 
 export class TopologyManager {
   private readonly config: TopologyConfig;
@@ -68,7 +42,6 @@ export class TopologyManager {
   private lastRebalanceAt: number = 0;
   private electionTerm = 0;
 
-  // Track previous effective type for adaptive mode transition events
   private lastEffectiveType: TopologyType;
 
   constructor(
@@ -103,10 +76,6 @@ export class TopologyManager {
     this.lastEffectiveType = this.resolveEffectiveType();
   }
 
-  // ==========================================================================
-  // Public API: Node management
-  // ==========================================================================
-
   addNode(agentId: string, role: TopologyNodeRole): TopologyNode {
     if (this.nodeIndex.has(agentId)) {
       throw new Error(`Node ${agentId} already exists in topology`);
@@ -135,32 +104,17 @@ export class TopologyManager {
       hierarchyDepth: null,
     };
 
-    // Add to state
     this.nodeIndex.set(agentId, node);
     this.state.nodes.push(node);
 
-    // Update role index for O(1) role-based lookups
     this.addToRoleIndex(node);
-
-    // Initialize adjacency list
     this.adjacencyList.set(agentId, new Set(connections));
-
-    // Create edges
     this.createEdgesForNode(node, effectiveType);
-
-    // Update partitions if needed
     this.updatePartitions(node, effectiveType);
-
-    // Mark as active after sync
     node.status = "active";
-
-    // Check for adaptive mode transition
     this.checkAdaptiveTransition();
-
-    // Emit topology.updated
     this.emitTopologyUpdated();
 
-    // Trigger rebalance if needed
     if (this.config.autoRebalance && this.shouldRebalance()) {
       this.rebalance();
     }
@@ -174,30 +128,23 @@ export class TopologyManager {
       return;
     }
 
-    // Remove from state
     this.state.nodes = this.state.nodes.filter((n) => n.agentId !== agentId);
     this.nodeIndex.delete(agentId);
-
-    // Update role index
     this.removeFromRoleIndex(node);
 
-    // Remove all edges connected to this node
     this.state.edges = this.state.edges.filter(
       (e) => e.from !== agentId && e.to !== agentId,
     );
 
-    // Update adjacency list
     this.adjacencyList.delete(agentId);
     for (const neighbors of this.adjacencyList.values()) {
       neighbors.delete(agentId);
     }
 
-    // Update all nodes' connections
     for (const n of this.state.nodes) {
       n.connections = n.connections.filter((c) => c !== agentId);
     }
 
-    // If this was the leader, elect new one
     if (this.state.leaderId === agentId) {
       if (this.state.nodes.length > 0) {
         this.electLeader();
@@ -206,7 +153,6 @@ export class TopologyManager {
       }
     }
 
-    // Update partitions
     for (const partition of this.state.partitions) {
       partition.nodeIds = partition.nodeIds.filter((n) => n !== agentId);
       if (partition.leaderId === agentId) {
@@ -214,10 +160,8 @@ export class TopologyManager {
       }
     }
 
-    // Emit topology.updated
     this.emitTopologyUpdated();
 
-    // Trigger rebalance if needed
     if (this.config.autoRebalance) {
       this.rebalance();
     }
@@ -241,10 +185,6 @@ export class TopologyManager {
     }
   }
 
-  // ==========================================================================
-  // Public API: Leader election
-  // ==========================================================================
-
   electLeader(): string {
     if (this.state.nodes.length === 0) {
       throw new Error("No nodes available for leader election");
@@ -252,7 +192,6 @@ export class TopologyManager {
 
     const effectiveType = this.resolveEffectiveType();
 
-    // For hierarchical topology, the queen is the leader (O(1) lookup)
     if (effectiveType === "hierarchical") {
       const queen = this.queenNode;
       if (queen) {
@@ -263,7 +202,6 @@ export class TopologyManager {
       }
     }
 
-    // For centralized topology, the coordinator is the leader (O(1) lookup)
     if (effectiveType === "centralized") {
       const coordinator = this.coordinatorNode;
       if (coordinator) {
@@ -274,7 +212,6 @@ export class TopologyManager {
       }
     }
 
-    // For mesh/hybrid/fallback, elect based on node capabilities
     const candidates = this.state.nodes
       .filter((n) => n.status === "active")
       .sort((a, b) => {
@@ -299,15 +236,10 @@ export class TopologyManager {
     return leader.agentId;
   }
 
-  // ==========================================================================
-  // Public API: Rebalance
-  // ==========================================================================
-
   rebalance(): void {
     const now = Date.now();
     const timeSinceLastRebalance = now - this.lastRebalanceAt;
 
-    // Prevent too frequent rebalancing (5 second throttle)
     if (timeSinceLastRebalance < 5000) {
       return;
     }
@@ -330,7 +262,6 @@ export class TopologyManager {
         this.rebalanceHybrid();
         break;
       case "adaptive":
-        // Should not happen since resolveEffectiveType never returns "adaptive"
         break;
     }
 
@@ -345,16 +276,12 @@ export class TopologyManager {
     });
   }
 
-  // ==========================================================================
-  // Public API: Path finding
-  // ==========================================================================
-
+  /** BFS shortest path between two nodes. */
   findOptimalPath(from: string, to: string): string[] {
     if (from === to) {
       return [from];
     }
 
-    // BFS for shortest path
     const visited = new Set<string>();
     const queue: Array<{ node: string; path: string[] }> = [
       { node: from, path: [from] },
@@ -380,13 +307,8 @@ export class TopologyManager {
       }
     }
 
-    // No path found
     return [];
   }
-
-  // ==========================================================================
-  // Public API: Query methods
-  // ==========================================================================
 
   getNeighbors(agentId: string): string[] {
     return Array.from(this.adjacencyList.get(agentId) ?? []);
@@ -455,10 +377,6 @@ export class TopologyManager {
     return total / this.state.nodes.length;
   }
 
-  // ==========================================================================
-  // Public API: Lifecycle
-  // ==========================================================================
-
   dispose(): void {
     this.nodeIndex.clear();
     this.adjacencyList.clear();
@@ -470,10 +388,6 @@ export class TopologyManager {
     this.state.partitions = [];
     this.state.leaderId = null;
   }
-
-  // ==========================================================================
-  // Private: Adaptive mode
-  // ==========================================================================
 
   private resolveEffectiveType(): TopologyType {
     if (this.config.type !== "adaptive") {
@@ -496,13 +410,8 @@ export class TopologyManager {
     const newEffective = this.resolveEffectiveType();
     if (newEffective !== this.lastEffectiveType) {
       this.lastEffectiveType = newEffective;
-      // Transition will be reflected in the next topology.updated event
     }
   }
-
-  // ==========================================================================
-  // Private: Role determination
-  // ==========================================================================
 
   private determineRole(
     requestedRole: TopologyNodeRole,
@@ -512,13 +421,11 @@ export class TopologyManager {
       case "mesh":
         return "peer";
       case "hierarchical":
-        // First node becomes queen
         if (this.state.nodes.length === 0) {
           return "queen";
         }
         return requestedRole === "queen" && !this.hasQueen() ? "queen" : "worker";
       case "centralized":
-        // First node becomes coordinator
         if (this.state.nodes.length === 0) {
           return "coordinator";
         }
@@ -526,7 +433,6 @@ export class TopologyManager {
       case "hybrid":
         return requestedRole;
       case "adaptive":
-        // Should not reach here since we pass effectiveType
         return requestedRole;
     }
   }
@@ -534,10 +440,6 @@ export class TopologyManager {
   private hasQueen(): boolean {
     return this.queenNode !== null;
   }
-
-  // ==========================================================================
-  // Private: Connection calculation
-  // ==========================================================================
 
   private calculateInitialConnections(
     _agentId: string,
@@ -548,13 +450,11 @@ export class TopologyManager {
 
     switch (effectiveType) {
       case "mesh": {
-        // In mesh, connect to all existing nodes (up to a limit)
         const maxMeshConnections = Math.min(10, existingNodes.length);
         return existingNodes.slice(0, maxMeshConnections);
       }
 
       case "hierarchical": {
-        // Workers connect to queen, queen connects to workers (O(1) lookup)
         if (role === "queen" || existingNodes.length === 0) {
           return existingNodes;
         }
@@ -562,7 +462,6 @@ export class TopologyManager {
       }
 
       case "centralized": {
-        // All nodes connect to coordinator (O(1) lookup)
         if (role === "coordinator" || existingNodes.length === 0) {
           return existingNodes;
         }
@@ -570,7 +469,6 @@ export class TopologyManager {
       }
 
       case "hybrid": {
-        // Mix of mesh and hierarchical
         const leaders = this.state.nodes.filter(
           (n) => n.role === "queen" || n.role === "coordinator",
         );
@@ -579,14 +477,9 @@ export class TopologyManager {
       }
 
       case "adaptive":
-        // Should not reach here
         return existingNodes.slice(0, 3);
     }
   }
-
-  // ==========================================================================
-  // Private: Edge creation
-  // ==========================================================================
 
   private createEdgesForNode(node: TopologyNode, effectiveType: TopologyType): void {
     for (const connectionId of node.connections) {
@@ -603,11 +496,7 @@ export class TopologyManager {
 
       this.state.edges.push(edge);
 
-      // For all topology types, ensure the reverse adjacency is tracked
-      // so that BFS path-finding can traverse in both directions.
-      // For mesh: also update the node's connections list (visible edges).
-      // For hierarchical/centralized/hybrid: update adjacency list only
-      // (queen/coordinator implicitly knows about its children for routing).
+      // Reverse adjacency for BFS traversal; mesh also updates visible connections.
       const existingNode = this.nodeIndex.get(connectionId);
       if (existingNode) {
         this.adjacencyList.get(connectionId)?.add(node.agentId);
@@ -618,21 +507,16 @@ export class TopologyManager {
     }
   }
 
-  // ==========================================================================
-  // Private: Partition management
-  // ==========================================================================
-
   private updatePartitions(node: TopologyNode, effectiveType: TopologyType): void {
     if (effectiveType !== "mesh" && effectiveType !== "hybrid") {
       return;
     }
 
     const nodesPerPartition = Math.ceil(this.config.maxAgents / 10);
-    // Use length - 1 because the node was already pushed to state.nodes before this call
+    // length - 1: the node was already pushed before this call
     const partitionIndex = Math.floor((this.state.nodes.length - 1) / nodesPerPartition);
 
     if (this.state.partitions.length <= partitionIndex) {
-      // Create new partition
       const partition: TopologyPartition = {
         id: `partition_${partitionIndex}`,
         nodeIds: [node.agentId],
@@ -641,7 +525,6 @@ export class TopologyManager {
       };
       this.state.partitions.push(partition);
     } else {
-      // Add to existing partition
       const partition = this.state.partitions[partitionIndex]!;
       partition.nodeIds.push(node.agentId);
       partition.replicaCount = Math.min(
@@ -650,10 +533,6 @@ export class TopologyManager {
       );
     }
   }
-
-  // ==========================================================================
-  // Private: Should rebalance
-  // ==========================================================================
 
   private shouldRebalance(): boolean {
     if (this.resolveEffectiveType() === "mesh") {
@@ -674,10 +553,6 @@ export class TopologyManager {
     return false;
   }
 
-  // ==========================================================================
-  // Private: Rebalance strategies
-  // ==========================================================================
-
   private rebalanceMesh(): void {
     const targetConnections = Math.min(5, this.state.nodes.length - 1);
 
@@ -692,7 +567,6 @@ export class TopologyManager {
 
         if (candidates.length === 0) break;
 
-        // Deterministic Fisher-Yates shuffle seeded from snapshot timestamp
         fisherYatesShuffle(candidates, this.state.snapshotAt);
 
         const target = candidates[0]!;
@@ -700,7 +574,6 @@ export class TopologyManager {
         connectionSet.add(target.agentId);
         this.adjacencyList.get(node.agentId)?.add(target.agentId);
 
-        // Bidirectional
         target.connections.push(node.agentId);
         this.adjacencyList.get(target.agentId)?.add(node.agentId);
 
@@ -721,7 +594,6 @@ export class TopologyManager {
       }
     }
 
-    // Ensure all workers are connected to queen
     const queenConnectionSet = new Set(queen.connections);
     for (const node of this.state.nodes) {
       const nodeConnectionSet = new Set(node.connections);
@@ -750,7 +622,6 @@ export class TopologyManager {
       }
     }
 
-    // Ensure all nodes are connected to coordinator
     const coordConnectionSet = new Set(coordinator.connections);
     for (const node of this.state.nodes) {
       const nodeConnectionSet = new Set(node.connections);
@@ -793,7 +664,6 @@ export class TopologyManager {
         );
         if (candidates.length === 0) break;
 
-        // Deterministic Fisher-Yates shuffle seeded from snapshot timestamp
         fisherYatesShuffle(candidates, this.state.snapshotAt);
 
         const target = candidates[0]!;
@@ -803,7 +673,6 @@ export class TopologyManager {
       }
     }
 
-    // Connect all workers to at least one coordinator
     if (coordinators.length > 0) {
       for (const worker of workers) {
         const connectionSet = new Set(worker.connections);
@@ -811,7 +680,6 @@ export class TopologyManager {
           connectionSet.has(coord.agentId),
         );
         if (!hasCoordinator) {
-          // Deterministic selection based on snapshot timestamp
           const idx = this.state.snapshotAt % coordinators.length;
           const coord = coordinators[idx]!;
           worker.connections.push(coord.agentId);
@@ -857,10 +725,6 @@ export class TopologyManager {
     this.state.edges = edges;
   }
 
-  // ==========================================================================
-  // Private: Role index management (O(1) lookups)
-  // ==========================================================================
-
   private addToRoleIndex(node: TopologyNode): void {
     let roleSet = this.roleIndex.get(node.role);
     if (!roleSet) {
@@ -869,7 +733,6 @@ export class TopologyManager {
     }
     roleSet.add(node.agentId);
 
-    // Cache queen/coordinator for O(1) access
     if (node.role === "queen") {
       this.queenNode = node;
     } else if (node.role === "coordinator") {
@@ -883,7 +746,6 @@ export class TopologyManager {
       roleSet.delete(node.agentId);
     }
 
-    // Clear cached queen/coordinator
     if (node.role === "queen" && this.queenNode?.agentId === node.agentId) {
       this.queenNode = null;
     } else if (
@@ -894,14 +756,9 @@ export class TopologyManager {
     }
   }
 
-  // ==========================================================================
-  // Private: Event emission
-  // ==========================================================================
-
   private emitTopologyUpdated(): void {
     const previousType = this.lastEffectiveType;
     const currentEffective = this.resolveEffectiveType();
-    // Update tracked effective type so the next emit reports the correct previous
     this.lastEffectiveType = currentEffective;
 
     this.events.emit("topology.updated", {
@@ -925,17 +782,8 @@ export class TopologyManager {
   }
 }
 
-// ============================================================================
-// Deterministic Fisher-Yates shuffle (seeded from timestamp)
-// ============================================================================
-
-/**
- * In-place Fisher-Yates shuffle using a simple seeded PRNG derived from
- * the topology snapshot timestamp. Replaces the non-deterministic
- * `Math.random() - 0.5` sort used previously in rebalance methods.
- */
+/** In-place Fisher-Yates shuffle using a seeded xorshift PRNG. */
 function fisherYatesShuffle<T>(arr: T[], seed: number): void {
-  // Simple xorshift-style hash for deterministic pseudo-random indices
   let s = seed | 0;
   for (let i = arr.length - 1; i > 0; i--) {
     s = (s ^ (s << 13)) | 0;

@@ -6,7 +6,7 @@ export interface HnswSearchResult {
 export class HnswLite {
   private vectors = new Map<string, Float32Array>();
   private neighbors = new Map<string, Set<string>>();
-  // @ts-expect-error -- stored for future validation; verbatim copy from ruflo hnsw-lite.ts
+  // @ts-expect-error -- stored for future validation
   private readonly dimensions: number;
   private readonly maxNeighbors: number;
   private readonly efConstruction: number;

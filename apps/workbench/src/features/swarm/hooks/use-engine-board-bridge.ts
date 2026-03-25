@@ -1,19 +1,4 @@
-/**
- * useEngineBoardBridge -- React hook that bridges SwarmOrchestrator's
- * TypedEventEmitter events to the Zustand board store.
- *
- * Maps engine lifecycle, task, topology, and guard events to board node
- * creation, status updates, layout repositioning, and receipt nodes.
- *
- * Follows the same pattern as useCoordinatorBoardBridge:
- * - Subscribe in useEffect
- * - Dedup by agentId/taskId before creating nodes (INTG-08)
- * - Call useSwarmBoardStore.getState().actions.* (not hook selectors)
- * - Clean up on unmount
- *
- * Additionally implements the evaluating glow pattern from
- * usePolicyEvalBoardBridge for guard.evaluated events (INTG-09).
- */
+/** Bridges SwarmOrchestrator events to the Zustand board store. */
 
 import { useEffect, useRef } from "react";
 import type { SwarmOrchestrator } from "@clawdstrike/swarm-engine";
@@ -27,17 +12,8 @@ import type { Node } from "@xyflow/react";
 import { computeLayout } from "@/features/swarm/layout/topology-layout";
 import { nextNodePosition } from "./node-position";
 
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
-
-/** Duration in ms that the evaluating glow remains visible. */
 const EVAL_GLOW_DURATION_MS = 2000;
 const DEFAULT_LAYOUT_VIEWPORT = { width: 1200, height: 800 };
-
-// ---------------------------------------------------------------------------
-// Status mapping: engine AgentSessionStatus -> board SessionStatus
-// ---------------------------------------------------------------------------
 
 function mapEngineStatus(engineStatus: string): SessionStatus {
   switch (engineStatus) {
@@ -208,17 +184,7 @@ function getLayoutViewport(): { width: number; height: number } {
   };
 }
 
-// ---------------------------------------------------------------------------
-// Hook
-// ---------------------------------------------------------------------------
-
-/**
- * Bridge SwarmOrchestrator engine events to the Zustand board store.
- *
- * @param engine - The SwarmOrchestrator instance, or null if unavailable.
- */
 export function useEngineBoardBridge(engine: SwarmOrchestrator | null): void {
-  // Glow tracking refs (matching usePolicyEvalBoardBridge exactly)
   const timeoutsRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const restoreStatusRef = useRef<Map<string, SessionStatus>>(new Map());
 
@@ -230,18 +196,12 @@ export function useEngineBoardBridge(engine: SwarmOrchestrator | null): void {
     const timeouts = timeoutsRef.current;
     const restoreStatuses = restoreStatusRef.current;
 
-    // Access the shared event emitter via the orchestrator's public accessor.
     const events = engine.getEvents();
     seedBoardFromEngineSnapshot(engine);
 
-    // -----------------------------------------------------------------------
-    // 1. agent.spawned -> addNode({ nodeType: "agentSession" }) (INTG-02, INTG-08)
-    // -----------------------------------------------------------------------
     unsubs.push(
       events.on("agent.spawned", (event: any) => {
         const { nodes, actions } = store();
-
-        // Dedup: skip if a node with this agentId already exists
         if (nodes.some((n: Node<SwarmBoardNodeData>) => n.data.agentId === event.agent.id)) return;
 
         const position = nextNodePosition(nodes);
@@ -262,9 +222,6 @@ export function useEngineBoardBridge(engine: SwarmOrchestrator | null): void {
       }),
     );
 
-    // -----------------------------------------------------------------------
-    // 2. agent.status_changed -> updateNode (INTG-02)
-    // -----------------------------------------------------------------------
     unsubs.push(
       events.on("agent.status_changed", (event: any) => {
         const { nodes, actions } = store();
@@ -279,12 +236,7 @@ export function useEngineBoardBridge(engine: SwarmOrchestrator | null): void {
       }),
     );
 
-    // -----------------------------------------------------------------------
-    // 3. agent.heartbeat -> updateNode (INTG-02)
-    //    Engine-managed nodes don't have a sessionId, so setSessionMetadata
-    //    (which matches by sessionId) would be a no-op. Use updateNode which
-    //    matches by node.id directly.
-    // -----------------------------------------------------------------------
+    // Engine-managed nodes lack sessionId, so use updateNode (not setSessionMetadata).
     unsubs.push(
       events.on("agent.heartbeat", (event: any) => {
         const { nodes, actions } = store();
@@ -301,9 +253,6 @@ export function useEngineBoardBridge(engine: SwarmOrchestrator | null): void {
       }),
     );
 
-    // -----------------------------------------------------------------------
-    // 4. agent.terminated -> updateNode({ status: "completed" }) (INTG-02)
-    // -----------------------------------------------------------------------
     unsubs.push(
       events.on("agent.terminated", (event: any) => {
         const { nodes, actions } = store();
@@ -320,23 +269,16 @@ export function useEngineBoardBridge(engine: SwarmOrchestrator | null): void {
       }),
     );
 
-    // -----------------------------------------------------------------------
-    // 5. task.created -> addNode({ nodeType: "terminalTask" }) + addEdge (INTG-02, INTG-08)
-    // -----------------------------------------------------------------------
     unsubs.push(
       events.on("task.created", (event: any) => {
         const { nodes, actions } = store();
-
-        // Dedup: skip if a node with this taskId already exists
         if (nodes.some((n: Node<SwarmBoardNodeData>) => n.data.taskId === event.task.id)) return;
 
-        // Find parent agent node by assignedTo
         const parentNode = nodes.find(
           (n: Node<SwarmBoardNodeData>) =>
             n.data.agentId === event.task.assignedTo,
         );
 
-        // Position: below parent if found, else nextNodePosition
         const position = parentNode
           ? { x: parentNode.position.x, y: parentNode.position.y + 200 }
           : nextNodePosition(nodes);
@@ -356,7 +298,6 @@ export function useEngineBoardBridge(engine: SwarmOrchestrator | null): void {
           },
         });
 
-        // Add spawned edge from parent agent to task
         if (parentNode) {
           actions.addEdge({
             id: `edge-spawn-${taskNode.id}`,
@@ -368,9 +309,6 @@ export function useEngineBoardBridge(engine: SwarmOrchestrator | null): void {
       }),
     );
 
-    // -----------------------------------------------------------------------
-    // 6. task.completed -> updateNode (INTG-02)
-    // -----------------------------------------------------------------------
     unsubs.push(
       events.on("task.completed", (event: any) => {
         const { nodes, actions } = store();
@@ -384,9 +322,6 @@ export function useEngineBoardBridge(engine: SwarmOrchestrator | null): void {
       }),
     );
 
-    // -----------------------------------------------------------------------
-    // 7. task.failed -> updateNode({ status: "failed" }) (INTG-02)
-    // -----------------------------------------------------------------------
     unsubs.push(
       events.on("task.failed", (event: any) => {
         const { nodes, actions } = store();
@@ -400,14 +335,9 @@ export function useEngineBoardBridge(engine: SwarmOrchestrator | null): void {
       }),
     );
 
-    // -----------------------------------------------------------------------
-    // 8. guard.evaluated -> guardEvaluate action + evaluating glow (INTG-02, INTG-09)
-    // -----------------------------------------------------------------------
     unsubs.push(
       events.on("guard.evaluated", (event: any) => {
         const { nodes, actions } = store();
-
-        // Find agent node by action.agentId
         const agentNode = nodes.find(
           (n: Node<SwarmBoardNodeData>) =>
             n.data.agentId === event.action?.agentId,
@@ -417,22 +347,18 @@ export function useEngineBoardBridge(engine: SwarmOrchestrator | null): void {
           const nodeId = agentNode.id;
           const currentStatus = (agentNode.data as SwarmBoardNodeData).status;
 
-          // Evaluating glow pattern (copied from usePolicyEvalBoardBridge)
           const existingTimeout = timeouts.get(nodeId);
           if (existingTimeout != null) {
             clearTimeout(existingTimeout);
           } else {
-            // Only save restore status if this is a fresh evaluation
             restoreStatuses.set(
               nodeId,
               currentStatus === "evaluating" ? "running" : currentStatus,
             );
           }
 
-          // Set the node to evaluating status (triggers gold glow ring)
           actions.updateNode(nodeId, { status: "evaluating" });
 
-          // Schedule reset back to previous status after glow duration
           const timeout = setTimeout(() => {
             timeouts.delete(nodeId);
             const restoreTo = restoreStatuses.get(nodeId) ?? "running";
@@ -440,7 +366,7 @@ export function useEngineBoardBridge(engine: SwarmOrchestrator | null): void {
             const currentNode = store().nodes.find((node) => node.id === nodeId);
             const latestStatus = currentNode?.data.status;
 
-            // Do not overwrite fresher lifecycle updates that landed during the glow.
+            // Don't overwrite fresher lifecycle updates that landed during the glow
             if (latestStatus !== "evaluating") {
               return;
             }
@@ -450,7 +376,6 @@ export function useEngineBoardBridge(engine: SwarmOrchestrator | null): void {
 
           timeouts.set(nodeId, timeout);
 
-          // Create receipt node via guardEvaluate action
           actions.guardEvaluate(
             nodeId,
             event.result?.verdict ?? "deny",
@@ -466,9 +391,6 @@ export function useEngineBoardBridge(engine: SwarmOrchestrator | null): void {
       }),
     );
 
-    // -----------------------------------------------------------------------
-    // 9 & 10. Shared handler for topology.updated and topology.rebalanced
-    // -----------------------------------------------------------------------
     function handleTopologyEvent(topologyState: { type?: string; edges?: Array<{ from: string; to: string }> } | undefined): void {
       const { nodes, edges, actions } = store();
       const topoType = (topologyState?.type ?? "mesh") as Parameters<typeof computeLayout>[2];
@@ -489,23 +411,18 @@ export function useEngineBoardBridge(engine: SwarmOrchestrator | null): void {
       actions.applyTopologyLayout(nextTopologyEdges, result.positions);
     }
 
-    // 9. topology.updated (INTG-02)
     unsubs.push(
       events.on("topology.updated", (event: any) => {
         handleTopologyEvent(event.newTopology);
       }),
     );
 
-    // 10. topology.rebalanced (INTG-02)
     unsubs.push(
       events.on("topology.rebalanced", (event: any) => {
         handleTopologyEvent(event.topology);
       }),
     );
 
-    // -----------------------------------------------------------------------
-    // Cleanup: unsubscribe all events + clear all glow timeouts
-    // -----------------------------------------------------------------------
     return () => {
       unsubs.forEach((fn) => fn());
 

@@ -1,12 +1,4 @@
-/**
- * IdbBackend -- IndexedDB persistence with graceful fallback.
- *
- * When IndexedDB is unavailable (Node.js, Safari incognito, ITP eviction),
- * all operations silently no-op instead of throwing. This keeps the memory
- * subsystem functional in any environment.
- *
- * @module
- */
+/** IndexedDB persistence with graceful no-op fallback when unavailable. */
 
 export class IdbBackend {
   private db: IDBDatabase | null = null;
@@ -18,9 +10,6 @@ export class IdbBackend {
     this.storeName = storeName;
   }
 
-  /**
-   * Open the IndexedDB database. Returns false if IndexedDB is unavailable.
-   */
   async open(): Promise<boolean> {
     if (typeof indexedDB === "undefined") {
       return false;
@@ -62,7 +51,7 @@ export class IdbBackend {
         request.onerror = () => reject(request.error);
       });
     } catch {
-      // Graceful fallback on Safari eviction or quota errors
+      // Safari eviction / quota errors
     }
   }
 
@@ -91,9 +80,7 @@ export class IdbBackend {
         request.onsuccess = () => resolve();
         request.onerror = () => reject(request.error);
       });
-    } catch {
-      // Graceful fallback
-    }
+    } catch {}
   }
 
   async getAll<T>(): Promise<Array<{ key: string; value: T }>> {
@@ -136,9 +123,7 @@ export class IdbBackend {
         request.onsuccess = () => resolve();
         request.onerror = () => reject(request.error);
       });
-    } catch {
-      // Graceful fallback
-    }
+    } catch {}
   }
 
   close(): void {

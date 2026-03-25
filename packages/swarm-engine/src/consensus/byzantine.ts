@@ -1,20 +1,4 @@
-/**
- * Byzantine Fault Tolerant Consensus (PBFT)
- *
- * PBFT-style consensus for handling malicious or faulty nodes.
- * Ported from ruflo v3 with TypedEventEmitter injection (no Node.js EventEmitter).
- *
- * Transforms applied:
- * - EventEmitter removed, TypedEventEmitter<SwarmEngineEventMap> injected via constructor
- * - NodeJS.Timeout -> ReturnType<typeof setTimeout> | null
- * - Date objects -> number (Unix ms via Date.now())
- * - proposal.votes: Map internal, ConsensusVote[] on public boundary
- * - generateSwarmId("csn") for proposal IDs
- * - Typed event emission (consensus.proposed, consensus.vote_cast, consensus.resolved, topology.leader_elected)
- * - Quorum: 2f+1 where f = floor((nodeCount-1)/3)
- *
- * @module
- */
+/** PBFT-style Byzantine fault tolerant consensus. Quorum: 2f+1. */
 
 import type { TypedEventEmitter, SwarmEngineEventMap } from "../events.js";
 import type {
@@ -24,10 +8,6 @@ import type {
 } from "../types.js";
 import { SWARM_ENGINE_CONSTANTS } from "../types.js";
 import { generateSwarmId } from "../ids.js";
-
-// ============================================================================
-// Types
-// ============================================================================
 
 export type ByzantinePhase =
   | "idle"
@@ -64,17 +44,12 @@ export interface ByzantineConfig {
   viewChangeTimeoutMs?: number;
 }
 
-// ============================================================================
-// ByzantineConsensus
-// ============================================================================
-
 export class ByzantineConsensus {
   private readonly events: TypedEventEmitter<SwarmEngineEventMap>;
   private readonly config: Required<ByzantineConfig>;
   private readonly node: ByzantineNode;
   private readonly nodes: Map<string, ByzantineNode> = new Map();
   private readonly proposals: Map<string, ConsensusProposal> = new Map();
-  /** Internal vote tracking: Map for O(1) dedup. */
   private readonly proposalVotes: Map<string, Map<string, ConsensusVote>> =
     new Map();
   private readonly messageLog: Map<string, ByzantineMessage[]> = new Map();
@@ -108,11 +83,7 @@ export class ByzantineConsensus {
     };
   }
 
-  // ===== PUBLIC API =====
-
-  initialize(): void {
-    // Byzantine consensus starts in idle state; primary elected explicitly
-  }
+  initialize(): void {}
 
   addNode(nodeId: string, isPrimary: boolean = false): void {
     this.nodes.set(nodeId, {
@@ -167,7 +138,6 @@ export class ByzantineConsensus {
     const digest = this.computeDigest(value);
     const proposalId = generateSwarmId("csn");
 
-    // Internal vote map for O(1) dedup
     const voteMap = new Map<string, ConsensusVote>();
     this.proposalVotes.set(proposalId, voteMap);
 
@@ -183,7 +153,6 @@ export class ByzantineConsensus {
 
     this.proposals.set(proposalId, proposal);
 
-    // Phase 1: Pre-prepare
     const prePrepareMsg: ByzantineMessage = {
       type: "pre-prepare",
       viewNumber: this.node.viewNumber,
@@ -196,7 +165,6 @@ export class ByzantineConsensus {
 
     this.broadcastMessage(prePrepareMsg);
 
-    // Self-prepare
     this.handlePrepare({
       type: "prepare",
       viewNumber: this.node.viewNumber,
@@ -206,7 +174,6 @@ export class ByzantineConsensus {
       timestamp: Date.now(),
     });
 
-    // Emit typed event
     this.events.emit("consensus.proposed", {
       kind: "consensus.proposed",
       sourceAgentId: this.node.id,
@@ -233,7 +200,6 @@ export class ByzantineConsensus {
       this.proposalVotes.set(proposalId, voteMap);
     }
 
-    // Derive voter identity from this node -- prevents vote spoofing
     const vote: ConsensusVote = {
       voterId: this.node.id,
       approve,
@@ -244,7 +210,6 @@ export class ByzantineConsensus {
     voteMap.set(vote.voterId, vote);
     proposal.votes = Array.from(voteMap.values());
 
-    // Emit vote_cast event
     this.events.emit("consensus.vote_cast", {
       kind: "consensus.vote_cast",
       sourceAgentId: vote.voterId,
@@ -253,7 +218,6 @@ export class ByzantineConsensus {
       vote,
     });
 
-    // Check consensus using PBFT quorum (2f+1)
     const f = this.getMaxFaultyNodes();
     const requiredVotes = 2 * f + 1;
 
@@ -283,13 +247,11 @@ export class ByzantineConsensus {
         return;
       }
 
-      // Already resolved
       if (proposal.status !== "pending") {
         resolve(this.createResult(proposal, Date.now() - startTime));
         return;
       }
 
-      // Event-driven resolution instead of setInterval polling
       const cleanup = this.events.on("consensus.resolved", (event) => {
         if (event.result.proposalId === proposalId) {
           cleanup();
@@ -300,7 +262,6 @@ export class ByzantineConsensus {
         }
       });
 
-      // Timeout fallback
       const timer = setTimeout(() => {
         cleanup();
         const p = this.proposals.get(proposalId);
@@ -312,15 +273,11 @@ export class ByzantineConsensus {
     });
   }
 
-  // ===== MESSAGE HANDLERS =====
-
   handlePrePrepare(message: ByzantineMessage): void {
     if (message.viewNumber !== this.node.viewNumber) {
       return;
     }
 
-    // Accept pre-prepare from primary -- find or create proposal
-    // Check if we have a proposal for this sequence
     let proposal: ConsensusProposal | undefined;
     for (const p of this.proposals.values()) {
       if (p.term === message.viewNumber && p.proposerId === message.senderId) {
@@ -344,7 +301,6 @@ export class ByzantineConsensus {
       this.proposalVotes.set(proposalId, new Map());
     }
 
-    // Send prepare message
     const prepareMsg: ByzantineMessage = {
       type: "prepare",
       viewNumber: message.viewNumber,
@@ -374,14 +330,12 @@ export class ByzantineConsensus {
       messages.push(message);
     }
 
-    // Check if prepared (2f + 1 prepare messages)
     const f = this.getMaxFaultyNodes();
     const prepareCount = messages.filter((m) => m.type === "prepare").length;
 
     if (prepareCount >= 2 * f + 1) {
       this.node.preparedMessages.set(key, messages);
 
-      // Send commit message
       const commitMsg: ByzantineMessage = {
         type: "commit",
         viewNumber: message.viewNumber,
@@ -412,14 +366,12 @@ export class ByzantineConsensus {
       messages.push(message);
     }
 
-    // Check if committed (2f + 1 commit messages)
     const f = this.getMaxFaultyNodes();
     const commitCount = messages.filter((m) => m.type === "commit").length;
 
     if (commitCount >= 2 * f + 1) {
       this.node.committedMessages.set(key, messages);
 
-      // Find and resolve the corresponding proposal
       for (const proposal of this.proposals.values()) {
         if (
           proposal.term === message.viewNumber &&
@@ -437,14 +389,10 @@ export class ByzantineConsensus {
     }
   }
 
-  // ===== VIEW CHANGE =====
-
   initiateViewChange(): void {
     this.node.viewNumber++;
     this.electPrimary();
   }
-
-  // ===== STATE QUERIES =====
 
   getIsPrimary(): boolean {
     return this.node.isPrimary;
@@ -496,15 +444,11 @@ export class ByzantineConsensus {
     }
   }
 
-  // ===== PRIVATE METHODS =====
-
   private broadcastMessage(_message: ByzantineMessage): void {
-    // Broadcast to all registered nodes (in-process simulation).
-    // In a real system, this would send over the network to each node.
+    // In-process simulation; real impl would send over the network.
   }
 
   private computeDigest(value: Record<string, unknown>): string {
-    // Simple hash for demonstration
     const str = JSON.stringify(value);
     let hash = 0;
     for (let i = 0; i < str.length; i++) {

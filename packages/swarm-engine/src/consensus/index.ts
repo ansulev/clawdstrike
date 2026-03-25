@@ -1,16 +1,4 @@
-/**
- * Consensus Engine Factory
- *
- * Unified interface for different consensus algorithms (Raft, Byzantine, Gossip).
- * Ported from ruflo v3 with TypedEventEmitter injection (no Node.js EventEmitter).
- *
- * Key changes from ruflo:
- * - No extends EventEmitter, constructor-injected TypedEventEmitter
- * - Paxos throws instead of silently falling back to Raft
- * - Delegates propose/vote/getActiveProposals/dispose to implementation
- *
- * @module
- */
+/** Consensus engine factory for Raft, Byzantine, and Gossip. */
 
 import type { TypedEventEmitter, SwarmEngineEventMap } from "../events.js";
 import type {
@@ -28,10 +16,6 @@ import type { GossipConfig } from "./gossip.js";
 
 export { RaftConsensus, ByzantineConsensus, GossipConsensus };
 export type { RaftConfig, ByzantineConfig, GossipConfig };
-
-// ============================================================================
-// ConsensusEngine Factory
-// ============================================================================
 
 type ConsensusImplementation =
   | RaftConsensus
@@ -63,10 +47,6 @@ export class ConsensusEngine {
     };
   }
 
-  /**
-   * Initialize the consensus engine, creating the underlying implementation
-   * based on the configured algorithm.
-   */
   initialize(config?: Partial<ConsensusConfig>): void {
     if (config) {
       this.config = { ...this.config, ...config };
@@ -116,10 +96,6 @@ export class ConsensusEngine {
     this.implementation.initialize();
   }
 
-  /**
-   * Add a node to the consensus cluster.
-   * Delegates to the underlying implementation.
-   */
   addNode(nodeId: string, options?: { isPrimary?: boolean }): void {
     if (!this.implementation) {
       throw new Error("Consensus engine not initialized");
@@ -134,9 +110,6 @@ export class ConsensusEngine {
     }
   }
 
-  /**
-   * Remove a node from the consensus cluster.
-   */
   removeNode(nodeId: string): void {
     if (!this.implementation) {
       return;
@@ -151,10 +124,6 @@ export class ConsensusEngine {
     }
   }
 
-  /**
-   * Propose a value for consensus.
-   * Delegates to the underlying implementation.
-   */
   propose(value: Record<string, unknown>): ConsensusProposal {
     if (!this.implementation) {
       throw new Error("Consensus engine not initialized");
@@ -163,9 +132,6 @@ export class ConsensusEngine {
     return this.implementation.propose(value);
   }
 
-  /**
-   * Cast a vote on a proposal.
-   */
   vote(proposalId: string, approve: boolean, confidence?: number): void {
     if (!this.implementation) {
       throw new Error("Consensus engine not initialized");
@@ -174,9 +140,6 @@ export class ConsensusEngine {
     this.implementation.vote(proposalId, approve, confidence);
   }
 
-  /**
-   * Await consensus resolution on a proposal.
-   */
   awaitConsensus(proposalId: string): Promise<ConsensusResult> {
     if (!this.implementation) {
       throw new Error("Consensus engine not initialized");
@@ -185,9 +148,6 @@ export class ConsensusEngine {
     return this.implementation.awaitConsensus(proposalId);
   }
 
-  /**
-   * Get all active (pending) proposals with votes serialized as arrays.
-   */
   getActiveProposals(): Record<string, ConsensusProposal> {
     if (!this.implementation) {
       return {};
@@ -196,25 +156,15 @@ export class ConsensusEngine {
     return this.implementation.getActiveProposals();
   }
 
-  /**
-   * Get the current consensus algorithm.
-   */
   getAlgorithm(): ConsensusConfig["algorithm"] {
     return this.config.algorithm;
   }
 
-  /**
-   * Get a copy of the current configuration.
-   */
   getConfig(): ConsensusConfig {
     return { ...this.config };
   }
 
-  /**
-   * Check if the current node is the leader/primary.
-   * Only applicable to Raft (isLeader) and Byzantine (isPrimary).
-   * Gossip has no leader concept -- returns false.
-   */
+  /** Gossip has no leader concept and always returns false. */
   isLeader(): boolean {
     if (this.implementation instanceof RaftConsensus) {
       return this.implementation.isLeader();
@@ -225,10 +175,6 @@ export class ConsensusEngine {
     return false;
   }
 
-  /**
-   * Dispose the consensus engine. Clears all timers.
-   * Does NOT call events.dispose() (shared emitter, not owned).
-   */
   dispose(): void {
     if (this.implementation) {
       this.implementation.dispose();

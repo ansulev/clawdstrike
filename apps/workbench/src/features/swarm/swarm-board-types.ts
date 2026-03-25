@@ -1,13 +1,5 @@
-// ---------------------------------------------------------------------------
-// SwarmBoard Types — node/edge/state definitions for the React Flow board
-// ---------------------------------------------------------------------------
-
 import type { Node } from "@xyflow/react";
 import type { FileType } from "@/lib/workbench/file-type-registry";
-
-// ---------------------------------------------------------------------------
-// Enums / tagged unions
-// ---------------------------------------------------------------------------
 
 export type SwarmNodeType =
   | "agentSession"
@@ -20,13 +12,7 @@ export type SwarmNodeType =
 export type SessionStatus = "idle" | "running" | "blocked" | "completed" | "failed" | "evaluating";
 export type RiskLevel = "low" | "medium" | "high";
 
-// ---------------------------------------------------------------------------
-// Node data payload — a single superset shared across all node types.
-// Each node type uses the subset of fields relevant to it.
-// ---------------------------------------------------------------------------
-
 export interface SwarmBoardNodeData {
-  /** Index signature required by React Flow's Record<string, unknown> constraint */
   [key: string]: unknown;
   title: string;
   status: SessionStatus;
@@ -45,54 +31,35 @@ export interface SwarmBoardNodeData {
   huntId?: string;
   artifactIds?: string[];
   createdAt?: number;
-  // Clawdstrike-native metadata (Section 8.5)
   toolBoundaryEvents?: number;
   filesTouched?: string[];
-  confidence?: number; // 0-100
-  // Receipt nodes
+  confidence?: number;
   verdict?: "allow" | "deny" | "warn";
   guardResults?: Array<{ guard: string; allowed: boolean; duration_ms?: number }>;
-  /** Hex-encoded Ed25519 signature from the receipt. */
   signature?: string;
-  /** Hex-encoded Ed25519 public key from the receipt signer. */
   publicKey?: string;
-  /** Verification status: true = verified, false = failed, undefined = not yet checked. */
   signatureVerified?: boolean;
-  // Diff nodes
   diffSummary?: { added: number; removed: number; files: string[] };
-  // Artifact nodes
   filePath?: string;
   fileType?: string;
-  // Note nodes
   content?: string;
-  // Session lifecycle
   exitCode?: number | null;
-  // UI state
   maximized?: boolean;
   editing?: boolean;
-  // Detection workflow metadata — optional extensions
   artifactKind?: "detection_rule" | "evidence_pack" | "lab_run" | "conversion_output" | "publication_manifest";
   documentId?: string;
   evidencePackId?: string;
   labRunId?: string;
   publicationId?: string;
-  /** Engine-managed agent ID (from @clawdstrike/swarm-engine AgentRegistry). */
   agentId?: string;
-  /** Engine-managed task ID (from @clawdstrike/swarm-engine TaskGraph). */
   taskId?: string;
-  /** True if this node was created by the engine bridge (not manual). */
   engineManaged?: boolean;
   format?: FileType;
   publishState?: "draft" | "validated" | "published" | "deployed";
   coverageDelta?: { added: string[]; removed: string[] };
 }
 
-/** The set of detection artifact kinds a SwarmBoardNode can represent. */
 export type DetectionArtifactKind = NonNullable<SwarmBoardNodeData["artifactKind"]>;
-
-// ---------------------------------------------------------------------------
-// Edge types
-// ---------------------------------------------------------------------------
 
 export interface SwarmBoardEdge {
   id: string;
@@ -102,10 +69,6 @@ export interface SwarmBoardEdge {
   type?: "handoff" | "spawned" | "artifact" | "receipt" | "topology";
 }
 
-// ---------------------------------------------------------------------------
-// Board state
-// ---------------------------------------------------------------------------
-
 export interface SwarmBoardState {
   boardId: string;
   repoRoot: string;
@@ -113,6 +76,5 @@ export interface SwarmBoardState {
   edges: SwarmBoardEdge[];
   selectedNodeId: string | null;
   inspectorOpen: boolean;
-  /** Absolute path to the .swarm bundle directory, or empty string for scratch boards. */
   bundlePath: string;
 }

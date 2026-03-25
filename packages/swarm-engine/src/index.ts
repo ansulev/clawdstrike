@@ -1,11 +1,4 @@
-/**
- * @clawdstrike/swarm-engine
- *
- * Runtime security enforcement + AI agent orchestration unified type system.
- * Zero runtime dependencies. ESM-only.
- *
- * @packageDocumentation
- */
+/** @clawdstrike/swarm-engine */
 
 export * from "./types.js";
 export * from "./events.js";
@@ -19,7 +12,6 @@ export type { TaskGraphConfig } from "./task-graph.js";
 export { generateSwarmId } from "./ids.js";
 export type { SwarmEngineIdPrefix } from "./ids.js";
 
-// Phase 3 additions
 export { AgentPool } from "./agent-pool.js";
 export { SwarmOrchestrator } from "./orchestrator.js";
 export type { SwarmOrchestratorConfig } from "./orchestrator.js";

@@ -1,21 +1,9 @@
 /**
- * ULID generation for swarm engine entities.
- *
- * Copied verbatim from apps/workbench/src/lib/workbench/sentinel-types.ts
- * (encodeTime, encodeRandom, CROCKFORD_BASE32). Extended with swarm-engine
- * prefixes.
+ * Prefixed ULID generation for swarm engine entities.
  *
  * @module
  */
 
-// ---------------------------------------------------------------------------
-// ID prefixes for swarm engine entities
-// ---------------------------------------------------------------------------
-
-/**
- * ID prefixes for swarm engine entities.
- * Extends sentinel-types.ts IdPrefix ("sen" | "sig" | "fnd" | "int" | "swm" | "spk" | "enr" | "msn").
- */
 export type SwarmEngineIdPrefix =
   | "agt" // AgentSession
   | "tsk" // Task
@@ -25,17 +13,9 @@ export type SwarmEngineIdPrefix =
   | "msg" // Internal message
   | "rct"; // Receipt
 
-// ---------------------------------------------------------------------------
-// Crockford Base32 ULID encoding (from sentinel-types.ts lines 148-196)
-// ---------------------------------------------------------------------------
-
-/** Crockford Base32 encoding alphabet. */
 const CROCKFORD_BASE32 = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
 
-/**
- * Encode a timestamp in milliseconds as a 10-character Crockford Base32 string.
- * Uses the ULID timestamp encoding: 48-bit big-endian millisecond value.
- */
+/** 10-char Crockford Base32 from 48-bit millisecond timestamp. */
 function encodeTime(ms: number): string {
   let value = ms;
   const chars: string[] = new Array(10);
@@ -46,14 +26,7 @@ function encodeTime(ms: number): string {
   return chars.join("");
 }
 
-/**
- * Generate 16 random Crockford Base32 characters (80 bits of randomness).
- * Uses crypto.getRandomValues when available, falls back to Math.random.
- *
- * Only 10 bytes are drawn (10 * 8 = 80 bits); each byte yields one 5-bit
- * character via `& 0x1f`, and the remaining 6 characters are extracted by
- * bit-packing pairs of adjacent bytes.
- */
+/** 16 random Crockford Base32 characters (80 bits). */
 function encodeRandom(): string {
   const chars: string[] = new Array(16);
   if (typeof crypto !== "undefined" && crypto.getRandomValues) {
@@ -62,11 +35,10 @@ function encodeRandom(): string {
     for (let i = 0; i < 10; i++) {
       chars[i] = CROCKFORD_BASE32[bytes[i]! & 0x1f]!;
     }
-    // Extract 6 more 5-bit characters from the upper 3 bits of each byte
-    // by combining pairs: (upper3 of byte[i] << 2) | (upper2 of byte[i+1])
+    // Extract 6 more 5-bit chars by combining upper bits of adjacent bytes
     for (let i = 0; i < 6; i++) {
-      const hi = (bytes[i]! >> 5) & 0x07; // upper 3 bits
-      const lo = (bytes[i + 1]! >> 6) & 0x03; // upper 2 bits
+      const hi = (bytes[i]! >> 5) & 0x07;
+      const lo = (bytes[i + 1]! >> 6) & 0x03;
       chars[10 + i] = CROCKFORD_BASE32[(hi << 2) | lo]!;
     }
   } else {
@@ -77,19 +49,7 @@ function encodeRandom(): string {
   return chars.join("");
 }
 
-// ---------------------------------------------------------------------------
-// Public API
-// ---------------------------------------------------------------------------
-
-/**
- * Generate a prefixed ULID for swarm engine entities.
- *
- * Format: `{prefix}_{ulid}` where the ULID component is 26 characters of
- * Crockford Base32 (10 timestamp + 16 random).
- *
- * @param prefix - Entity type prefix (3 chars)
- * @returns Prefixed ID, e.g. "agt_01HXK8M3N2..."
- */
+/** Generate a prefixed ULID, e.g. `agt_01HXK8M3N2...` */
 export function generateSwarmId(prefix: SwarmEngineIdPrefix): string {
   return `${prefix}_${encodeTime(Date.now())}${encodeRandom()}`;
 }

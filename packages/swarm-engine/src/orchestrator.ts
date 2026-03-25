@@ -1,22 +1,4 @@
-/**
- * SwarmOrchestrator -- facade composing all subsystems under a single
- * lifecycle with guard pipeline integration.
- *
- * The orchestrator is the main entry point for the swarm engine. It wires
- * AgentRegistry, TaskGraph, TopologyManager, and AgentPool together with:
- * - Lifecycle management (init / shutdown / pause / resume / dispose)
- * - Guard pipeline evaluation via injected GuardEvaluator (fail-closed)
- * - State snapshots (getState) and live metrics (getMetrics)
- * - Background timers (heartbeat, metrics)
- *
- * Design:
- * - Constructor injection for events, registry, taskGraph, topology
- * - AgentPool is constructed internally from config.pool
- * - dispose() is the ONLY method that calls events.dispose()
- * - No Node.js imports -- all timers use setInterval/clearInterval
- *
- * @module
- */
+/** Facade composing all swarm engine subsystems under a single lifecycle. */
 
 import type { TypedEventEmitter, SwarmEngineEventMap } from "./events.js";
 import type { AgentRegistry } from "./agent-registry.js";
@@ -41,13 +23,6 @@ import type {
   TopologyConfig,
 } from "./types.js";
 
-// ============================================================================
-// Configuration
-// ============================================================================
-
-/**
- * Configuration for the SwarmOrchestrator.
- */
 export interface SwarmOrchestratorConfig {
   /** Swarm namespace for ID scoping. */
   namespace: string;
@@ -67,34 +42,12 @@ export interface SwarmOrchestratorConfig {
   healthCheckIntervalMs: number;
   /** Task timeout in ms. Default: SWARM_ENGINE_CONSTANTS.DEFAULT_TASK_TIMEOUT_MS */
   taskTimeoutMs: number;
-  /** Guard evaluator injected by host. If absent, all guarded actions are denied (fail-closed). */
+  /** If absent, all guarded actions are denied (fail-closed). */
   guardEvaluator?: GuardEvaluator;
   /** Max guard action records retained. Default: SWARM_ENGINE_CONSTANTS.MAX_GUARD_ACTION_HISTORY */
   maxGuardActionHistory: number;
 }
 
-// ============================================================================
-// SwarmOrchestrator
-// ============================================================================
-
-/**
- * Facade composing all swarm engine subsystems.
- *
- * **Security invariant:** Subsystem references (registry, taskGraph, topology,
- * pool) MUST only be accessed through orchestrator methods so that all
- * mutations pass through the guard pipeline. Direct access to the subsystems
- * bypasses guard enforcement and violates the fail-closed contract.
- *
- * Usage:
- * ```ts
- * const events = new TypedEventEmitter<SwarmEngineEventMap>();
- * const registry = new AgentRegistry(events);
- * const taskGraph = new TaskGraph(events, registry);
- * const topology = new TopologyManager(events);
- * const orchestrator = new SwarmOrchestrator(events, registry, taskGraph, topology, config);
- * orchestrator.initialize();
- * ```
- */
 export class SwarmOrchestrator {
   private readonly pool: AgentPool;
   private readonly mirroredPoolAgents = new Map<string, AgentSession>();
@@ -106,7 +59,6 @@ export class SwarmOrchestrator {
   private guardEvaluationsTotal = 0;
   private guardDenialsTotal = 0;
 
-  // Background timers
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(
@@ -120,16 +72,7 @@ export class SwarmOrchestrator {
     this.pool = new AgentPool(events, config.pool);
   }
 
-  // =========================================================================
-  // Lifecycle
-  // =========================================================================
-
-  /**
-   * Initialize the orchestrator. Sets status to "running", creates pool
-   * agents, starts health checks, and begins background timers.
-   *
-   * Must be called from "initializing" or "stopped" status.
-   */
+  /** Must be called from "initializing" or "stopped" status. */
   initialize(): void {
     if (this.status !== "initializing" && this.status !== "stopped") {
       throw new Error(
@@ -137,52 +80,32 @@ export class SwarmOrchestrator {
       );
     }
 
-    // Initialize pool first (creates minSize agents)
     this.pool.initialize();
     this.syncPoolAgents({ emitLifecycleEvents: true });
 
-    // Start registry health checks
     this.registry.startHealthChecks();
-
-    // Start background processes
     this.startBackgroundProcesses();
-
-    // Update status
     this.startedAt = Date.now();
     this.status = "running";
   }
 
-  /**
-   * Shut down the orchestrator gracefully. Sets status to "stopped",
-   * stops all background timers, and cleans up subsystems.
-   *
-   * Idempotent: calling from "stopped" is a no-op.
-   */
+  /** Idempotent graceful shutdown. */
   shutdown(): void {
     if (this.status === "stopped") {
       return;
     }
 
     this.status = "shutting_down";
-
-    // Stop background timers
     this.stopBackgroundProcesses();
-
-    // Shut down pool (clears agents, stops its health checks)
     this.pool.shutdown();
     this.syncPoolAgents({ emitLifecycleEvents: true });
 
-    // Stop registry health checks
     this.registry.stopHealthChecks();
 
     this.status = "stopped";
   }
 
-  /**
-   * Pause the orchestrator. Stops background timers but retains state.
-   *
-   * No-op if not in "running" status.
-   */
+  /** Stops background timers but retains state. No-op if not running. */
   pause(): void {
     if (this.status !== "running") {
       return;
@@ -192,11 +115,7 @@ export class SwarmOrchestrator {
     this.status = "paused";
   }
 
-  /**
-   * Resume the orchestrator from "paused" status. Restarts background timers.
-   *
-   * No-op if not in "paused" status.
-   */
+  /** Restarts background timers. No-op if not paused. */
   resume(): void {
     if (this.status !== "paused") {
       return;
@@ -206,46 +125,23 @@ export class SwarmOrchestrator {
     this.status = "running";
   }
 
-  /**
-   * Synchronous disposal. Stops all timers, disposes the pool, and disposes
-   * the shared event emitter.
-   *
-   * This is the ONLY method that calls events.dispose().
-   */
+  /** The only method that calls events.dispose(). */
   dispose(): void {
-    // Stop all timers (safe with null)
     this.stopBackgroundProcesses();
-
-    // Dispose pool (stops its health check timer)
     this.pool.dispose();
     this.mirroredPoolAgents.clear();
-
-    // Stop registry health checks so dispose actually releases all timers.
     this.registry.stopHealthChecks();
-
-    // Dispose the shared emitter -- ONLY here
     this.events.dispose();
 
     this.status = "stopped";
   }
 
-  // =========================================================================
-  // Guard Pipeline
-  // =========================================================================
-
-  /**
-   * Evaluate a guarded action through the guard pipeline.
-   *
-   * If no GuardEvaluator was injected, returns a deny result (fail-closed).
-   * Emits "guard.evaluated" on every evaluation, "action.denied" on deny,
-   * and "action.completed" on allow/warn.
-   */
+  /** Evaluate a guarded action. Deny-by-default if no evaluator is configured. */
   async evaluateGuard(action: GuardedAction): Promise<GuardEvaluationResult> {
     const startMs = Date.now();
     let result: GuardEvaluationResult;
 
     if (!this.config.guardEvaluator) {
-      // Fail-closed: no evaluator means deny all guarded actions
       result = {
         verdict: "deny",
         allowed: false,
@@ -260,13 +156,11 @@ export class SwarmOrchestrator {
 
     const durationMs = Date.now() - startMs;
 
-    // Track metrics
     this.guardEvaluationsTotal++;
     if (result.verdict === "deny") {
       this.guardDenialsTotal++;
     }
 
-    // Store in audit log (FIFO eviction)
     const record: GuardedActionRecord = {
       action,
       evaluation: result,
@@ -278,7 +172,6 @@ export class SwarmOrchestrator {
       this.recentGuardActions.shift();
     }
 
-    // Emit guard.evaluated event
     this.events.emit("guard.evaluated", {
       kind: "guard.evaluated",
       sourceAgentId: action.agentId,
@@ -289,7 +182,6 @@ export class SwarmOrchestrator {
     });
 
     if (result.verdict === "deny") {
-      // Redact context to prevent sensitive data leaking via broadcast
       const redactedAction: GuardedAction = { ...action, context: {} };
       this.events.emit("action.denied", {
         kind: "action.denied",
@@ -316,20 +208,11 @@ export class SwarmOrchestrator {
     return result;
   }
 
-  // =========================================================================
-  // State & Metrics
-  // =========================================================================
-
-  /**
-   * Returns a complete snapshot of the swarm engine state.
-   *
-   * Aggregates state from all subsystems into a single serializable object.
-   */
+  /** Returns a complete snapshot of the swarm engine state. */
   getState(): SwarmEngineState {
     this.syncPoolAgents({ emitLifecycleEvents: false });
     const agents = this.getMergedAgentState();
 
-    // Tasks from task graph
     const tasks = this.taskGraph.getState();
 
     return {
@@ -352,11 +235,7 @@ export class SwarmOrchestrator {
     };
   }
 
-  /**
-   * Returns live swarm engine metrics.
-   *
-   * Computed on-demand from subsystem state. Not cached.
-   */
+  /** Returns live swarm engine metrics. Computed on-demand, not cached. */
   getMetrics(): SwarmEngineMetrics {
     this.syncPoolAgents({ emitLifecycleEvents: false });
     const now = Date.now();
@@ -395,48 +274,29 @@ export class SwarmOrchestrator {
     };
   }
 
-  // =========================================================================
-  // Convenience Accessors
-  // =========================================================================
-
   /** Returns the internal agent pool. */
   getPool(): AgentPool {
     return this.pool;
   }
 
-  /** Returns the current engine status. */
   getStatus(): SwarmEngineStatus {
     return this.status;
   }
 
-  /** Returns the engine instance ID. */
   getId(): string {
     return this.id;
   }
 
-  /** Returns the shared event emitter for external subscriptions. */
   getEvents(): TypedEventEmitter<SwarmEngineEventMap> {
     return this.events;
   }
 
-  // =========================================================================
-  // Private: Background Processes
-  // =========================================================================
-
-  /**
-   * Start heartbeat background timer.
-   * Metrics are computed lazily in getMetrics() -- no periodic timer needed.
-   */
   private startBackgroundProcesses(): void {
-    // Heartbeat timer: update pool agent heartbeats
     this.heartbeatTimer = setInterval(() => {
       this.performHeartbeat();
     }, this.config.heartbeatIntervalMs);
   }
 
-  /**
-   * Stop all background timers. Safe to call with null timers.
-   */
   private stopBackgroundProcesses(): void {
     if (this.heartbeatTimer !== null) {
       clearInterval(this.heartbeatTimer);
@@ -444,9 +304,6 @@ export class SwarmOrchestrator {
     }
   }
 
-  /**
-   * Heartbeat tick: update pool agent heartbeats.
-   */
   private performHeartbeat(): void {
     const poolState = this.pool.getState();
     for (const agentId of Object.keys(poolState.agents)) {
@@ -669,13 +526,7 @@ export class SwarmOrchestrator {
     };
   }
 
-  // =========================================================================
-  // Private: Guard Helpers
-  // =========================================================================
-
-  /**
-   * Create a minimal deny receipt for fail-closed evaluation.
-   */
+  /** Create a minimal deny receipt for fail-closed evaluation. */
   private createDenyReceipt(action: GuardedAction): Receipt {
     return {
       id: generateSwarmId("rct" as import("./ids.js").SwarmEngineIdPrefix),
@@ -691,9 +542,7 @@ export class SwarmOrchestrator {
     };
   }
 
-  /**
-   * Project a full Receipt to a compact EnvelopeReceipt for transport.
-   */
+  /** Project a full Receipt to a compact EnvelopeReceipt for transport. */
   private envelopeReceiptFromReceipt(receipt: Receipt): EnvelopeReceipt {
     return {
       receiptId: receipt.id,

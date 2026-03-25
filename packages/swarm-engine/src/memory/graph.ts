@@ -1,15 +1,4 @@
-/**
- * KnowledgeGraph -- entity-relationship storage with Map-based backing.
- *
- * Provides typed entity/relation CRUD, query-by-type with optional property
- * matching, and a serializable getState() that returns Records (not Maps).
- *
- * @module
- */
-
-// ============================================================================
-// Types
-// ============================================================================
+/** Entity-relationship graph with Map-based backing. */
 
 export interface Entity {
   id: string;
@@ -26,10 +15,6 @@ export interface Relation {
   createdAt: number;
 }
 
-// ============================================================================
-// KnowledgeGraph
-// ============================================================================
-
 export class KnowledgeGraph {
   private entities = new Map<string, Entity>();
   private relations = new Map<string, Relation[]>();
@@ -40,9 +25,7 @@ export class KnowledgeGraph {
 
   removeEntity(id: string): void {
     this.entities.delete(id);
-    // Remove outgoing relations
     this.relations.delete(id);
-    // Remove incoming relations from all other entities
     for (const [sourceId, rels] of this.relations) {
       const filtered = rels.filter((r) => r.to !== id);
       if (filtered.length === 0) {
@@ -67,10 +50,6 @@ export class KnowledgeGraph {
     return this.relations.get(entityId) ?? [];
   }
 
-  /**
-   * Query entities by type, optionally filtering by partial property match.
-   * Every key in `properties` must match the entity's corresponding value.
-   */
   query(type: string, properties?: Record<string, unknown>): Entity[] {
     const results: Entity[] = [];
     for (const entity of this.entities.values()) {
@@ -90,9 +69,6 @@ export class KnowledgeGraph {
     return results;
   }
 
-  /**
-   * Returns a serializable snapshot (Records, not Maps).
-   */
   getState(): {
     entities: Record<string, Entity>;
     relations: Record<string, Relation[]>;

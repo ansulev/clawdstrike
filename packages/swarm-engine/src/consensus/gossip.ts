@@ -1,19 +1,4 @@
-/**
- * Gossip Protocol Consensus
- *
- * Eventually consistent consensus for large-scale distributed systems.
- * Ported from ruflo v3 with TypedEventEmitter injection (no Node.js EventEmitter).
- *
- * Transforms applied:
- * - EventEmitter removed, TypedEventEmitter<SwarmEngineEventMap> injected via constructor
- * - NodeJS.Timeout -> ReturnType<typeof setInterval> | null
- * - Date objects -> number (Unix ms via Date.now())
- * - proposal.votes: Map internal, ConsensusVote[] on public boundary
- * - generateSwarmId("csn") for proposal IDs
- * - Typed event emission (consensus.proposed, consensus.vote_cast, consensus.resolved)
- *
- * @module
- */
+/** Gossip protocol consensus -- eventually consistent. */
 
 import type { TypedEventEmitter, SwarmEngineEventMap } from "../events.js";
 import type {
@@ -23,10 +8,6 @@ import type {
 } from "../types.js";
 import { SWARM_ENGINE_CONSTANTS } from "../types.js";
 import { generateSwarmId } from "../ids.js";
-
-// ============================================================================
-// Types
-// ============================================================================
 
 export interface GossipMessage {
   id: string;
@@ -60,17 +41,12 @@ export interface GossipConfig {
   convergenceThreshold?: number;
 }
 
-// ============================================================================
-// GossipConsensus
-// ============================================================================
-
 export class GossipConsensus {
   private readonly events: TypedEventEmitter<SwarmEngineEventMap>;
   private readonly config: Required<GossipConfig>;
   private readonly node: GossipNode;
   private readonly nodes: Map<string, GossipNode> = new Map();
   private readonly proposals: Map<string, ConsensusProposal> = new Map();
-  /** Internal vote tracking: Map for O(1) dedup. */
   private readonly proposalVotes: Map<string, Map<string, ConsensusVote>> =
     new Map();
   private readonly messageQueue: GossipMessage[] = [];
@@ -89,7 +65,7 @@ export class GossipConsensus {
         config?.timeoutMs ??
         SWARM_ENGINE_CONSTANTS.DEFAULT_CONSENSUS_TIMEOUT_MS,
       maxRounds: config?.maxRounds ?? 10,
-      requireQuorum: config?.requireQuorum ?? false, // Gossip is eventually consistent
+      requireQuorum: config?.requireQuorum ?? false,
       fanout: config?.fanout ?? 3,
       gossipIntervalMs: config?.gossipIntervalMs ?? 100,
       maxHops: config?.maxHops ?? 10,
@@ -106,8 +82,6 @@ export class GossipConsensus {
     };
   }
 
-  // ===== PUBLIC API =====
-
   initialize(): void {
     this.startGossipLoop();
   }
@@ -122,7 +96,6 @@ export class GossipConsensus {
       lastSync: Date.now(),
     });
 
-    // Add as neighbor with some probability (random mesh)
     if (Math.random() < 0.5) {
       this.node.neighbors.add(nodeId);
       this.nodes.get(nodeId)!.neighbors.add(this.node.id);
@@ -151,7 +124,6 @@ export class GossipConsensus {
   propose(value: Record<string, unknown>): ConsensusProposal {
     const proposalId = generateSwarmId("csn");
 
-    // Internal vote map for O(1) dedup
     const voteMap = new Map<string, ConsensusVote>();
     this.proposalVotes.set(proposalId, voteMap);
 
@@ -167,7 +139,6 @@ export class GossipConsensus {
 
     this.proposals.set(proposalId, proposal);
 
-    // Self-vote
     const selfVote: ConsensusVote = {
       voterId: this.node.id,
       approve: true,
@@ -177,7 +148,6 @@ export class GossipConsensus {
     voteMap.set(this.node.id, selfVote);
     proposal.votes = Array.from(voteMap.values());
 
-    // Create gossip message
     const message: GossipMessage = {
       id: `msg_${proposalId}`,
       type: "proposal",
@@ -190,10 +160,8 @@ export class GossipConsensus {
       path: [this.node.id],
     };
 
-    // Queue for gossip
     this.queueMessage(message);
 
-    // Emit typed event
     this.events.emit("consensus.proposed", {
       kind: "consensus.proposed",
       sourceAgentId: this.node.id,
@@ -201,7 +169,6 @@ export class GossipConsensus {
       proposal,
     });
 
-    // Check if self-vote alone triggers convergence (e.g., single-node cluster)
     this.checkConvergence(proposalId);
 
     return proposal;
@@ -223,7 +190,6 @@ export class GossipConsensus {
       this.proposalVotes.set(proposalId, voteMap);
     }
 
-    // Derive voter identity from this node -- prevents vote spoofing
     const vote: ConsensusVote = {
       voterId: this.node.id,
       approve,
@@ -234,7 +200,6 @@ export class GossipConsensus {
     voteMap.set(vote.voterId, vote);
     proposal.votes = Array.from(voteMap.values());
 
-    // Create vote gossip message
     const message: GossipMessage = {
       id: `vote_${proposalId}_${vote.voterId}`,
       type: "vote",
@@ -249,7 +214,6 @@ export class GossipConsensus {
 
     this.queueMessage(message);
 
-    // Emit vote_cast event
     this.events.emit("consensus.vote_cast", {
       kind: "consensus.vote_cast",
       sourceAgentId: vote.voterId,
@@ -258,7 +222,6 @@ export class GossipConsensus {
       vote,
     });
 
-    // Check convergence
     this.checkConvergence(proposalId);
   }
 
@@ -272,13 +235,11 @@ export class GossipConsensus {
         return;
       }
 
-      // Already resolved
       if (proposal.status !== "pending") {
         resolve(this.createResult(proposal, Date.now() - startTime));
         return;
       }
 
-      // Event-driven resolution instead of setInterval polling
       const cleanup = this.events.on("consensus.resolved", (event) => {
         if (event.result.proposalId === proposalId) {
           cleanup();
@@ -289,12 +250,10 @@ export class GossipConsensus {
         }
       });
 
-      // Timeout fallback
       const timer = setTimeout(() => {
         cleanup();
         const p = this.proposals.get(proposalId);
         if (p && p.status === "pending") {
-          // Gossip is eventually consistent: accept if convergence threshold met
           const totalNodes = this.nodes.size + 1;
           const voteMap = this.proposalVotes.get(proposalId);
           const votes = voteMap ? voteMap.size : 0;
@@ -310,8 +269,6 @@ export class GossipConsensus {
       }, this.config.timeoutMs);
     });
   }
-
-  // ===== STATE QUERIES =====
 
   getConvergence(proposalId: string): number {
     const voteMap = this.proposalVotes.get(proposalId);
@@ -358,7 +315,6 @@ export class GossipConsensus {
     }
   }
 
-  // Anti-entropy: sync full state with a random neighbor
   antiEntropy(): void {
     if (this.node.neighbors.size === 0) return;
 
@@ -381,8 +337,6 @@ export class GossipConsensus {
     this.sendToNeighbor(randomNeighbor, stateMessage);
   }
 
-  // ===== GOSSIP PROTOCOL (PRIVATE) =====
-
   private startGossipLoop(): void {
     this.gossipInterval = setInterval(() => {
       this.gossipRound();
@@ -394,12 +348,9 @@ export class GossipConsensus {
       return;
     }
 
-    // Select random neighbors (fanout)
     const fanout = Math.min(this.config.fanout, this.node.neighbors.size);
     const neighbors = this.selectRandomNeighbors(fanout);
-
-    // Send queued messages to selected neighbors
-    const messages = this.messageQueue.splice(0, 10); // Process up to 10 per round
+    const messages = this.messageQueue.splice(0, 10);
 
     for (const message of messages) {
       for (const neighborId of neighbors) {
@@ -428,19 +379,16 @@ export class GossipConsensus {
       return;
     }
 
-    // Check if already seen
     if (neighbor.seenMessages.has(message.id)) {
       return;
     }
 
-    // Deliver message to neighbor node
     const deliveredMessage: GossipMessage = {
       ...message,
       hops: message.hops + 1,
       path: [...message.path, neighborId],
     };
 
-    // Process at neighbor
     this.processReceivedMessage(neighbor, deliveredMessage);
   }
 
@@ -448,10 +396,8 @@ export class GossipConsensus {
     node: GossipNode,
     message: GossipMessage,
   ): void {
-    // Mark as seen
     node.seenMessages.add(message.id);
 
-    // Check TTL
     if (message.ttl <= 0 || message.hops >= this.config.maxHops) {
       return;
     }
@@ -468,14 +414,12 @@ export class GossipConsensus {
         break;
     }
 
-    // Propagate to neighbors (gossip)
     if (message.hops < this.config.maxHops) {
       const propagateMessage: GossipMessage = {
         ...message,
         ttl: message.ttl - 1,
       };
 
-      // Add to queue if this is our node
       if (node.id === this.node.id) {
         this.queueMessage(propagateMessage);
       }
@@ -507,7 +451,6 @@ export class GossipConsensus {
 
       this.proposals.set(proposalId, proposal);
 
-      // Auto-vote (simplified)
       if (node.id === this.node.id) {
         this.vote(proposalId, true, 0.9);
       }
@@ -537,7 +480,6 @@ export class GossipConsensus {
   ): void {
     const state = message.payload;
 
-    // Merge state (last-writer-wins)
     if (message.version > node.version) {
       for (const [key, value] of Object.entries(state)) {
         node.state.set(key, value);
@@ -547,7 +489,6 @@ export class GossipConsensus {
   }
 
   private queueMessage(message: GossipMessage): void {
-    // Avoid duplicates
     if (!this.node.seenMessages.has(message.id)) {
       this.node.seenMessages.add(message.id);
       this.messageQueue.push(message);
@@ -566,7 +507,6 @@ export class GossipConsensus {
     const totalNodes = this.nodes.size + 1;
     const votes = voteMap.size;
 
-    // Check if we've converged (enough nodes have voted)
     if (votes / totalNodes >= this.config.convergenceThreshold) {
       const approvingVotes = Array.from(voteMap.values()).filter(
         (v) => v.approve,

@@ -335,6 +335,59 @@ export function useEngineBoardBridge(engine: SwarmOrchestrator | null): void {
     );
 
     unsubs.push(
+      events.on("task.assigned", (event: any) => {
+        const { nodes, edges, actions } = store();
+
+        const taskNode = nodes.find(
+          (n: Node<SwarmBoardNodeData>) => n.data.taskId === event.taskId,
+        );
+        if (!taskNode) return;
+
+        const agentNode = nodes.find(
+          (n: Node<SwarmBoardNodeData>) => n.data.agentId === event.agentId,
+        );
+
+        const nextNodes = nodes.map((node) => {
+          if (node.id !== taskNode.id) {
+            return node;
+          }
+
+          return {
+            ...node,
+            position: agentNode
+              ? { x: agentNode.position.x, y: agentNode.position.y + 200 }
+              : node.position,
+            data: {
+              ...node.data,
+              agentId: event.agentId,
+              status: mapEngineStatus("assigned"),
+            },
+          };
+        });
+
+        if (!agentNode) {
+          actions.loadState({ nodes: nextNodes });
+          return;
+        }
+
+        const nextEdges = [
+          ...edges.filter(
+            (edge: SwarmBoardEdge) =>
+              !(edge.type === "spawned" && edge.target === taskNode.id),
+          ),
+          {
+            id: `edge-spawn-${taskNode.id}`,
+            source: agentNode.id,
+            target: taskNode.id,
+            type: "spawned" as const,
+          },
+        ];
+
+        actions.loadState({ nodes: nextNodes, edges: nextEdges });
+      }),
+    );
+
+    unsubs.push(
       events.on("task.completed", (event: any) => {
         const { nodes, actions } = store();
 

@@ -70,22 +70,26 @@ export class AgentPool {
    * Returns undefined when the pool is fully exhausted.
    */
   acquire(): string | undefined {
-    const availableId = this.available.values().next().value as
-      | string
-      | undefined;
-
-    if (availableId) {
+    for (const availableId of this.available) {
       const pooled = this.pooledAgents.get(availableId);
-      if (pooled) {
+      if (!pooled) {
         this.available.delete(availableId);
-        this.busy.add(availableId);
-        pooled.status = "busy";
-        pooled.usageCount++;
-        pooled.lastUsed = Date.now();
-
-        this.checkScaling();
-        return availableId;
+        continue;
       }
+
+      if (pooled.status !== "available" || pooled.health <= 0) {
+        this.available.delete(availableId);
+        continue;
+      }
+
+      this.available.delete(availableId);
+      this.busy.add(availableId);
+      pooled.status = "busy";
+      pooled.usageCount++;
+      pooled.lastUsed = Date.now();
+
+      this.checkScaling();
+      return availableId;
     }
 
     if (this.pooledAgents.size < this.config.maxSize) {
@@ -113,9 +117,12 @@ export class AgentPool {
     if (!pooled) return;
 
     this.busy.delete(agentId);
-    this.available.add(agentId);
-    pooled.status = "available";
     pooled.lastUsed = Date.now();
+
+    if (pooled.status !== "unhealthy" && pooled.health > 0) {
+      this.available.add(agentId);
+      pooled.status = "available";
+    }
 
     this.checkScaling();
   }
@@ -352,6 +359,7 @@ export class AgentPool {
       if (timeSinceLastHeartbeat > unhealthyThresholdMs) {
         pooled.health = Math.max(0, pooled.health - 0.2);
         pooled.status = "unhealthy";
+        this.available.delete(agentId);
 
         if (pooled.health <= 0) {
           this.replaceUnhealthyAgent(agentId);
@@ -359,7 +367,12 @@ export class AgentPool {
       } else {
         pooled.health = Math.min(1.0, pooled.health + 0.1);
         if (pooled.status === "unhealthy") {
-          pooled.status = this.busy.has(agentId) ? "busy" : "available";
+          if (this.busy.has(agentId)) {
+            pooled.status = "busy";
+          } else {
+            pooled.status = "available";
+            this.available.add(agentId);
+          }
         }
       }
     }

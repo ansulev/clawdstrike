@@ -428,7 +428,7 @@ describe("useEngineBoardBridge", () => {
     }
   });
 
-  it("maps task and unknown engine statuses safely", () => {
+  it("maps task statuses safely and binds tasks when assignment happens after creation", () => {
     const events = new TypedEventEmitter<SwarmEngineEventMap>();
     const engine = {
       getState: () => makeEngineState(),
@@ -455,6 +455,26 @@ describe("useEngineBoardBridge", () => {
       expect(
         useSwarmBoardStore.getState().nodes.find((node) => node.data.taskId === "tsk_1")?.data.status,
       ).toBe("idle");
+
+      act(() => {
+        events.emit("task.assigned", {
+          taskId: "tsk_1",
+          agentId: "agt_pool_1",
+        } as any);
+      });
+
+      const assignedTaskNode = useSwarmBoardStore
+        .getState()
+        .nodes.find((node) => node.data.taskId === "tsk_1");
+
+      expect(assignedTaskNode?.data.agentId).toBe("agt_pool_1");
+      expect(assignedTaskNode?.position).toEqual({ x: 240, y: 320 });
+      expect(useSwarmBoardStore.getState().edges).toContainEqual({
+        id: `edge-spawn-${assignedTaskNode?.id}`,
+        source: "agt_pool_1",
+        target: assignedTaskNode?.id,
+        type: "spawned",
+      });
 
       act(() => {
         events.emit("task.status_changed", {

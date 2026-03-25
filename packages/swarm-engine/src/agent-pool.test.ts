@@ -118,6 +118,23 @@ describe("AgentPool", () => {
       expect(a3).toBeUndefined();
     });
 
+    it("skips unhealthy agents when selecting from the available pool", () => {
+      pool.initialize();
+      const [staleAgentId, healthyAgentId] = Object.keys(pool.getState().agents);
+
+      const staleAgent = (pool as any).pooledAgents.get(staleAgentId);
+      staleAgent.lastHeartbeatAt = Date.now() - 40_000;
+
+      vi.advanceTimersByTime(10_001);
+
+      expect(pool.getState().agents[staleAgentId]?.status).toBe("unhealthy");
+
+      const acquiredAgentId = pool.acquire();
+
+      expect(acquiredAgentId).toBe(healthyAgentId);
+      expect(pool.getState().agents[staleAgentId]?.status).toBe("unhealthy");
+    });
+
     it("increments busy count and decrements available count", () => {
       pool.initialize();
       const before = pool.getState();

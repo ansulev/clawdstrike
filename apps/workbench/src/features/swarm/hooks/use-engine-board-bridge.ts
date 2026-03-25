@@ -185,7 +185,7 @@ function buildTopologyEdges(
       id: `edge-topo-${topologyEdge.from}-${topologyEdge.to}`,
       source: fromNode.id,
       target: toNode.id,
-      type: "topology",
+      type: "topology" as const,
     }];
   });
 }
@@ -273,6 +273,14 @@ export function useEngineBoardBridge(engine: SwarmOrchestrator | null): void {
     const unsubs: Array<() => void> = [];
     const timeouts = timeoutsRef.current;
     const restoreStatuses = restoreStatusRef.current;
+    const clearPendingGuardGlow = (nodeId: string): void => {
+      const timeout = timeouts.get(nodeId);
+      if (timeout != null) {
+        clearTimeout(timeout);
+        timeouts.delete(nodeId);
+      }
+      restoreStatuses.delete(nodeId);
+    };
 
     const events = engine.getEvents();
     seedBoardFromEngineSnapshot(engine);
@@ -343,6 +351,7 @@ export function useEngineBoardBridge(engine: SwarmOrchestrator | null): void {
         );
         if (!node) return;
 
+        clearPendingGuardGlow(node.id);
         actions.updateNode(node.id, {
           status: "completed",
           exitCode: event.exitCode,
@@ -586,11 +595,9 @@ export function useEngineBoardBridge(engine: SwarmOrchestrator | null): void {
     return () => {
       unsubs.forEach((fn) => fn());
 
-      for (const timeout of timeouts.values()) {
-        clearTimeout(timeout);
+      for (const nodeId of Array.from(timeouts.keys())) {
+        clearPendingGuardGlow(nodeId);
       }
-      timeouts.clear();
-      restoreStatuses.clear();
     };
   }, [engine]);
 }

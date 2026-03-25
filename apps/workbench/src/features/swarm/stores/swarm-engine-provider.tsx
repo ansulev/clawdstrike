@@ -112,42 +112,6 @@ interface PositionedSpawnOptions {
   position?: { x: number; y: number };
 }
 
-function fallbackSpawnPosition(
-  position?: { x: number; y: number },
-): { x: number; y: number } {
-  return position ?? {
-    x: 100 + Math.random() * 400,
-    y: 100 + Math.random() * 300,
-  };
-}
-
-function receiptNodeFromGuardResult(
-  opts: PositionedSpawnOptions,
-  verdict: "allow" | "deny" | "warn",
-  guardResults: Array<{ guard: string; allowed: boolean; duration_ms?: number }>,
-  signature?: string,
-  publicKey?: string,
-  detail?: string,
-): Node<SwarmBoardNodeData> {
-  const { actions } = useSwarmBoardStore.getState();
-  const position = fallbackSpawnPosition(opts.position);
-
-  return actions.addNode({
-    nodeType: "receipt",
-    title: `Guard: ${verdict.toUpperCase()}`,
-    position: { x: position.x, y: position.y + 340 },
-    data: {
-      verdict,
-      guardResults,
-      signature,
-      publicKey,
-      status: "completed",
-      engineManaged: true,
-      ...(detail ? { previewLines: [detail] } : {}),
-    },
-  });
-}
-
 function buildSpawnGuardAction(
   kind: "terminal" | "claude" | "worktree",
   opts: SpawnSessionOptions | SpawnClaudeSessionOptions | SpawnWorktreeSessionOptions,
@@ -329,33 +293,34 @@ export function SwarmEngineProvider({
       } catch (guardErr) {
         const message =
           guardErr instanceof Error ? guardErr.message : String(guardErr);
+        const { actions } = useSwarmBoardStore.getState();
         console.warn(
           "[SwarmEngineProvider] Guard evaluation failed; denying spawn:",
           message,
         );
 
-        return receiptNodeFromGuardResult(
-          opts,
-          "deny",
-          [{ guard: "engine_error", allowed: false }],
-          undefined,
-          undefined,
-          message,
-        );
+        return actions.addGuardReceipt({
+          verdict: "deny",
+          guardResults: [{ guard: "engine_error", allowed: false }],
+          position: opts.position,
+          detail: message,
+        });
       }
 
       if (!result.allowed) {
-        return receiptNodeFromGuardResult(
-          opts,
-          result.verdict,
-          result.guardResults.map((guardResult) => ({
+        const { actions } = useSwarmBoardStore.getState();
+
+        return actions.addGuardReceipt({
+          verdict: result.verdict,
+          guardResults: result.guardResults.map((guardResult) => ({
             guard: guardResult.guardId,
             allowed: guardResult.verdict !== "deny",
             duration_ms: guardResult.duration_ms,
           })),
-          result.receipt.signature,
-          result.receipt.publicKey,
-        );
+          signature: result.receipt.signature,
+          publicKey: result.receipt.publicKey,
+          position: opts.position,
+        });
       }
 
       const node = await spawnFn(opts);

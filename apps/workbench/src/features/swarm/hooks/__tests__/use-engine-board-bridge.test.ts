@@ -322,7 +322,7 @@ describe("useEngineBoardBridge", () => {
     unmount();
   });
 
-  it("does not overwrite a newer node status when the guard glow expires", () => {
+  it("clears pending guard-glow state on termination before a later glow reuses the baseline", () => {
     vi.useFakeTimers();
 
     const events = new TypedEventEmitter<SwarmEngineEventMap>();
@@ -364,6 +364,24 @@ describe("useEngineBoardBridge", () => {
       expect(
         useSwarmBoardStore.getState().nodes.find((node) => node.id === "agt_pool_1")?.data.status,
       ).toBe("completed");
+
+      act(() => {
+        events.emit("guard.evaluated", {
+          action: { agentId: "agt_pool_1" },
+          result: {
+            verdict: "allow",
+            guardResults: [],
+            receipt: {
+              signature: "dcba".repeat(32),
+              publicKey: "5678".repeat(16),
+            },
+          },
+        } as any);
+      });
+
+      expect(
+        useSwarmBoardStore.getState().nodes.find((node) => node.id === "agt_pool_1")?.data.status,
+      ).toBe("evaluating");
 
       act(() => {
         vi.advanceTimersByTime(2000);

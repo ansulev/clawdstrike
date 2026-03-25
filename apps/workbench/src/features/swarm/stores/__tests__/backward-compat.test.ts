@@ -427,6 +427,35 @@ describe("Engine actions are additive, not breaking", () => {
     expect(state.nodes.filter((node) => node.data.nodeType === "receipt")).toHaveLength(2);
     expect(state.edges.filter((edge) => edge.type === "receipt")).toHaveLength(2);
   });
+
+  it("addGuardReceipt supports detached receipts with shared dedupe semantics", () => {
+    const { actions } = useSwarmBoardStore.getState();
+
+    actions.addGuardReceipt({
+      verdict: "deny",
+      guardResults: [{ guard: "engine_error", allowed: false }],
+      signature: "feed".repeat(32),
+      publicKey: "5678".repeat(16),
+      position: { x: 120, y: 80 },
+      detail: "engine exploded",
+    });
+    actions.addGuardReceipt({
+      verdict: "deny",
+      guardResults: [{ guard: "engine_error", allowed: false }],
+      signature: "feed".repeat(32),
+      publicKey: "5678".repeat(16),
+      position: { x: 240, y: 120 },
+      detail: "engine exploded",
+    });
+
+    const state = useSwarmBoardStore.getState();
+    const receiptNodes = state.nodes.filter((node) => node.data.nodeType === "receipt");
+
+    expect(receiptNodes).toHaveLength(1);
+    expect(state.edges.filter((edge) => edge.type === "receipt")).toHaveLength(0);
+    expect(receiptNodes[0]?.position).toEqual({ x: 120, y: 420 });
+    expect(receiptNodes[0]?.data.previewLines).toEqual(["engine exploded"]);
+  });
 });
 
 // ---------------------------------------------------------------------------

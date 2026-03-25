@@ -522,6 +522,15 @@ interface SwarmBoardStoreState extends SwarmBoardState {
     topologyLayout: (topology: string, positions: Map<string, { x: number; y: number }>) => void;
     applyTopologyLayout: (topologyEdges: SwarmBoardEdge[], positions: Map<string, { x: number; y: number }>) => void;
     engineSync: (engineNodes: Array<{ id: string; agentId?: string; taskId?: string; data: Partial<SwarmBoardNodeData>; position?: { x: number; y: number } }>, engineEdges: SwarmBoardEdge[]) => void;
+    addGuardReceipt: (config: {
+      verdict: "allow" | "deny" | "warn";
+      guardResults: Array<{ guard: string; allowed: boolean; duration_ms?: number }>;
+      signature?: string;
+      publicKey?: string;
+      agentNodeId?: string;
+      position?: { x: number; y: number };
+      detail?: string;
+    }) => Node<SwarmBoardNodeData>;
     guardEvaluate: (agentNodeId: string, verdict: string, guardResults: Array<{ guard: string; allowed: boolean; duration_ms?: number }>, signature?: string, publicKey?: string) => void;
   };
 }
@@ -842,6 +851,72 @@ const useSwarmBoardStoreBase = create<SwarmBoardStoreState>()((set, get) => ({
       schedulePersist({ ...get() });
     },
 
+    addGuardReceipt: ({
+      verdict,
+      guardResults,
+      signature,
+      publicKey,
+      agentNodeId,
+      position,
+      detail,
+    }): Node<SwarmBoardNodeData> => {
+      const current = get();
+
+      if (signature && signature.length > 0) {
+        const duplicate = current.nodes.find(
+          (n) => (n.data as SwarmBoardNodeData).nodeType === "receipt" &&
+                 (n.data as SwarmBoardNodeData).signature === signature,
+        );
+        if (duplicate) return duplicate;
+      }
+
+      const agentNode = agentNodeId
+        ? current.nodes.find((n) => n.id === agentNodeId)
+        : undefined;
+      const anchor = agentNode?.position ?? position ?? {
+        x: 100 + Math.random() * 400,
+        y: 100 + Math.random() * 300,
+      };
+
+      const receiptNode = createBoardNode({
+        nodeType: "receipt",
+        title: `Guard: ${verdict.toUpperCase()}`,
+        position: { x: anchor.x, y: anchor.y + 340 },
+        data: {
+          verdict,
+          guardResults,
+          signature,
+          publicKey,
+          status: "completed",
+          engineManaged: true,
+          ...(detail ? { previewLines: [detail] } : {}),
+        },
+      });
+
+      const edges = agentNode
+        ? [
+          ...current.edges,
+          {
+            id: `edge-receipt-${receiptNode.id}-${agentNode.id}`,
+            source: agentNode.id,
+            target: receiptNode.id,
+            type: "receipt" as const,
+            label: verdict,
+          },
+        ]
+        : current.edges;
+      const nodes = [...current.nodes, receiptNode];
+
+      set({
+        nodes,
+        edges,
+        rfEdges: toRfEdges(edges),
+        selectedNode: deriveSelectedNode(nodes, current.selectedNodeId),
+      });
+      schedulePersist({ ...get() });
+      return receiptNode;
+    },
+
     guardEvaluate: (
       agentNodeId: string,
       verdict: string,
@@ -853,45 +928,13 @@ const useSwarmBoardStoreBase = create<SwarmBoardStoreState>()((set, get) => ({
       const agentNode = current.nodes.find((n) => n.id === agentNodeId);
       if (!agentNode) return;
 
-      if (signature && signature.length > 0) {
-        const duplicate = current.nodes.some(
-          (n) => (n.data as SwarmBoardNodeData).nodeType === "receipt" &&
-                 (n.data as SwarmBoardNodeData).signature === signature,
-        );
-        if (duplicate) return;
-      }
-
-      const receiptNode = createBoardNode({
-        nodeType: "receipt",
-        title: `Guard: ${verdict.toUpperCase()}`,
-        position: { x: agentNode.position.x, y: agentNode.position.y + 340 },
-        data: {
-          verdict: verdict as "allow" | "deny" | "warn",
-          guardResults,
-          signature,
-          publicKey,
-          status: "completed",
-          engineManaged: true,
-        },
+      get().actions.addGuardReceipt({
+        agentNodeId: agentNode.id,
+        verdict: verdict as "allow" | "deny" | "warn",
+        guardResults,
+        signature,
+        publicKey,
       });
-
-      const nodes = [...current.nodes, receiptNode];
-      const receiptEdge: SwarmBoardEdge = {
-        id: `edge-receipt-${receiptNode.id}-${agentNodeId}`,
-        source: agentNodeId,
-        target: receiptNode.id,
-        type: "receipt",
-        label: verdict,
-      };
-      const edges = [...current.edges, receiptEdge];
-
-      set({
-        nodes,
-        edges,
-        rfEdges: toRfEdges(edges),
-        selectedNode: deriveSelectedNode(nodes, current.selectedNodeId),
-      });
-      schedulePersist({ ...get() });
     },
   },
 }));

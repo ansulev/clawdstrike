@@ -13,6 +13,7 @@ openclaw_runtime_prepare
 openclaw_runtime_require_cmd curl
 
 TARGET_FILE="$OPENCLAW_RUNTIME_ROOT/destructive-target.txt"
+BLOCKED_COMMAND="touch $TARGET_FILE"
 IDEMPOTENCY_KEY="blocked-e2e-$(date +%s)"
 GATEWAY_LOG="$ARTIFACT_DIR/gateway.log"
 
@@ -62,6 +63,8 @@ cleanup() {
   openclaw_runtime_cleanup
 }
 trap cleanup EXIT
+
+rm -f "$TARGET_FILE"
 
 cat >"$OPENCLAW_RUNTIME_CONFIG_PATH" <<JSON
 {
@@ -141,7 +144,7 @@ openclaw_gateway_call_capture \
   openclaw gateway call \
   --token "$OPENCLAW_RUNTIME_GATEWAY_TOKEN" \
   --json \
-  --params "{\"sessionKey\":\"global\",\"message\":\"! rm -rf $TARGET_FILE\",\"idempotencyKey\":\"$IDEMPOTENCY_KEY\"}" \
+  --params "{\"sessionKey\":\"global\",\"message\":\"! $BLOCKED_COMMAND\",\"idempotencyKey\":\"$IDEMPOTENCY_KEY\"}" \
   chat.send || CHAT_SEND_RC=$?
 
 HISTORY_READY=0
@@ -150,7 +153,7 @@ for _ in $(seq 1 20); do
     "$ARTIFACT_DIR/chat-history.raw.txt" \
     "$ARTIFACT_DIR/chat-history.json" \
     openclaw gateway call --token "$OPENCLAW_RUNTIME_GATEWAY_TOKEN" --json --params '{"sessionKey":"global","limit":20}' chat.history; then
-    if jq -e '(.messages // []) | length > 0' "$ARTIFACT_DIR/chat-history.json" >/dev/null; then
+    if jq -e 'any((.messages // [])[]?; ((.role // .authorRole // .author // .senderRole // "") | ascii_downcase) == "assistant")' "$ARTIFACT_DIR/chat-history.json" >/dev/null; then
       HISTORY_READY=1
       break
     fi
@@ -158,7 +161,21 @@ for _ in $(seq 1 20); do
   sleep 1
 done
 
-ASSISTANT_TEXT="$(jq -r '[.messages[]?.content[]? | select(.type=="text") | .text] | join("\n")' "$ARTIFACT_DIR/chat-history.json" 2>/dev/null || true)"
+ASSISTANT_TEXT="$(jq -r '
+  [
+    .messages[]?
+    | select(((.role // .authorRole // .author // .senderRole // "") | ascii_downcase) == "assistant")
+    | (
+        if (.content | type) == "array" then
+          .content[]? | select(.type=="text") | .text
+        elif (.text | type) == "string" then
+          .text
+        else
+          empty
+        end
+      )
+  ] | join("\n")
+' "$ARTIFACT_DIR/chat-history.json" 2>/dev/null || true)"
 printf '%s\n' "$ASSISTANT_TEXT" >"$ARTIFACT_DIR/assistant-text.txt"
 
 ASSISTANT_AUTH_MISSING=false
@@ -175,7 +192,7 @@ openclaw_http_post_capture \
   "http://127.0.0.1:$OPENCLAW_RUNTIME_GATEWAY_PORT/tools/invoke" \
   -H "Authorization: Bearer $OPENCLAW_RUNTIME_GATEWAY_TOKEN" \
   -H 'Content-Type: application/json' \
-  -d "{\"tool\":\"policy_check\",\"args\":{\"action\":\"command\",\"resource\":\"rm -rf $TARGET_FILE\"}}" || POLICY_CHECK_CURL_RC=$?
+  -d "{\"tool\":\"policy_check\",\"args\":{\"action\":\"command\",\"resource\":\"$BLOCKED_COMMAND\"}}" || POLICY_CHECK_CURL_RC=$?
 
 POLICY_CHECK_HTTP_OK=false
 if [ "$POLICY_CHECK_CURL_RC" -eq 0 ] \
@@ -227,7 +244,7 @@ if [ "$CHAT_SEND_RC" -eq 0 ] && jq -e '.status == "started"' "$ARTIFACT_DIR/chat
 fi
 
 HISTORY_HAS_MESSAGES=false
-if [ "$HISTORY_READY" -eq 1 ] && jq -e '(.messages // []) | length > 0' "$ARTIFACT_DIR/chat-history.json" >/dev/null 2>&1; then
+if [ "$HISTORY_READY" -eq 1 ] && jq -e 'any((.messages // [])[]?; ((.role // .authorRole // .author // .senderRole // "") | ascii_downcase) == "assistant")' "$ARTIFACT_DIR/chat-history.json" >/dev/null 2>&1; then
   HISTORY_HAS_MESSAGES=true
 fi
 

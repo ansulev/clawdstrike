@@ -66,6 +66,29 @@ describe("resolve-project-path", () => {
     ).toBe("C:/repo/rules/example.yml");
   });
 
+  it("preserves UNC prefixes when resolving relative project paths", () => {
+    expect(
+      resolveProjectPath("\\\\server\\share", "rules/example.yml"),
+    ).toBe("//server/share/rules/example.yml");
+  });
+
+  it("preserves UNC prefixes when normalizing absolute project paths", () => {
+    expect(
+      resolveProjectPath("workspace", "\\\\server\\share\\rules\\example.yml"),
+    ).toBe("//server/share/rules/example.yml");
+  });
+
+  it("derives UNC search roots from absolute workspace file paths", () => {
+    expect(
+      deriveSearchRootPath("workspace", [
+        "//server/share/policies/example.yml",
+      ], [
+        "policies/example.yml",
+        "rules/detections.yml",
+      ]),
+    ).toBe("//server/share");
+  });
+
   it("rejects rename basenames that include path traversal or separators", () => {
     expect(isValidProjectBasename("renamed.yml")).toBe(true);
     expect(isValidProjectBasename(" nested name.yml ")).toBe(true);

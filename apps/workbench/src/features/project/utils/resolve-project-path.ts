@@ -1,7 +1,18 @@
 export const WINDOWS_ABSOLUTE_PATH = /^[A-Za-z]:[\\/]/;
+export const UNC_ABSOLUTE_PATH = /^[\\/]{2}[^\\/]+[\\/][^\\/]+/;
 
 function normalizeProjectPath(path: string): string {
-  return path.replace(/\\/g, "/").replace(/\/+/g, "/").replace(/\/+$/, "");
+  const slashNormalized = path.replace(/\\/g, "/");
+  const hasUncPrefix = UNC_ABSOLUTE_PATH.test(path) || slashNormalized.startsWith("//");
+  const collapsed = hasUncPrefix
+    ? `//${slashNormalized.replace(/^\/+/, "").replace(/\/+/g, "/")}`
+    : slashNormalized.replace(/\/+/g, "/");
+
+  if (collapsed === "/" || collapsed === "//" || /^[A-Za-z]:\/$/.test(collapsed)) {
+    return collapsed;
+  }
+
+  return collapsed.replace(/\/+$/, "");
 }
 
 export function getProjectPathBasename(filePath: string): string {
@@ -21,7 +32,7 @@ export function isValidProjectBasename(name: string): boolean {
 
 export function isAbsoluteProjectPath(path: string | null | undefined): boolean {
   return typeof path === "string"
-    && (path.startsWith("/") || WINDOWS_ABSOLUTE_PATH.test(path));
+    && (path.startsWith("/") || WINDOWS_ABSOLUTE_PATH.test(path) || UNC_ABSOLUTE_PATH.test(path));
 }
 
 export function resolveProjectPath(
@@ -75,7 +86,7 @@ export function replaceProjectPathBasename(filePath: string, newName: string): s
 }
 
 interface ParsedAbsoluteDirectory {
-  kind: "posix" | "windows";
+  kind: "posix" | "windows" | "unc";
   prefix: string;
   separator: "/" | "\\";
   directories: string[];
@@ -86,13 +97,27 @@ function parseAbsoluteDirectory(filePath: string): ParsedAbsoluteDirectory | nul
     return null;
   }
 
-  const normalized = filePath.replace(/\\/g, "/").replace(/\/+/g, "/");
+  const normalized = normalizeProjectPath(filePath);
   if (WINDOWS_ABSOLUTE_PATH.test(filePath)) {
     const [drive, ...segments] = normalized.split("/");
     return {
       kind: "windows",
       prefix: drive,
       separator: "\\",
+      directories: segments.filter(Boolean).slice(0, -1),
+    };
+  }
+
+  if (normalized.startsWith("//")) {
+    const [server, share, ...segments] = normalized.replace(/^\/+/, "").split("/");
+    if (!server || !share) {
+      return null;
+    }
+
+    return {
+      kind: "unc",
+      prefix: `//${server}/${share}`,
+      separator: "/",
       directories: segments.filter(Boolean).slice(0, -1),
     };
   }
@@ -113,6 +138,10 @@ function stringifyAbsoluteDirectory(
     return directories.length > 0
       ? `${parsed.prefix}${parsed.separator}${directories.join(parsed.separator)}`
       : `${parsed.prefix}${parsed.separator}`;
+  }
+
+  if (parsed.kind === "unc") {
+    return directories.length > 0 ? `${parsed.prefix}/${directories.join("/")}` : parsed.prefix;
   }
 
   return directories.length > 0 ? `/${directories.join("/")}` : "/";

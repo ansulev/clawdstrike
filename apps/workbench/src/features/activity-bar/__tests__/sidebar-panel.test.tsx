@@ -221,9 +221,61 @@ describe("SidebarPanel explorer wiring", () => {
     await userEvent.click(screen.getByRole("button", { name: "create file" }));
 
     await waitFor(() => {
-      expect(setFileStatus).toHaveBeenCalledWith("policies/new.yml", { modified: true });
+      expect(setFileStatus).toHaveBeenCalledWith(
+        "C:\\workspace\\project\\policies\\new.yml",
+        { modified: true },
+      );
     });
     expect(openFileByPath).toHaveBeenCalledWith("C:\\workspace\\project\\policies\\new.yml");
+  });
+
+  it("uses the saved absolute path when flagging created files in multi-root workspaces", async () => {
+    createFile.mockResolvedValueOnce("/workspace/other/policies/new.yml");
+    useProjectStore.setState((state) => ({
+      ...state,
+      projectRoots: ["/workspace/project", "/workspace/other"],
+      projects: new Map([
+        [
+          "/workspace/project",
+          {
+            rootPath: "/workspace/project",
+            name: "project",
+            files: [],
+            expandedDirs: new Set<string>(),
+          },
+        ],
+        [
+          "/workspace/other",
+          {
+            rootPath: "/workspace/other",
+            name: "other",
+            files: [],
+            expandedDirs: new Set<string>(),
+          },
+        ],
+      ]),
+      actions: {
+        ...state.actions,
+        createFile,
+        renameFile,
+        deleteFile,
+        setFileStatus,
+      },
+    }));
+
+    render(
+      <MemoryRouter>
+        <SidebarPanel />
+      </MemoryRouter>,
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "create file" }));
+
+    await waitFor(() => {
+      expect(setFileStatus).toHaveBeenCalledWith("/workspace/other/policies/new.yml", {
+        modified: true,
+      });
+    });
   });
 
   it("renders the findings panel for the hunt activity-bar entry", () => {

@@ -70,6 +70,8 @@ const DEFAULT_OPERATOR = {
   devices: [{ deviceId: "e2e-device", deviceName: "E2E Device", addedAt: 0, lastSeenAt: 0 }],
 };
 
+const MAX_LINE_CONTENT_LEN = 500;
+
 export function makePolicyYaml(name: string, description = ""): string {
   return [
     'version: "1.2.0"',
@@ -166,7 +168,23 @@ export async function seedWorkbench(page: Page, options: SeedWorkbenchOptions): 
       };
 
       const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-      const isWordChar = (value: string) => /[\p{L}\p{N}_]/u.test(value);
+      const codeUnitIndexToCharIndex = (value: string, codeUnitIndex: number) =>
+        Array.from(value.slice(0, codeUnitIndex)).length;
+      const truncateSearchLine = (line: string) => {
+        const characters = Array.from(line);
+        if (characters.length <= MAX_LINE_CONTENT_LEN) {
+          return {
+            content: line,
+            charLength: characters.length,
+          };
+        }
+
+        return {
+          content: characters.slice(0, MAX_LINE_CONTENT_LEN).join(""),
+          charLength: MAX_LINE_CONTENT_LEN,
+        };
+      };
+      const isWordChar = (value: string) => /[\p{Alphabetic}\p{N}_]/u.test(value);
       const hasWholeWordBoundary = (line: string, start: number, end: number) => {
         const previousChar = Array.from(line.slice(0, start)).at(-1);
         const nextChar = Array.from(line.slice(end))[0];
@@ -221,14 +239,17 @@ export async function seedWorkbench(page: Page, options: SeedWorkbenchOptions): 
                 match = matcher.exec(line);
                 continue;
               }
+              const linePreview = truncateSearchLine(line);
+              const sourceMatchStart = codeUnitIndexToCharIndex(line, match.index);
+              const sourceMatchEnd = sourceMatchStart + Array.from(value).length;
               matches.push({
                 file_path: relativePathFor(rootPath, file.path),
                 line_number: index + 1,
-                line_content: line,
-                match_start: match.index,
-                match_end: match.index + value.length,
-                source_match_start: match.index,
-                source_match_end: match.index + value.length,
+                line_content: linePreview.content,
+                match_start: Math.min(linePreview.charLength, sourceMatchStart),
+                match_end: Math.min(linePreview.charLength, sourceMatchEnd),
+                source_match_start: sourceMatchStart,
+                source_match_end: sourceMatchEnd,
               });
 
               if (value.length === 0) {

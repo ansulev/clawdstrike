@@ -380,7 +380,9 @@ export class AgentRegistry {
 
         if (healthStatus.consecutiveMisses >= this.maxMissedHeartbeats) {
           healthStatus.healthy = false;
-          this.updateStatus(agentId, "failed");
+          if (session.status !== "failed") {
+            this.updateStatus(agentId, "failed");
+          }
         }
       }
     }

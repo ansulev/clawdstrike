@@ -181,6 +181,24 @@ describe("useEngineBoardBridge", () => {
     const baseAgent = engineState.agents.agt_pool_1;
     const originalWidth = window.innerWidth;
     const originalHeight = window.innerHeight;
+    const flowCanvas = document.createElement("div");
+
+    flowCanvas.className = "react-flow";
+    Object.defineProperty(flowCanvas, "getBoundingClientRect", {
+      configurable: true,
+      value: () => ({
+        x: 0,
+        y: 0,
+        top: 0,
+        left: 0,
+        right: 180,
+        bottom: 140,
+        width: 180,
+        height: 140,
+        toJSON: () => ({}),
+      }),
+    });
+    document.body.appendChild(flowCanvas);
 
     engineState.topology.nodes.push({
       ...engineState.topology.nodes[0],
@@ -273,6 +291,7 @@ describe("useEngineBoardBridge", () => {
         configurable: true,
         value: originalHeight,
       });
+      flowCanvas.remove();
     }
 
     const state = useSwarmBoardStore.getState();
@@ -295,10 +314,10 @@ describe("useEngineBoardBridge", () => {
     });
     expect(
       Math.max(...state.nodes.map((node) => node.position.x)),
-    ).toBeLessThanOrEqual(320);
+    ).toBeLessThanOrEqual(180);
     expect(
       Math.max(...state.nodes.map((node) => node.position.y)),
-    ).toBeLessThanOrEqual(240);
+    ).toBeLessThanOrEqual(140);
 
     unmount();
   });

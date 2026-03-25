@@ -41,6 +41,11 @@ export interface GossipConfig {
   convergenceThreshold?: number;
 }
 
+interface QueuedGossipMessage {
+  senderId: string;
+  message: GossipMessage;
+}
+
 export class GossipConsensus {
   private readonly events: TypedEventEmitter<SwarmEngineEventMap>;
   private readonly config: Required<GossipConfig>;
@@ -49,7 +54,7 @@ export class GossipConsensus {
   private readonly proposals: Map<string, ConsensusProposal> = new Map();
   private readonly proposalVotes: Map<string, Map<string, ConsensusVote>> =
     new Map();
-  private readonly messageQueue: GossipMessage[] = [];
+  private readonly messageQueue: QueuedGossipMessage[] = [];
   private gossipInterval: ReturnType<typeof setInterval> | null = null;
 
   constructor(
@@ -160,7 +165,8 @@ export class GossipConsensus {
       path: [this.node.id],
     };
 
-    this.queueMessage(message);
+    this.node.seenMessages.add(message.id);
+    this.queueMessage(this.node.id, message);
 
     this.events.emit("consensus.proposed", {
       kind: "consensus.proposed",
@@ -212,7 +218,8 @@ export class GossipConsensus {
       path: [this.node.id],
     };
 
-    this.queueMessage(message);
+    this.node.seenMessages.add(message.id);
+    this.queueMessage(this.node.id, message);
 
     this.events.emit("consensus.vote_cast", {
       kind: "consensus.vote_cast",
@@ -348,21 +355,31 @@ export class GossipConsensus {
       return;
     }
 
-    const fanout = Math.min(this.config.fanout, this.node.neighbors.size);
-    const neighbors = this.selectRandomNeighbors(fanout);
-    const messages = this.messageQueue.splice(0, 10);
+    const queuedMessages = this.messageQueue.splice(0, 10);
 
-    for (const message of messages) {
+    for (const { senderId, message } of queuedMessages) {
+      const sender = this.getNode(senderId);
+      if (!sender) {
+        continue;
+      }
+
+      const fanout = Math.min(this.config.fanout, sender.neighbors.size);
+      const neighbors = this.selectRandomNeighbors(sender.neighbors, fanout);
       for (const neighborId of neighbors) {
         this.sendToNeighbor(neighborId, message);
       }
+
+      sender.lastSync = Date.now();
     }
 
     this.node.lastSync = Date.now();
   }
 
-  private selectRandomNeighbors(count: number): string[] {
-    const neighbors = Array.from(this.node.neighbors);
+  private selectRandomNeighbors(
+    neighborSet: Set<string>,
+    count: number,
+  ): string[] {
+    const neighbors = Array.from(neighborSet);
     const selected: string[] = [];
 
     while (selected.length < count && neighbors.length > 0) {
@@ -420,8 +437,8 @@ export class GossipConsensus {
         ttl: message.ttl - 1,
       };
 
-      if (node.id === this.node.id) {
-        this.queueMessage(propagateMessage);
+      if (propagateMessage.ttl > 0) {
+        this.queueMessage(node.id, propagateMessage);
       }
     }
   }
@@ -488,11 +505,16 @@ export class GossipConsensus {
     }
   }
 
-  private queueMessage(message: GossipMessage): void {
-    if (!this.node.seenMessages.has(message.id)) {
-      this.node.seenMessages.add(message.id);
-      this.messageQueue.push(message);
+  private queueMessage(senderId: string, message: GossipMessage): void {
+    this.messageQueue.push({ senderId, message });
+  }
+
+  private getNode(nodeId: string): GossipNode | undefined {
+    if (nodeId === this.node.id) {
+      return this.node;
     }
+
+    return this.nodes.get(nodeId);
   }
 
   private checkConvergence(proposalId: string): void {

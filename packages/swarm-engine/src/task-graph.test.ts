@@ -591,6 +591,24 @@ describe("TaskGraph", () => {
       expect(events).toHaveLength(1);
       expect((events[0] as { error: string }).error).toContain("timeout");
     });
+
+    it("ignores stale timeout callbacks once a task has already completed", () => {
+      const agentId = registry.register(makeRegistration());
+      registry.spawn(agentId);
+      const task = graph.addTask(makeSubmission());
+      graph.queueTask(task.id);
+      graph.assignTask(task.id, agentId);
+      graph.startTask(task.id);
+      graph.completeTask(task.id, { ok: true });
+
+      const events: unknown[] = [];
+      emitter.on("task.failed", (e) => events.push(e));
+
+      graph.timeoutTask(task.id);
+
+      expect(graph.getTask(task.id)?.status).toBe("completed");
+      expect(events).toHaveLength(0);
+    });
   });
 
   // =========================================================================

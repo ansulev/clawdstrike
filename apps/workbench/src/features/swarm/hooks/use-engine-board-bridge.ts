@@ -235,6 +235,17 @@ function getLayoutViewport(): { width: number; height: number } {
     return DEFAULT_LAYOUT_VIEWPORT;
   }
 
+  const flowCanvas = document.querySelector(".react-flow");
+  if (flowCanvas) {
+    const rect = flowCanvas.getBoundingClientRect();
+    if (rect.width > 0 && rect.height > 0) {
+      return {
+        width: rect.width,
+        height: rect.height,
+      };
+    }
+  }
+
   const width = Math.max(
     window.innerWidth || 0,
     document.documentElement?.clientWidth || 0,

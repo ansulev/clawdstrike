@@ -615,6 +615,30 @@ describe("AgentRegistry", () => {
       reg.dispose();
     });
 
+    it("emits the failed transition only once after the threshold is crossed", () => {
+      const config: AgentRegistryConfig = {
+        healthCheckIntervalMs: 1000,
+        maxMissedHeartbeats: 2,
+      };
+      const reg = new AgentRegistry(events, config);
+      const id = reg.register(makeRegistration());
+      reg.spawn(id);
+
+      const statusChanges: Array<{ newStatus: string }> = [];
+      events.on("agent.status_changed", (e) =>
+        statusChanges.push({ newStatus: e.newStatus }),
+      );
+
+      reg.startHealthChecks();
+      vi.advanceTimersByTime(5000);
+
+      expect(
+        statusChanges.filter((event) => event.newStatus === "failed"),
+      ).toHaveLength(1);
+
+      reg.dispose();
+    });
+
     it("startHealthChecks is idempotent", () => {
       registry.startHealthChecks();
       registry.startHealthChecks(); // should not throw or create duplicate timers

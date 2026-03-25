@@ -354,6 +354,10 @@ export class TaskGraph {
   timeoutTask(taskId: string): void {
     const task = this.getTaskOrThrow(taskId);
 
+    if (task.status !== "running") {
+      return;
+    }
+
     if (task.assignedTo) {
       const session = this.agentRegistry.getAgentSession(task.assignedTo);
       if (session && session.currentTaskId === taskId) {

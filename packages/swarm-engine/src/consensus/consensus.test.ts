@@ -608,6 +608,39 @@ describe("GossipConsensus", () => {
     expect(gossip.getConvergence("nonexistent")).toBe(0);
   });
 
+  it("requeues received messages so multi-hop neighbors eventually see them", () => {
+    gossip = new GossipConsensus(events, "node-1", {
+      gossipIntervalMs: 50,
+      convergenceThreshold: 0.9,
+      fanout: 1,
+      maxHops: 5,
+    });
+    gossip.addNode("node-2");
+    gossip.addNode("node-3");
+
+    const localNode = (gossip as any).node as {
+      neighbors: Set<string>;
+    };
+    const nodes = (gossip as any).nodes as Map<string, {
+      neighbors: Set<string>;
+      seenMessages: Set<string>;
+    }>;
+
+    localNode.neighbors = new Set(["node-2"]);
+    nodes.get("node-2")!.neighbors = new Set(["node-3"]);
+    nodes.get("node-3")!.neighbors = new Set(["node-2"]);
+
+    const proposal = gossip.propose({ action: "spread" });
+    const messageId = `msg_${proposal.id}`;
+
+    (gossip as any).gossipRound();
+    expect(nodes.get("node-2")!.seenMessages.has(messageId)).toBe(true);
+    expect(nodes.get("node-3")!.seenMessages.has(messageId)).toBe(false);
+
+    (gossip as any).gossipRound();
+    expect(nodes.get("node-3")!.seenMessages.has(messageId)).toBe(true);
+  });
+
   it("dispose clears gossip interval", () => {
     gossip.initialize();
     gossip.dispose();

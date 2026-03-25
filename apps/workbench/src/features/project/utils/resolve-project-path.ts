@@ -29,13 +29,12 @@ export function resolveProjectPath(
   filePath: string,
 ): string {
   if (!rootPath || isAbsoluteProjectPath(filePath)) {
-    return filePath;
+    return normalizeProjectPath(filePath);
   }
 
-  const separator = rootPath.includes("\\") ? "\\" : "/";
-  const normalizedRoot = rootPath.replace(/[\\/]+$/, "");
-  const normalizedFile = filePath.replace(/^[/\\]+/, "").replace(/[\\/]+/g, separator);
-  return `${normalizedRoot}${separator}${normalizedFile}`;
+  const normalizedRoot = normalizeProjectPath(rootPath);
+  const normalizedFile = normalizeProjectPath(filePath).replace(/^\/+/, "");
+  return `${normalizedRoot}/${normalizedFile}`;
 }
 
 export function stripProjectRoot(

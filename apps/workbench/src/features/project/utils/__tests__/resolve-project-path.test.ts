@@ -54,10 +54,16 @@ describe("resolve-project-path", () => {
     ).toBe("rules/example.yml");
   });
 
-  it("resolves relative project paths against Windows roots", () => {
+  it("normalizes resolved Windows project paths to workspace-style separators", () => {
     expect(
       resolveProjectPath("C:\\repo", "rules/example.yml"),
-    ).toBe("C:\\repo\\rules\\example.yml");
+    ).toBe("C:/repo/rules/example.yml");
+  });
+
+  it("normalizes absolute Windows project paths to workspace-style separators", () => {
+    expect(
+      resolveProjectPath("workspace", "C:\\repo\\rules\\example.yml"),
+    ).toBe("C:/repo/rules/example.yml");
   });
 
   it("rejects rename basenames that include path traversal or separators", () => {

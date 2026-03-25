@@ -231,8 +231,20 @@ describe("EVENT_TO_CHANNEL", () => {
     expect(EVENT_TO_CHANNEL["hooks.completed"]).toBe("hooks");
   });
 
-  it("covers all 20 SwarmEngineEventMap keys", () => {
-    expect(Object.keys(EVENT_TO_CHANNEL)).toHaveLength(20);
+  it('maps "guard.evaluated" to "coordination"', () => {
+    expect(EVENT_TO_CHANNEL["guard.evaluated"]).toBe("coordination");
+  });
+
+  it('maps "action.denied" to "coordination"', () => {
+    expect(EVENT_TO_CHANNEL["action.denied"]).toBe("coordination");
+  });
+
+  it('maps "action.completed" to "coordination"', () => {
+    expect(EVENT_TO_CHANNEL["action.completed"]).toBe("coordination");
+  });
+
+  it("covers all 23 SwarmEngineEventMap keys", () => {
+    expect(Object.keys(EVENT_TO_CHANNEL)).toHaveLength(23);
   });
 });
 
@@ -308,12 +320,12 @@ describe("ProtocolBridge", () => {
   it("connect() subscribes to all mapped events", () => {
     const { emitter, bridge } = createBridge();
     bridge.connect();
-    // There should be 20 listeners (one per EVENT_TO_CHANNEL key)
+    // There should be 23 listeners (one per EVENT_TO_CHANNEL key)
     const totalListeners = Object.keys(EVENT_TO_CHANNEL).reduce(
       (sum, key) => sum + emitter.listenerCount(key as keyof SwarmEngineEventMap),
       0,
     );
-    expect(totalListeners).toBe(20);
+    expect(totalListeners).toBe(23);
     bridge.disconnect();
   });
 

@@ -18,6 +18,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [ ] **Phase 4: Consensus + Shared Memory** - Tree-shakeable opt-in subsystems: Raft/PBFT/Gossip consensus and HNSW/KnowledgeGraph/IndexedDB shared memory
 - [ ] **Phase 5: React Integration** - SwarmEngineProvider, engine-to-board bridge, topology-driven layout, convenience hooks, board extensions
 - [ ] **Phase 6: Validation + Tauri Transport** - Backward compatibility verification, TauriIpcTransport, all 745 existing tests pass
+- [ ] **Phase 7: Protocol + Tech Debt Cleanup** - Close audit gaps: add guard events to EVENT_TO_CHANNEL, public events accessor, test fixes, TauriIpcTransport type alignment
 
 ## Phase Details
 
@@ -123,10 +124,26 @@ Plans:
 - [ ] 06-01-PLAN.md — TauriIpcTransport implementing TransportAdapter via Tauri invoke/listen APIs with full test suite
 - [ ] 06-02-PLAN.md — Backward compatibility verification: store without engine, bridge hooks unchanged, action type preservation, detection workflow compat, full regression run
 
+### Phase 7: Protocol + Tech Debt Cleanup
+**Goal**: Guard pipeline events reach the transport layer for remote peer visibility, and all tech debt from the milestone audit is resolved
+**Depends on**: Phase 6
+**Requirements**: PROT-02, PROT-04
+**Gap Closure**: Closes gaps from v1.0 audit
+**Success Criteria** (what must be TRUE):
+  1. EVENT_TO_CHANNEL in protocol.ts includes guard.evaluated, action.denied, action.completed mapped to "coordination" channel
+  2. DenyNotification is relayed over transport when guard pipeline denies an action
+  3. SwarmOrchestrator exposes public getEvents() accessor (no more `(engine as any).events`)
+  4. events.test.ts exhaustive switch covers all 23 event kinds including 3 guard pipeline events
+  5. TauriIpcTransport accepts SwarmEngineEnvelope (11 channels), not just SwarmEnvelope (5 channels)
+**Plans**: 1 plan
+
+Plans:
+- [ ] 07-01-PLAN.md — Add guard events to EVENT_TO_CHANNEL, public getEvents() accessor, events.test.ts fix, bridge hook cleanup, TauriIpcTransport type alignment
+
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 > 2 > 3 > 4 > 5 > 6
+Phases execute in numeric order: 1 > 2 > 3 > 4 > 5 > 6 > 7
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -135,4 +152,5 @@ Phases execute in numeric order: 1 > 2 > 3 > 4 > 5 > 6
 | 3. Orchestrator + Protocol | 3/3 | Complete | - |
 | 4. Consensus + Shared Memory | 3/3 | Complete | - |
 | 5. React Integration | 4/4 | Complete | 2026-03-25 |
-| 6. Validation + Tauri Transport | 0/2 | Not started | - |
+| 6. Validation + Tauri Transport | 2/2 | Complete | 2026-03-25 |
+| 7. Protocol + Tech Debt Cleanup | 0/1 | Not started | - |

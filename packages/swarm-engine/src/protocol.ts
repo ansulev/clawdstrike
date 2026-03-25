@@ -99,6 +99,9 @@ export const EVENT_TO_CHANNEL: Record<string, SwarmEngineEnvelope["type"]> = {
   "memory.search": "memory",
   "hooks.triggered": "hooks",
   "hooks.completed": "hooks",
+  "guard.evaluated": "coordination",
+  "action.denied": "coordination",
+  "action.completed": "coordination",
 };
 
 // ============================================================================

@@ -398,6 +398,11 @@ export class SwarmOrchestrator {
     return this.id;
   }
 
+  /** Returns the shared event emitter for external subscriptions. */
+  getEvents(): TypedEventEmitter<SwarmEngineEventMap> {
+    return this.events;
+  }
+
   // =========================================================================
   // Private: Background Processes
   // =========================================================================

@@ -17,14 +17,24 @@ const DEFAULT_LAYOUT_VIEWPORT = { width: 1200, height: 800 };
 
 function mapEngineStatus(engineStatus: string): SessionStatus {
   switch (engineStatus) {
+    case "created":
+    case "queued":
+    case "assigned":
+      return "idle";
     case "running":
       return "running";
     case "idle":
       return "idle";
     case "busy":
       return "running";
+    case "paused":
+      return "blocked";
     case "terminated":
       return "completed";
+    case "cancelled":
+      return "completed";
+    case "timeout":
+      return "failed";
     case "offline":
       return "failed";
     case "completed":
@@ -290,7 +300,7 @@ export function useEngineBoardBridge(engine: SwarmOrchestrator | null): void {
           data: {
             nodeType: "terminalTask",
             title: event.task.type ?? event.task.name ?? "Task",
-            status: "running",
+            status: mapEngineStatus(event.task.status),
             taskId: event.task.id,
             agentId: event.task.assignedTo,
             engineManaged: true,
@@ -306,6 +316,21 @@ export function useEngineBoardBridge(engine: SwarmOrchestrator | null): void {
             type: "spawned",
           });
         }
+      }),
+    );
+
+    unsubs.push(
+      events.on("task.status_changed", (event: any) => {
+        const { nodes, actions } = store();
+
+        const taskNode = nodes.find(
+          (n: Node<SwarmBoardNodeData>) => n.data.taskId === event.taskId,
+        );
+        if (!taskNode) return;
+
+        actions.updateNode(taskNode.id, {
+          status: mapEngineStatus(event.newStatus),
+        });
       }),
     );
 
@@ -350,7 +375,9 @@ export function useEngineBoardBridge(engine: SwarmOrchestrator | null): void {
           const existingTimeout = timeouts.get(nodeId);
           if (existingTimeout != null) {
             clearTimeout(existingTimeout);
-          } else {
+          }
+
+          if (currentStatus !== "evaluating" || !restoreStatuses.has(nodeId)) {
             restoreStatuses.set(
               nodeId,
               currentStatus === "evaluating" ? "running" : currentStatus,

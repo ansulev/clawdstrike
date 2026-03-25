@@ -358,4 +358,127 @@ describe("useEngineBoardBridge", () => {
       vi.useRealTimers();
     }
   });
+
+  it("refreshes the restore status when guard evaluation re-triggers after a status change", () => {
+    vi.useFakeTimers();
+
+    const events = new TypedEventEmitter<SwarmEngineEventMap>();
+    const engine = {
+      getState: () => makeEngineState(),
+      getEvents: () => events,
+    };
+
+    const { unmount } = renderHook(() =>
+      useEngineBoardBridge(engine as any),
+    );
+
+    try {
+      act(() => {
+        events.emit("agent.status_changed", {
+          agentId: "agt_pool_1",
+          newStatus: "running",
+        } as any);
+      });
+
+      act(() => {
+        events.emit("guard.evaluated", {
+          action: { agentId: "agt_pool_1" },
+          result: {
+            verdict: "allow",
+            guardResults: [],
+            receipt: {
+              signature: "beef".repeat(32),
+              publicKey: "1234".repeat(16),
+            },
+          },
+        } as any);
+      });
+
+      act(() => {
+        events.emit("agent.status_changed", {
+          agentId: "agt_pool_1",
+          newStatus: "idle",
+        } as any);
+      });
+
+      act(() => {
+        events.emit("guard.evaluated", {
+          action: { agentId: "agt_pool_1" },
+          result: {
+            verdict: "allow",
+            guardResults: [],
+            receipt: {
+              signature: "cafe".repeat(32),
+              publicKey: "5678".repeat(16),
+            },
+          },
+        } as any);
+      });
+
+      act(() => {
+        vi.advanceTimersByTime(2000);
+      });
+
+      expect(
+        useSwarmBoardStore.getState().nodes.find((node) => node.id === "agt_pool_1")?.data.status,
+      ).toBe("idle");
+    } finally {
+      unmount();
+      vi.useRealTimers();
+    }
+  });
+
+  it("maps created tasks from engine status updates instead of forcing them to running", () => {
+    const events = new TypedEventEmitter<SwarmEngineEventMap>();
+    const engine = {
+      getState: () => makeEngineState(),
+      getEvents: () => events,
+    };
+
+    const { unmount } = renderHook(() =>
+      useEngineBoardBridge(engine as any),
+    );
+
+    try {
+      act(() => {
+        events.emit("task.created", {
+          task: {
+            id: "tsk_1",
+            name: "Queue scan",
+            type: "analysis",
+            status: "created",
+            assignedTo: null,
+          },
+        } as any);
+      });
+
+      expect(
+        useSwarmBoardStore.getState().nodes.find((node) => node.data.taskId === "tsk_1")?.data.status,
+      ).toBe("idle");
+
+      act(() => {
+        events.emit("task.status_changed", {
+          taskId: "tsk_1",
+          newStatus: "paused",
+        } as any);
+      });
+
+      expect(
+        useSwarmBoardStore.getState().nodes.find((node) => node.data.taskId === "tsk_1")?.data.status,
+      ).toBe("blocked");
+
+      act(() => {
+        events.emit("task.status_changed", {
+          taskId: "tsk_1",
+          newStatus: "cancelled",
+        } as any);
+      });
+
+      expect(
+        useSwarmBoardStore.getState().nodes.find((node) => node.data.taskId === "tsk_1")?.data.status,
+      ).toBe("completed");
+    } finally {
+      unmount();
+    }
+  });
 });

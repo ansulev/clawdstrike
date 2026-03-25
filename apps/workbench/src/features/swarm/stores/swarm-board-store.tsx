@@ -932,7 +932,7 @@ export interface SpawnWorktreeSessionOptions {
   shell?: string;
 }
 
-interface SwarmBoardSessionContextValue {
+export interface SwarmBoardSessionContextValue {
   spawnSession: (opts: SpawnSessionOptions) => Promise<Node<SwarmBoardNodeData>>;
   spawnClaudeSession: (opts: SpawnClaudeSessionOptions) => Promise<Node<SwarmBoardNodeData>>;
   spawnWorktreeSession: (opts: SpawnWorktreeSessionOptions) => Promise<Node<SwarmBoardNodeData>>;
@@ -940,6 +940,17 @@ interface SwarmBoardSessionContextValue {
 }
 
 const SwarmBoardSessionContext = createContext<SwarmBoardSessionContextValue | null>(null);
+
+const NOOP_SESSION_METHODS: SwarmBoardSessionContextValue = {
+  spawnSession: () =>
+    Promise.reject(new Error("useSwarmBoard must be used within SwarmBoardProvider for session management")),
+  spawnClaudeSession: () =>
+    Promise.reject(new Error("useSwarmBoard must be used within SwarmBoardProvider for session management")),
+  spawnWorktreeSession: () =>
+    Promise.reject(new Error("useSwarmBoard must be used within SwarmBoardProvider for session management")),
+  killSession: () =>
+    Promise.reject(new Error("useSwarmBoard must be used within SwarmBoardProvider for session management")),
+};
 
 interface SwarmBoardContextValue {
   state: SwarmBoardState;
@@ -1034,25 +1045,8 @@ export function useSwarmBoard(): SwarmBoardContextValue {
   const rfEdges = useSwarmBoardStore((s) => s.rfEdges);
   const actions = useSwarmBoardStore((s) => s.actions);
 
-  const sessionCtx = useContext(SwarmBoardSessionContext);
-
   const dispatch = useMemo(() => createDispatchShim(), []);
-
-  const noopSession = useMemo(
-    () => ({
-      spawnSession: () =>
-        Promise.reject(new Error("useSwarmBoard must be used within SwarmBoardProvider for session management")),
-      spawnClaudeSession: () =>
-        Promise.reject(new Error("useSwarmBoard must be used within SwarmBoardProvider for session management")),
-      spawnWorktreeSession: () =>
-        Promise.reject(new Error("useSwarmBoard must be used within SwarmBoardProvider for session management")),
-      killSession: () =>
-        Promise.reject(new Error("useSwarmBoard must be used within SwarmBoardProvider for session management")),
-    }),
-    [],
-  );
-
-  const sessionMethods = sessionCtx ?? noopSession;
+  const sessionMethods = useSwarmBoardSession();
 
   return useMemo(
     () => ({
@@ -1071,6 +1065,10 @@ export function useSwarmBoard(): SwarmBoardContextValue {
     }),
     [state, dispatch, actions, selectedNode, rfEdges, sessionMethods],
   );
+}
+
+export function useSwarmBoardSession(): SwarmBoardSessionContextValue {
+  return useContext(SwarmBoardSessionContext) ?? NOOP_SESSION_METHODS;
 }
 
 export function SwarmBoardProvider({ children, bundlePath }: { children: ReactNode; bundlePath?: string }) {

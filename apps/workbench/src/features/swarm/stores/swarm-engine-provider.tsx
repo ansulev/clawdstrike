@@ -236,6 +236,7 @@ export function SwarmEngineProvider({
     }
 
     let cancelled = false;
+    let orchestrator: SwarmOrchestrator | null = null;
 
     try {
       const events = new TypedEventEmitter<SwarmEngineEventMap>();
@@ -243,7 +244,7 @@ export function SwarmEngineProvider({
       const taskGraph = new TaskGraph(events, registry);
       const topologyMgr = new TopologyManager(events);
 
-      const orchestrator = new SwarmOrchestrator(
+      orchestrator = new SwarmOrchestrator(
         events,
         registry,
         taskGraph,
@@ -254,6 +255,7 @@ export function SwarmEngineProvider({
 
       if (cancelled) {
         orchestrator.shutdown();
+        orchestrator = null;
         return;
       }
 
@@ -271,6 +273,8 @@ export function SwarmEngineProvider({
         spawnEngineWorktreeSession: manualSpawnEngineWorktreeSession,
       });
     } catch (err) {
+      orchestrator?.shutdown();
+      orchestrator = null;
       if (cancelled) return;
       const message = err instanceof Error ? err.message : String(err);
       console.warn(
@@ -294,10 +298,10 @@ export function SwarmEngineProvider({
 
     return () => {
       cancelled = true;
-      if (engineRef.current) {
-        engineRef.current.shutdown();
-        engineRef.current = null;
-      }
+      const activeEngine = engineRef.current ?? orchestrator;
+      activeEngine?.shutdown();
+      engineRef.current = null;
+      orchestrator = null;
     };
   }, [enabled]);
 

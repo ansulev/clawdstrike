@@ -79,9 +79,17 @@ function meshLayout(
   viewport: { width: number; height: number },
 ): LayoutResult {
   const { width, height } = viewport;
+  const originNodeCount = nodes.filter(
+    (node) => node.position.x === 0 && node.position.y === 0,
+  ).length;
 
   const simNodes: SimNode[] = nodes.map((n, i) => {
-    const hasPosition = n.position.x !== 0 || n.position.y !== 0;
+    // Preserve a single node intentionally placed at the origin; treat
+    // duplicated (0, 0) positions as "unset" seeds that need spreading.
+    const hasPosition =
+      n.position.x !== 0 ||
+      n.position.y !== 0 ||
+      originNodeCount === 1;
     return {
       id: n.id,
       x: hasPosition ? n.position.x : (width / (nodes.length + 1)) * (i + 1),

@@ -2,27 +2,58 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { renderHook } from "@testing-library/react";
 import { useTerminalSessions } from "../use-terminal-sessions";
 
-const mockSpawnSession = vi.fn();
-const mockSpawnClaudeSession = vi.fn();
-const mockSpawnWorktreeSession = vi.fn();
-const mockKillSession = vi.fn();
-const mockRemoveNode = vi.fn();
-const mockSpawnEngineSession = vi.fn();
-const mockSpawnEngineClaudeSession = vi.fn();
-const mockSpawnEngineWorktreeSession = vi.fn();
+const {
+  mockSpawnSession,
+  mockSpawnClaudeSession,
+  mockSpawnWorktreeSession,
+  mockKillSession,
+  mockRemoveNode,
+  mockSpawnEngineSession,
+  mockSpawnEngineClaudeSession,
+  mockSpawnEngineWorktreeSession,
+  mockUseSwarmBoardStore,
+} = vi.hoisted(() => {
+  const mockSpawnSession = vi.fn();
+  const mockSpawnClaudeSession = vi.fn();
+  const mockSpawnWorktreeSession = vi.fn();
+  const mockKillSession = vi.fn();
+  const mockRemoveNode = vi.fn();
+  const mockSpawnEngineSession = vi.fn();
+  const mockSpawnEngineClaudeSession = vi.fn();
+  const mockSpawnEngineWorktreeSession = vi.fn();
+
+  const mockUseSwarmBoardStore = Object.assign(
+    (selector: (state: { actions: { removeNode: typeof mockRemoveNode } }) => unknown) =>
+      selector({ actions: { removeNode: mockRemoveNode } }),
+    {
+      use: {
+        repoRoot: () => "/repo",
+        nodes: () => [],
+      },
+    },
+  );
+
+  return {
+    mockSpawnSession,
+    mockSpawnClaudeSession,
+    mockSpawnWorktreeSession,
+    mockKillSession,
+    mockRemoveNode,
+    mockSpawnEngineSession,
+    mockSpawnEngineClaudeSession,
+    mockSpawnEngineWorktreeSession,
+    mockUseSwarmBoardStore,
+  };
+});
 
 vi.mock("../swarm-board-store", () => ({
   MAX_ACTIVE_TERMINALS: 8,
-  useSwarmBoard: () => ({
-    state: {
-      repoRoot: "/repo",
-      nodes: [],
-    },
+  useSwarmBoardStore: mockUseSwarmBoardStore,
+  useSwarmBoardSession: () => ({
     spawnSession: mockSpawnSession,
     spawnClaudeSession: mockSpawnClaudeSession,
     spawnWorktreeSession: mockSpawnWorktreeSession,
     killSession: mockKillSession,
-    removeNode: mockRemoveNode,
   }),
 }));
 

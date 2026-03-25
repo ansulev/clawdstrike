@@ -102,11 +102,11 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Backward Compatibility
 
-- [ ] **BKWD-01**: All ~745 existing test cases pass without modification
-- [ ] **BKWD-02**: SwarmBoard without SwarmEngineProvider works exactly as before
-- [ ] **BKWD-03**: Existing bridge hooks (coordinator, policy-eval, receipt-flow, trust-graph) unchanged
-- [ ] **BKWD-04**: SwarmBoardAction type extended (not modified) — existing action types preserved
-- [ ] **BKWD-05**: Detection workflow (use-swarm-launch.ts) unaffected — _dispatchSwarmNodes still works
+- [x] **BKWD-01**: All ~745 existing test cases pass without modification
+- [x] **BKWD-02**: SwarmBoard without SwarmEngineProvider works exactly as before
+- [x] **BKWD-03**: Existing bridge hooks (coordinator, policy-eval, receipt-flow, trust-graph) unchanged
+- [x] **BKWD-04**: SwarmBoardAction type extended (not modified) — existing action types preserved
+- [x] **BKWD-05**: Detection workflow (use-swarm-launch.ts) unaffected — _dispatchSwarmNodes still works
 
 ## v2 Requirements
 
@@ -206,11 +206,11 @@ Deferred to future release. Tracked but not in current roadmap.
 | INTG-08 | Phase 5 | Complete |
 | INTG-09 | Phase 5 | Complete |
 | TRNS-01 | Phase 6 | Complete |
-| BKWD-01 | Phase 6 | Pending |
-| BKWD-02 | Phase 6 | Pending |
-| BKWD-03 | Phase 6 | Pending |
-| BKWD-04 | Phase 6 | Pending |
-| BKWD-05 | Phase 6 | Pending |
+| BKWD-01 | Phase 6 | Complete |
+| BKWD-02 | Phase 6 | Complete |
+| BKWD-03 | Phase 6 | Complete |
+| BKWD-04 | Phase 6 | Complete |
+| BKWD-05 | Phase 6 | Complete |
 
 **Coverage:**
 - v1 requirements: 65 total

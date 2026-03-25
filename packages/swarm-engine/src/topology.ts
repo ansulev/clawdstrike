@@ -234,6 +234,7 @@ export class TopologyManager {
     if (updates.connections !== undefined) {
       node.connections = updates.connections;
       this.adjacencyList.set(agentId, new Set(updates.connections));
+      this.rebuildEdgesFromConnections();
     }
     if (updates.metadata !== undefined) {
       node.metadata = { ...node.metadata, ...updates.metadata };
@@ -332,6 +333,8 @@ export class TopologyManager {
         // Should not happen since resolveEffectiveType never returns "adaptive"
         break;
     }
+
+    this.rebuildEdgesFromConnections();
 
     this.events.emit("topology.rebalanced", {
       kind: "topology.rebalanced",
@@ -701,15 +704,6 @@ export class TopologyManager {
         target.connections.push(node.agentId);
         this.adjacencyList.get(target.agentId)?.add(node.agentId);
 
-        // Keep edges in sync so getState().edges reflects the new connection
-        this.state.edges.push({
-          from: node.agentId,
-          to: target.agentId,
-          weight: 1,
-          bidirectional: true,
-          latencyMs: null,
-          edgeType: "topology",
-        });
       }
     }
   }
@@ -829,6 +823,38 @@ export class TopologyManager {
         }
       }
     }
+  }
+
+  private rebuildEdgesFromConnections(): void {
+    const edges: TopologyEdge[] = [];
+    const bidirectionalPairs = new Set<string>();
+
+    for (const node of this.state.nodes) {
+      for (const connectionId of new Set(node.connections)) {
+        const reverseConnected =
+          this.nodeIndex.get(connectionId)?.connections.includes(node.agentId) ??
+          false;
+
+        if (reverseConnected) {
+          const pairKey = [node.agentId, connectionId].sort().join("::");
+          if (bidirectionalPairs.has(pairKey)) {
+            continue;
+          }
+          bidirectionalPairs.add(pairKey);
+        }
+
+        edges.push({
+          from: node.agentId,
+          to: connectionId,
+          weight: 1,
+          bidirectional: reverseConnected,
+          latencyMs: null,
+          edgeType: "topology",
+        });
+      }
+    }
+
+    this.state.edges = edges;
   }
 
   // ==========================================================================

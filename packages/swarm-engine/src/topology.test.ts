@@ -410,6 +410,33 @@ describe("TopologyManager - rebalance", () => {
       expect(node.connections.length).toBeGreaterThan(0);
     }
   });
+
+  it("rebuilds emitted topology edges after hierarchical rebalance", () => {
+    const { manager, events } = makeManager({ type: "hierarchical", autoRebalance: false });
+    const handler = vi.fn();
+    events.on("topology.rebalanced", handler);
+
+    manager.addNode("queen", "worker");
+    manager.addNode("worker", "worker");
+
+    manager.updateNode("queen", { connections: [] });
+    manager.updateNode("worker", { connections: [] });
+
+    manager.rebalance();
+
+    expect(handler).toHaveBeenCalledOnce();
+    const event = handler.mock.calls[0]![0];
+    expect(event.topology.edges).toEqual([
+      {
+        from: "queen",
+        to: "worker",
+        weight: 1,
+        bidirectional: true,
+        latencyMs: null,
+        edgeType: "topology",
+      },
+    ]);
+  });
 });
 
 // ============================================================================

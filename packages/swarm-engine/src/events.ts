@@ -34,7 +34,7 @@ import type {
  * Type-safe event emitter wrapping the browser-native EventTarget.
  *
  * Design choices (see PITFALLS.md):
- * - Per-event listener tracking via Map<string, Map<handler, EventListener>> (Pitfall 1 prevention)
+ * - Per-event listener tracking via per-registration arrays (Pitfall 1 prevention)
  * - structuredClone(detail) per listener for cross-listener isolation (Pitfall 2 prevention)
  * - dispose() removes ALL listeners across ALL event names
  * - listenerCount(event) returns accurate count after add/remove
@@ -43,7 +43,7 @@ export class TypedEventEmitter<Events extends Record<string, unknown>> {
   private target = new EventTarget();
   private listeners = new Map<
     string,
-    Map<(data: any) => void, EventListener>
+    Array<{ handler: (data: any) => void; listener: EventListener }>
   >();
 
   /**
@@ -59,14 +59,29 @@ export class TypedEventEmitter<Events extends Record<string, unknown>> {
     this.target.addEventListener(event, listener);
 
     if (!this.listeners.has(event)) {
-      this.listeners.set(event, new Map());
+      this.listeners.set(event, []);
     }
-    this.listeners.get(event)!.set(handler, listener);
+    this.listeners.get(event)!.push({ handler, listener });
 
     // Return cleanup function
     return () => {
       this.target.removeEventListener(event, listener);
-      this.listeners.get(event)?.delete(handler);
+      const registrations = this.listeners.get(event);
+      if (!registrations) {
+        return;
+      }
+
+      const registrationIndex = registrations.findIndex(
+        (registration) =>
+          registration.handler === handler &&
+          registration.listener === listener,
+      );
+      if (registrationIndex !== -1) {
+        registrations.splice(registrationIndex, 1);
+      }
+      if (registrations.length === 0) {
+        this.listeners.delete(event);
+      }
     };
   }
 
@@ -85,7 +100,7 @@ export class TypedEventEmitter<Events extends Record<string, unknown>> {
    * Returns the number of listeners registered for the given event.
    */
   listenerCount<K extends keyof Events & string>(event: K): number {
-    return this.listeners.get(event)?.size ?? 0;
+    return this.listeners.get(event)?.length ?? 0;
   }
 
   /**
@@ -94,19 +109,18 @@ export class TypedEventEmitter<Events extends Record<string, unknown>> {
    */
   removeAllListeners<K extends keyof Events & string>(event?: K): void {
     if (event) {
-      const map = this.listeners.get(event);
-      if (map) {
-        for (const listener of map.values()) {
+      const registrations = this.listeners.get(event);
+      if (registrations) {
+        for (const { listener } of registrations) {
           this.target.removeEventListener(event, listener);
         }
-        map.clear();
+        this.listeners.delete(event);
       }
     } else {
-      for (const [name, map] of this.listeners) {
-        for (const listener of map.values()) {
+      for (const [name, registrations] of this.listeners) {
+        for (const { listener } of registrations) {
           this.target.removeEventListener(name, listener);
         }
-        map.clear();
       }
       this.listeners.clear();
     }

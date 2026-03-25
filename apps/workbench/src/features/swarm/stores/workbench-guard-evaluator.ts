@@ -70,6 +70,12 @@ function buildScenarioPayload(action: GuardedAction): Record<string, unknown> {
       return {
         text: prompt ?? command ?? action.target,
       };
+    default:
+      return {
+        actionType: action.actionType,
+        target: action.target,
+        ...action.context,
+      };
   }
 }
 

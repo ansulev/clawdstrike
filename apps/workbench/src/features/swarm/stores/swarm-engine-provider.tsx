@@ -372,55 +372,58 @@ export function SwarmEngineProvider({
     );
   }, []);
 
-  async function runGuardedSpawn<Opts extends PositionedSpawnOptions>(
-    kind: "terminal" | "claude" | "worktree",
-    spawnFn: (opts: Opts) => Promise<Node<SwarmBoardNodeData>>,
-    opts: Opts,
-  ): Promise<Node<SwarmBoardNodeData>> {
-    const engine = engineRef.current;
-    if (!engine) {
-      return spawnFn(opts);
-    }
+  const runGuardedSpawn = useCallback(
+    async function <Opts extends PositionedSpawnOptions>(
+      kind: "terminal" | "claude" | "worktree",
+      spawnFn: (opts: Opts) => Promise<Node<SwarmBoardNodeData>>,
+      opts: Opts,
+    ): Promise<Node<SwarmBoardNodeData>> {
+      const engine = engineRef.current;
+      if (!engine) {
+        return spawnFn(opts);
+      }
 
-    let result: Awaited<ReturnType<SwarmOrchestrator["evaluateGuard"]>>;
-    try {
-      result = await engine.evaluateGuard(buildSpawnGuardAction(kind, opts));
-    } catch (guardErr) {
-      const message =
-        guardErr instanceof Error ? guardErr.message : String(guardErr);
-      console.warn(
-        "[SwarmEngineProvider] Guard evaluation failed; denying spawn:",
-        message,
-      );
+      let result: Awaited<ReturnType<SwarmOrchestrator["evaluateGuard"]>>;
+      try {
+        result = await engine.evaluateGuard(buildSpawnGuardAction(kind, opts));
+      } catch (guardErr) {
+        const message =
+          guardErr instanceof Error ? guardErr.message : String(guardErr);
+        console.warn(
+          "[SwarmEngineProvider] Guard evaluation failed; denying spawn:",
+          message,
+        );
 
-      return receiptNodeFromGuardResult(
-        opts,
-        "deny",
-        [{ guard: "engine_error", allowed: false }],
-        undefined,
-        undefined,
-        message,
-      );
-    }
+        return receiptNodeFromGuardResult(
+          opts,
+          "deny",
+          [{ guard: "engine_error", allowed: false }],
+          undefined,
+          undefined,
+          message,
+        );
+      }
 
-    if (!result.allowed) {
-      return receiptNodeFromGuardResult(
-        opts,
-        result.verdict,
-        result.guardResults.map((guardResult) => ({
-          guard: guardResult.guardId,
-          allowed: guardResult.verdict !== "deny",
-          duration_ms: guardResult.duration_ms,
-        })),
-        result.receipt.signature,
-        result.receipt.publicKey,
-      );
-    }
+      if (!result.allowed) {
+        return receiptNodeFromGuardResult(
+          opts,
+          result.verdict,
+          result.guardResults.map((guardResult) => ({
+            guard: guardResult.guardId,
+            allowed: guardResult.verdict !== "deny",
+            duration_ms: guardResult.duration_ms,
+          })),
+          result.receipt.signature,
+          result.receipt.publicKey,
+        );
+      }
 
-    const node = await spawnFn(opts);
-    finalizeAllowedSpawn(node.id, result);
-    return node;
-  }
+      const node = await spawnFn(opts);
+      finalizeAllowedSpawn(node.id, result);
+      return node;
+    },
+    [finalizeAllowedSpawn],
+  );
 
   const spawnEngineSession = useCallback(
     async (
@@ -428,7 +431,7 @@ export function SwarmEngineProvider({
       opts: SpawnSessionOptions,
     ): Promise<Node<SwarmBoardNodeData>> =>
       runGuardedSpawn("terminal", spawnFn, opts),
-    [finalizeAllowedSpawn],
+    [runGuardedSpawn],
   );
 
   const spawnEngineClaudeSession = useCallback(
@@ -437,7 +440,7 @@ export function SwarmEngineProvider({
       opts: SpawnClaudeSessionOptions,
     ): Promise<Node<SwarmBoardNodeData>> =>
       runGuardedSpawn("claude", spawnFn, opts),
-    [finalizeAllowedSpawn],
+    [runGuardedSpawn],
   );
 
   const spawnEngineWorktreeSession = useCallback(
@@ -446,7 +449,7 @@ export function SwarmEngineProvider({
       opts: SpawnWorktreeSessionOptions,
     ): Promise<Node<SwarmBoardNodeData>> =>
       runGuardedSpawn("worktree", spawnFn, opts),
-    [finalizeAllowedSpawn],
+    [runGuardedSpawn],
   );
 
   // Merge engine spawn wrappers into the context value when they change

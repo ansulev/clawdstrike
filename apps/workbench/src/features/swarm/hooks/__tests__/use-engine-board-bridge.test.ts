@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { renderHook, cleanup } from "@testing-library/react";
+import { renderHook, cleanup, act } from "@testing-library/react";
 import { TypedEventEmitter } from "@clawdstrike/swarm-engine";
 import type {
   SwarmEngineEventMap,
@@ -171,6 +171,90 @@ describe("useEngineBoardBridge", () => {
     expect(agentNode).toBeDefined();
     expect(agentNode?.data.engineManaged).toBe(true);
     expect(agentNode?.position).toEqual({ x: 240, y: 120 });
+
+    unmount();
+  });
+
+  it("replaces topology edges from the latest topology event and preserves non-topology edges", () => {
+    const events = new TypedEventEmitter<SwarmEngineEventMap>();
+    const engineState = makeEngineState();
+    const baseAgent = engineState.agents.agt_pool_1;
+
+    engineState.topology.nodes.push({
+      ...engineState.topology.nodes[0],
+      id: "agt_pool_2",
+      agentId: "agt_pool_2",
+      positionX: 480,
+      positionY: 120,
+    });
+    engineState.topology.edges = [{
+      from: "agt_pool_1",
+      to: "agt_pool_2",
+      weight: 1,
+      bidirectional: false,
+      latencyMs: null,
+      edgeType: "topology",
+    }];
+    engineState.agents.agt_pool_2 = {
+      ...baseAgent,
+      id: "agt_pool_2",
+      name: "Pool Agent agt_pool_2",
+      metrics: { ...baseAgent.metrics },
+      filesTouched: [...baseAgent.filesTouched],
+    };
+    engineState.metrics.activeAgents = 2;
+
+    const engine = {
+      getState: () => engineState,
+      getEvents: () => events,
+    };
+
+    const { unmount } = renderHook(() =>
+      useEngineBoardBridge(engine as any),
+    );
+
+    act(() => {
+      useSwarmBoardStore.getState().actions.addEdge({
+        id: "edge-spawn-keep",
+        source: "agt_pool_1",
+        target: "agt_pool_2",
+        type: "spawned",
+      });
+    });
+
+    act(() => {
+      events.emit("topology.updated", {
+        newTopology: {
+          type: "mesh",
+          edges: [{
+            from: "agt_pool_2",
+            to: "agt_pool_1",
+            weight: 1,
+            bidirectional: false,
+            latencyMs: null,
+            edgeType: "topology",
+          }],
+        },
+      } as any);
+    });
+
+    const state = useSwarmBoardStore.getState();
+    const topologyEdges = state.edges.filter((edge) => edge.type === "topology");
+
+    expect(topologyEdges).toEqual([
+      {
+        id: "edge-topo-agt_pool_2-agt_pool_1",
+        source: "agt_pool_2",
+        target: "agt_pool_1",
+        type: "topology",
+      },
+    ]);
+    expect(state.edges).toContainEqual({
+      id: "edge-spawn-keep",
+      source: "agt_pool_1",
+      target: "agt_pool_2",
+      type: "spawned",
+    });
 
     unmount();
   });

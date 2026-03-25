@@ -18,7 +18,11 @@
 import { useEffect, useRef } from "react";
 import type { SwarmOrchestrator } from "@clawdstrike/swarm-engine";
 import { useSwarmBoardStore } from "@/features/swarm/stores/swarm-board-store";
-import type { SwarmBoardNodeData, SessionStatus } from "@/features/swarm/swarm-board-types";
+import type {
+  SwarmBoardEdge,
+  SwarmBoardNodeData,
+  SessionStatus,
+} from "@/features/swarm/swarm-board-types";
 import type { Node } from "@xyflow/react";
 import { computeLayout } from "@/features/swarm/layout/topology-layout";
 
@@ -168,6 +172,37 @@ function seedBoardFromEngineSnapshot(engine: SwarmOrchestrator): void {
     [...agentNodes, ...taskNodes],
     [...taskEdges, ...topologyEdges],
   );
+}
+
+function buildTopologyEdges(
+  nodes: Node<SwarmBoardNodeData>[],
+  topologyEdges: Array<{ from: string; to: string }> | undefined,
+): SwarmBoardEdge[] {
+  if (!topologyEdges?.length) {
+    return [];
+  }
+
+  return topologyEdges.flatMap((topologyEdge) => {
+    const fromNode = nodes.find(
+      (node) =>
+        node.data.agentId === topologyEdge.from || node.id === topologyEdge.from,
+    );
+    const toNode = nodes.find(
+      (node) =>
+        node.data.agentId === topologyEdge.to || node.id === topologyEdge.to,
+    );
+
+    if (!fromNode || !toNode) {
+      return [];
+    }
+
+    return [{
+      id: `edge-topo-${topologyEdge.from}-${topologyEdge.to}`,
+      source: fromNode.id,
+      target: toNode.id,
+      type: "topology",
+    }];
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -426,43 +461,22 @@ export function useEngineBoardBridge(engine: SwarmOrchestrator | null): void {
     function handleTopologyEvent(topologyState: { type?: string; edges?: Array<{ from: string; to: string }> } | undefined): void {
       const { nodes, edges, actions } = store();
       const topoType = (topologyState?.type ?? "mesh") as Parameters<typeof computeLayout>[2];
+      const currentNodes = nodes as Node<SwarmBoardNodeData>[];
+      const nextTopologyEdges = buildTopologyEdges(currentNodes, topologyState?.edges);
+      const nextEdges = [
+        ...edges.filter((edge) => edge.type !== "topology"),
+        ...nextTopologyEdges,
+      ];
 
       const result = computeLayout(
-        nodes as Node<SwarmBoardNodeData>[],
-        edges,
+        currentNodes,
+        nextEdges,
         topoType,
         { width: 1200, height: 800 },
       );
 
+      actions.setEdges(nextEdges);
       actions.topologyLayout(topoType, result.positions);
-
-      // Reconcile topology edges: remove stale ones, add new ones
-      // First, remove all existing topology edges
-      const nonTopoEdges = edges.filter((e) => e.type !== "topology");
-      actions.setEdges(nonTopoEdges);
-
-      // Then add the current topology edges
-      if (topologyState?.edges) {
-        for (const topoEdge of topologyState.edges) {
-          // Map topology node IDs to board node IDs via agentId matching
-          const fromNode = nodes.find(
-            (n: Node<SwarmBoardNodeData>) =>
-              n.data.agentId === topoEdge.from || n.id === topoEdge.from,
-          );
-          const toNode = nodes.find(
-            (n: Node<SwarmBoardNodeData>) =>
-              n.data.agentId === topoEdge.to || n.id === topoEdge.to,
-          );
-          if (fromNode && toNode) {
-            actions.addEdge({
-              id: `edge-topo-${topoEdge.from}-${topoEdge.to}`,
-              source: fromNode.id,
-              target: toNode.id,
-              type: "topology",
-            });
-          }
-        }
-      }
     }
 
     // 9. topology.updated (INTG-02)

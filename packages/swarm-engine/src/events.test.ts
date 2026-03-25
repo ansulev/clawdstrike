@@ -256,6 +256,26 @@ describe("TypedEventEmitter", () => {
       expect(handler2).toHaveBeenCalledOnce();
       expect(handler2).toHaveBeenCalledWith({ value: 99 });
     });
+
+    it("tracks duplicate registrations of the same handler independently", () => {
+      const emitter = new TypedEventEmitter<TestEvents>();
+      const handler = vi.fn();
+
+      const cleanup1 = emitter.on("ping", handler);
+      const cleanup2 = emitter.on("ping", handler);
+
+      expect(emitter.listenerCount("ping")).toBe(2);
+
+      cleanup1();
+      emitter.emit("ping", { value: 99 });
+
+      expect(handler).toHaveBeenCalledOnce();
+      expect(handler).toHaveBeenCalledWith({ value: 99 });
+      expect(emitter.listenerCount("ping")).toBe(1);
+
+      cleanup2();
+      expect(emitter.listenerCount("ping")).toBe(0);
+    });
   });
 
   describe("cross-listener isolation", () => {

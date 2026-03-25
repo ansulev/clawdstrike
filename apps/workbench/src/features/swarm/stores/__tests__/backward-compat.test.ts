@@ -285,7 +285,7 @@ describe("Engine actions are additive, not breaking", () => {
     expect(state.nodes[0].position).toEqual({ x: 100, y: 100 });
   });
 
-  it("engineSync with empty arrays leaves existing nodes untouched", () => {
+  it("engineSync with empty arrays preserves non-engine nodes and prunes orphaned edges", () => {
     const { actions } = useSwarmBoardStore.getState();
     const node = actions.addNode({
       nodeType: "agentSession",
@@ -300,7 +300,7 @@ describe("Engine actions are additive, not breaking", () => {
     expect(state.nodes).toHaveLength(1);
     expect(state.nodes[0].id).toBe(node.id);
     expect(state.nodes[0].data.title).toBe("Existing Agent");
-    expect(state.edges).toHaveLength(1);
+    expect(state.edges).toHaveLength(0);
   });
 
   it("engineSync replaces existing engine edge definitions by ID", () => {
@@ -312,12 +312,37 @@ describe("Engine actions are additive, not breaking", () => {
       type: "spawned",
     });
 
-    actions.engineSync([], [{
-      id: "edge-spawn-tsk_1",
-      source: "agt_new",
-      target: "tsk_1",
-      type: "spawned",
-    }]);
+    actions.engineSync(
+      [
+        {
+          id: "agt_new",
+          agentId: "agt_new",
+          data: {
+            nodeType: "agentSession",
+            title: "Engine Agent",
+            status: "idle",
+          },
+          position: { x: 100, y: 100 },
+        },
+        {
+          id: "tsk_1",
+          taskId: "tsk_1",
+          agentId: "agt_new",
+          data: {
+            nodeType: "terminalTask",
+            title: "Engine Task",
+            status: "idle",
+          },
+          position: { x: 100, y: 220 },
+        },
+      ],
+      [{
+        id: "edge-spawn-tsk_1",
+        source: "agt_new",
+        target: "tsk_1",
+        type: "spawned",
+      }],
+    );
 
     const state = useSwarmBoardStore.getState();
     expect(state.edges).toHaveLength(1);

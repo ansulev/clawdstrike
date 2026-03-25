@@ -179,6 +179,8 @@ describe("useEngineBoardBridge", () => {
     const events = new TypedEventEmitter<SwarmEngineEventMap>();
     const engineState = makeEngineState();
     const baseAgent = engineState.agents.agt_pool_1;
+    const originalWidth = window.innerWidth;
+    const originalHeight = window.innerHeight;
 
     engineState.topology.nodes.push({
       ...engineState.topology.nodes[0],
@@ -222,25 +224,61 @@ describe("useEngineBoardBridge", () => {
       });
     });
 
-    act(() => {
-      events.emit("topology.updated", {
-        newTopology: {
-          type: "mesh",
-          edges: [{
-            from: "agt_pool_2",
-            to: "agt_pool_1",
-            weight: 1,
-            bidirectional: false,
-            latencyMs: null,
-            edgeType: "topology",
-          }],
-        },
-      } as any);
-    });
+    const states: Array<{ edgeIds: string[]; positions: Array<{ id: string; x: number; y: number }> }> = [];
+    let unsubscribe = () => {};
+
+    try {
+      Object.defineProperty(window, "innerWidth", {
+        configurable: true,
+        value: 320,
+      });
+      Object.defineProperty(window, "innerHeight", {
+        configurable: true,
+        value: 240,
+      });
+
+      unsubscribe = useSwarmBoardStore.subscribe((state) => {
+        states.push({
+          edgeIds: state.edges.map((edge) => edge.id),
+          positions: state.nodes.map((node) => ({
+            id: node.id,
+            x: node.position.x,
+            y: node.position.y,
+          })),
+        });
+      });
+
+      act(() => {
+        events.emit("topology.updated", {
+          newTopology: {
+            type: "mesh",
+            edges: [{
+              from: "agt_pool_2",
+              to: "agt_pool_1",
+              weight: 1,
+              bidirectional: false,
+              latencyMs: null,
+              edgeType: "topology",
+            }],
+          },
+        } as any);
+      });
+    } finally {
+      unsubscribe();
+      Object.defineProperty(window, "innerWidth", {
+        configurable: true,
+        value: originalWidth,
+      });
+      Object.defineProperty(window, "innerHeight", {
+        configurable: true,
+        value: originalHeight,
+      });
+    }
 
     const state = useSwarmBoardStore.getState();
     const topologyEdges = state.edges.filter((edge) => edge.type === "topology");
 
+    expect(states).toHaveLength(1);
     expect(topologyEdges).toEqual([
       {
         id: "edge-topo-agt_pool_2-agt_pool_1",
@@ -255,6 +293,12 @@ describe("useEngineBoardBridge", () => {
       target: "agt_pool_2",
       type: "spawned",
     });
+    expect(
+      Math.max(...state.nodes.map((node) => node.position.x)),
+    ).toBeLessThanOrEqual(320);
+    expect(
+      Math.max(...state.nodes.map((node) => node.position.y)),
+    ).toBeLessThanOrEqual(240);
 
     unmount();
   });

@@ -32,6 +32,7 @@ import { computeLayout } from "@/features/swarm/layout/topology-layout";
 
 /** Duration in ms that the evaluating glow remains visible. */
 const EVAL_GLOW_DURATION_MS = 2000;
+const DEFAULT_LAYOUT_VIEWPORT = { width: 1200, height: 800 };
 
 // ---------------------------------------------------------------------------
 // Position helper
@@ -203,6 +204,26 @@ function buildTopologyEdges(
       type: "topology",
     }];
   });
+}
+
+function getLayoutViewport(): { width: number; height: number } {
+  if (typeof window === "undefined") {
+    return DEFAULT_LAYOUT_VIEWPORT;
+  }
+
+  const width = Math.max(
+    window.innerWidth || 0,
+    document.documentElement?.clientWidth || 0,
+  );
+  const height = Math.max(
+    window.innerHeight || 0,
+    document.documentElement?.clientHeight || 0,
+  );
+
+  return {
+    width: width > 0 ? width : DEFAULT_LAYOUT_VIEWPORT.width,
+    height: height > 0 ? height : DEFAULT_LAYOUT_VIEWPORT.height,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -472,11 +493,18 @@ export function useEngineBoardBridge(engine: SwarmOrchestrator | null): void {
         currentNodes,
         nextEdges,
         topoType,
-        { width: 1200, height: 800 },
+        getLayoutViewport(),
       );
 
-      actions.setEdges(nextEdges);
-      actions.topologyLayout(topoType, result.positions);
+      const nextNodes = currentNodes.map((node) => {
+        const nextPosition = result.positions.get(node.id);
+        return nextPosition ? { ...node, position: nextPosition } : node;
+      });
+
+      actions.loadState({
+        nodes: nextNodes,
+        edges: nextEdges,
+      });
     }
 
     // 9. topology.updated (INTG-02)

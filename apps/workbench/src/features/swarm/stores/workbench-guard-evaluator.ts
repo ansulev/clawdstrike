@@ -79,6 +79,32 @@ function buildScenarioPayload(action: GuardedAction): Record<string, unknown> {
   }
 }
 
+function buildScenarioCategory(
+  action: GuardedAction,
+): TestScenario["category"] {
+  const operation = coerceString(action.context.operation);
+  if (
+    operation === "agent_spawn" ||
+    operation === "claude_spawn" ||
+    operation === "worktree_spawn"
+  ) {
+    return "benign";
+  }
+
+  switch (action.actionType) {
+    case "file_access":
+      return "benign";
+    case "file_write":
+    case "network_egress":
+    case "shell_command":
+    case "mcp_tool_call":
+    case "patch_apply":
+    case "user_input":
+    default:
+      return "edge_case";
+  }
+}
+
 function mapGuardResult(
   guardResult: WorkbenchGuardSimResult,
 ): GuardSimResult {
@@ -148,7 +174,7 @@ export const workbenchGuardEvaluator: GuardEvaluator = {
       id: generateSwarmId("tsk"),
       name: "swarm-session-spawn",
       description: `Guard evaluation for ${action.actionType}`,
-      category: "benign",
+      category: buildScenarioCategory(action),
       actionType: action.actionType as TestActionType,
       payload: buildScenarioPayload(action),
     };

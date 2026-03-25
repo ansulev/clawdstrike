@@ -7,6 +7,8 @@ import {
   SigilLibrary,
   SigilFleet,
   SigilCompliance,
+  SigilHunt,
+  SigilObservatory,
 } from "@/components/desktop/sidebar-icons";
 import { IconSearch, IconUsers } from "@tabler/icons-react";
 
@@ -18,6 +20,7 @@ import { IconSearch, IconUsers } from "@tabler/icons-react";
  */
 export type ActivityBarItemId =
   | "heartbeat"
+  | "hunt"
   | "sentinels"
   | "findings"
   | "explorer"
@@ -25,7 +28,8 @@ export type ActivityBarItemId =
   | "library"
   | "fleet"
   | "compliance"
-  | "people";
+  | "people"
+  | "observatory";
 
 export interface ActivityBarItemConfig {
   id: ActivityBarItemId;
@@ -40,6 +44,7 @@ export interface ActivityBarItemConfig {
  * diamond inline rather than a standard sigil).
  */
 export const ACTIVITY_BAR_ITEMS: readonly ActivityBarItemConfig[] = [
+  { id: "hunt", label: "Hunt", tooltip: "Hunt (artifacts & observatory)", icon: SigilHunt },
   { id: "sentinels", label: "Sentinels", tooltip: "Sentinels", icon: SigilSentinel },
   { id: "findings", label: "Findings & Intel", tooltip: "Findings & Intel", icon: SigilFindings },
   { id: "explorer", label: "Explorer", tooltip: "Explorer (Cmd+Shift+E)", icon: SigilEditor },
@@ -48,4 +53,5 @@ export const ACTIVITY_BAR_ITEMS: readonly ActivityBarItemConfig[] = [
   { id: "fleet", label: "Fleet & Topology", tooltip: "Fleet & Topology", icon: SigilFleet },
   { id: "compliance", label: "Compliance", tooltip: "Compliance", icon: SigilCompliance },
   { id: "people", label: "People", tooltip: "People", icon: IconUsers },
+  { id: "observatory", label: "Observatory", tooltip: "Observatory Minimap", icon: SigilObservatory },
 ];

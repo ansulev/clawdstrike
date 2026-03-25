@@ -584,6 +584,7 @@ interface SwarmBoardStoreState extends SwarmBoardState {
     toggleInspector: (open?: boolean) => void;
     loadFromBundle: (bundlePath: string) => Promise<void>;
     topologyLayout: (topology: string, positions: Map<string, { x: number; y: number }>) => void;
+    applyTopologyLayout: (topologyEdges: SwarmBoardEdge[], positions: Map<string, { x: number; y: number }>) => void;
     engineSync: (engineNodes: Array<{ id: string; agentId?: string; taskId?: string; data: Partial<SwarmBoardNodeData>; position?: { x: number; y: number } }>, engineEdges: SwarmBoardEdge[]) => void;
     guardEvaluate: (agentNodeId: string, verdict: string, guardResults: Array<{ guard: string; allowed: boolean; duration_ms?: number }>, signature?: string, publicKey?: string) => void;
   };
@@ -842,6 +843,30 @@ const useSwarmBoardStoreBase = create<SwarmBoardStoreState>()((set, get) => ({
       schedulePersist({ ...get() });
     },
 
+    applyTopologyLayout: (
+      topologyEdges: SwarmBoardEdge[],
+      positions: Map<string, { x: number; y: number }>,
+    ): void => {
+      set((current) => {
+        const nodes = current.nodes.map((node) => {
+          const nextPosition = positions.get(node.id);
+          return nextPosition ? { ...node, position: nextPosition } : node;
+        });
+        const edges = [
+          ...current.edges.filter((edge) => edge.type !== "topology"),
+          ...topologyEdges,
+        ];
+
+        return {
+          nodes,
+          edges,
+          rfEdges: toRfEdges(edges),
+          selectedNode: deriveSelectedNode(nodes, current.selectedNodeId),
+        };
+      });
+      schedulePersist({ ...get() });
+    },
+
     engineSync: (
       engineNodes: Array<{ id: string; agentId?: string; taskId?: string; data: Partial<SwarmBoardNodeData>; position?: { x: number; y: number } }>,
       engineEdges: SwarmBoardEdge[],
@@ -903,7 +928,7 @@ const useSwarmBoardStoreBase = create<SwarmBoardStoreState>()((set, get) => ({
       if (!agentNode) return;
 
       // Dedup: skip if a receipt with the same signature already exists
-      if (signature) {
+      if (signature !== undefined) {
         const duplicate = current.nodes.some(
           (n) => (n.data as SwarmBoardNodeData).nodeType === "receipt" &&
                  (n.data as SwarmBoardNodeData).signature === signature,

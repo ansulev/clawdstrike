@@ -90,6 +90,7 @@ const FORMAT_ICONS: Record<FileType, typeof IconShieldLock> = {
   yara_rule: IconBug,
   ocsf_event: IconSchema,
   swarm_bundle: IconHexagons,
+  receipt: IconFileText,
 };
 
 // ---------------------------------------------------------------------------

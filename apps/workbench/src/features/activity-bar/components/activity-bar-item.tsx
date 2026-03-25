@@ -1,6 +1,7 @@
 import type { ComponentType } from "react";
 import type { SigilProps } from "@/components/desktop/sidebar-icons";
 import type { ActivityBarItemId } from "../types";
+import { SpiritOrbIcon } from "@/features/spirit/components/spirit-orb-icon";
 import { cn } from "@/lib/utils";
 
 // ---------------------------------------------------------------------------
@@ -14,6 +15,7 @@ interface ActivityBarItemProps {
   active: boolean;
   onClick: () => void;
   badge?: number;
+  orbColor?: string;
 }
 
 export function ActivityBarItem({
@@ -23,6 +25,7 @@ export function ActivityBarItem({
   active,
   onClick,
   badge,
+  orbColor,
 }: ActivityBarItemProps) {
   return (
     <button
@@ -31,7 +34,7 @@ export function ActivityBarItem({
       aria-selected={active}
       aria-controls="sidebar-panel"
       id={`activity-bar-tab-${id}`}
-      title={tooltip}
+      title={badge && badge > 0 ? `${tooltip} — ${badge > 99 ? "99+" : badge} artifact${badge === 1 ? "" : "s"}` : tooltip}
       onClick={onClick}
       className={cn(
         "w-9 h-9 flex items-center justify-center relative",
@@ -54,26 +57,28 @@ export function ActivityBarItem({
           }}
         />
       )}
-      <Icon
-        size={18}
-        stroke={1.4}
-        style={
-          active
-            ? { filter: "drop-shadow(0 0 4px rgba(212,168,75,0.25))" }
-            : undefined
-        }
-      />
-      {typeof badge === "number" && badge > 0 && (
+      {orbColor ? (
+        <SpiritOrbIcon accentColor={orbColor} size={18} />
+      ) : (
+        <Icon
+          size={18}
+          stroke={1.4}
+          style={
+            active
+              ? { filter: "drop-shadow(0 0 4px rgba(212,168,75,0.25))" }
+              : undefined
+          }
+        />
+      )}
+      {/* Seam badge */}
+      {badge !== undefined && badge > 0 && (
         <span
-          className="absolute -top-0.5 -right-0.5 min-w-[14px] h-[14px] flex items-center justify-center rounded-full text-[8px] font-bold leading-none px-1"
-          style={{
-            backgroundColor: "#c45c5c",
-            color: "#ece7dc",
-            boxShadow: "0 0 6px rgba(196,92,92,0.4)",
-          }}
-        >
-          {badge > 99 ? "99+" : badge}
-        </span>
+          aria-label={`${badge > 99 ? "99+" : badge} artifact${badge === 1 ? "" : "s"} in active hunt`}
+          className={cn(
+            "absolute top-0.5 right-0.5 h-2 w-2 rounded-full",
+            "bg-[#3dbf84] animate-pulse",
+          )}
+        />
       )}
     </button>
   );

@@ -56,6 +56,10 @@ import {
   reconstructPolicyTab,
 } from "@/features/policy/types/policy-tab";
 
+type OpenFileByPathOptions = {
+  shouldApply?: () => boolean;
+};
+
 // ---- Singleton dispatch ----
 
 let _dispatch: React.Dispatch<MultiPolicyAction> | null = null;
@@ -512,10 +516,11 @@ export function useWorkbenchState() {
   }, [dispatch]);
 
   const openFileByPath = useCallback(
-    async (filePath: string) => {
+    async (filePath: string, options?: OpenFileByPathOptions) => {
       try {
         const result = await readDetectionFileByPath(filePath);
         if (!result) return;
+        if (options?.shouldApply && !options.shouldApply()) return;
         dispatch({
           type: "OPEN_TAB_OR_SWITCH",
           filePath: result.path,

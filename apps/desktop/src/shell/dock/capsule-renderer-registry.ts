@@ -27,7 +27,9 @@ export function registerCapsuleRenderer(
   }
   rendererMap.set(kind, component);
   return () => {
-    rendererMap.delete(kind);
+    if (rendererMap.get(kind) === component) {
+      rendererMap.delete(kind);
+    }
   };
 }
 

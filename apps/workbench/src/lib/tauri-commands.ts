@@ -10,6 +10,7 @@
  */
 
 import { isDesktop } from "./tauri-bridge";
+import { getWorkbenchE2EBridge, hasWorkbenchE2EInvoke } from "@/lib/workbench/e2e-bridge";
 
 
 export interface TauriValidationError {
@@ -172,30 +173,41 @@ export interface TauriChainVerificationResponse {
 
 
 async function tauriInvoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
+  const e2eInvoke = getWorkbenchE2EBridge()?.invoke;
+  if (e2eInvoke) {
+    return e2eInvoke<T>(cmd, args);
+  }
+
   const { invoke } = await import("@tauri-apps/api/core");
   return invoke<T>(cmd, args);
 }
 
-function coerceTauriError(err: unknown, fallback: string): Error {
+function normalizeTauriCommandError(command: string, err: unknown): Error {
   if (err instanceof Error) {
     return err;
+  }
+
+  if (
+    typeof err === "object" &&
+    err !== null &&
+    "message" in err &&
+    typeof err.message === "string" &&
+    err.message.trim()
+  ) {
+    return new Error(err.message);
+  }
+  if (typeof err === "object" && err !== null) {
+    const record = err as { error?: unknown };
+    if (typeof record.error === "string" && record.error.trim()) {
+      return new Error(record.error);
+    }
   }
 
   if (typeof err === "string" && err.trim()) {
     return new Error(err);
   }
 
-  if (typeof err === "object" && err !== null) {
-    const record = err as { message?: unknown; error?: unknown };
-    if (typeof record.message === "string" && record.message.trim()) {
-      return new Error(record.message);
-    }
-    if (typeof record.error === "string" && record.error.trim()) {
-      return new Error(record.error);
-    }
-  }
-
-  return new Error(fallback);
+  return new Error(`${command} failed`);
 }
 
 
@@ -617,6 +629,8 @@ export interface TauriSearchMatch {
   line_content: string;
   match_start: number;
   match_end: number;
+  source_match_start?: number;
+  source_match_end?: number;
 }
 
 export interface TauriSearchResult {
@@ -629,7 +643,7 @@ export interface TauriSearchResult {
 /**
  * Search for text across all eligible files in a project directory.
  * Supports case-sensitive, whole-word, and regex modes.
- * Returns null when not running inside Tauri.
+ * Returns null when not running inside Tauri or the browser E2E bridge.
  */
 export async function searchInProjectNative(
   rootPath: string,
@@ -639,7 +653,7 @@ export async function searchInProjectNative(
   useRegex: boolean,
   searchId?: string,
 ): Promise<TauriSearchResult | null> {
-  if (!isDesktop()) return null;
+  if (!isDesktop() && !hasWorkbenchE2EInvoke()) return null;
   try {
     return await tauriInvoke<TauriSearchResult>("search_in_project", {
       rootPath,
@@ -651,12 +665,12 @@ export async function searchInProjectNative(
     });
   } catch (err) {
     console.error("[tauri-commands] search_in_project failed:", err);
-    throw coerceTauriError(err, "Search failed");
+    throw normalizeTauriCommandError("search_in_project", err);
   }
 }
 
 export async function cancelSearchInProjectNative(searchId: string): Promise<void> {
-  if (!isDesktop()) return;
+  if (!isDesktop() && !hasWorkbenchE2EInvoke()) return;
   try {
     await tauriInvoke("cancel_search_in_project", { searchId });
   } catch (err) {

@@ -2,6 +2,10 @@ import react from "@vitejs/plugin-react";
 import { resolve } from "path";
 import { defineConfig } from "vite";
 import { pluginEvalMiddleware } from "./src/lib/plugins/playground/playground-eval-server";
+import {
+  resolveWorkbenchManualChunk,
+  resolveWorkbenchModulePreloadDependencies,
+} from "./build/workbench-chunking";
 
 const host = process.env.TAURI_DEV_HOST;
 const hushdProxyTarget =
@@ -82,6 +86,9 @@ export default defineConfig({
   },
   envPrefix: ["VITE_", "TAURI_ENV_*"],
   build: {
+    modulePreload: {
+      resolveDependencies: resolveWorkbenchModulePreloadDependencies,
+    },
     target:
       process.env.TAURI_ENV_PLATFORM === "windows"
         ? "chrome105"
@@ -90,27 +97,7 @@ export default defineConfig({
     sourcemap: !!process.env.TAURI_ENV_DEBUG,
     rollupOptions: {
       output: {
-        manualChunks: {
-          "vendor-codemirror": [
-            "codemirror",
-            "@codemirror/autocomplete",
-            "@codemirror/lang-yaml",
-            "@codemirror/language",
-            "@codemirror/lint",
-            "@codemirror/search",
-            "@codemirror/state",
-            "@codemirror/theme-one-dark",
-            "@codemirror/view",
-          ],
-          "vendor-ui": [
-            "react-resizable-panels",
-            "react-syntax-highlighter",
-            "lucide-react",
-            "@tabler/icons-react",
-            "motion",
-          ],
-          "vendor-yaml": ["yaml"],
-        },
+        manualChunks: resolveWorkbenchManualChunk,
       },
     },
   },

@@ -340,11 +340,11 @@ describe("App", () => {
   it("keeps workbench state available to the shell", async () => {
     render(<App />);
 
-    // If workbench state bootstrapping is broken, the sidebar would throw.
-    // The sidebar nav items prove the context is available.
+    // This test uses a lightweight DesktopLayout mock, so assert the shell it
+    // renders instead of the real activity bar internals.
     await waitFor(() => {
-      expect(screen.getByText("Editor")).toBeTruthy();
-      expect(screen.getByText("Lab")).toBeTruthy();
+      expect(screen.getByText("Clawdstrike")).toBeTruthy();
+      expect(screen.getByText("Workbench")).toBeTruthy();
       expect(screen.getByText("Mission Control")).toBeTruthy();
     });
   });

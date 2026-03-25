@@ -132,6 +132,22 @@ function pickDecidingGuard(
   );
 }
 
+function stableHex(value: string, length: number): string {
+  let output = "";
+
+  for (let salt = 0; output.length < length; salt++) {
+    let hash = 0x811c9dc5 ^ salt;
+    const salted = `${value}:${salt}`;
+    for (let index = 0; index < salted.length; index++) {
+      hash ^= salted.charCodeAt(index);
+      hash = Math.imul(hash, 0x01000193);
+    }
+    output += (hash >>> 0).toString(16).padStart(8, "0");
+  }
+
+  return output.slice(0, length);
+}
+
 function buildReceipt(
   action: GuardedAction,
   policy: WorkbenchPolicy,
@@ -140,13 +156,26 @@ function buildReceipt(
   executedAt: number,
 ): Receipt {
   const decidingGuard = pickDecidingGuard(guardResults);
+  const policyName = policy.name || "Workbench Policy";
+  const signatureMaterial = JSON.stringify({
+    executedAt,
+    actionType: action.actionType,
+    target: action.target,
+    verdict,
+    guardResults: guardResults.map((result) => ({
+      guardId: result.guardId,
+      verdict: result.verdict,
+      message: result.message,
+    })),
+    policyName,
+  });
 
   return {
     id: generateSwarmId("rct"),
     timestamp: new Date(executedAt).toISOString(),
     verdict,
     guard: decidingGuard?.guardName ?? "simulation_engine",
-    policyName: policy.name || "Workbench Policy",
+    policyName,
     action: {
       type: action.actionType as TestActionType,
       target: action.target,
@@ -160,8 +189,8 @@ function buildReceipt(
       })),
       context: action.context,
     },
-    signature: "",
-    publicKey: "",
+    signature: stableHex(signatureMaterial, 128),
+    publicKey: stableHex(`workbench:${policyName}`, 64),
     valid: false,
   };
 }

@@ -49,7 +49,7 @@ JSON
 RAW_OUTPUT="$(openclaw plugins info clawdstrike-security --json 2>&1 || true)"
 printf '%s\n' "$RAW_OUTPUT" >"$ARTIFACT_DIR/plugins-info.raw.txt"
 
-JSON_PAYLOAD="$(printf '%s\n' "$RAW_OUTPUT" | openclaw_runtime_json_from_output)"
+JSON_PAYLOAD="$(printf '%s\n' "$RAW_OUTPUT" | openclaw_runtime_plugin_info_from_output)"
 if [ -n "$JSON_PAYLOAD" ]; then
   printf '%s\n' "$JSON_PAYLOAD" >"$ARTIFACT_DIR/plugins-info.json"
 else

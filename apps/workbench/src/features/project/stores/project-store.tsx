@@ -11,6 +11,12 @@ import {
   relativeWorkspacePath,
   resolveWorkspaceRootPath,
 } from "@/lib/workbench/path-utils";
+import {
+  getProjectPathBasename,
+  isValidProjectBasename,
+  replaceProjectPathBasename,
+} from "@/features/project/utils/resolve-project-path";
+import { getWorkbenchE2EBridge } from "@/lib/workbench/e2e-bridge";
 
 const TAURI_FS_SPECIFIER = "@tauri-apps/plugin-fs";
 
@@ -152,13 +158,22 @@ async function importTauriFs() {
   return import(/* @vite-ignore */ TAURI_FS_SPECIFIER);
 }
 
+async function readProjectDirEntries(dirPath: string) {
+  const e2eBridge = getWorkbenchE2EBridge();
+  if (e2eBridge?.readDetectionDir) {
+    return e2eBridge.readDetectionDir(dirPath);
+  }
+
+  const { readDir } = await importTauriFs();
+  return readDir(dirPath);
+}
+
 /**
  * Recursively scan a directory via Tauri fs readDir and collect relative paths.
  * Directories get a trailing "/" to distinguish them from files.
  */
 async function scanDir(dirPath: string, basePath: string): Promise<string[]> {
-  const { readDir } = await importTauriFs();
-  const entries = await readDir(dirPath);
+  const entries = await readProjectDirEntries(dirPath);
   const paths: string[] = [];
   for (const entry of entries) {
     const fullPath = `${dirPath}/${entry.name}`;
@@ -375,6 +390,40 @@ function inferFileTypeFromPath(relPath: string, name: string): FileType {
   return "clawdstrike_policy";
 }
 
+function moveFileStatus(
+  fileStatuses: Map<string, FileStatus>,
+  rootPath: string,
+  oldRelPath: string,
+  newRelPath: string,
+): Map<string, FileStatus> {
+  const oldKey = getProjectFileStatusKey(rootPath, oldRelPath);
+  const existingStatus = fileStatuses.get(oldKey);
+  if (!existingStatus) {
+    return fileStatuses;
+  }
+
+  const newKey = getProjectFileStatusKey(rootPath, newRelPath);
+  const next = new Map(fileStatuses);
+  next.delete(oldKey);
+  next.set(newKey, existingStatus);
+  return next;
+}
+
+function deleteFileStatus(
+  fileStatuses: Map<string, FileStatus>,
+  rootPath: string,
+  relPath: string,
+): Map<string, FileStatus> {
+  const key = getProjectFileStatusKey(rootPath, relPath);
+  if (!fileStatuses.has(key)) {
+    return fileStatuses;
+  }
+
+  const next = new Map(fileStatuses);
+  next.delete(key);
+  return next;
+}
+
 // ---- Zustand store ----
 
 interface ProjectStoreState extends ProjectState {
@@ -510,11 +559,16 @@ const useProjectStoreBase = create<ProjectStoreState>()((set, get) => ({
       const project = getProjectForRoot(state, rootPath);
       if (!project || !rootPath) return null;
 
+      const trimmedName = fileName.trim();
+      if (!isValidProjectBasename(trimmedName)) {
+        return null;
+      }
+
       const { createDetectionFile } = await import("@/lib/tauri-bridge");
-      const savedPath = await createDetectionFile(parentDirPath, fileName, fileType);
+      const savedPath = await createDetectionFile(parentDirPath, trimmedName, fileType);
       if (!savedPath) return null;
 
-      const relPath = relativePathWithinRoot(rootPath, savedPath) || fileName;
+      const relPath = relativePathWithinRoot(rootPath, savedPath) || trimmedName;
       const parentRelPath = relativePathWithinRoot(rootPath, parentDirPath);
 
       // Compute depth from relative path segments.
@@ -522,8 +576,8 @@ const useProjectStoreBase = create<ProjectStoreState>()((set, get) => ({
 
       const newNode: ProjectFile = {
         path: relPath,
-        name: fileName,
-        fileType: inferFileTypeFromPath(relPath, fileName),
+        name: trimmedName,
+        fileType: inferFileTypeFromPath(relPath, trimmedName),
         isDirectory: false,
         depth,
       };
@@ -557,27 +611,32 @@ const useProjectStoreBase = create<ProjectStoreState>()((set, get) => ({
       const project = getProjectForRoot(state, rootPath);
       if (!project || !rootPath) return false;
 
+      const trimmedName = newName.trim();
+      if (!isValidProjectBasename(trimmedName)) {
+        return false;
+      }
+
       // oldPath may be relative; resolve to absolute for Tauri APIs.
       const oldAbsPath = isAbsoluteWorkspacePath(oldPath)
         ? normalizeWorkspacePath(oldPath)
         : joinWorkspacePath(rootPath, oldPath);
-
-      // Compute new absolute path by replacing the last segment.
-      const lastSlash = oldAbsPath.lastIndexOf("/");
-      const newAbsPath = lastSlash >= 0
-        ? oldAbsPath.substring(0, lastSlash + 1) + newName
-        : joinWorkspacePath(rootPath, newName);
+      const newAbsPath = replaceProjectPathBasename(oldAbsPath, trimmedName);
 
       const { renameDetectionFile } = await import("@/lib/tauri-bridge");
       const ok = await renameDetectionFile(oldAbsPath, newAbsPath);
       if (!ok) return false;
 
       const tabsStore = usePolicyTabsStore.getState();
+      const previousName = getProjectPathBasename(oldAbsPath);
       const renamedTabIds = tabsStore.tabs
         .filter((tab) => tab.filePath === oldAbsPath)
         .map((tab) => tab.id);
       for (const tabId of renamedTabIds) {
         tabsStore.setFilePath(tabId, newAbsPath);
+        const renamedTab = tabsStore.tabs.find((tab) => tab.id === tabId);
+        if (renamedTab?.name === previousName) {
+          tabsStore.renameTab(tabId, trimmedName);
+        }
       }
       getDocumentIdentityStore().move(oldAbsPath, newAbsPath);
 
@@ -587,23 +646,19 @@ const useProjectStoreBase = create<ProjectStoreState>()((set, get) => ({
       const newFiles = mutateTree(project.files, oldRelPath, (siblings, idx) => {
         siblings[idx] = {
           ...siblings[idx],
-          name: newName,
+          name: trimmedName,
           path: newRelPath,
-          fileType: inferFileTypeFromPath(newRelPath, newName),
+          fileType: inferFileTypeFromPath(newRelPath, trimmedName),
         };
         return sortChildren(siblings);
       });
 
-      // Migrate file status entry from old to new path.
-      const fileStatuses = new Map(get().fileStatuses);
-      const oldStatusKey = getProjectFileStatusKey(rootPath, oldRelPath);
-      const newStatusKey = getProjectFileStatusKey(rootPath, newRelPath);
-      const oldStatus = fileStatuses.get(oldStatusKey);
-      if (oldStatus) {
-        fileStatuses.delete(oldStatusKey);
-        fileStatuses.set(newStatusKey, oldStatus);
-      }
-
+      const fileStatuses = moveFileStatus(
+        get().fileStatuses,
+        rootPath,
+        oldRelPath,
+        newRelPath,
+      );
       const nextProject = { ...project, files: newFiles };
       const nextProjects = new Map(get().projects);
       nextProjects.set(rootPath, nextProject);
@@ -635,10 +690,15 @@ const useProjectStoreBase = create<ProjectStoreState>()((set, get) => ({
         return siblings;
       });
 
-      // Remove stale file status entry.
-      const fileStatuses = new Map(get().fileStatuses);
-      fileStatuses.delete(getProjectFileStatusKey(rootPath, relPath));
-
+      const tabsStore = usePolicyTabsStore.getState();
+      const tabsToClose = tabsStore.tabs
+        .filter((tab) => tab.filePath === absPath)
+        .map((tab) => tab.id);
+      for (const tabId of tabsToClose) {
+        tabsStore.closeTab(tabId);
+      }
+      getDocumentIdentityStore().unregister(absPath);
+      const fileStatuses = deleteFileStatus(get().fileStatuses, rootPath, relPath);
       const nextProject = { ...project, files: newFiles };
       const nextProjects = new Map(get().projects);
       nextProjects.set(rootPath, nextProject);

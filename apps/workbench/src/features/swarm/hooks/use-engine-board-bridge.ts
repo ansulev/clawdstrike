@@ -25,6 +25,7 @@ import type {
 } from "@/features/swarm/swarm-board-types";
 import type { Node } from "@xyflow/react";
 import { computeLayout } from "@/features/swarm/layout/topology-layout";
+import { nextNodePosition } from "./node-position";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -33,25 +34,6 @@ import { computeLayout } from "@/features/swarm/layout/topology-layout";
 /** Duration in ms that the evaluating glow remains visible. */
 const EVAL_GLOW_DURATION_MS = 2000;
 const DEFAULT_LAYOUT_VIEWPORT = { width: 1200, height: 800 };
-
-// ---------------------------------------------------------------------------
-// Position helper
-// ---------------------------------------------------------------------------
-
-/**
- * Calculate a position for a new auto-created node, placing it to the right
- * of the rightmost existing node with slight vertical jitter.
- * Copied from use-coordinator-board-bridge.ts lines 36-44.
- */
-function nextNodePosition(
-  nodes: Array<{ position: { x: number; y: number } }>,
-): { x: number; y: number } {
-  if (nodes.length === 0) return { x: 200, y: 200 };
-  const maxX = Math.max(...nodes.map((n) => n.position.x));
-  const avgY =
-    nodes.reduce((sum, n) => sum + n.position.y, 0) / nodes.length;
-  return { x: maxX + 320, y: avgY + (Math.random() - 0.5) * 100 };
-}
 
 // ---------------------------------------------------------------------------
 // Status mapping: engine AgentSessionStatus -> board SessionStatus
@@ -496,15 +478,7 @@ export function useEngineBoardBridge(engine: SwarmOrchestrator | null): void {
         getLayoutViewport(),
       );
 
-      const nextNodes = currentNodes.map((node) => {
-        const nextPosition = result.positions.get(node.id);
-        return nextPosition ? { ...node, position: nextPosition } : node;
-      });
-
-      actions.loadState({
-        nodes: nextNodes,
-        edges: nextEdges,
-      });
+      actions.applyTopologyLayout(nextTopologyEdges, result.positions);
     }
 
     // 9. topology.updated (INTG-02)

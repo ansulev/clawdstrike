@@ -345,6 +345,34 @@ describe("Engine actions are additive, not breaking", () => {
     expect(state.edges[0].source).toBe(agentNode.id);
     expect(state.edges[0].type).toBe("receipt");
   });
+
+  it("guardEvaluate deduplicates receipt nodes when the signature matches", () => {
+    const { actions } = useSwarmBoardStore.getState();
+    const agentNode = actions.addNode({
+      nodeType: "agentSession",
+      title: "Test Agent",
+      position: { x: 100, y: 100 },
+    });
+
+    actions.guardEvaluate(
+      agentNode.id,
+      "allow",
+      [{ guard: "ForbiddenPathGuard", allowed: true, duration_ms: 2 }],
+      "abcd".repeat(32),
+      "1234".repeat(16),
+    );
+    actions.guardEvaluate(
+      agentNode.id,
+      "allow",
+      [{ guard: "ForbiddenPathGuard", allowed: true, duration_ms: 2 }],
+      "abcd".repeat(32),
+      "1234".repeat(16),
+    );
+
+    const state = useSwarmBoardStore.getState();
+    expect(state.nodes.filter((node) => node.data.nodeType === "receipt")).toHaveLength(1);
+    expect(state.edges.filter((edge) => edge.type === "receipt")).toHaveLength(1);
+  });
 });
 
 // ---------------------------------------------------------------------------

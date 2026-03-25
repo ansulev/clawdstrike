@@ -1499,12 +1499,16 @@ pub struct SearchMatch {
     pub file_path: String,
     /// 1-indexed line number.
     pub line_number: usize,
-    /// Full line text (trimmed to 500 chars max).
+    /// Preview line text (trimmed to 500 chars max).
     pub line_content: String,
     /// Character offset of match start within `line_content`.
     pub match_start: usize,
     /// Character offset of match end within `line_content`.
     pub match_end: usize,
+    /// Character offset of match start within the full source line.
+    pub source_match_start: usize,
+    /// Character offset of match end within the full source line.
+    pub source_match_end: usize,
 }
 
 /// Aggregate search results.
@@ -1534,7 +1538,7 @@ const SEARCHABLE_EXTENSIONS: &[&str] = &[
 ];
 
 /// Directory names to skip during search.
-const SKIP_DIRS: &[&str] = &["node_modules", "target", ".git"];
+const SKIP_DIRS: &[&str] = &[".git", "node_modules", "target"];
 
 #[derive(Debug)]
 struct SearchCancellationEntry {
@@ -1622,10 +1626,51 @@ fn is_match_on_word_boundary(line: &str, match_start: usize, match_end: usize) -
     before_ok && after_ok
 }
 
-fn truncate_line_content(line: &str) -> &str {
-    match line.char_indices().nth(MAX_LINE_CONTENT_LEN) {
-        Some((idx, _)) => &line[..idx],
-        None => line,
+fn build_search_regex(
+    query: &str,
+    case_sensitive: bool,
+    whole_word: bool,
+    use_regex: bool,
+) -> Result<regex::Regex, String> {
+    let pattern = if use_regex {
+        if whole_word {
+            format!(r"\b(?:{})\b", query)
+        } else {
+            query.to_string()
+        }
+    } else {
+        regex::escape(query)
+    };
+
+    regex::RegexBuilder::new(&pattern)
+        .case_insensitive(!case_sensitive)
+        .build()
+        .map_err(|e| format!("Invalid regex: {e}"))
+}
+
+struct SearchLinePreview {
+    content: String,
+    char_len: usize,
+}
+
+fn truncate_search_line(line: &str) -> SearchLinePreview {
+    let char_len = line.chars().count();
+    if char_len <= MAX_LINE_CONTENT_LEN {
+        return SearchLinePreview {
+            content: line.to_string(),
+            char_len,
+        };
+    }
+
+    let truncate_at = line
+        .char_indices()
+        .nth(MAX_LINE_CONTENT_LEN)
+        .map(|(idx, _)| idx)
+        .unwrap_or(line.len());
+
+    SearchLinePreview {
+        content: line[..truncate_at].to_string(),
+        char_len: MAX_LINE_CONTENT_LEN,
     }
 }
 
@@ -1644,7 +1689,6 @@ fn collect_search_files(
     if is_search_cancelled(cancellation_flag) {
         return false;
     }
-
     let entries = match std::fs::read_dir(dir) {
         Ok(e) => e,
         Err(_) => return true,
@@ -1730,32 +1774,13 @@ pub async fn search_in_project(
         });
     }
 
-    let query_clone = query.clone();
     let cancellation_flag = search_id.as_deref().map(register_search_cancellation);
     let search_result = tokio::task::spawn_blocking(move || {
         if is_search_cancelled(cancellation_flag.as_deref()) {
             return Err("Search canceled".into());
         }
-
-        // Build the regex or prepare the literal query.
-        let compiled_regex = if use_regex {
-            let pattern = if whole_word {
-                format!(r"\b(?:{})\b", query_clone)
-            } else {
-                query_clone.clone()
-            };
-            let pattern = if !case_sensitive {
-                format!("(?i){}", pattern)
-            } else {
-                pattern
-            };
-            regex::Regex::new(&pattern).map_err(|e| format!("Invalid regex: {e}"))?
-        } else {
-            regex::RegexBuilder::new(&regex::escape(&query_clone))
-                .case_insensitive(!case_sensitive)
-                .build()
-                .map_err(|e| format!("Invalid literal search: {e}"))?
-        };
+        let compiled_regex =
+            build_search_regex(&query, case_sensitive, whole_word, use_regex)?;
 
         // Collect eligible files.
         let mut file_paths = Vec::new();
@@ -1772,7 +1797,6 @@ pub async fn search_in_project(
             if is_search_cancelled(cancellation_flag.as_deref()) {
                 return Err("Search canceled".into());
             }
-
             let content = match std::fs::read_to_string(file_path) {
                 Ok(c) => c,
                 Err(_) => continue, // skip binary/unreadable files
@@ -1799,7 +1823,8 @@ pub async fn search_in_project(
                     .filter_map(|m| {
                         let match_start = m.start();
                         let match_end = m.end();
-                        if !use_regex && whole_word
+                        if !use_regex
+                            && whole_word
                             && !is_match_on_word_boundary(line, match_start, match_end)
                         {
                             return None;
@@ -1812,7 +1837,8 @@ pub async fn search_in_project(
                     continue;
                 }
 
-                let line_content = truncate_line_content(line).to_string();
+                // Truncate line content once per line; every match on the line shares it.
+                let line_preview = truncate_search_line(line);
 
                 for (match_start, match_end) in line_matches {
                     if is_search_cancelled(cancellation_flag.as_deref()) {
@@ -1825,17 +1851,21 @@ pub async fn search_in_project(
                         break;
                     }
 
-                    // Clamp match offsets to truncated line.
-                    let clamped_start = byte_index_to_char_index(&line_content, match_start);
-                    let clamped_end = byte_index_to_char_index(&line_content, match_end);
+                    let match_start_chars = byte_index_to_char_index(line, match_start);
+                    let match_end_chars = byte_index_to_char_index(line, match_end);
+                    let preview_match_start = match_start_chars.min(line_preview.char_len);
+                    let preview_match_end =
+                        match_end_chars.clamp(preview_match_start, line_preview.char_len);
 
                     file_had_match = true;
                     all_matches.push(SearchMatch {
                         file_path: rel_path.clone(),
                         line_number,
-                        line_content: line_content.clone(),
-                        match_start: clamped_start,
-                        match_end: clamped_end,
+                        line_content: line_preview.content.clone(),
+                        match_start: preview_match_start,
+                        match_end: preview_match_end,
+                        source_match_start: match_start_chars,
+                        source_match_end: match_end_chars,
                     });
                 }
 
@@ -1966,9 +1996,17 @@ guards:
         assert_eq!(result.matches.len(), 1);
         let first_match = &result.matches[0];
         assert_eq!(first_match.file_path, "search.txt");
-        assert_eq!(first_match.line_content.chars().count(), MAX_LINE_CONTENT_LEN);
+        assert_eq!(
+            first_match.line_content.chars().count(),
+            MAX_LINE_CONTENT_LEN
+        );
         assert_eq!(first_match.match_start, MAX_LINE_CONTENT_LEN);
         assert_eq!(first_match.match_end, MAX_LINE_CONTENT_LEN);
+        assert_eq!(first_match.source_match_start, MAX_LINE_CONTENT_LEN + 10);
+        assert_eq!(
+            first_match.source_match_end,
+            MAX_LINE_CONTENT_LEN + 10 + "needle".chars().count()
+        );
     }
 
     #[tokio::test]
@@ -2044,6 +2082,38 @@ guards:
         assert_eq!(result.file_count, 1);
         assert_eq!(result.total_matches, MAX_SEARCH_MATCHES);
         assert_eq!(result.matches.len(), MAX_SEARCH_MATCHES);
+    }
+
+    #[tokio::test]
+    async fn search_in_project_skips_git_directories() {
+        let root = tempdir().unwrap();
+        let repo_metadata_dir = root.path().join(".git").join("objects");
+        let source_dir = root.path().join("src");
+
+        std::fs::create_dir_all(&repo_metadata_dir).unwrap();
+        std::fs::create_dir_all(&source_dir).unwrap();
+        std::fs::write(repo_metadata_dir.join("ignored.yaml"), "needle\n").unwrap();
+        std::fs::write(source_dir.join("main.yaml"), "needle\n").unwrap();
+
+        let result = search_in_project(
+            root.path().to_string_lossy().to_string(),
+            "needle".to_string(),
+            true,
+            false,
+            false,
+            None,
+        )
+        .await
+        .unwrap();
+
+        let matched_files: Vec<_> = result
+            .matches
+            .iter()
+            .map(|entry| entry.file_path.as_str())
+            .collect();
+
+        assert_eq!(matched_files, vec!["src/main.yaml"]);
+        assert_eq!(result.file_count, 1);
     }
 
     #[cfg(unix)]
@@ -2769,6 +2839,85 @@ guards: {}
 
         let err = validate_file_path(&path).unwrap_err();
         assert_eq!(err, "Refusing to access sensitive file");
+    }
+
+    #[tokio::test]
+    async fn search_in_project_handles_case_insensitive_unicode_literal_offsets() {
+        let dir = tempfile::tempdir().unwrap();
+        let file_path = dir.path().join("unicode.txt");
+        std::fs::write(&file_path, "foo ẞ bar\n").unwrap();
+
+        let result = search_in_project(
+            dir.path().to_string_lossy().to_string(),
+            "ß".into(),
+            false,
+            true,
+            false,
+            None,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(result.file_count, 1);
+        assert_eq!(result.total_matches, 1);
+        assert_eq!(result.matches.len(), 1);
+
+        let first_match = &result.matches[0];
+        assert_eq!(first_match.file_path, "unicode.txt");
+        assert_eq!(first_match.line_number, 1);
+        assert_eq!(first_match.line_content, "foo ẞ bar");
+        assert_eq!(first_match.match_start, 4);
+        assert_eq!(first_match.match_end, 5);
+        assert_eq!(first_match.source_match_start, 4);
+        assert_eq!(first_match.source_match_end, 5);
+    }
+
+    #[test]
+    fn build_search_regex_wraps_whole_word_regex_queries_in_non_capturing_group() {
+        let regex = build_search_regex("foo|bar", true, true, true).unwrap();
+
+        assert!(regex.is_match("foo"));
+        assert!(regex.is_match("bar"));
+        assert!(!regex.is_match("foobar"));
+        assert!(!regex.is_match("barista"));
+    }
+
+    #[tokio::test]
+    async fn search_in_project_truncates_multibyte_lines_without_panic() {
+        let dir = tempfile::tempdir().unwrap();
+        let file_path = dir.path().join("emoji.txt");
+        let prefix = "😀".repeat(MAX_LINE_CONTENT_LEN);
+        std::fs::write(&file_path, format!("{prefix}needle\n")).unwrap();
+
+        let result = search_in_project(
+            dir.path().to_string_lossy().to_string(),
+            "needle".into(),
+            true,
+            false,
+            false,
+            None,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(result.file_count, 1);
+        assert_eq!(result.total_matches, 1);
+        assert_eq!(result.matches.len(), 1);
+
+        let first_match = &result.matches[0];
+        assert_eq!(first_match.file_path, "emoji.txt");
+        assert_eq!(first_match.line_content, prefix);
+        assert_eq!(
+            first_match.line_content.chars().count(),
+            MAX_LINE_CONTENT_LEN
+        );
+        assert_eq!(first_match.match_start, MAX_LINE_CONTENT_LEN);
+        assert_eq!(first_match.match_end, MAX_LINE_CONTENT_LEN);
+        assert_eq!(first_match.source_match_start, MAX_LINE_CONTENT_LEN);
+        assert_eq!(
+            first_match.source_match_end,
+            MAX_LINE_CONTENT_LEN + "needle".chars().count()
+        );
     }
 
     // =======================================================================

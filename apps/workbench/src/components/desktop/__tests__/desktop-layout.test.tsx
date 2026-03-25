@@ -1,9 +1,12 @@
 import React from "react";
-import { afterEach, describe, it, expect, vi } from "vitest";
-import { fireEvent, screen, waitFor } from "@testing-library/react";
-import { cleanup, render } from "@testing-library/react";
+import "@testing-library/jest-dom/vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, useNavigate } from "react-router-dom";
-import { DesktopLayout } from "../desktop-layout";
+import {
+  DesktopLayout,
+  shouldSyncLocationToActivePane,
+} from "../desktop-layout";
 import { usePolicyTabsStore } from "@/features/policy/stores/policy-tabs-store";
 import { setActivePluginView } from "../active-plugin-view";
 import { registerView } from "@/lib/plugins/view-registry";
@@ -71,14 +74,34 @@ vi.mock("@/features/right-sidebar/components/right-sidebar-resize-handle", () =>
   RightSidebarResizeHandle: () => null,
 }));
 
+vi.mock("@/features/spirit/components/spirit-field-injector", () => ({
+  SpiritFieldInjector: () => null,
+}));
+
+vi.mock("@/features/spirit/components/spirit-mood-reactor", () => ({
+  SpiritMoodReactor: () => null,
+}));
+
+vi.mock("@/features/spirit/components/spirit-experience-tracker", () => ({
+  SpiritExperienceTracker: () => null,
+}));
+
+vi.mock("@/features/hunt/components/HuntTelemetryBridge", () => ({
+  HuntTelemetryBridge: () => null,
+}));
+
+vi.mock("@/features/observatory/components/ObservatoryTelemetryBridge", () => ({
+  ObservatoryTelemetryBridge: () => null,
+}));
+
 vi.mock("@/features/right-sidebar/stores/right-sidebar-store", () => ({
-  useRightSidebarStore: () => ({ visible: false }),
+  useRightSidebarStore: vi.fn((selector) => selector({ visible: false })),
 }));
 
 vi.mock("@/components/ui/resizable", () => ({
-  ResizablePanelGroup: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  ResizablePanel: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   ResizableHandle: () => null,
+  ResizablePanel: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  ResizablePanelGroup: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 
 vi.mock("@/features/panes/pane-session", () => ({
@@ -87,10 +110,13 @@ vi.mock("@/features/panes/pane-session", () => ({
 }));
 
 vi.mock("@/features/bottom-pane/bottom-pane-store", () => ({
-  useBottomPaneStore: Object.assign(() => ({ isOpen: false, size: 30 }), {
-    getState: () => ({ isOpen: false, activeTab: "terminal", setSize: vi.fn() }),
-    subscribe: () => () => {},
-  }),
+  useBottomPaneStore: Object.assign(
+    vi.fn((selector) => selector({ isOpen: false, size: 30, setSize: vi.fn() })),
+    {
+      getState: vi.fn(() => ({ isOpen: false, size: 30, setSize: vi.fn() })),
+      subscribe: vi.fn(() => () => {}),
+    },
+  ),
 }));
 
 vi.mock("@/components/desktop/status-bar", () => ({
@@ -117,6 +143,24 @@ vi.mock("@/features/panes/pane-root", () => ({
   PaneRoot: () => <div data-testid="pane-root">Pane Root</div>,
 }));
 
+vi.mock("@/features/panes/pane-store", () => ({
+  getActivePaneRoute: vi.fn(() => ""),
+  usePaneStore: Object.assign(
+    vi.fn((selector) => selector({ root: {}, activePaneId: "main" })),
+    {
+      getState: vi.fn(() => ({
+        root: {},
+        activePaneId: "main",
+        syncRoute: vi.fn(),
+      })),
+    },
+  ),
+}));
+
+vi.mock("@/components/desktop/workbench-routes", () => ({
+  normalizeWorkbenchRoute: (route: string) => route,
+}));
+
 afterEach(() => {
   usePolicyTabsStore.getState()._reset();
   setActivePluginView(null);
@@ -135,12 +179,12 @@ function NavigateHarness() {
 
 function renderLayout(route = "/editor", withDirtyBackgroundTab = false) {
   if (withDirtyBackgroundTab) {
-    // Mark the default tab as dirty in the real Zustand store
     const { tabs } = usePolicyTabsStore.getState();
     if (tabs.length > 0) {
       usePolicyTabsStore.getState().setDirty(tabs[0].id, true);
     }
   }
+
   return render(
     <MemoryRouter initialEntries={[route]}>
       <DesktopLayout />
@@ -152,7 +196,6 @@ describe("DesktopLayout", () => {
   it("renders the titlebar", () => {
     renderLayout();
 
-    // The titlebar renders a header with the brand name (split into two spans)
     expect(screen.getByText("Clawdstrike")).toBeInTheDocument();
     expect(screen.getByText("Workbench")).toBeInTheDocument();
   });
@@ -160,7 +203,6 @@ describe("DesktopLayout", () => {
   it("renders the sidebar", () => {
     renderLayout();
 
-    // Sidebar renders navigation items
     expect(screen.getByRole("complementary")).toBeInTheDocument();
     expect(screen.getByText("Editor")).toBeInTheDocument();
     expect(screen.getByText("Lab")).toBeInTheDocument();
@@ -169,7 +211,6 @@ describe("DesktopLayout", () => {
   it("renders the status bar", () => {
     renderLayout();
 
-    // Status bar renders as a footer
     expect(screen.getByRole("contentinfo")).toBeInTheDocument();
   });
 
@@ -189,7 +230,6 @@ describe("DesktopLayout", () => {
   it("has a flex column layout structure", () => {
     renderLayout();
 
-    // The root div should have flex flex-col
     const root = screen.getByText("Clawdstrike").closest("div.flex.flex-col");
     expect(root).toBeInTheDocument();
   });
@@ -197,7 +237,6 @@ describe("DesktopLayout", () => {
   it("has a flex row section for sidebar + content", () => {
     renderLayout();
 
-    // The sidebar and content area should be in a flex row container
     const sidebar = screen.getByRole("complementary");
     const flexRow = sidebar.parentElement;
     expect(flexRow).toBeInTheDocument();
@@ -243,5 +282,19 @@ describe("DesktopLayout", () => {
     expect(screen.getByTestId("pane-root")).toBeInTheDocument();
 
     disposeView();
+  });
+
+  it("skips syncing a stale browser route into a pane that already switched views", () => {
+    expect(
+      shouldSyncLocationToActivePane("/overview", "/home", "/home", "/editor"),
+    ).toBe(false);
+    expect(
+      shouldSyncLocationToActivePane(
+        "/editor",
+        "/lab?tab=simulate",
+        "/lab?tab=simulate",
+        "/editor",
+      ),
+    ).toBe(true);
   });
 });

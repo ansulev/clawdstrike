@@ -35,6 +35,7 @@ import {
   registerEditCommands,
   registerPolicyCommands,
   registerViewCommands,
+  registerHuntronomerCommands,
 } from "./index";
 import { ShortcutHelpDialog } from "@/components/desktop/shortcut-help-dialog";
 
@@ -246,10 +247,13 @@ export function InitCommands() {
       showFleet: () => useActivityBarStore.getState().actions.showPanel("fleet"),
       showCompliance: () => useActivityBarStore.getState().actions.showPanel("compliance"),
       showHeartbeat: () => useActivityBarStore.getState().actions.showPanel("heartbeat"),
+      showObservatory: () => useActivityBarStore.getState().actions.showPanel("observatory"),
       toggleAudit: () => useBottomPaneStore.getState().toggleTab("audit"),
     });
 
-    // No cleanup needed -- commands are re-registered (overwritten) when deps change.
+    registerHuntronomerCommands();
+
+    // No cleanup needed — commands are re-registered (overwritten) when deps change.
     // The registry uses a Map keyed by id, so re-registration is idempotent.
   }, [
     saveFile,

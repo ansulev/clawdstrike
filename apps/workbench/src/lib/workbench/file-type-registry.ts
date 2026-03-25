@@ -10,6 +10,7 @@ export const BUILTIN_FILE_TYPES = [
   "sigma_rule",
   "yara_rule",
   "ocsf_event",
+  "receipt",
   "swarm_bundle",
 ] as const;
 
@@ -164,6 +165,16 @@ const BUILTIN_FILE_TYPE_DESCRIPTORS: FileTypeDescriptor[] = [
     testable: false,
     convertibleTo: [],
   },
+  {
+    id: "receipt",
+    label: "Receipt / Evidence",
+    shortLabel: "Receipt",
+    extensions: [".receipt", ".hush"],
+    iconColor: "#7ee6f2",
+    defaultContent: "",
+    testable: false,
+    convertibleTo: [],
+  },
 ];
 
 const fileTypeMap = new Map<string, FileTypeDescriptor>();
@@ -249,6 +260,9 @@ export function sanitizeFilenameStem(name: string, fallback: string): string {
 export function getFileTypeByExtension(filename: string): FileType | null {
   const lower = filename.toLowerCase();
 
+  if (lower.endsWith(".receipt") || lower.endsWith(".hush")) {
+    return "receipt";
+  }
   if (lower.endsWith(".yar") || lower.endsWith(".yara")) {
     return "yara_rule";
   }

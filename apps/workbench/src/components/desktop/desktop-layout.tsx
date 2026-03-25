@@ -31,6 +31,11 @@ import {
   ResizablePanelGroup,
 } from "@/components/ui/resizable";
 import { InitCommands } from "@/lib/commands/init-commands";
+import { SpiritFieldInjector } from "@/features/spirit/components/spirit-field-injector";
+import { SpiritMoodReactor } from "@/features/spirit/components/spirit-mood-reactor";
+import { SpiritExperienceTracker } from "@/features/spirit/components/spirit-experience-tracker";
+import { HuntTelemetryBridge } from "@/features/hunt/components/HuntTelemetryBridge";
+import { ObservatoryTelemetryBridge } from "@/features/observatory/components/ObservatoryTelemetryBridge";
 import { useAutoSave } from "@/lib/workbench/use-auto-save";
 import { usePolicyTabsStore } from "@/features/policy/stores/policy-tabs-store";
 import { useWorkbenchUIStore } from "@/features/policy/stores/workbench-ui-store";
@@ -83,6 +88,28 @@ function ActivityBarPluginView({
   );
 }
 
+export function shouldSyncLocationToActivePane(
+  previousRawRoute: string | null,
+  rawRoute: string,
+  currentRoute: string,
+  activePaneRoute: string | null,
+) {
+  if (previousRawRoute === null) {
+    return true;
+  }
+
+  if (previousRawRoute === rawRoute) {
+    return false;
+  }
+
+  if (!activePaneRoute) {
+    return true;
+  }
+
+  const previousPaneRoute = normalizeWorkbenchRoute(previousRawRoute);
+  return activePaneRoute === previousPaneRoute || activePaneRoute === currentRoute;
+}
+
 export function DesktopLayout() {
   const tabs = usePolicyTabsStore((state) => state.tabs);
   const isCollapsed = useWorkbenchUIStore((state) => state.sidebarCollapsed);
@@ -98,6 +125,7 @@ export function DesktopLayout() {
   const hasDirtyTabs = tabs.some((tab) => tab.dirty);
   const rawRoute = `${location.pathname}${location.search}` || "/";
   const currentRoute = normalizeWorkbenchRoute(rawRoute);
+  const previousRawRouteRef = useRef<string | null>(null);
 
   const activePluginViewId = useActivePluginView();
   const previousRouteRef = useRef(rawRoute);
@@ -149,8 +177,18 @@ export function DesktopLayout() {
   }, []);
 
   useLayoutEffect(() => {
+    const previousRawRoute = previousRawRouteRef.current;
+    previousRawRouteRef.current = rawRoute;
+    if (!shouldSyncLocationToActivePane(
+      previousRawRoute,
+      rawRoute,
+      currentRoute,
+      activePaneRoute,
+    )) {
+      return;
+    }
     usePaneStore.getState().syncRoute(currentRoute);
-  }, [currentRoute]);
+  }, [activePaneRoute, currentRoute, rawRoute]);
 
   useEffect(() => {
     if (rawRoute === currentRoute) return;
@@ -209,6 +247,17 @@ export function DesktopLayout() {
 
   return (
     <div className="flex h-screen w-screen flex-col overflow-hidden bg-[#05060a]">
+      {/* Spirit CSS var injection — must be first so vars are available to all children */}
+      <SpiritFieldInjector />
+      {/* Spirit mood reactor — derives mood from workbench signals, 500ms debounced */}
+      <SpiritMoodReactor />
+      {/* Spirit experience tracker — grants XP on probe completion and lint pass events */}
+      <SpiritExperienceTracker />
+      {/* Shared hunt telemetry bridge — exposes live hunt state beyond the Hunt pane */}
+      <HuntTelemetryBridge />
+      {/* Observatory live adapter — derives routeable observatory state from hunt telemetry */}
+      <ObservatoryTelemetryBridge />
+      {/* Command registry initialization + global keyboard shortcuts */}
       <InitCommands />
       <ShortcutProvider />
       <CommandPalette />

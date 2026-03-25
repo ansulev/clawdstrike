@@ -34,7 +34,7 @@ describe("workbenchGuardEvaluator", () => {
   });
 
   it("keeps known spawn operations in the benign category", async () => {
-    await workbenchGuardEvaluator.evaluate(
+    const result = await workbenchGuardEvaluator.evaluate(
       makeAction({
         context: {
           operation: "agent_spawn",
@@ -45,6 +45,8 @@ describe("workbenchGuardEvaluator", () => {
 
     const scenario = vi.mocked(simulatePolicy).mock.calls[0]?.[1];
     expect(scenario?.category).toBe("benign");
+    expect(result.receipt.signature).toMatch(/^[0-9a-f]{128}$/);
+    expect(result.receipt.publicKey).toMatch(/^[0-9a-f]{64}$/);
   });
 
   it("treats non-spawn shell commands as edge cases", async () => {

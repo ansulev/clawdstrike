@@ -10,9 +10,10 @@ use std::time::Duration;
 use axum::{
     extract::{
         ws::{Message, WebSocket, WebSocketUpgrade},
-        Query, State,
+        Extension, Query, State,
     },
     response::IntoResponse,
+    Json,
 };
 use dashmap::DashMap;
 use futures::{SinkExt, StreamExt};
@@ -21,7 +22,7 @@ use tokio::sync::broadcast;
 use tokio::sync::Notify;
 
 use crate::api::v1::V1Error;
-use crate::auth::{ApiKey, Scope};
+use crate::auth::{actor_has_scope, AuthenticatedActor, Scope};
 use crate::state::AppState;
 
 // ---------------------------------------------------------------------------
@@ -36,6 +37,9 @@ pub const HEARTBEAT_TTL_SECS: u64 = 45;
 
 /// How often the reaper task checks for stale analysts (seconds).
 pub const REAPER_INTERVAL_SECS: u64 = 10;
+
+/// How long a presence websocket ticket remains valid (seconds).
+pub const PRESENCE_TICKET_TTL_SECS: u64 = 60;
 
 /// Deterministic color palette for analyst cursors / avatars.
 pub const PRESENCE_COLORS: [&str; 8] = [
@@ -128,6 +132,64 @@ pub enum ClientMessage {
         head_ch: u32,
     },
     Heartbeat,
+}
+
+#[derive(Clone, Debug)]
+struct StoredPresenceTicket {
+    actor: AuthenticatedActor,
+    expires_at: tokio::time::Instant,
+}
+
+/// Short-lived, single-use presence websocket tickets minted over authenticated HTTP.
+pub struct PresenceTicketStore {
+    tickets: DashMap<String, StoredPresenceTicket>,
+}
+
+impl PresenceTicketStore {
+    pub fn new() -> Self {
+        Self {
+            tickets: DashMap::new(),
+        }
+    }
+
+    pub fn issue(&self, actor: AuthenticatedActor) -> String {
+        self.purge_expired();
+
+        let ticket = format!("pst_{}", uuid::Uuid::new_v4().simple());
+        self.tickets.insert(
+            ticket.clone(),
+            StoredPresenceTicket {
+                actor,
+                expires_at: tokio::time::Instant::now()
+                    + Duration::from_secs(PRESENCE_TICKET_TTL_SECS),
+            },
+        );
+        ticket
+    }
+
+    pub fn consume(&self, ticket: &str) -> Option<AuthenticatedActor> {
+        let (_, stored) = self.tickets.remove(ticket)?;
+        if tokio::time::Instant::now() > stored.expires_at {
+            return None;
+        }
+        Some(stored.actor)
+    }
+
+    fn purge_expired(&self) {
+        let now = tokio::time::Instant::now();
+        self.tickets.retain(|_, stored| stored.expires_at > now);
+    }
+}
+
+impl Default for PresenceTicketStore {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct CreatePresenceTicketResponse {
+    pub ticket: String,
 }
 
 // ---------------------------------------------------------------------------
@@ -332,24 +394,41 @@ fn derive_presence_sigil(display_name: &str) -> String {
 }
 
 fn resolve_presence_identity(
-    authenticated_key: Option<&ApiKey>,
+    authenticated_actor: Option<&AuthenticatedActor>,
     connection_id: &str,
     fingerprint: &str,
     display_name: &str,
     sigil: &str,
 ) -> (String, String, String) {
-    if let Some(key) = authenticated_key {
-        let resolved_display_name = if key.name.trim().is_empty() {
-            format!("API Key {}", key.id)
-        } else {
-            key.name.clone()
-        };
+    if let Some(actor) = authenticated_actor {
+        match actor {
+            AuthenticatedActor::ApiKey(key) => {
+                let resolved_display_name = if key.name.trim().is_empty() {
+                    format!("API Key {}", key.id)
+                } else {
+                    key.name.clone()
+                };
 
-        return (
-            format!("api_key:{}:{connection_id}", key.id),
-            resolved_display_name.clone(),
-            derive_presence_sigil(&resolved_display_name),
-        );
+                return (
+                    format!("api_key:{}:{connection_id}", key.id),
+                    resolved_display_name.clone(),
+                    derive_presence_sigil(&resolved_display_name),
+                );
+            }
+            AuthenticatedActor::User(principal) => {
+                let resolved_display_name = principal
+                    .display_name
+                    .clone()
+                    .or_else(|| principal.email.clone())
+                    .unwrap_or_else(|| principal.id.clone());
+
+                return (
+                    format!("user:{}:{connection_id}", principal.id),
+                    resolved_display_name.clone(),
+                    derive_presence_sigil(&resolved_display_name),
+                );
+            }
+        }
     }
 
     (
@@ -357,6 +436,10 @@ fn resolve_presence_identity(
         display_name.to_string(),
         sigil.to_string(),
     )
+}
+
+fn actor_can_access_presence(actor: &AuthenticatedActor) -> bool {
+    actor_has_scope(actor, Scope::Read) || actor_has_scope(actor, Scope::Admin)
 }
 
 // ---------------------------------------------------------------------------
@@ -393,47 +476,75 @@ pub async fn spawn_heartbeat_reaper(hub: Arc<PresenceHub>, shutdown: Arc<Notify>
 /// Query parameters for the WebSocket upgrade request.
 #[derive(Debug, Deserialize)]
 pub struct PresenceQuery {
-    pub token: Option<String>,
+    pub ticket: Option<String>,
+}
+
+/// POST /api/v1/presence/tickets
+///
+/// Issues a short-lived, single-use websocket ticket so browser clients can
+/// authenticate the presence socket without putting long-lived bearer tokens in
+/// URL query parameters.
+pub async fn create_ticket(
+    State(state): State<AppState>,
+    actor: Option<Extension<AuthenticatedActor>>,
+) -> Result<Json<CreatePresenceTicketResponse>, V1Error> {
+    let actor = actor
+        .map(|ext| ext.0)
+        .ok_or_else(|| V1Error::unauthorized("UNAUTHENTICATED", "unauthenticated"))?;
+
+    if !actor_can_access_presence(&actor) {
+        return Err(V1Error::forbidden(
+            "INSUFFICIENT_SCOPE",
+            "presence websocket requires read scope",
+        ));
+    }
+
+    let ticket = state.presence_ticket_store.issue(actor);
+    Ok(Json(CreatePresenceTicketResponse { ticket }))
 }
 
 /// Handler for `GET /api/v1/presence` — upgrades to WebSocket.
 ///
-/// Authentication is handled via the `?token=` query parameter because the
-/// browser `WebSocket` constructor cannot set custom headers.
+/// Authentication is handled via a short-lived `?ticket=` query parameter
+/// because the browser `WebSocket` constructor cannot set custom headers.
 pub async fn ws_handler(
     ws: WebSocketUpgrade,
     State(state): State<AppState>,
     Query(query): Query<PresenceQuery>,
 ) -> Result<impl IntoResponse, V1Error> {
-    let authenticated_key = if state.auth_enabled() {
-        let token = query.token.as_deref().ok_or_else(|| {
+    let authenticated_actor = if state.auth_enabled() {
+        let ticket = query.ticket.as_deref().ok_or_else(|| {
             V1Error::unauthorized(
-                "MISSING_TOKEN",
-                "WebSocket requires ?token= query parameter",
+                "MISSING_TICKET",
+                "WebSocket requires ?ticket= query parameter",
             )
         })?;
-        let key = state
-            .auth_store
-            .validate_key(token)
-            .await
-            .map_err(|_| V1Error::unauthorized("INVALID_TOKEN", "Invalid or expired token"))?;
 
-        if !key.has_scope(Scope::Read) && !key.has_scope(Scope::Admin) {
+        let actor = state
+            .presence_ticket_store
+            .consume(ticket)
+            .ok_or_else(|| V1Error::unauthorized("INVALID_TICKET", "Invalid or expired ticket"))?;
+
+        if !actor_can_access_presence(&actor) {
             return Err(V1Error::forbidden(
                 "INSUFFICIENT_SCOPE",
                 "presence websocket requires read scope",
             ));
         }
 
-        Some(key)
+        Some(actor)
     } else {
         None
     };
 
-    Ok(ws.on_upgrade(move |socket| handle_ws(socket, state, authenticated_key)))
+    Ok(ws.on_upgrade(move |socket| handle_ws(socket, state, authenticated_actor)))
 }
 
-async fn handle_ws(socket: WebSocket, state: AppState, authenticated_key: Option<ApiKey>) {
+async fn handle_ws(
+    socket: WebSocket,
+    state: AppState,
+    authenticated_actor: Option<AuthenticatedActor>,
+) {
     use futures::stream::SplitSink;
     let (sender, mut receiver): (SplitSink<WebSocket, Message>, _) = socket.split();
     let hub = &state.presence_hub;
@@ -492,7 +603,7 @@ async fn handle_ws(socket: WebSocket, state: AppState, authenticated_key: Option
                     } => {
                         let (resolved_fingerprint, resolved_display_name, resolved_sigil) =
                             resolve_presence_identity(
-                                authenticated_key.as_ref(),
+                                authenticated_actor.as_ref(),
                                 &connection_id,
                                 &fingerprint,
                                 &display_name,
@@ -607,7 +718,9 @@ async fn handle_ws(socket: WebSocket, state: AppState, authenticated_key: Option
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::auth::{ApiKey, Scope};
     use futures::{SinkExt, StreamExt};
+    use std::collections::HashSet;
 
     #[test]
     fn hub_new_creates_empty_hub() {
@@ -733,8 +846,13 @@ mod tests {
             expires_at: None,
         };
 
-        let (fingerprint, display_name, sigil) =
-            resolve_presence_identity(Some(&key), "conn-1", "spoofed", "Mallory", "M");
+        let (fingerprint, display_name, sigil) = resolve_presence_identity(
+            Some(&AuthenticatedActor::ApiKey(key)),
+            "conn-1",
+            "spoofed",
+            "Mallory",
+            "M",
+        );
 
         assert_eq!(fingerprint, "api_key:key-123:conn-1");
         assert_eq!(display_name, "Blue Team");
@@ -753,8 +871,13 @@ mod tests {
             expires_at: None,
         };
 
-        let (fingerprint, display_name, sigil) =
-            resolve_presence_identity(Some(&key), "conn-1", "spoofed", "Mallory", "M");
+        let (fingerprint, display_name, sigil) = resolve_presence_identity(
+            Some(&AuthenticatedActor::ApiKey(key)),
+            "conn-1",
+            "spoofed",
+            "Mallory",
+            "M",
+        );
 
         assert_eq!(fingerprint, "api_key:key-123:conn-1");
         assert_eq!(display_name, "API Key key-123");
@@ -773,12 +896,79 @@ mod tests {
             expires_at: None,
         };
 
-        let (first, _, _) =
-            resolve_presence_identity(Some(&key), "conn-1", "spoofed", "Mallory", "M");
-        let (second, _, _) =
-            resolve_presence_identity(Some(&key), "conn-2", "spoofed", "Mallory", "M");
+        let (first, _, _) = resolve_presence_identity(
+            Some(&AuthenticatedActor::ApiKey(key.clone())),
+            "conn-1",
+            "spoofed",
+            "Mallory",
+            "M",
+        );
+        let (second, _, _) = resolve_presence_identity(
+            Some(&AuthenticatedActor::ApiKey(key)),
+            "conn-2",
+            "spoofed",
+            "Mallory",
+            "M",
+        );
 
         assert_ne!(first, second);
+    }
+
+    #[test]
+    fn resolve_presence_identity_uses_authenticated_user() {
+        let principal = clawdstrike::IdentityPrincipal {
+            id: "user-123".to_string(),
+            provider: clawdstrike::IdentityProvider::Custom,
+            issuer: "hushd://test".to_string(),
+            display_name: Some("Alice Example".to_string()),
+            email: Some("alice@example.com".to_string()),
+            email_verified: Some(true),
+            organization_id: None,
+            teams: Vec::new(),
+            roles: vec!["policy-viewer".to_string()],
+            attributes: std::collections::HashMap::new(),
+            authenticated_at: chrono::Utc::now().to_rfc3339(),
+            auth_method: Some(clawdstrike::AuthMethod::ServiceAccount),
+            expires_at: None,
+        };
+
+        let (fingerprint, display_name, sigil) = resolve_presence_identity(
+            Some(&AuthenticatedActor::User(principal)),
+            "conn-1",
+            "spoofed",
+            "Mallory",
+            "M",
+        );
+
+        assert_eq!(fingerprint, "user:user-123:conn-1");
+        assert_eq!(display_name, "Alice Example");
+        assert_eq!(sigil, "AE");
+    }
+
+    #[test]
+    fn presence_ticket_store_consumes_tickets_once() {
+        let mut scopes = HashSet::new();
+        scopes.insert(Scope::Read);
+        let actor = AuthenticatedActor::ApiKey(ApiKey {
+            id: "key-123".to_string(),
+            key_hash: "hash".to_string(),
+            name: "Blue Team".to_string(),
+            tier: None,
+            scopes,
+            created_at: chrono::Utc::now(),
+            expires_at: None,
+        });
+
+        let store = PresenceTicketStore::new();
+        let ticket = store.issue(actor.clone());
+
+        let consumed = store.consume(&ticket);
+        assert!(matches!(
+            consumed,
+            Some(AuthenticatedActor::ApiKey(ApiKey { id, .. })) if id == "key-123"
+        ));
+        assert!(store.consume(&ticket).is_none());
+        assert!(actor_can_access_presence(&actor));
     }
 
     #[test]
@@ -1101,6 +1291,120 @@ mod tests {
             .viewers_of("tmp/policies/foo.yaml")
             .is_empty());
 
+        state.shutdown.notify_waiters();
+        let _ = shutdown_tx.send(());
+        server.await.expect("join server");
+    }
+
+    #[tokio::test]
+    async fn websocket_presence_auth_enabled_uses_short_lived_ticket() {
+        let temp_dir = tempfile::tempdir().expect("tempdir");
+        let config = crate::config::Config {
+            cors_enabled: false,
+            audit_db: temp_dir.path().join("audit.db"),
+            control_db: Some(temp_dir.path().join("control.db")),
+            auth: crate::config::AuthConfig {
+                enabled: true,
+                api_keys: Vec::new(),
+            },
+            ..Default::default()
+        };
+        let state = crate::state::AppState::new(config).await.expect("state");
+
+        let raw_key = "presence-secret";
+        let mut scopes = HashSet::new();
+        scopes.insert(Scope::Read);
+        state
+            .auth_store
+            .add_key(ApiKey {
+                id: "key-123".to_string(),
+                key_hash: state.auth_store.hash_key_for_token(raw_key),
+                name: "Blue Team".to_string(),
+                tier: None,
+                scopes,
+                created_at: chrono::Utc::now(),
+                expires_at: None,
+            })
+            .await;
+
+        let app = crate::api::create_router(state.clone());
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind listener");
+        let addr = listener.local_addr().expect("listener addr");
+        let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel::<()>();
+        let server = tokio::spawn(async move {
+            axum::serve(listener, app)
+                .with_graceful_shutdown(async {
+                    let _ = shutdown_rx.await;
+                })
+                .await
+                .expect("serve presence app");
+        });
+
+        let ticket_response = reqwest::Client::new()
+            .post(format!("http://{addr}/api/v1/presence/tickets"))
+            .bearer_auth(raw_key)
+            .send()
+            .await
+            .expect("create presence ticket");
+        assert_eq!(ticket_response.status(), reqwest::StatusCode::OK);
+        let ticket_body: serde_json::Value = ticket_response.json().await.expect("ticket body");
+        let ticket = ticket_body["ticket"]
+            .as_str()
+            .expect("presence ticket")
+            .to_string();
+
+        let raw_key_connect = tokio_tungstenite::connect_async(format!(
+            "ws://{addr}/api/v1/presence?ticket={raw_key}"
+        ))
+        .await;
+        assert!(
+            raw_key_connect.is_err(),
+            "raw API key should not be accepted as websocket ticket"
+        );
+
+        let (mut socket, _response) = tokio_tungstenite::connect_async(format!(
+            "ws://{addr}/api/v1/presence?ticket={ticket}"
+        ))
+        .await
+        .expect("connect websocket with ticket");
+
+        async fn recv_text(
+            socket: &mut tokio_tungstenite::WebSocketStream<
+                tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
+            >,
+        ) -> String {
+            loop {
+                match socket
+                    .next()
+                    .await
+                    .expect("websocket frame")
+                    .expect("websocket message")
+                {
+                    tokio_tungstenite::tungstenite::Message::Text(text) => {
+                        return text.to_string();
+                    }
+                    tokio_tungstenite::tungstenite::Message::Ping(_)
+                    | tokio_tungstenite::tungstenite::Message::Pong(_) => {}
+                    other => panic!("unexpected websocket message: {other:?}"),
+                }
+            }
+        }
+
+        socket
+            .send(tokio_tungstenite::tungstenite::Message::Text(
+                r#"{"type":"join","fingerprint":"spoofed","display_name":"Mallory","sigil":"M"}"#
+                    .into(),
+            ))
+            .await
+            .expect("send join");
+        let welcome = recv_text(&mut socket).await;
+        assert!(welcome.contains(r#""type":"welcome""#));
+        assert!(welcome.contains(r#""analyst_id":"api_key:key-123:"#));
+        assert!(welcome.contains(r#""display_name":"Blue Team""#));
+
+        socket.close(None).await.expect("close websocket");
         state.shutdown.notify_waiters();
         let _ = shutdown_tx.send(());
         server.await.expect("join server");

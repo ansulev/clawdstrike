@@ -9,7 +9,8 @@
 
 import { useCallback, useMemo } from "react";
 import {
-  useSwarmBoard,
+  useSwarmBoardSession,
+  useSwarmBoardStore,
   MAX_ACTIVE_TERMINALS,
   type SpawnSessionOptions,
   type SpawnClaudeSessionOptions,
@@ -17,6 +18,7 @@ import {
 } from "./swarm-board-store";
 import type { SwarmBoardNodeData } from "./swarm-board-types";
 import type { Node } from "@xyflow/react";
+import { useOptionalSwarmEngine } from "@/features/swarm/stores/swarm-engine-provider";
 
 // ---------------------------------------------------------------------------
 // Types re-exported for convenience
@@ -28,17 +30,56 @@ export type { SpawnSessionOptions, SpawnClaudeSessionOptions, SpawnWorktreeSessi
 // Hook
 // ---------------------------------------------------------------------------
 
-export function useTerminalSessions() {
-  const {
-    state,
-    spawnSession,
-    spawnClaudeSession,
-    spawnWorktreeSession,
-    killSession,
-    removeNode,
-  } = useSwarmBoard();
+interface TerminalSessionSource {
+  repoRoot: string;
+  nodes: Node<SwarmBoardNodeData>[];
+  removeNode: (nodeId: string) => void;
+  spawnSession: (opts: SpawnSessionOptions) => Promise<Node<SwarmBoardNodeData>>;
+  spawnClaudeSession: (opts: SpawnClaudeSessionOptions) => Promise<Node<SwarmBoardNodeData>>;
+  spawnWorktreeSession: (opts: SpawnWorktreeSessionOptions) => Promise<Node<SwarmBoardNodeData>>;
+  killSession: (nodeId: string) => Promise<void>;
+}
 
-  const repoRoot = state.repoRoot;
+function useTerminalSessionsWithSource({
+  repoRoot,
+  nodes,
+  removeNode,
+  spawnSession: rawSpawnSession,
+  spawnClaudeSession: rawSpawnClaudeSession,
+  spawnWorktreeSession: rawSpawnWorktreeSession,
+  killSession,
+}: TerminalSessionSource) {
+  const engineCtx = useOptionalSwarmEngine();
+
+  const spawnSession = useCallback(
+    async (opts: SpawnSessionOptions): Promise<Node<SwarmBoardNodeData>> => {
+      if (engineCtx?.mode === "engine") {
+        return engineCtx.spawnEngineSession(rawSpawnSession, opts);
+      }
+      return rawSpawnSession(opts);
+    },
+    [engineCtx, rawSpawnSession],
+  );
+
+  const spawnClaudeSession = useCallback(
+    async (opts: SpawnClaudeSessionOptions): Promise<Node<SwarmBoardNodeData>> => {
+      if (engineCtx?.mode === "engine") {
+        return engineCtx.spawnEngineClaudeSession(rawSpawnClaudeSession, opts);
+      }
+      return rawSpawnClaudeSession(opts);
+    },
+    [engineCtx, rawSpawnClaudeSession],
+  );
+
+  const spawnWorktreeSession = useCallback(
+    async (opts: SpawnWorktreeSessionOptions): Promise<Node<SwarmBoardNodeData>> => {
+      if (engineCtx?.mode === "engine") {
+        return engineCtx.spawnEngineWorktreeSession(rawSpawnWorktreeSession, opts);
+      }
+      return rawSpawnWorktreeSession(opts);
+    },
+    [engineCtx, rawSpawnWorktreeSession],
+  );
 
   // -----------------------------------------------------------------------
   // Quick-spawn helpers (use defaults from the store's repoRoot)
@@ -93,7 +134,7 @@ export function useTerminalSessions() {
   /** Remove a node from the board, killing its session if active. */
   const removeNodeWithCleanup = useCallback(
     async (nodeId: string) => {
-      const node = state.nodes.find((n) => n.id === nodeId);
+      const node = nodes.find((n) => n.id === nodeId);
       if (node) {
         const d = node.data as SwarmBoardNodeData;
         if (d.sessionId && (d.status === "running" || d.status === "blocked")) {
@@ -108,7 +149,7 @@ export function useTerminalSessions() {
       }
       removeNode(nodeId);
     },
-    [state.nodes, killSession, removeNode],
+    [nodes, killSession, removeNode],
   );
 
   // -----------------------------------------------------------------------
@@ -117,11 +158,11 @@ export function useTerminalSessions() {
 
   /** Count of currently active (running/blocked) sessions. */
   const activeSessionCount = useMemo(
-    () => state.nodes.filter((n) => {
+    () => nodes.filter((n) => {
       const d = n.data as SwarmBoardNodeData;
       return d.sessionId && (d.status === "running" || d.status === "blocked");
     }).length,
-    [state.nodes],
+    [nodes],
   );
 
   /** Whether we can spawn more sessions (below the limit). */
@@ -149,4 +190,37 @@ export function useTerminalSessions() {
     hasRepoRoot,
     repoRoot,
   };
+}
+
+export function useTerminalSessions() {
+  const repoRoot = useSwarmBoardStore.use.repoRoot();
+  const nodes = useSwarmBoardStore.use.nodes();
+  const removeNode = useSwarmBoardStore((s) => s.actions.removeNode);
+  const session = useSwarmBoardSession();
+
+  return useTerminalSessionsWithSource({
+    repoRoot,
+    nodes,
+    removeNode,
+    ...session,
+  });
+}
+
+export function useTerminalSessionsFromBoard(board: {
+  state: { repoRoot: string; nodes: Node<SwarmBoardNodeData>[] };
+  removeNode: (nodeId: string) => void;
+  spawnSession: (opts: SpawnSessionOptions) => Promise<Node<SwarmBoardNodeData>>;
+  spawnClaudeSession: (opts: SpawnClaudeSessionOptions) => Promise<Node<SwarmBoardNodeData>>;
+  spawnWorktreeSession: (opts: SpawnWorktreeSessionOptions) => Promise<Node<SwarmBoardNodeData>>;
+  killSession: (nodeId: string) => Promise<void>;
+}) {
+  return useTerminalSessionsWithSource({
+    repoRoot: board.state.repoRoot,
+    nodes: board.state.nodes,
+    removeNode: board.removeNode,
+    spawnSession: board.spawnSession,
+    spawnClaudeSession: board.spawnClaudeSession,
+    spawnWorktreeSession: board.spawnWorktreeSession,
+    killSession: board.killSession,
+  });
 }

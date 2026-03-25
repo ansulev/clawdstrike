@@ -25,7 +25,8 @@
     "apps/workbench",
     "packages/sdk/clawdstrike-hunt",
     "packages/sdk/plugin-sdk",
-    "packages/cli/create-plugin"
+    "packages/cli/create-plugin",
+    "packages/swarm-engine"
   ],
   "devDependencies": {
     "@biomejs/biome": "^2.4.4"

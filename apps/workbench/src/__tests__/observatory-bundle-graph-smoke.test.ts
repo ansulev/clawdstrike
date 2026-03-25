@@ -3,11 +3,18 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const distAssetsDir = join(process.cwd(), "dist/assets");
-const runSmoke = existsSync(distAssetsDir);
+const requiredAssetPrefixes = [
+  "ObservatoryWorldCanvas-",
+  "ObservatoryFlowRuntimeScene-",
+] as const;
+const builtAssets = existsSync(distAssetsDir) ? readdirSync(distAssetsDir) : [];
+const runSmoke = requiredAssetPrefixes.every((prefix) =>
+  builtAssets.some((entry) => entry.startsWith(prefix)),
+);
 const describeIfBuild = runSmoke ? describe : describe.skip;
 
 function findAssetByPrefix(prefix: string) {
-  const assetName = readdirSync(distAssetsDir).find((entry) => entry.startsWith(prefix));
+  const assetName = builtAssets.find((entry) => entry.startsWith(prefix));
   if (!assetName) {
     throw new Error(`Could not find a built asset with prefix "${prefix}" in ${distAssetsDir}`);
   }

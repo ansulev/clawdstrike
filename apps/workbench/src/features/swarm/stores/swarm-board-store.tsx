@@ -1,18 +1,3 @@
-// ---------------------------------------------------------------------------
-// SwarmBoard Store — Zustand store with createSelectors for board CRUD
-//
-// Migrated from React Context + useReducer to Zustand, matching the
-// swarm-store.tsx / swarm-feed-store.tsx pattern. The Zustand store is
-// globally accessible (no provider tree required for read-only access).
-//
-// SwarmBoardProvider is kept as a thin wrapper that manages:
-// - Auto-detect repoRoot on mount (terminalService.getCwd)
-// - Session spawn/kill lifecycle (PTY refs, exit monitoring, worktrees)
-// - Session context (spawn/kill methods via SwarmBoardSessionContext)
-//
-// The existing useSwarmBoard() hook composes Zustand store + session context
-// for backward compatibility.
-// ---------------------------------------------------------------------------
 import {
   createContext,
   useContext,
@@ -37,16 +22,7 @@ import type {
 import { terminalService, worktreeService } from "@/lib/workbench/terminal-service";
 import type { UnlistenFn } from "@tauri-apps/api/event";
 
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
-
-/** Maximum number of live xterm terminals to keep active simultaneously. */
 export const MAX_ACTIVE_TERMINALS = 8;
-
-// ---------------------------------------------------------------------------
-// Legacy Action type — kept for backward compat type exports
-// ---------------------------------------------------------------------------
 
 export type SwarmBoardAction =
   | { type: "ADD_NODE"; node: Node<SwarmBoardNodeData> }
@@ -62,25 +38,46 @@ export type SwarmBoardAction =
   | { type: "LOAD"; state: Partial<SwarmBoardState> }
   | { type: "CLEAR_BOARD" }
   | { type: "SET_SESSION_STATUS"; sessionId: string; status: SessionStatus; exitCode?: number }
-  | { type: "SET_SESSION_METADATA"; sessionId: string; metadata: Partial<SwarmBoardNodeData> };
-
-// ---------------------------------------------------------------------------
-// Persistence
-// ---------------------------------------------------------------------------
+  | { type: "SET_SESSION_METADATA"; sessionId: string; metadata: Partial<SwarmBoardNodeData> }
+  | { type: "TOPOLOGY_LAYOUT"; topology: string; positions: Map<string, { x: number; y: number }> }
+  | { type: "ENGINE_SYNC"; engineNodes: Array<{ id: string; agentId?: string; taskId?: string; data: Partial<SwarmBoardNodeData>; position?: { x: number; y: number } }>; engineEdges: SwarmBoardEdge[] }
+  | { type: "GUARD_EVALUATE"; agentNodeId: string; verdict: string; guardResults: Array<{ guard: string; allowed: boolean; duration_ms?: number }>; signature?: string; publicKey?: string };
 
 const STORAGE_KEY = "clawdstrike_workbench_swarm_board";
+
+function sanitizePersistedNode(
+  node: Node<SwarmBoardNodeData>,
+): Node<SwarmBoardNodeData> {
+  if (!node.data?.engineManaged) {
+    return node;
+  }
+
+  const {
+    branch: _branch,
+    worktreePath: _worktreePath,
+    filesTouched: _filesTouched,
+    previewLines: _previewLines,
+    taskPrompt: _taskPrompt,
+    ...restData
+  } = node.data;
+
+  return {
+    ...node,
+    data: restData,
+  };
+}
 
 function persistBoard(state: SwarmBoardState): void {
   try {
     const persisted = {
       boardId: state.boardId,
       repoRoot: state.repoRoot,
-      nodes: state.nodes,
+      nodes: state.nodes.map(sanitizePersistedNode),
       edges: state.edges,
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(persisted));
 
-    // File-backed persistence for .swarm bundles
+    // File-backed persistence for .swarm bundles (Tauri only)
     if (state.bundlePath) {
       import("@/lib/tauri-bridge").then(({ writeSwarmBoardJson }) => {
         writeSwarmBoardJson(state.bundlePath, persisted).catch((err: unknown) => {
@@ -109,7 +106,6 @@ function loadPersistedBoard(): Partial<SwarmBoardState> | null {
       return null;
     }
 
-    // Validate each node has the minimum required shape
     const validNodes = (parsed.nodes as unknown[]).filter(
       (n): n is Node<SwarmBoardNodeData> =>
         typeof n === "object" &&
@@ -119,7 +115,6 @@ function loadPersistedBoard(): Partial<SwarmBoardState> | null {
         typeof (n as Record<string, unknown>).data === "object",
     );
 
-    // Validate each edge has required source/target
     const validEdges = (parsed.edges as unknown[]).filter(
       (e): e is SwarmBoardEdge =>
         typeof e === "object" &&
@@ -131,19 +126,23 @@ function loadPersistedBoard(): Partial<SwarmBoardState> | null {
 
     if (validNodes.length === 0) return null;
 
-    // Strip sessionId from persisted nodes — PTY sessions don't survive reloads
+    // PTY sessions don't survive reloads
     const sanitizedNodes = validNodes.map((n) => {
+      const persistedNode = sanitizePersistedNode(n);
       if (n.data?.sessionId) {
         return {
-          ...n,
+          ...persistedNode,
           data: {
-            ...n.data,
+            ...persistedNode.data,
             sessionId: undefined,
-            status: n.data.status === "running" ? "idle" : n.data.status,
+            status:
+              persistedNode.data.status === "running"
+                ? "idle"
+                : persistedNode.data.status,
           },
         } as Node<SwarmBoardNodeData>;
       }
-      return n;
+      return persistedNode;
     });
 
     return {
@@ -158,10 +157,6 @@ function loadPersistedBoard(): Partial<SwarmBoardState> | null {
   }
 }
 
-// ---------------------------------------------------------------------------
-// ID generators
-// ---------------------------------------------------------------------------
-
 let nodeCounter = 0;
 
 function generateBoardId(): string {
@@ -172,10 +167,6 @@ export function generateNodeId(prefix: string = "sbn"): string {
   nodeCounter += 1;
   return `${prefix}-${Date.now().toString(36)}-${nodeCounter}`;
 }
-
-// ---------------------------------------------------------------------------
-// Node factory
-// ---------------------------------------------------------------------------
 
 export interface CreateNodeConfig {
   nodeType: SwarmNodeType;
@@ -198,7 +189,6 @@ export function createBoardNode(config: CreateNodeConfig): Node<SwarmBoardNodeDa
     createdAt: Date.now(),
   };
 
-  // Dimension defaults per node type
   const dimensions: Record<SwarmNodeType, { width?: number; height?: number }> = {
     agentSession: { width: 380, height: 280 },
     terminalTask: { width: 300, height: 180 },
@@ -219,10 +209,6 @@ export function createBoardNode(config: CreateNodeConfig): Node<SwarmBoardNodeDa
     ...(dims.height ? { height: dims.height } : {}),
   };
 }
-
-// ---------------------------------------------------------------------------
-// Mock data seeder
-// ---------------------------------------------------------------------------
 
 export function createMockBoard(): {
   nodes: Node<SwarmBoardNodeData>[];
@@ -470,10 +456,6 @@ export function createMockBoard(): {
   return { nodes, edges };
 }
 
-// ---------------------------------------------------------------------------
-// Edge color helper
-// ---------------------------------------------------------------------------
-
 function edgeColor(type?: SwarmBoardEdge["type"]): string {
   switch (type) {
     case "handoff":
@@ -484,14 +466,12 @@ function edgeColor(type?: SwarmBoardEdge["type"]): string {
       return "#3dbf84";
     case "receipt":
       return "#8b5cf6";
+    case "topology":
+      return "#3d4250";
     default:
       return "#2d3240";
   }
 }
-
-// ---------------------------------------------------------------------------
-// Convert SwarmBoardEdge[] to React Flow Edge[]
-// ---------------------------------------------------------------------------
 
 function toRfEdges(edges: SwarmBoardEdge[]): Edge[] {
   return edges.map((e) => ({
@@ -502,16 +482,13 @@ function toRfEdges(edges: SwarmBoardEdge[]): Edge[] {
     type: "swarmEdge",
     data: { edgeType: e.type },
     animated: e.type === "spawned",
+    style: { stroke: edgeColor(e.type) },
     markerEnd:
       e.type === "handoff" || e.type === "spawned"
         ? { type: MarkerType.ArrowClosed, color: edgeColor(e.type) }
         : undefined,
   }));
 }
-
-// ---------------------------------------------------------------------------
-// Debounced persistence
-// ---------------------------------------------------------------------------
 
 let _persistTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -522,10 +499,6 @@ function schedulePersist(state: SwarmBoardState): void {
     _persistTimer = null;
   }, 500);
 }
-
-// ---------------------------------------------------------------------------
-// Initial state
-// ---------------------------------------------------------------------------
 
 function getInitialState(): SwarmBoardState {
   const persisted = loadPersistedBoard();
@@ -541,7 +514,6 @@ function getInitialState(): SwarmBoardState {
     };
   }
 
-  // Start with an empty board — users create real sessions via "Launch Swarm"
   return {
     boardId: generateBoardId(),
     repoRoot: "",
@@ -553,16 +525,9 @@ function getInitialState(): SwarmBoardState {
   };
 }
 
-// ---------------------------------------------------------------------------
-// Zustand store type
-// ---------------------------------------------------------------------------
-
 interface SwarmBoardStoreState extends SwarmBoardState {
-  // Derived state
   selectedNode: Node<SwarmBoardNodeData> | undefined;
   rfEdges: Edge[];
-
-  // Actions namespace (matching swarm-store.tsx pattern)
   actions: {
     addNode: (config: CreateNodeConfig) => Node<SwarmBoardNodeData>;
     addNodeDirect: (node: Node<SwarmBoardNodeData>) => void;
@@ -580,12 +545,21 @@ interface SwarmBoardStoreState extends SwarmBoardState {
     setEdges: (edges: SwarmBoardEdge[]) => void;
     toggleInspector: (open?: boolean) => void;
     loadFromBundle: (bundlePath: string) => Promise<void>;
+    topologyLayout: (topology: string, positions: Map<string, { x: number; y: number }>) => void;
+    applyTopologyLayout: (topologyEdges: SwarmBoardEdge[], positions: Map<string, { x: number; y: number }>) => void;
+    engineSync: (engineNodes: Array<{ id: string; agentId?: string; taskId?: string; data: Partial<SwarmBoardNodeData>; position?: { x: number; y: number } }>, engineEdges: SwarmBoardEdge[]) => void;
+    addGuardReceipt: (config: {
+      verdict: "allow" | "deny" | "warn";
+      guardResults: Array<{ guard: string; allowed: boolean; duration_ms?: number }>;
+      signature?: string;
+      publicKey?: string;
+      agentNodeId?: string;
+      position?: { x: number; y: number };
+      detail?: string;
+    }) => Node<SwarmBoardNodeData>;
+    guardEvaluate: (agentNodeId: string, verdict: string, guardResults: Array<{ guard: string; allowed: boolean; duration_ms?: number }>, signature?: string, publicKey?: string) => void;
   };
 }
-
-// ---------------------------------------------------------------------------
-// Derived helpers
-// ---------------------------------------------------------------------------
 
 function deriveSelectedNode(
   nodes: Node<SwarmBoardNodeData>[],
@@ -593,10 +567,6 @@ function deriveSelectedNode(
 ): Node<SwarmBoardNodeData> | undefined {
   return selectedNodeId ? nodes.find((n) => n.id === selectedNodeId) : undefined;
 }
-
-// ---------------------------------------------------------------------------
-// Zustand store
-// ---------------------------------------------------------------------------
 
 const initialState = getInitialState();
 
@@ -609,7 +579,6 @@ const useSwarmBoardStoreBase = create<SwarmBoardStoreState>()((set, get) => ({
     addNode: (config: CreateNodeConfig): Node<SwarmBoardNodeData> => {
       const node = createBoardNode(config);
       const current = get();
-      // Prevent duplicates
       if (current.nodes.some((n) => n.id === node.id)) return node;
       const nodes = [...current.nodes, node];
       set({
@@ -797,7 +766,7 @@ const useSwarmBoardStoreBase = create<SwarmBoardStoreState>()((set, get) => ({
         const { readSwarmBundle } = await import("@/lib/tauri-bridge");
         const data = await readSwarmBundle(bundlePath);
         if (!data?.board) {
-          // Empty bundle — just set the path, keep empty board
+          // Empty bundle: just set the path
           set({ bundlePath });
           return;
         }
@@ -822,10 +791,240 @@ const useSwarmBoardStoreBase = create<SwarmBoardStoreState>()((set, get) => ({
         set({ bundlePath });
       }
     },
+
+    topologyLayout: (_topology: string, positions: Map<string, { x: number; y: number }>): void => {
+      const current = get();
+      const nodes = current.nodes.map((n) => {
+        const pos = positions.get(n.id);
+        return pos ? { ...n, position: pos } : n;
+      });
+      set({
+        nodes,
+        selectedNode: deriveSelectedNode(nodes, current.selectedNodeId),
+      });
+      schedulePersist({ ...get() });
+    },
+
+    applyTopologyLayout: (
+      topologyEdges: SwarmBoardEdge[],
+      positions: Map<string, { x: number; y: number }>,
+    ): void => {
+      set((current) => {
+        const nodes = current.nodes.map((node) => {
+          const nextPosition = positions.get(node.id);
+          return nextPosition ? { ...node, position: nextPosition } : node;
+        });
+        const edges = [
+          ...current.edges.filter((edge) => edge.type !== "topology"),
+          ...topologyEdges,
+        ];
+
+        return {
+          nodes,
+          edges,
+          rfEdges: toRfEdges(edges),
+          selectedNode: deriveSelectedNode(nodes, current.selectedNodeId),
+        };
+      });
+      schedulePersist({ ...get() });
+    },
+
+    engineSync: (
+      engineNodes: Array<{ id: string; agentId?: string; taskId?: string; data: Partial<SwarmBoardNodeData>; position?: { x: number; y: number } }>,
+      engineEdges: SwarmBoardEdge[],
+    ): void => {
+      const current = get();
+      const lookupById = new Map(engineNodes.map((en) => [en.id, en]));
+      const lookupByAgentId = new Map(
+        engineNodes
+          .filter((en) => en.agentId)
+          .map((en) => [en.agentId!, en]),
+      );
+      const lookupByTaskId = new Map(
+        engineNodes
+          .filter((en) => en.taskId)
+          .map((en) => [en.taskId!, en]),
+      );
+      const isSnapshotManagedNode = (node: Node<SwarmBoardNodeData>): boolean => {
+        const data = node.data as SwarmBoardNodeData;
+        return (
+          data.engineManaged === true &&
+          (data.nodeType === "agentSession" || data.nodeType === "terminalTask")
+        );
+      };
+      const findMatchingEngineNode = (
+        node: Node<SwarmBoardNodeData>,
+      ): (typeof engineNodes)[number] | undefined => {
+        const data = node.data as SwarmBoardNodeData;
+        return (
+          lookupById.get(node.id) ??
+          (data.agentId ? lookupByAgentId.get(data.agentId) : undefined) ??
+          (data.taskId ? lookupByTaskId.get(data.taskId) : undefined)
+        );
+      };
+
+      const preservedNodes = current.nodes.filter(
+        (node) => !isSnapshotManagedNode(node),
+      );
+      const reconciledNodes = engineNodes.map((engineNode) => {
+        const existingNode = current.nodes.find((node) => {
+          if (!isSnapshotManagedNode(node)) {
+            return false;
+          }
+
+          return findMatchingEngineNode(node)?.id === engineNode.id;
+        });
+
+        if (existingNode) {
+          const existingData = existingNode.data as SwarmBoardNodeData;
+          return {
+            ...existingNode,
+            id: engineNode.id,
+            type:
+              (engineNode.data.nodeType as SwarmBoardNodeData["nodeType"]) ??
+              existingNode.type,
+            data: {
+              ...existingData,
+              ...engineNode.data,
+              agentId: engineNode.agentId,
+              taskId: engineNode.taskId,
+              engineManaged: true,
+            },
+            position: engineNode.position ?? existingNode.position,
+          };
+        }
+
+        const newNode = createBoardNode({
+          nodeType:
+            (engineNode.data.nodeType as SwarmBoardNodeData["nodeType"]) ??
+            "agentSession",
+          title: (engineNode.data.title as string) ?? engineNode.id,
+          position: engineNode.position,
+          data: {
+            ...engineNode.data,
+            agentId: engineNode.agentId,
+            taskId: engineNode.taskId,
+            engineManaged: true,
+          },
+        });
+
+        return { ...newNode, id: engineNode.id };
+      });
+      const nodes = [...preservedNodes, ...reconciledNodes];
+      const nodeIds = new Set(nodes.map((node) => node.id));
+      const isSnapshotManagedEdge = (edge: SwarmBoardEdge): boolean =>
+        edge.type === "spawned" || edge.type === "topology";
+
+      const edgesById = new Map(
+        current.edges
+          .filter((edge) => !isSnapshotManagedEdge(edge))
+          .map((edge) => [edge.id, edge]),
+      );
+      for (const engineEdge of engineEdges) {
+        edgesById.set(engineEdge.id, engineEdge);
+      }
+      const edges = Array.from(edgesById.values()).filter(
+        (edge) => nodeIds.has(edge.source) && nodeIds.has(edge.target),
+      );
+
+      set({
+        nodes,
+        edges,
+        rfEdges: toRfEdges(edges),
+        selectedNode: deriveSelectedNode(nodes, current.selectedNodeId),
+      });
+      schedulePersist({ ...get() });
+    },
+
+    addGuardReceipt: ({
+      verdict,
+      guardResults,
+      signature,
+      publicKey,
+      agentNodeId,
+      position,
+      detail,
+    }): Node<SwarmBoardNodeData> => {
+      const current = get();
+
+      if (signature && signature.length > 0) {
+        const duplicate = current.nodes.find(
+          (n) => (n.data as SwarmBoardNodeData).nodeType === "receipt" &&
+                 (n.data as SwarmBoardNodeData).signature === signature,
+        );
+        if (duplicate) return duplicate;
+      }
+
+      const agentNode = agentNodeId
+        ? current.nodes.find((n) => n.id === agentNodeId)
+        : undefined;
+      const anchor = agentNode?.position ?? position ?? {
+        x: 100 + Math.random() * 400,
+        y: 100 + Math.random() * 300,
+      };
+
+      const receiptNode = createBoardNode({
+        nodeType: "receipt",
+        title: `Guard: ${verdict.toUpperCase()}`,
+        position: { x: anchor.x, y: anchor.y + 340 },
+        data: {
+          verdict,
+          guardResults,
+          signature,
+          publicKey,
+          status: "completed",
+          engineManaged: true,
+          ...(detail ? { previewLines: [detail] } : {}),
+        },
+      });
+
+      const edges = agentNode
+        ? [
+          ...current.edges,
+          {
+            id: `edge-receipt-${receiptNode.id}-${agentNode.id}`,
+            source: agentNode.id,
+            target: receiptNode.id,
+            type: "receipt" as const,
+            label: verdict,
+          },
+        ]
+        : current.edges;
+      const nodes = [...current.nodes, receiptNode];
+
+      set({
+        nodes,
+        edges,
+        rfEdges: toRfEdges(edges),
+        selectedNode: deriveSelectedNode(nodes, current.selectedNodeId),
+      });
+      schedulePersist({ ...get() });
+      return receiptNode;
+    },
+
+    guardEvaluate: (
+      agentNodeId: string,
+      verdict: string,
+      guardResults: Array<{ guard: string; allowed: boolean; duration_ms?: number }>,
+      signature?: string,
+      publicKey?: string,
+    ): void => {
+      const current = get();
+      const agentNode = current.nodes.find((n) => n.id === agentNodeId);
+      if (!agentNode) return;
+
+      get().actions.addGuardReceipt({
+        agentNodeId: agentNode.id,
+        verdict: verdict as "allow" | "deny" | "warn",
+        guardResults,
+        signature,
+        publicKey,
+      });
+    },
   },
 }));
 
-// Expose getInitialState and reinitialize for test reset / provider mount
+// Used for test reset and provider mount
 function reinitializeFromStorage(): void {
   const fresh = getInitialState();
   useSwarmBoardStoreBase.setState({
@@ -841,10 +1040,6 @@ const storeWithInitialState = Object.assign(useSwarmBoardStoreBase, {
 });
 
 export const useSwarmBoardStore = createSelectors(storeWithInitialState);
-
-// ---------------------------------------------------------------------------
-// Session context (spawn/kill — needs mutable refs + Tauri callbacks)
-// ---------------------------------------------------------------------------
 
 export interface SpawnSessionOptions {
   cwd: string;
@@ -871,7 +1066,7 @@ export interface SpawnWorktreeSessionOptions {
   shell?: string;
 }
 
-interface SwarmBoardSessionContextValue {
+export interface SwarmBoardSessionContextValue {
   spawnSession: (opts: SpawnSessionOptions) => Promise<Node<SwarmBoardNodeData>>;
   spawnClaudeSession: (opts: SpawnClaudeSessionOptions) => Promise<Node<SwarmBoardNodeData>>;
   spawnWorktreeSession: (opts: SpawnWorktreeSessionOptions) => Promise<Node<SwarmBoardNodeData>>;
@@ -880,9 +1075,16 @@ interface SwarmBoardSessionContextValue {
 
 const SwarmBoardSessionContext = createContext<SwarmBoardSessionContextValue | null>(null);
 
-// ---------------------------------------------------------------------------
-// Backward-compatible context value shape
-// ---------------------------------------------------------------------------
+const NOOP_SESSION_METHODS: SwarmBoardSessionContextValue = {
+  spawnSession: () =>
+    Promise.reject(new Error("useSwarmBoard must be used within SwarmBoardProvider for session management")),
+  spawnClaudeSession: () =>
+    Promise.reject(new Error("useSwarmBoard must be used within SwarmBoardProvider for session management")),
+  spawnWorktreeSession: () =>
+    Promise.reject(new Error("useSwarmBoard must be used within SwarmBoardProvider for session management")),
+  killSession: () =>
+    Promise.reject(new Error("useSwarmBoard must be used within SwarmBoardProvider for session management")),
+};
 
 interface SwarmBoardContextValue {
   state: SwarmBoardState;
@@ -901,10 +1103,6 @@ interface SwarmBoardContextValue {
   spawnWorktreeSession: (opts: SpawnWorktreeSessionOptions) => Promise<Node<SwarmBoardNodeData>>;
   killSession: (nodeId: string) => Promise<void>;
 }
-
-// ---------------------------------------------------------------------------
-// Dispatch shim — routes legacy dispatch calls to Zustand actions
-// ---------------------------------------------------------------------------
 
 function createDispatchShim(): (action: SwarmBoardAction) => void {
   return (action: SwarmBoardAction) => {
@@ -952,13 +1150,18 @@ function createDispatchShim(): (action: SwarmBoardAction) => void {
       case "SET_SESSION_METADATA":
         actions.setSessionMetadata(action.sessionId, action.metadata);
         break;
+      case "TOPOLOGY_LAYOUT":
+        actions.topologyLayout(action.topology, action.positions);
+        break;
+      case "ENGINE_SYNC":
+        actions.engineSync(action.engineNodes, action.engineEdges);
+        break;
+      case "GUARD_EVALUATE":
+        actions.guardEvaluate(action.agentNodeId, action.verdict, action.guardResults, action.signature, action.publicKey);
+        break;
     }
   };
 }
-
-// ---------------------------------------------------------------------------
-// Hook
-// ---------------------------------------------------------------------------
 
 export function useSwarmBoard(): SwarmBoardContextValue {
   const state = useSwarmBoardStore(
@@ -976,26 +1179,8 @@ export function useSwarmBoard(): SwarmBoardContextValue {
   const rfEdges = useSwarmBoardStore((s) => s.rfEdges);
   const actions = useSwarmBoardStore((s) => s.actions);
 
-  // Session context (may be null if called outside SwarmBoardProvider)
-  const sessionCtx = useContext(SwarmBoardSessionContext);
-
   const dispatch = useMemo(() => createDispatchShim(), []);
-
-  const noopSession = useMemo(
-    () => ({
-      spawnSession: () =>
-        Promise.reject(new Error("useSwarmBoard must be used within SwarmBoardProvider for session management")),
-      spawnClaudeSession: () =>
-        Promise.reject(new Error("useSwarmBoard must be used within SwarmBoardProvider for session management")),
-      spawnWorktreeSession: () =>
-        Promise.reject(new Error("useSwarmBoard must be used within SwarmBoardProvider for session management")),
-      killSession: () =>
-        Promise.reject(new Error("useSwarmBoard must be used within SwarmBoardProvider for session management")),
-    }),
-    [],
-  );
-
-  const sessionMethods = sessionCtx ?? noopSession;
+  const sessionMethods = useSwarmBoardSession();
 
   return useMemo(
     () => ({
@@ -1016,13 +1201,11 @@ export function useSwarmBoard(): SwarmBoardContextValue {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Provider — thin wrapper for session lifecycle
-// ---------------------------------------------------------------------------
+export function useSwarmBoardSession(): SwarmBoardSessionContextValue {
+  return useContext(SwarmBoardSessionContext) ?? NOOP_SESSION_METHODS;
+}
 
 export function SwarmBoardProvider({ children, bundlePath }: { children: ReactNode; bundlePath?: string }) {
-  // Re-initialize store from localStorage on mount (scratch boards),
-  // or load from .swarm bundle when bundlePath is provided.
   useEffect(() => {
     if (bundlePath) {
       useSwarmBoardStore.getState().actions.loadFromBundle(bundlePath);
@@ -1031,7 +1214,6 @@ export function SwarmBoardProvider({ children, bundlePath }: { children: ReactNo
     }
   }, [bundlePath]);
 
-  // Auto-detect repoRoot on mount if empty
   useEffect(() => {
     const state = useSwarmBoardStore.getState();
     if (state.repoRoot) return;
@@ -1047,7 +1229,6 @@ export function SwarmBoardProvider({ children, bundlePath }: { children: ReactNo
       });
   }, []);
 
-  // Track exit listeners and worktree paths for cleanup
   const exitListenersRef = useRef<Map<string, UnlistenFn>>(new Map());
   const worktreeMapRef = useRef<Map<string, string>>(new Map());
   const closedSessionsRef = useRef<Set<string>>(new Set());
@@ -1339,7 +1520,6 @@ export function SwarmBoardProvider({ children, bundlePath }: { children: ReactNo
     [cleanupSessionTracking],
   );
 
-  // Clean up all listeners on unmount
   useEffect(() => {
     return () => {
       for (const unlisten of exitListenersRef.current.values()) {
@@ -1367,9 +1547,5 @@ export function SwarmBoardProvider({ children, bundlePath }: { children: ReactNo
     </SwarmBoardSessionContext.Provider>
   );
 }
-
-// ---------------------------------------------------------------------------
-// Type re-exports
-// ---------------------------------------------------------------------------
 
 export type { SwarmBoardState, SwarmBoardNodeData, SwarmBoardEdge, SwarmNodeType, SessionStatus, RiskLevel };

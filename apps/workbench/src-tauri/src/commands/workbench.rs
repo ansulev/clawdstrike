@@ -1538,7 +1538,7 @@ const SEARCHABLE_EXTENSIONS: &[&str] = &[
 ];
 
 /// Directory names to skip during search.
-const SKIP_DIRS: &[&str] = &["node_modules", "target"];
+const SKIP_DIRS: &[&str] = &[".git", "node_modules", "target"];
 
 #[derive(Debug)]
 struct SearchCancellationEntry {
@@ -2082,6 +2082,38 @@ guards:
         assert_eq!(result.file_count, 1);
         assert_eq!(result.total_matches, MAX_SEARCH_MATCHES);
         assert_eq!(result.matches.len(), MAX_SEARCH_MATCHES);
+    }
+
+    #[tokio::test]
+    async fn search_in_project_skips_git_directories() {
+        let root = tempdir().unwrap();
+        let repo_metadata_dir = root.path().join(".git").join("objects");
+        let source_dir = root.path().join("src");
+
+        std::fs::create_dir_all(&repo_metadata_dir).unwrap();
+        std::fs::create_dir_all(&source_dir).unwrap();
+        std::fs::write(repo_metadata_dir.join("ignored.yaml"), "needle\n").unwrap();
+        std::fs::write(source_dir.join("main.yaml"), "needle\n").unwrap();
+
+        let result = search_in_project(
+            root.path().to_string_lossy().to_string(),
+            "needle".to_string(),
+            true,
+            false,
+            false,
+            None,
+        )
+        .await
+        .unwrap();
+
+        let matched_files: Vec<_> = result
+            .matches
+            .iter()
+            .map(|entry| entry.file_path.as_str())
+            .collect();
+
+        assert_eq!(matched_files, vec!["src/main.yaml"]);
+        assert_eq!(result.file_count, 1);
     }
 
     #[cfg(unix)]

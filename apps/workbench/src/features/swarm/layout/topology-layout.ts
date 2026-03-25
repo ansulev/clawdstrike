@@ -276,7 +276,42 @@ function centralizedLayout(
   const cx = width / 2;
   const cy = height / 2;
 
-  const hub = nodes.find((n) => n.data.nodeType === "agentSession") ?? nodes[0];
+  const degreeByNodeId = new Map<string, number>();
+  for (const edge of edges) {
+    degreeByNodeId.set(edge.source, (degreeByNodeId.get(edge.source) ?? 0) + 1);
+    degreeByNodeId.set(edge.target, (degreeByNodeId.get(edge.target) ?? 0) + 1);
+  }
+
+  let hub =
+    nodes.find((node) => (degreeByNodeId.get(node.id) ?? 0) > 0) ?? null;
+
+  for (const node of nodes) {
+    const degree = degreeByNodeId.get(node.id) ?? 0;
+    if (degree === 0) {
+      continue;
+    }
+
+    if (!hub) {
+      hub = node;
+      continue;
+    }
+
+    const hubDegree = degreeByNodeId.get(hub.id) ?? 0;
+    if (degree > hubDegree) {
+      hub = node;
+      continue;
+    }
+
+    if (
+      degree === hubDegree &&
+      node.data.nodeType === "agentSession" &&
+      hub.data.nodeType !== "agentSession"
+    ) {
+      hub = node;
+    }
+  }
+
+  hub ??= nodes.find((n) => n.data.nodeType === "agentSession") ?? nodes[0];
   const spokes = nodes.filter((n) => n.id !== hub.id);
 
   const positions = new Map<string, { x: number; y: number }>();

@@ -22,7 +22,6 @@ import {
   TopologyManager,
   type GuardedAction,
   type SwarmEngineEventMap,
-  type SwarmEngineState,
   type SwarmOrchestratorConfig,
 } from "@clawdstrike/swarm-engine";
 import type { SwarmBoardNodeData } from "../swarm-board-types";
@@ -234,7 +233,10 @@ export function SwarmEngineProvider({
     try {
       const events = new TypedEventEmitter<SwarmEngineEventMap>();
       const registry = new AgentRegistry(events);
-      const taskGraph = new TaskGraph(events, registry);
+      const taskGraph = new TaskGraph(events, registry, {
+        maxTasks: WORKBENCH_CONFIG.maxTasks,
+        defaultTimeoutMs: WORKBENCH_CONFIG.taskTimeoutMs,
+      });
       const topologyMgr = new TopologyManager(events);
 
       orchestrator = new SwarmOrchestrator(
@@ -427,22 +429,4 @@ export function useSwarmEngine(): SwarmEngineContextValue {
 /** Returns null if no provider is mounted (safe for compatibility layers). */
 export function useOptionalSwarmEngine(): SwarmEngineContextValue | null {
   return useContext(SwarmEngineContext);
-}
-
-/** @deprecated Use `useSwarmEngine().engine?.getState().agents` instead. */
-export function useAgentRegistry(): ReturnType<AgentRegistry["getState"]> | null {
-  const { engine } = useSwarmEngine();
-  return engine?.getState().agents ?? null;
-}
-
-/** @deprecated Use `useSwarmEngine().engine?.getState().tasks` instead. */
-export function useTaskGraph(): ReturnType<TaskGraph["getState"]> | null {
-  const { engine } = useSwarmEngine();
-  return engine?.getState().tasks ?? null;
-}
-
-/** @deprecated Use `useSwarmEngine().engine?.getState().topology` instead. */
-export function useTopology(): SwarmEngineState["topology"] | null {
-  const { engine } = useSwarmEngine();
-  return engine?.getState().topology ?? null;
 }

@@ -303,6 +303,32 @@ describe("Engine actions are additive, not breaking", () => {
     expect(state.edges).toHaveLength(1);
   });
 
+  it("engineSync replaces existing engine edge definitions by ID", () => {
+    const { actions } = useSwarmBoardStore.getState();
+    actions.addEdge({
+      id: "edge-spawn-tsk_1",
+      source: "agt_old",
+      target: "tsk_1",
+      type: "spawned",
+    });
+
+    actions.engineSync([], [{
+      id: "edge-spawn-tsk_1",
+      source: "agt_new",
+      target: "tsk_1",
+      type: "spawned",
+    }]);
+
+    const state = useSwarmBoardStore.getState();
+    expect(state.edges).toHaveLength(1);
+    expect(state.edges[0]).toMatchObject({
+      id: "edge-spawn-tsk_1",
+      source: "agt_new",
+      target: "tsk_1",
+      type: "spawned",
+    });
+  });
+
   it("guardEvaluate handles missing node gracefully", () => {
     const { actions } = useSwarmBoardStore.getState();
 
@@ -372,6 +398,34 @@ describe("Engine actions are additive, not breaking", () => {
     const state = useSwarmBoardStore.getState();
     expect(state.nodes.filter((node) => node.data.nodeType === "receipt")).toHaveLength(1);
     expect(state.edges.filter((edge) => edge.type === "receipt")).toHaveLength(1);
+  });
+
+  it("guardEvaluate does not deduplicate receipts with empty signatures", () => {
+    const { actions } = useSwarmBoardStore.getState();
+    const agentNode = actions.addNode({
+      nodeType: "agentSession",
+      title: "Test Agent",
+      position: { x: 100, y: 100 },
+    });
+
+    actions.guardEvaluate(
+      agentNode.id,
+      "deny",
+      [{ guard: "ForbiddenPathGuard", allowed: false, duration_ms: 2 }],
+      "",
+      "",
+    );
+    actions.guardEvaluate(
+      agentNode.id,
+      "deny",
+      [{ guard: "ForbiddenPathGuard", allowed: false, duration_ms: 3 }],
+      "",
+      "",
+    );
+
+    const state = useSwarmBoardStore.getState();
+    expect(state.nodes.filter((node) => node.data.nodeType === "receipt")).toHaveLength(2);
+    expect(state.edges.filter((edge) => edge.type === "receipt")).toHaveLength(2);
   });
 });
 

@@ -4,6 +4,7 @@ import { SwarmEngineProvider, useSwarmEngine } from "../swarm-engine-provider";
 
 const mockInitialize = vi.fn();
 const mockShutdown = vi.fn();
+const mockTaskGraphConfig = vi.fn();
 
 vi.mock("@clawdstrike/swarm-engine", () => {
   class MockSwarmOrchestrator {
@@ -13,7 +14,15 @@ vi.mock("@clawdstrike/swarm-engine", () => {
 
   class MockTypedEventEmitter {}
   class MockAgentRegistry {}
-  class MockTaskGraph {}
+  class MockTaskGraph {
+    constructor(
+      _events: unknown,
+      _registry: unknown,
+      config?: unknown,
+    ) {
+      mockTaskGraphConfig(config);
+    }
+  }
   class MockTopologyManager {}
 
   return {
@@ -36,6 +45,7 @@ describe("SwarmEngineProvider", () => {
   beforeEach(() => {
     mockInitialize.mockReset();
     mockShutdown.mockReset();
+    mockTaskGraphConfig.mockReset();
     mockInitialize.mockImplementation(() => {
       throw new Error("engine exploded");
     });
@@ -59,6 +69,12 @@ describe("SwarmEngineProvider", () => {
 
     expect(mockInitialize).toHaveBeenCalledTimes(1);
     expect(mockShutdown).toHaveBeenCalledTimes(1);
+    expect(mockTaskGraphConfig).toHaveBeenCalledWith(
+      expect.objectContaining({
+        maxTasks: 200,
+        defaultTimeoutMs: 300_000,
+      }),
+    );
 
     unmount();
 

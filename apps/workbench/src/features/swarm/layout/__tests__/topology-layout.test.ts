@@ -220,6 +220,26 @@ describe("computeLayout -- centralized", () => {
     expect(spokeDists[0]).toBeCloseTo(spokeDists[1], 0);
     expect(spokeDists[1]).toBeCloseTo(spokeDists[2], 0);
   });
+
+  it("uses the highest-degree node as the hub when multiple agent sessions exist", () => {
+    const nodes = [
+      mockNode("agent-1", "agentSession"),
+      mockNode("agent-2", "agentSession"),
+      mockNode("task-1", "terminalTask"),
+      mockNode("task-2", "terminalTask"),
+    ];
+    const edges = [
+      mockEdge("agent-2", "task-1"),
+      mockEdge("agent-2", "task-2"),
+      mockEdge("agent-1", "task-1"),
+    ];
+
+    const result = computeLayout(nodes, edges, "centralized", viewport);
+    const hubPos = result.positions.get("agent-2")!;
+
+    expect(hubPos.x).toBeCloseTo(400, 0);
+    expect(hubPos.y).toBeCloseTo(300, 0);
+  });
 });
 
 // ---------------------------------------------------------------------------

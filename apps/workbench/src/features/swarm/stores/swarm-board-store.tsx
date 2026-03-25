@@ -824,8 +824,11 @@ const useSwarmBoardStoreBase = create<SwarmBoardStoreState>()((set, get) => ({
         }
       }
 
-      const existingEdgeIds = new Set(current.edges.map((e) => e.id));
-      const edges = [...current.edges, ...engineEdges.filter((e) => !existingEdgeIds.has(e.id))];
+      const edgesById = new Map(current.edges.map((edge) => [edge.id, edge]));
+      for (const engineEdge of engineEdges) {
+        edgesById.set(engineEdge.id, engineEdge);
+      }
+      const edges = Array.from(edgesById.values());
 
       set({
         nodes,
@@ -847,7 +850,7 @@ const useSwarmBoardStoreBase = create<SwarmBoardStoreState>()((set, get) => ({
       const agentNode = current.nodes.find((n) => n.id === agentNodeId);
       if (!agentNode) return;
 
-      if (signature !== undefined) {
+      if (signature && signature.length > 0) {
         const duplicate = current.nodes.some(
           (n) => (n.data as SwarmBoardNodeData).nodeType === "receipt" &&
                  (n.data as SwarmBoardNodeData).signature === signature,

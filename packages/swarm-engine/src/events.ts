@@ -3,7 +3,7 @@
  * and SwarmEngineEnvelope wire type.
  *
  * The TypedEventEmitter wraps EventTarget with per-event listener tracking,
- * detail freezing (prevents cross-listener mutation), dispose(), and
+ * deep cloning (prevents cross-listener mutation), dispose(), and
  * listenerCount(). It is the communication backbone for every subsystem.
  *
  * @module
@@ -34,8 +34,8 @@ import type {
  * Type-safe event emitter wrapping the browser-native EventTarget.
  *
  * Design choices (see PITFALLS.md):
- * - Per-event listener tracking via Map<string, Set> (Pitfall 1 prevention)
- * - Object.freeze(detail) before dispatch (Pitfall 2 prevention)
+ * - Per-event listener tracking via Map<string, Map<handler, EventListener>> (Pitfall 1 prevention)
+ * - structuredClone(detail) per listener for cross-listener isolation (Pitfall 2 prevention)
  * - dispose() removes ALL listeners across ALL event names
  * - listenerCount(event) returns accurate count after add/remove
  */
@@ -43,7 +43,7 @@ export class TypedEventEmitter<Events extends Record<string, unknown>> {
   private target = new EventTarget();
   private listeners = new Map<
     string,
-    Set<{ handler: Function; listener: EventListener }>
+    Map<(data: any) => void, EventListener>
   >();
 
   /**
@@ -55,32 +55,30 @@ export class TypedEventEmitter<Events extends Record<string, unknown>> {
     handler: (data: Events[K]) => void,
   ): () => void {
     const listener = ((e: Event) =>
-      handler((e as CustomEvent).detail)) as EventListener;
+      handler(structuredClone((e as CustomEvent).detail))) as EventListener;
     this.target.addEventListener(event, listener);
 
     if (!this.listeners.has(event)) {
-      this.listeners.set(event, new Set());
+      this.listeners.set(event, new Map());
     }
-    const entry = { handler: handler as Function, listener };
-    this.listeners.get(event)!.add(entry);
+    this.listeners.get(event)!.set(handler, listener);
 
     // Return cleanup function
     return () => {
       this.target.removeEventListener(event, listener);
-      this.listeners.get(event)?.delete(entry);
+      this.listeners.get(event)?.delete(handler);
     };
   }
 
   /**
    * Emit an event to all registered listeners.
    *
-   * CRITICAL: Freezes the detail before dispatch to prevent cross-listener
-   * mutation (PITFALLS.md Pitfall 2). Throws TypeError in strict mode if
-   * any listener attempts to mutate the payload.
+   * CRITICAL: Each listener receives its own structuredClone of the detail
+   * to prevent cross-listener mutation (PITFALLS.md Pitfall 2).
    */
   emit<K extends keyof Events & string>(event: K, data: Events[K]): void {
-    const frozen = Object.freeze(data);
-    this.target.dispatchEvent(new CustomEvent(event, { detail: frozen }));
+    const cloned = structuredClone(data);
+    this.target.dispatchEvent(new CustomEvent(event, { detail: cloned }));
   }
 
   /**
@@ -96,19 +94,19 @@ export class TypedEventEmitter<Events extends Record<string, unknown>> {
    */
   removeAllListeners<K extends keyof Events & string>(event?: K): void {
     if (event) {
-      const set = this.listeners.get(event);
-      if (set) {
-        for (const { listener } of set) {
+      const map = this.listeners.get(event);
+      if (map) {
+        for (const listener of map.values()) {
           this.target.removeEventListener(event, listener);
         }
-        set.clear();
+        map.clear();
       }
     } else {
-      for (const [name, set] of this.listeners) {
-        for (const { listener } of set) {
+      for (const [name, map] of this.listeners) {
+        for (const listener of map.values()) {
           this.target.removeEventListener(name, listener);
         }
-        set.clear();
+        map.clear();
       }
       this.listeners.clear();
     }

@@ -31,7 +31,7 @@ import type {
 // ---------------------------------------------------------------------------
 
 /** Crockford Base32 regex (excludes I, L, O, U). */
-const CROCKFORD_RE = /^(agt|tsk|swe|top|csn|msg)_[0-9A-HJKMNP-TV-Z]{26}$/;
+const CROCKFORD_RE = /^(agt|tsk|swe|top|csn|msg|rct)_[0-9A-HJKMNP-TV-Z]{26}$/;
 
 function makeCapabilities(): AgentCapabilities {
   return {
@@ -147,8 +147,8 @@ describe("generateSwarmId", () => {
     expect(id).toMatch(/^agt_[0-9A-HJKMNP-TV-Z]{26}$/);
   });
 
-  it("produces correctly formatted ULID for all 6 prefixes", () => {
-    const prefixes: SwarmEngineIdPrefix[] = ["agt", "tsk", "swe", "top", "csn", "msg"];
+  it("produces correctly formatted ULID for all 7 prefixes", () => {
+    const prefixes: SwarmEngineIdPrefix[] = ["agt", "tsk", "swe", "top", "csn", "msg", "rct"];
     for (const prefix of prefixes) {
       const id = generateSwarmId(prefix);
       expect(id).toMatch(CROCKFORD_RE);
@@ -344,10 +344,8 @@ describe("SWARM_ENGINE_CONSTANTS", () => {
     expect(SWARM_ENGINE_CONSTANTS.DEFAULT_CONSENSUS_THRESHOLD).toBe(0.66);
   });
 
-  it("is immutable (as const)", () => {
-    // The object is declared as `as const` -- verify values are literal types
-    // by checking that the object exists and has expected readonly properties
-    expect(Object.isFrozen(SWARM_ENGINE_CONSTANTS)).toBe(false); // `as const` is compile-time only
+  it("is immutable (Object.freeze at runtime)", () => {
+    expect(Object.isFrozen(SWARM_ENGINE_CONSTANTS)).toBe(true);
     expect(SWARM_ENGINE_CONSTANTS.MAX_RETRIES).toBe(3);
   });
 });

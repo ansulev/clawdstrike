@@ -1137,7 +1137,7 @@ export function isSwarmEngineEnvelope(
 // Section 13: Constants
 // ============================================================================
 
-export const SWARM_ENGINE_CONSTANTS = {
+export const SWARM_ENGINE_CONSTANTS = Object.freeze({
   /** Internal heartbeat interval for agent liveness checks (orchestrator loop). */
   DEFAULT_HEARTBEAT_INTERVAL_MS: 5_000,
   /** Protocol-level heartbeat envelope interval (local swarms). Networked: 30_000. */
@@ -1168,7 +1168,7 @@ export const SWARM_ENGINE_CONSTANTS = {
   MAX_GUARD_ACTION_HISTORY: 500,
   /** Health score threshold below which failover triggers. */
   HEALTH_FAILOVER_THRESHOLD: 0.3,
-} as const;
+});
 
 // ============================================================================
 // Protocol Types (from PROTOCOL-SPEC.md sections 4.1-4.2)

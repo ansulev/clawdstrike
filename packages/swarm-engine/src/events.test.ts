@@ -258,36 +258,44 @@ describe("TypedEventEmitter", () => {
     });
   });
 
-  describe("detail freezing", () => {
-    it("freezes emitted data to prevent cross-listener mutation (Pitfall 2)", () => {
+  describe("cross-listener isolation", () => {
+    it("each listener receives its own deep clone (Pitfall 2)", () => {
       const emitter = new TypedEventEmitter<TestEvents>();
+      let listenerAData: Record<string, unknown> | undefined;
+      let listenerBData: Record<string, unknown> | undefined;
 
       emitter.on("ping", (data) => {
-        // Attempt top-level mutation -- should throw TypeError in strict mode
-        expect(() => {
-          (data as Record<string, unknown>).mutated = true;
-        }).toThrow(TypeError);
+        // Listener A mutates its copy
+        (data as Record<string, unknown>).mutated = true;
+        listenerAData = data as Record<string, unknown>;
       });
 
       emitter.on("ping", (data) => {
-        // Second listener should see the original data, unmodified
-        expect((data as Record<string, unknown>).mutated).toBeUndefined();
-        expect(data.value).toBe(42);
+        // Listener B should see the original data, unmodified
+        listenerBData = data as Record<string, unknown>;
       });
 
       emitter.emit("ping", { value: 42 });
+
+      expect(listenerAData!.mutated).toBe(true);
+      expect(listenerBData!.mutated).toBeUndefined();
+      expect(listenerBData!.value).toBe(42);
     });
 
-    it("Object.freeze is applied to the detail", () => {
+    it("each listener gets a distinct object reference", () => {
       const emitter = new TypedEventEmitter<TestEvents>();
-      let receivedData: unknown;
+      const refs: unknown[] = [];
 
       emitter.on("ping", (data) => {
-        receivedData = data;
+        refs.push(data);
+      });
+      emitter.on("ping", (data) => {
+        refs.push(data);
       });
 
       emitter.emit("ping", { value: 7 });
-      expect(Object.isFrozen(receivedData)).toBe(true);
+      expect(refs).toHaveLength(2);
+      expect(refs[0]).not.toBe(refs[1]);
     });
   });
 

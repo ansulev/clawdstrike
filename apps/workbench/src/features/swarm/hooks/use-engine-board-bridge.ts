@@ -46,7 +46,7 @@ function mapEngineStatus(engineStatus: string): SessionStatus {
     case "evaluating":
       return "evaluating";
     default:
-      return "running";
+      return "idle";
   }
 }
 

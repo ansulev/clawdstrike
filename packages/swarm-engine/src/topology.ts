@@ -173,7 +173,11 @@ export class TopologyManager {
       throw new Error(`Node ${agentId} not found`);
     }
 
-    if (updates.role !== undefined) node.role = updates.role;
+    if (updates.role !== undefined && updates.role !== node.role) {
+      this.removeFromRoleIndex({ ...node });
+      node.role = updates.role;
+      this.addToRoleIndex(node);
+    }
     if (updates.status !== undefined) node.status = updates.status;
     if (updates.connections !== undefined) {
       node.connections = updates.connections;

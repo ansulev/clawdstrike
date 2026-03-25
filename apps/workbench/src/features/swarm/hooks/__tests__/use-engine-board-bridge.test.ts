@@ -428,7 +428,7 @@ describe("useEngineBoardBridge", () => {
     }
   });
 
-  it("maps created tasks from engine status updates instead of forcing them to running", () => {
+  it("maps task and unknown engine statuses safely", () => {
     const events = new TypedEventEmitter<SwarmEngineEventMap>();
     const engine = {
       getState: () => makeEngineState(),
@@ -477,6 +477,17 @@ describe("useEngineBoardBridge", () => {
       expect(
         useSwarmBoardStore.getState().nodes.find((node) => node.data.taskId === "tsk_1")?.data.status,
       ).toBe("completed");
+
+      act(() => {
+        events.emit("agent.status_changed", {
+          agentId: "agt_pool_1",
+          newStatus: "draining",
+        } as any);
+      });
+
+      expect(
+        useSwarmBoardStore.getState().nodes.find((node) => node.id === "agt_pool_1")?.data.status,
+      ).toBe("idle");
     } finally {
       unmount();
     }

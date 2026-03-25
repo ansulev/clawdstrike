@@ -48,6 +48,7 @@ export class SharedMemory {
   private readonly hnsw: HnswLite;
   private readonly graph: KnowledgeGraph;
   private readonly idb: IdbBackend | null;
+  private readonly idbReady: Promise<boolean> | null;
   private readonly data = new Map<string, MemoryEntry>();
 
   constructor(
@@ -61,8 +62,10 @@ export class SharedMemory {
 
     if (config?.enableIdb) {
       this.idb = new IdbBackend(config.idbName ?? "swarm-memory");
+      this.idbReady = this.idb.open();
     } else {
       this.idb = null;
+      this.idbReady = null;
     }
   }
 
@@ -112,8 +115,11 @@ export class SharedMemory {
       this.hnsw.add(compositeKey, options.vector);
     }
 
-    if (this.idb?.isAvailable) {
-      await this.idb.put(compositeKey, { ...entry, vector: undefined });
+    if (this.idb && this.idbReady) {
+      await this.idbReady;
+      if (this.idb.isAvailable) {
+        await this.idb.put(compositeKey, { ...entry, vector: undefined });
+      }
     }
 
     this.events.emit("memory.store", {

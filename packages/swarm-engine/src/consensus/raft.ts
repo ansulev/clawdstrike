@@ -468,7 +468,7 @@ export class RaftConsensus {
       (v) => v.approve,
     ).length;
 
-    const quorum = Math.floor(totalVoters * this.config.threshold);
+    const quorum = Math.max(1, Math.ceil(totalVoters * this.config.threshold));
 
     if (approvingVotes >= quorum) {
       proposal.status = "accepted";

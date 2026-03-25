@@ -241,7 +241,7 @@ describe("RaftConsensus", () => {
     );
   });
 
-  it("threshold resolution emits consensus.resolved", async () => {
+  it("threshold resolution emits consensus.resolved only after quorum is met", async () => {
     const resolved: ConsensusResolvedEvent[] = [];
     events.on("consensus.resolved", (e) => resolved.push(e));
 
@@ -250,12 +250,21 @@ describe("RaftConsensus", () => {
     raft.initialize();
     await new Promise((r) => setTimeout(r, 200));
 
-    raft.propose({ action: "commit" });
-    // Leader auto-voted (1 vote). Need 2 of 3 for 0.66 threshold.
-    // ceil(3 * 0.66) = 1.98 -> floor = 1, so 1 vote might be enough?
-    // Actually Math.floor(3 * 0.66) = Math.floor(1.98) = 1
-    // 1 >= 1 is true, so it should resolve immediately
-    expect(resolved.length).toBeGreaterThanOrEqual(1);
+    const proposal = raft.propose({ action: "commit" });
+    expect(resolved).toHaveLength(0);
+
+    const voteMap = (raft as any).proposalVotes.get(proposal.id) as Map<string, unknown>;
+    voteMap.set("node-2", {
+      voterId: "node-2",
+      approve: true,
+      confidence: 1.0,
+      timestamp: Date.now(),
+    });
+
+    proposal.votes = Array.from(voteMap.values()) as any;
+    (raft as any).checkConsensus(proposal.id);
+
+    expect(resolved).toHaveLength(1);
     expect(resolved[0]!.result.approved).toBe(true);
     expect(resolved[0]!.kind).toBe("consensus.resolved");
     expect(resolved[0]!.result.receipt).toBeNull();

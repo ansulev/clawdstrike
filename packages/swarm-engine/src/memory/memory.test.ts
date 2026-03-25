@@ -6,7 +6,7 @@
  * namespace scoping, tag search, TTL expiration, guarded writes.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { HnswLite, cosineSimilarity } from "./hnsw.js";
 import { KnowledgeGraph } from "./graph.js";
 import type { Entity, Relation } from "./graph.js";
@@ -259,6 +259,7 @@ describe("shared", () => {
 
   afterEach(() => {
     memory.dispose();
+    vi.restoreAllMocks();
   });
 
   it("store + get roundtrip", async () => {
@@ -322,6 +323,40 @@ describe("shared", () => {
     const resultsB = memory.search("ns-b", {});
     expect(resultsA).toHaveLength(1);
     expect(resultsB).toHaveLength(1);
+  });
+
+  it("opens IndexedDB and persists entries when enableIdb is true", async () => {
+    const close = vi.fn();
+    const openSpy = vi
+      .spyOn(IdbBackend.prototype, "open")
+      .mockImplementation(async function mockOpen(this: IdbBackend) {
+        (this as any).db = { close } as IDBDatabase;
+        return true;
+      });
+    const putSpy = vi.spyOn(IdbBackend.prototype, "put").mockResolvedValue();
+
+    const idbMemory = new SharedMemory(events, {
+      dimensions: 3,
+      enableIdb: true,
+      idbName: "test-memory",
+      guardEvaluator: makeAllowEvaluator(),
+    });
+
+    try {
+      const stored = await idbMemory.store("ns", "persisted", { data: "hello" });
+      expect(stored).toBe(true);
+      expect(openSpy).toHaveBeenCalledOnce();
+      expect(putSpy).toHaveBeenCalledWith(
+        "ns:persisted",
+        expect.objectContaining({
+          namespace: "ns",
+          value: { data: "hello" },
+          _key: "ns:persisted",
+        }),
+      );
+    } finally {
+      idbMemory.dispose();
+    }
   });
 });
 

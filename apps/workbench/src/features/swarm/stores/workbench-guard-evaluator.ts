@@ -94,12 +94,6 @@ function buildScenarioCategory(
   switch (action.actionType) {
     case "file_access":
       return "benign";
-    case "file_write":
-    case "network_egress":
-    case "shell_command":
-    case "mcp_tool_call":
-    case "patch_apply":
-    case "user_input":
     default:
       return "edge_case";
   }

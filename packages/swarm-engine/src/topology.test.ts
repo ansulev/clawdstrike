@@ -475,6 +475,25 @@ describe("TopologyManager - role index", () => {
     manager.addNode("a1", "worker");
     expect(manager.getNodesByRole("queen")).toEqual([]);
   });
+
+  it("keeps role indexes and cached leader-role lookups in sync on role updates", () => {
+    const { manager } = makeManager({ type: "hybrid" });
+    manager.addNode("q", "queen");
+    manager.addNode("c", "coordinator");
+    manager.addNode("w", "worker");
+
+    manager.updateNode("q", { role: "worker" });
+    manager.updateNode("c", { role: "worker" });
+    manager.updateNode("w", { role: "coordinator" });
+
+    expect(manager.getQueen()).toBeUndefined();
+    expect(manager.getNodesByRole("queen")).toEqual([]);
+    expect(manager.getCoordinator()?.agentId).toBe("w");
+    expect(manager.getNodesByRole("coordinator").map((node) => node.agentId)).toEqual(["w"]);
+    expect(
+      manager.getNodesByRole("worker").map((node) => node.agentId).sort(),
+    ).toEqual(["c", "q"]);
+  });
 });
 
 // ============================================================================

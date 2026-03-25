@@ -17,6 +17,8 @@ import { nextNodePosition } from "./node-position";
 
 const EVAL_GLOW_DURATION_MS = 2000;
 const DEFAULT_LAYOUT_VIEWPORT = { width: 1200, height: 800 };
+const TASK_VERTICAL_OFFSET = 200;
+const TASK_VERTICAL_STAGGER = 24;
 
 function mapEngineStatus(engineStatus: string): SessionStatus {
   switch (engineStatus) {
@@ -96,10 +98,20 @@ function seedBoardFromEngineSnapshot(engine: SwarmOrchestrator): void {
     position: agentPositions.get(agent.id),
   }));
 
-  const taskNodes = Object.values(snapshot.tasks).map((task, index) => {
+  const seededTaskCounts = new Map<string, number>();
+
+  const taskNodes = Object.values(snapshot.tasks).map((task) => {
     const agentPosition = task.assignedTo
       ? agentPositions.get(task.assignedTo)
       : undefined;
+    const taskIndex = task.assignedTo
+      ? (seededTaskCounts.get(task.assignedTo) ?? 0)
+      : 0;
+
+    if (task.assignedTo) {
+      seededTaskCounts.set(task.assignedTo, taskIndex + 1);
+    }
+
     return {
       id: task.id,
       taskId: task.id,
@@ -115,7 +127,7 @@ function seedBoardFromEngineSnapshot(engine: SwarmOrchestrator): void {
         previewLines: task.previewLines,
       },
       position: agentPosition
-        ? { x: agentPosition.x, y: agentPosition.y + 200 + index * 24 }
+        ? getStackedTaskPosition(agentPosition, taskIndex)
         : undefined,
     };
   });
@@ -175,6 +187,47 @@ function buildTopologyEdges(
       type: "topology",
     }];
   });
+}
+
+function getStackedTaskPosition(
+  agentPosition: { x: number; y: number },
+  taskIndex: number,
+): { x: number; y: number } {
+  return {
+    x: agentPosition.x,
+    y: agentPosition.y + TASK_VERTICAL_OFFSET + taskIndex * TASK_VERTICAL_STAGGER,
+  };
+}
+
+function getAssignedTaskPosition(
+  nodes: Node<SwarmBoardNodeData>[],
+  agentId: string | null | undefined,
+  excludeTaskNodeId?: string,
+): { x: number; y: number } | undefined {
+  if (!agentId) {
+    return undefined;
+  }
+
+  const agentNode = nodes.find(
+    (node) => node.data.agentId === agentId,
+  );
+
+  if (!agentNode) {
+    return undefined;
+  }
+
+  const siblingTaskCount = nodes.filter((node) => {
+    if (node.id === excludeTaskNodeId) {
+      return false;
+    }
+
+    return (
+      node.data.nodeType === "terminalTask" &&
+      node.data.agentId === agentId
+    );
+  }).length;
+
+  return getStackedTaskPosition(agentNode.position, siblingTaskCount);
 }
 
 function getLayoutViewport(): { width: number; height: number } {
@@ -292,9 +345,10 @@ export function useEngineBoardBridge(engine: SwarmOrchestrator | null): void {
             n.data.agentId === event.task.assignedTo,
         );
 
-        const position = parentNode
-          ? { x: parentNode.position.x, y: parentNode.position.y + 200 }
-          : nextNodePosition(nodes);
+        const position = getAssignedTaskPosition(
+          nodes,
+          event.task.assignedTo,
+        ) ?? nextNodePosition(nodes);
 
         const taskNode = {
           ...createBoardNode({
@@ -363,7 +417,10 @@ export function useEngineBoardBridge(engine: SwarmOrchestrator | null): void {
           return {
             ...node,
             position: agentNode
-              ? { x: agentNode.position.x, y: agentNode.position.y + 200 }
+              ? (
+                getAssignedTaskPosition(nodes, event.agentId, taskNode.id) ??
+                node.position
+              )
               : node.position,
             data: {
               ...node.data,

@@ -428,6 +428,57 @@ describe("useEngineBoardBridge", () => {
     }
   });
 
+  it("stacks runtime-created tasks under the same agent instead of overlapping them", () => {
+    const events = new TypedEventEmitter<SwarmEngineEventMap>();
+    const engine = {
+      getState: () => makeEngineState(),
+      getEvents: () => events,
+    };
+
+    const { unmount } = renderHook(() =>
+      useEngineBoardBridge(engine as any),
+    );
+
+    try {
+      act(() => {
+        events.emit("task.created", {
+          task: {
+            id: "tsk_1",
+            name: "Queue scan",
+            type: "analysis",
+            status: "created",
+            assignedTo: "agt_pool_1",
+          },
+        } as any);
+
+        events.emit("task.created", {
+          task: {
+            id: "tsk_2",
+            name: "Trace graph",
+            type: "analysis",
+            status: "created",
+            assignedTo: "agt_pool_1",
+          },
+        } as any);
+      });
+
+      const taskPositions = useSwarmBoardStore.getState().nodes
+        .filter((node) => node.data.taskId === "tsk_1" || node.data.taskId === "tsk_2")
+        .sort((left, right) => left.id.localeCompare(right.id))
+        .map((node) => ({
+          id: node.id,
+          position: node.position,
+        }));
+
+      expect(taskPositions).toEqual([
+        { id: "tsk_1", position: { x: 240, y: 320 } },
+        { id: "tsk_2", position: { x: 240, y: 344 } },
+      ]);
+    } finally {
+      unmount();
+    }
+  });
+
   it("maps task statuses safely and binds tasks when assignment happens after creation", () => {
     const events = new TypedEventEmitter<SwarmEngineEventMap>();
     const engine = {

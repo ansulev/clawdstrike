@@ -96,7 +96,7 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Transport
 
-- [ ] **TRNS-01**: TauriIpcTransport implementing TransportAdapter via Tauri invoke/listen APIs
+- [x] **TRNS-01**: TauriIpcTransport implementing TransportAdapter via Tauri invoke/listen APIs
 - [x] **TRNS-02**: InProcessEventBus handles new topics without modification (topic-agnostic)
 - [x] **TRNS-03**: Speakeasy Gossipsub adapter handles new channels with TTL hop-decrement
 
@@ -205,7 +205,7 @@ Deferred to future release. Tracked but not in current roadmap.
 | INTG-07 | Phase 5 | Complete |
 | INTG-08 | Phase 5 | Complete |
 | INTG-09 | Phase 5 | Complete |
-| TRNS-01 | Phase 6 | Pending |
+| TRNS-01 | Phase 6 | Complete |
 | BKWD-01 | Phase 6 | Pending |
 | BKWD-02 | Phase 6 | Pending |
 | BKWD-03 | Phase 6 | Pending |

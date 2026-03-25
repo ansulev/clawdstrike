@@ -221,7 +221,6 @@ export class ByzantineConsensus {
     proposalId: string,
     approve: boolean,
     confidence?: number,
-    voterId?: string,
   ): void {
     const proposal = this.proposals.get(proposalId);
     if (!proposal || proposal.status !== "pending") {
@@ -234,8 +233,9 @@ export class ByzantineConsensus {
       this.proposalVotes.set(proposalId, voteMap);
     }
 
+    // Derive voter identity from this node -- prevents vote spoofing
     const vote: ConsensusVote = {
-      voterId: voterId ?? this.node.id,
+      voterId: this.node.id,
       approve,
       confidence: confidence ?? 1.0,
       timestamp: Date.now(),

@@ -378,6 +378,23 @@ describe("SwarmOrchestrator", () => {
       expect(deniedEvents).toHaveLength(1);
     });
 
+    it("on deny redacts context from broadcast action (H-04)", async () => {
+      orchestrator.initialize();
+      const deniedEvents: Array<{ action: GuardedAction }> = [];
+      events.on("action.denied", (e) =>
+        deniedEvents.push(e as unknown as { action: GuardedAction }),
+      );
+
+      const sensitiveAction = makeAction({
+        context: { secret: "api-key-12345", internal: true },
+      });
+      await orchestrator.evaluateGuard(sensitiveAction);
+
+      expect(deniedEvents).toHaveLength(1);
+      // Context should be redacted (empty object)
+      expect(deniedEvents[0]!.action.context).toEqual({});
+    });
+
     it("on allow emits action.completed event", async () => {
       const action = makeAction();
       const result = makeAllowResult(action);
@@ -645,17 +662,15 @@ describe("SwarmOrchestrator", () => {
       expect(orchestrator.getStatus()).toBe("running");
     });
 
-    it("metrics timer updates metrics periodically", () => {
+    it("metrics are computed lazily in getMetrics() (no background timer)", () => {
       orchestrator.initialize();
 
-      // Advance past health check interval
-      vi.advanceTimersByTime(
-        SWARM_ENGINE_CONSTANTS.DEFAULT_HEALTH_CHECK_INTERVAL_MS + 100,
-      );
+      // Advance time
+      vi.advanceTimersByTime(5000);
 
-      // Metrics should be available
+      // Metrics should be available (computed on-demand, not by timer)
       const metrics = orchestrator.getMetrics();
-      expect(metrics.uptimeMs).toBeGreaterThan(0);
+      expect(metrics.uptimeMs).toBe(5000);
     });
   });
 });

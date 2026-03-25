@@ -117,6 +117,7 @@ export const CHANNEL_TO_TOPIC_SUFFIX: Record<SwarmEngineEnvelope["type"], string
   signal: "signals",
   detection: "detections",
   coordination: "coordination",
+  // Included for upstream SwarmEnvelope v1 compatibility — no engine event maps to this channel
   status: "status",
   agent_lifecycle: "agents",
   task_orchestration: "tasks",
@@ -149,9 +150,18 @@ export interface ProtocolBridgeConfig {
  *
  * Transport errors are swallowed -- the host is responsible for retry logic.
  */
+/** Default replay window: 5 minutes. */
+const REPLAY_WINDOW_MS = 5 * 60 * 1000;
+
 export class ProtocolBridge {
   private readonly unsubscribers: Array<() => void> = [];
   private readonly defaultTtl: number;
+  /**
+   * Replay protection: tracks the most recent `created` timestamp per
+   * sourceAgentId (sender). Envelopes older than `lastSeen - REPLAY_WINDOW_MS`
+   * are silently dropped.
+   */
+  private readonly lastSeen: Map<string, number> = new Map();
 
   constructor(
     private readonly events: TypedEventEmitter<SwarmEngineEventMap>,
@@ -176,6 +186,25 @@ export class ProtocolBridge {
             ttl: this.defaultTtl,
             created: Date.now(),
           };
+
+          // Replay protection: drop envelopes older than the window
+          const sender =
+            (data as Record<string, unknown>)?.sourceAgentId as
+              | string
+              | null
+              | undefined;
+          if (sender) {
+            const prev = this.lastSeen.get(sender);
+            if (
+              prev !== undefined &&
+              envelope.created < prev - REPLAY_WINDOW_MS
+            ) {
+              // Stale / replayed envelope -- skip
+              return;
+            }
+            this.lastSeen.set(sender, envelope.created);
+          }
+
           const topicSuffix = CHANNEL_TO_TOPIC_SUFFIX[channel];
           const topic = `${TOPIC_PREFIX}/swarm/${this.config.swarmId}/${topicSuffix}`;
           this.config.publish(topic, envelope).catch(() => {

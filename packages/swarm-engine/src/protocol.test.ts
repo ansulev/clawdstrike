@@ -346,7 +346,7 @@ describe("ProtocolBridge", () => {
     expect(topic).toBe("/baychat/v1/swarm/swe_test123/agents");
     expect(envelope.version).toBe(1);
     expect(envelope.type).toBe("agent_lifecycle");
-    expect(envelope.payload).toBe(event);
+    expect(envelope.payload).toStrictEqual(event);
     expect(envelope.ttl).toBe(5);
     expect(typeof envelope.created).toBe("number");
     bridge.disconnect();
@@ -393,7 +393,7 @@ describe("ProtocolBridge", () => {
     const { envelope } = published[0]!;
     expect(envelope.version).toBe(1);
     expect(envelope.type).toBe("task_orchestration");
-    expect(envelope.payload).toBe(event);
+    expect(envelope.payload).toStrictEqual(event);
     expect(envelope.ttl).toBe(5);
     expect(envelope.created).toBeGreaterThanOrEqual(now);
     bridge.disconnect();

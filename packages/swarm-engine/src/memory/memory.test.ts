@@ -251,7 +251,10 @@ describe("shared", () => {
 
   beforeEach(() => {
     events = new TypedEventEmitter<SwarmEngineEventMap>();
-    memory = new SharedMemory(events, { dimensions: 3 });
+    memory = new SharedMemory(events, {
+      dimensions: 3,
+      guardEvaluator: makeAllowEvaluator(),
+    });
   });
 
   afterEach(() => {
@@ -357,12 +360,21 @@ describe("guarded", () => {
     memory.dispose();
   });
 
-  it("no evaluator: store() returns true (unguarded mode)", async () => {
+  it("no evaluator: store() returns false (fail-closed)", async () => {
     const memory = new SharedMemory(events, { dimensions: 3 });
 
     const result = await memory.store("ns", "key", "data");
-    expect(result).toBe(true);
-    expect(memory.get("ns", "key")).toBeDefined();
+    expect(result).toBe(false);
+    expect(memory.get("ns", "key")).toBeUndefined();
+    memory.dispose();
+  });
+
+  it("SharedMemory without evaluator rejects writes (fail-closed, C-02)", async () => {
+    const memory = new SharedMemory(events, { dimensions: 3 });
+
+    const result = await memory.store("ns", "key", "sensitive-data");
+    expect(result).toBe(false);
+    expect(memory.get("ns", "key")).toBeUndefined();
     memory.dispose();
   });
 

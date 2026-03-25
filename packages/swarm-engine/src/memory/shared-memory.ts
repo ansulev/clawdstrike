@@ -5,7 +5,8 @@
  *
  * Memory writes pass through the guard pipeline as `file_write` actions with
  * `memory://{namespace}/{key}` targets. Deny verdicts block the write and
- * return false. When no guard evaluator is configured, writes are unguarded.
+ * return false. When no guard evaluator is configured, writes are denied
+ * (fail-closed), consistent with the orchestrator's guard pipeline.
  *
  * Does NOT call events.dispose() on dispose (Pitfall 7).
  *
@@ -94,25 +95,27 @@ export class SharedMemory {
     value: unknown,
     options?: StoreOptions,
   ): Promise<boolean> {
-    // Guard check
-    if (this.guardEvaluator) {
-      const action: GuardedAction = {
-        agentId: options?.agentId ?? "system",
-        taskId: options?.taskId ?? null,
-        actionType: "file_write",
-        target: `memory://${namespace}/${key}`,
-        context: {
-          namespace,
-          key,
-          sizeBytes: JSON.stringify(value).length,
-        },
-        requestedAt: Date.now(),
-      };
+    // Guard check -- fail-closed: no evaluator means deny all writes
+    if (!this.guardEvaluator) {
+      return false;
+    }
 
-      const result = await this.guardEvaluator.evaluate(action);
-      if (!result.allowed) {
-        return false;
-      }
+    const action: GuardedAction = {
+      agentId: options?.agentId ?? "system",
+      taskId: options?.taskId ?? null,
+      actionType: "file_write",
+      target: `memory://${namespace}/${key}`,
+      context: {
+        namespace,
+        key,
+        sizeBytes: JSON.stringify(value).length,
+      },
+      requestedAt: Date.now(),
+    };
+
+    const result = await this.guardEvaluator.evaluate(action);
+    if (!result.allowed) {
+      return false;
     }
 
     // Store entry

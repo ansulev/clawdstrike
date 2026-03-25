@@ -78,6 +78,11 @@ export interface SwarmOrchestratorConfig {
 /**
  * Facade composing all swarm engine subsystems.
  *
+ * **Security invariant:** Subsystem references (registry, taskGraph, topology,
+ * pool) MUST only be accessed through orchestrator methods so that all
+ * mutations pass through the guard pipeline. Direct access to the subsystems
+ * bypasses guard enforcement and violates the fail-closed contract.
+ *
  * Usage:
  * ```ts
  * const events = new TypedEventEmitter<SwarmEngineEventMap>();
@@ -100,7 +105,6 @@ export class SwarmOrchestrator {
 
   // Background timers
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
-  private metricsTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(
     private readonly events: TypedEventEmitter<SwarmEngineEventMap>,
@@ -276,11 +280,13 @@ export class SwarmOrchestrator {
     });
 
     if (result.verdict === "deny") {
+      // Redact context to prevent sensitive data leaking via broadcast
+      const redactedAction: GuardedAction = { ...action, context: {} };
       this.events.emit("action.denied", {
         kind: "action.denied",
         sourceAgentId: action.agentId,
         timestamp: Date.now(),
-        action,
+        action: redactedAction,
         receipt: this.envelopeReceiptFromReceipt(result.receipt),
         reason:
           result.guardResults.length > 0
@@ -408,18 +414,14 @@ export class SwarmOrchestrator {
   // =========================================================================
 
   /**
-   * Start heartbeat and metrics background timers.
+   * Start heartbeat background timer.
+   * Metrics are computed lazily in getMetrics() -- no periodic timer needed.
    */
   private startBackgroundProcesses(): void {
     // Heartbeat timer: update pool agent heartbeats
     this.heartbeatTimer = setInterval(() => {
       this.performHeartbeat();
     }, this.config.heartbeatIntervalMs);
-
-    // Metrics timer: periodic metrics snapshot (for future use)
-    this.metricsTimer = setInterval(() => {
-      this.performMetricsUpdate();
-    }, this.config.healthCheckIntervalMs);
   }
 
   /**
@@ -429,10 +431,6 @@ export class SwarmOrchestrator {
     if (this.heartbeatTimer !== null) {
       clearInterval(this.heartbeatTimer);
       this.heartbeatTimer = null;
-    }
-    if (this.metricsTimer !== null) {
-      clearInterval(this.metricsTimer);
-      this.metricsTimer = null;
     }
   }
 
@@ -446,15 +444,6 @@ export class SwarmOrchestrator {
     }
   }
 
-  /**
-   * Metrics update tick. Currently a no-op placeholder for future
-   * metrics aggregation (e.g., rolling averages, alerting thresholds).
-   */
-  private performMetricsUpdate(): void {
-    // Metrics are computed on-demand in getMetrics().
-    // This timer slot is reserved for future periodic aggregation.
-  }
-
   // =========================================================================
   // Private: Guard Helpers
   // =========================================================================
@@ -464,7 +453,7 @@ export class SwarmOrchestrator {
    */
   private createDenyReceipt(action: GuardedAction): Receipt {
     return {
-      id: generateSwarmId("msg"),
+      id: generateSwarmId("rct" as import("./ids.js").SwarmEngineIdPrefix),
       timestamp: new Date().toISOString(),
       verdict: "deny",
       guard: "fail-closed",

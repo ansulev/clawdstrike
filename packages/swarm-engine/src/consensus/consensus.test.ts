@@ -219,12 +219,13 @@ describe("RaftConsensus", () => {
     await new Promise((r) => setTimeout(r, 200));
 
     const proposal = raft.propose({ action: "test" });
-    raft.vote(proposal.id, true, 0.9, "node-2");
+    // vote() now derives voterId from this node (node-1)
+    raft.vote(proposal.id, true, 0.9);
 
     expect(voteCasts.length).toBe(1);
     expect(voteCasts[0]!.kind).toBe("consensus.vote_cast");
     expect(voteCasts[0]!.proposalId).toBe(proposal.id);
-    expect(voteCasts[0]!.vote.voterId).toBe("node-2");
+    expect(voteCasts[0]!.vote.voterId).toBe("node-1");
     expect(voteCasts[0]!.vote.approve).toBe(true);
   });
 
@@ -399,17 +400,13 @@ describe("ByzantineConsensus", () => {
     const resolved: ConsensusResolvedEvent[] = [];
     events.on("consensus.resolved", (e) => resolved.push(e));
 
+    // 1 node total (just the primary): f = floor(0/3) = 0, need 2*0+1 = 1 vote
     bft.addNode("node-1", true);
-    bft.addNode("node-2");
-    bft.addNode("node-3");
-    bft.addNode("node-4");
-    // 5 nodes: f = floor(4/3) = 1, need 2*1+1 = 3 approving votes
 
     const proposal = bft.propose({ action: "commit" });
 
-    bft.vote(proposal.id, true, 1.0, "node-1");
-    bft.vote(proposal.id, true, 1.0, "node-2");
-    bft.vote(proposal.id, true, 1.0, "node-3");
+    // vote() derives identity from this node (node-1)
+    bft.vote(proposal.id, true, 1.0);
 
     expect(resolved.length).toBe(1);
     expect(resolved[0]!.result.approved).toBe(true);
@@ -428,12 +425,14 @@ describe("ByzantineConsensus", () => {
     bft.addNode("node-4");
     const proposal = bft.propose({ action: "test" });
 
-    bft.vote(proposal.id, true, 0.8, "voter-1");
-    bft.vote(proposal.id, false, 0.5, "voter-2");
+    // vote() derives identity from this node (node-1). Calling twice
+    // overwrites the same voter's entry but still emits vote_cast each time.
+    bft.vote(proposal.id, true, 0.8);
+    bft.vote(proposal.id, false, 0.5);
 
     expect(voteCasts.length).toBe(2);
-    expect(voteCasts[0]!.vote.voterId).toBe("voter-1");
-    expect(voteCasts[1]!.vote.voterId).toBe("voter-2");
+    expect(voteCasts[0]!.vote.voterId).toBe("node-1");
+    expect(voteCasts[1]!.vote.voterId).toBe("node-1");
   });
 
   it("initiateViewChange increments view and re-elects primary", () => {
@@ -516,11 +515,17 @@ describe("GossipConsensus", () => {
     const voteCasts: ConsensusVoteCastEvent[] = [];
     events.on("consensus.vote_cast", (e) => voteCasts.push(e));
 
+    // Add nodes so self-vote on propose doesn't trigger convergence
+    gossip.addNode("node-2");
+    gossip.addNode("node-3");
+    gossip.addNode("node-4");
+
     const proposal = gossip.propose({ action: "test" });
-    gossip.vote(proposal.id, true, 0.8, "node-2");
+    // vote() derives voterId from this node (node-1)
+    gossip.vote(proposal.id, true, 0.8);
 
     expect(voteCasts.length).toBe(1);
-    expect(voteCasts[0]!.vote.voterId).toBe("node-2");
+    expect(voteCasts[0]!.vote.voterId).toBe("node-1");
   });
 
   it("convergence threshold triggers resolution", () => {

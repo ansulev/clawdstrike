@@ -220,6 +220,9 @@ export class SwarmOrchestrator {
     this.pool.dispose();
     this.mirroredPoolAgents.clear();
 
+    // Stop registry health checks so dispose actually releases all timers.
+    this.registry.stopHealthChecks();
+
     // Dispose the shared emitter -- ONLY here
     this.events.dispose();
 

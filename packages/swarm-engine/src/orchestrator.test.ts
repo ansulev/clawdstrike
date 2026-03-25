@@ -339,6 +339,13 @@ describe("SwarmOrchestrator", () => {
       expect(disposeSpy).toHaveBeenCalledOnce();
     });
 
+    it("stops registry health checks", () => {
+      const stopHealthChecksSpy = vi.spyOn(registry, "stopHealthChecks");
+      orchestrator.initialize();
+      orchestrator.dispose();
+      expect(stopHealthChecksSpy).toHaveBeenCalledOnce();
+    });
+
     it("is the ONLY method that calls events.dispose()", () => {
       const disposeSpy = vi.spyOn(events, "dispose");
       orchestrator.initialize();

@@ -387,6 +387,21 @@ describe("TaskGraph", () => {
 
       expect(() => graph.assignTask(task.id, agentId)).toThrow("not queued");
     });
+
+    it("leaves the task queued when registry assignment fails", () => {
+      const agentId = registry.register(makeRegistration());
+      const task = graph.addTask(makeSubmission());
+      graph.queueTask(task.id);
+
+      expect(() => graph.assignTask(task.id, agentId)).toThrow("not spawned");
+
+      const stored = graph.getTask(task.id);
+      expect(stored?.assignedTo).toBeNull();
+      expect(stored?.status).toBe("queued");
+      expect(graph.getTasksByStatus("queued").map((queued) => queued.id)).toContain(
+        task.id,
+      );
+    });
   });
 
   describe("startTask", () => {
@@ -817,6 +832,18 @@ describe("TaskGraph", () => {
       const state = graph.getState();
       expect(typeof state).toBe("object");
       expect(Object.keys(state)).toHaveLength(2);
+    });
+
+    it("getState returns a defensive copy", () => {
+      const task = graph.addTask(makeSubmission({ name: "Original" }));
+
+      const state = graph.getState();
+      state[task.id]!.name = "Mutated";
+      state[task.id]!.dependencies.push("tsk_fake");
+
+      const liveTask = graph.getTask(task.id);
+      expect(liveTask?.name).toBe("Original");
+      expect(liveTask?.dependencies).toEqual([]);
     });
 
     it("JSON round-trips cleanly", () => {

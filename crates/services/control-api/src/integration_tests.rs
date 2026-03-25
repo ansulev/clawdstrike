@@ -7180,6 +7180,7 @@ fn is_retryable_docker_run_error(stderr: &str) -> bool {
     [
         "bad gateway",
         "service unavailable",
+        "internal server error",
         "client.timeout exceeded while awaiting headers",
         "tls handshake timeout",
         "connection reset by peer",
@@ -7227,6 +7228,9 @@ fn run_container(args: &[&str]) -> DockerContainer {
 fn retryable_docker_run_error_matches_transient_registry_failures() {
     assert!(is_retryable_docker_run_error(
         "docker: Error response from daemon: Head \"https://registry-1.docker.io/v2/library/postgres/manifests/16-alpine\": received unexpected HTTP status: 502 Bad Gateway"
+    ));
+    assert!(is_retryable_docker_run_error(
+        "docker: Error response from daemon: Head \"https://registry-1.docker.io/v2/library/nats/manifests/2.10-alpine\": received unexpected HTTP status: 500 Internal Server Error"
     ));
     assert!(is_retryable_docker_run_error(
         "docker: Error response from daemon: Head \"https://registry-1.docker.io/v2/library/nats/manifests/2.10-alpine\": net/http: request canceled (Client.Timeout exceeded while awaiting headers)"

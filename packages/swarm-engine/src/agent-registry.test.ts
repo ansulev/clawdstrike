@@ -682,6 +682,24 @@ describe("AgentRegistry", () => {
   // =========================================================================
 
   describe("serialization", () => {
+    it("getState returns a defensive copy", () => {
+      const id = registry.register(
+        makeRegistration({
+          name: "original-agent",
+          capabilities: makeCapabilities({ languages: ["typescript"] }),
+        }),
+      );
+      registry.spawn(id);
+
+      const state = registry.getState();
+      state[id]!.name = "mutated-agent";
+      state[id]!.capabilities.languages.push("rust");
+
+      const live = registry.getAgentSession(id);
+      expect(live?.name).toBe("original-agent");
+      expect(live?.capabilities.languages).toEqual(["typescript"]);
+    });
+
     it("JSON round-trip of getState() works cleanly", () => {
       const id = registry.register(
         makeRegistration({

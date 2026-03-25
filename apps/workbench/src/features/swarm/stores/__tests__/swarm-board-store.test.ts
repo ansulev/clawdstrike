@@ -371,6 +371,76 @@ describe("SwarmBoardStore (Zustand)", () => {
     expect(state.boardId).toBeDefined();
   });
 
+  it("engineSync removes stale engine-managed agent and task nodes while preserving receipts", () => {
+    const { actions } = useSwarmBoardStore.getState();
+
+    actions.addNodeDirect({
+      id: "agt_stale",
+      type: "agentSession",
+      position: { x: 0, y: 0 },
+      data: {
+        title: "Stale Agent",
+        status: "idle",
+        nodeType: "agentSession",
+        agentId: "agt_stale",
+        engineManaged: true,
+      },
+    });
+    actions.addNodeDirect({
+      id: "tsk_stale",
+      type: "terminalTask",
+      position: { x: 0, y: 200 },
+      data: {
+        title: "Stale Task",
+        status: "idle",
+        nodeType: "terminalTask",
+        taskId: "tsk_stale",
+        agentId: "agt_stale",
+        engineManaged: true,
+      },
+    });
+    actions.addNodeDirect({
+      id: "receipt-keep",
+      type: "receipt",
+      position: { x: 0, y: 400 },
+      data: {
+        title: "Receipt",
+        status: "completed",
+        nodeType: "receipt",
+        engineManaged: true,
+      },
+    });
+    actions.addEdge({
+      id: "edge-spawn-stale",
+      source: "agt_stale",
+      target: "tsk_stale",
+      type: "spawned",
+    });
+
+    actions.engineSync(
+      [
+        {
+          id: "agt_live",
+          agentId: "agt_live",
+          data: {
+            nodeType: "agentSession",
+            title: "Live Agent",
+            status: "running",
+          },
+          position: { x: 100, y: 100 },
+        },
+      ],
+      [],
+    );
+
+    const state = useSwarmBoardStore.getState();
+    expect(state.nodes.find((node) => node.id === "agt_stale")).toBeUndefined();
+    expect(state.nodes.find((node) => node.id === "tsk_stale")).toBeUndefined();
+    expect(state.nodes.find((node) => node.id === "receipt-keep")).toBeDefined();
+    expect(state.nodes.find((node) => node.id === "agt_live")?.data.title).toBe("Live Agent");
+    expect(state.edges.find((edge) => edge.id === "edge-spawn-stale")).toBeUndefined();
+  });
+
   // Test 16
   it("createBoardNode factory returns properly shaped node", () => {
     const node = createBoardNode({
@@ -524,6 +594,41 @@ describe("SwarmBoardStore persistence", () => {
       const parsed = JSON.parse(raw!);
       expect(parsed.nodes).toHaveLength(1);
       expect(parsed.nodes[0].data.title).toBe("Persistent Agent");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("redacts sensitive engine-managed metadata before persistence", () => {
+    vi.useFakeTimers();
+    try {
+      const { actions } = useSwarmBoardStore.getState();
+      actions.addNode({
+        nodeType: "agentSession",
+        title: "Engine Agent",
+        position: { x: 0, y: 0 },
+        data: {
+          engineManaged: true,
+          branch: "feature/private-branch",
+          worktreePath: "/tmp/private/worktree",
+          filesTouched: ["src/secret.ts"],
+          previewLines: ["token=super-secret"],
+          taskPrompt: "exfiltrate secrets",
+        },
+      });
+
+      vi.advanceTimersByTime(600);
+
+      const raw = localStorage.getItem(STORAGE_KEY);
+      expect(raw).not.toBeNull();
+
+      const persistedNode = JSON.parse(raw!).nodes[0];
+      expect(persistedNode.data.engineManaged).toBe(true);
+      expect(persistedNode.data.branch).toBeUndefined();
+      expect(persistedNode.data.worktreePath).toBeUndefined();
+      expect(persistedNode.data.filesTouched).toBeUndefined();
+      expect(persistedNode.data.previewLines).toBeUndefined();
+      expect(persistedNode.data.taskPrompt).toBeUndefined();
     } finally {
       vi.useRealTimers();
     }

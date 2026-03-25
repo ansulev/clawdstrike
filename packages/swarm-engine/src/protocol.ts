@@ -121,6 +121,10 @@ export class ProtocolBridge {
   }
 
   connect(): void {
+    if (this.unsubscribers.length > 0) {
+      return;
+    }
+
     for (const [eventKind, channel] of Object.entries(EVENT_TO_CHANNEL)) {
       const unsub = this.events.on(
         eventKind as keyof SwarmEngineEventMap,
@@ -161,6 +165,7 @@ export class ProtocolBridge {
   disconnect(): void {
     for (const unsub of this.unsubscribers) unsub();
     this.unsubscribers.length = 0;
+    this.lastSeen.clear();
   }
 
   dispose(): void {

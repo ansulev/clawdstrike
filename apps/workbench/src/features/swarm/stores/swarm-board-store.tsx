@@ -45,12 +45,34 @@ export type SwarmBoardAction =
 
 const STORAGE_KEY = "clawdstrike_workbench_swarm_board";
 
+function sanitizePersistedNode(
+  node: Node<SwarmBoardNodeData>,
+): Node<SwarmBoardNodeData> {
+  if (!node.data?.engineManaged) {
+    return node;
+  }
+
+  const {
+    branch: _branch,
+    worktreePath: _worktreePath,
+    filesTouched: _filesTouched,
+    previewLines: _previewLines,
+    taskPrompt: _taskPrompt,
+    ...restData
+  } = node.data;
+
+  return {
+    ...node,
+    data: restData,
+  };
+}
+
 function persistBoard(state: SwarmBoardState): void {
   try {
     const persisted = {
       boardId: state.boardId,
       repoRoot: state.repoRoot,
-      nodes: state.nodes,
+      nodes: state.nodes.map(sanitizePersistedNode),
       edges: state.edges,
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(persisted));
@@ -106,17 +128,21 @@ function loadPersistedBoard(): Partial<SwarmBoardState> | null {
 
     // PTY sessions don't survive reloads
     const sanitizedNodes = validNodes.map((n) => {
+      const persistedNode = sanitizePersistedNode(n);
       if (n.data?.sessionId) {
         return {
-          ...n,
+          ...persistedNode,
           data: {
-            ...n.data,
+            ...persistedNode.data,
             sessionId: undefined,
-            status: n.data.status === "running" ? "idle" : n.data.status,
+            status:
+              persistedNode.data.status === "running"
+                ? "idle"
+                : persistedNode.data.status,
           },
         } as Node<SwarmBoardNodeData>;
       }
-      return n;
+      return persistedNode;
     });
 
     return {
@@ -808,39 +834,92 @@ const useSwarmBoardStoreBase = create<SwarmBoardStoreState>()((set, get) => ({
       engineEdges: SwarmBoardEdge[],
     ): void => {
       const current = get();
-      const lookup = new Map(engineNodes.map((en) => [en.id, en]));
+      const lookupById = new Map(engineNodes.map((en) => [en.id, en]));
+      const lookupByAgentId = new Map(
+        engineNodes
+          .filter((en) => en.agentId)
+          .map((en) => [en.agentId!, en]),
+      );
+      const lookupByTaskId = new Map(
+        engineNodes
+          .filter((en) => en.taskId)
+          .map((en) => [en.taskId!, en]),
+      );
+      const isSnapshotManagedNode = (node: Node<SwarmBoardNodeData>): boolean => {
+        const data = node.data as SwarmBoardNodeData;
+        return (
+          data.engineManaged === true &&
+          (data.nodeType === "agentSession" || data.nodeType === "terminalTask")
+        );
+      };
+      const findMatchingEngineNode = (
+        node: Node<SwarmBoardNodeData>,
+      ): (typeof engineNodes)[number] | undefined => {
+        const data = node.data as SwarmBoardNodeData;
+        return (
+          lookupById.get(node.id) ??
+          (data.agentId ? lookupByAgentId.get(data.agentId) : undefined) ??
+          (data.taskId ? lookupByTaskId.get(data.taskId) : undefined)
+        );
+      };
 
-      const existingIds = new Set(current.nodes.map((n) => n.id));
-      const nodes = current.nodes.map((n) => {
-        const d = n.data as SwarmBoardNodeData;
-        const eng = lookup.get(n.id);
-        if (d.engineManaged && eng) {
+      const preservedNodes = current.nodes.filter(
+        (node) => !isSnapshotManagedNode(node),
+      );
+      const reconciledNodes = engineNodes.map((engineNode) => {
+        const existingNode = current.nodes.find((node) => {
+          if (!isSnapshotManagedNode(node)) {
+            return false;
+          }
+
+          return findMatchingEngineNode(node)?.id === engineNode.id;
+        });
+
+        if (existingNode) {
+          const existingData = existingNode.data as SwarmBoardNodeData;
           return {
-            ...n,
-            data: { ...d, ...eng.data },
-            position: eng.position ?? n.position,
+            ...existingNode,
+            id: engineNode.id,
+            type:
+              (engineNode.data.nodeType as SwarmBoardNodeData["nodeType"]) ??
+              existingNode.type,
+            data: {
+              ...existingData,
+              ...engineNode.data,
+              agentId: engineNode.agentId,
+              taskId: engineNode.taskId,
+              engineManaged: true,
+            },
+            position: engineNode.position ?? existingNode.position,
           };
         }
-        return n;
-      });
 
-      for (const en of engineNodes) {
-        if (!existingIds.has(en.id)) {
-          const newNode = createBoardNode({
-            nodeType: (en.data.nodeType as SwarmBoardNodeData["nodeType"]) ?? "agentSession",
-            title: (en.data.title as string) ?? en.id,
-            position: en.position,
-            data: { ...en.data, agentId: en.agentId, taskId: en.taskId, engineManaged: true },
-          });
-          nodes.push({ ...newNode, id: en.id });
-        }
-      }
+        const newNode = createBoardNode({
+          nodeType:
+            (engineNode.data.nodeType as SwarmBoardNodeData["nodeType"]) ??
+            "agentSession",
+          title: (engineNode.data.title as string) ?? engineNode.id,
+          position: engineNode.position,
+          data: {
+            ...engineNode.data,
+            agentId: engineNode.agentId,
+            taskId: engineNode.taskId,
+            engineManaged: true,
+          },
+        });
+
+        return { ...newNode, id: engineNode.id };
+      });
+      const nodes = [...preservedNodes, ...reconciledNodes];
+      const nodeIds = new Set(nodes.map((node) => node.id));
 
       const edgesById = new Map(current.edges.map((edge) => [edge.id, edge]));
       for (const engineEdge of engineEdges) {
         edgesById.set(engineEdge.id, engineEdge);
       }
-      const edges = Array.from(edgesById.values());
+      const edges = Array.from(edgesById.values()).filter(
+        (edge) => nodeIds.has(edge.source) && nodeIds.has(edge.target),
+      );
 
       set({
         nodes,

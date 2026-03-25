@@ -273,11 +273,21 @@ export function useEngineBoardBridge(engine: SwarmOrchestrator | null): void {
     const unsubs: Array<() => void> = [];
     const timeouts = timeoutsRef.current;
     const restoreStatuses = restoreStatusRef.current;
-    const clearPendingGuardGlow = (nodeId: string): void => {
+    const clearPendingGuardGlow = (
+      nodeId: string,
+      options: { restore?: boolean } = {},
+    ): void => {
       const timeout = timeouts.get(nodeId);
       if (timeout != null) {
         clearTimeout(timeout);
         timeouts.delete(nodeId);
+      }
+      if (options.restore) {
+        const restoreTo = restoreStatuses.get(nodeId) ?? "running";
+        const currentNode = store().nodes.find((node) => node.id === nodeId);
+        if (currentNode?.data.status === "evaluating") {
+          store().actions.updateNode(nodeId, { status: restoreTo });
+        }
       }
       restoreStatuses.delete(nodeId);
     };
@@ -291,20 +301,24 @@ export function useEngineBoardBridge(engine: SwarmOrchestrator | null): void {
         if (nodes.some((n: Node<SwarmBoardNodeData>) => n.data.agentId === event.agent.id)) return;
 
         const position = nextNodePosition(nodes);
-
-        actions.addNode({
-          nodeType: "agentSession",
-          title: event.agent.name ?? event.agent.id,
-          position,
-          data: {
+        const agentNode = {
+          ...createBoardNode({
             nodeType: "agentSession",
             title: event.agent.name ?? event.agent.id,
-            status: "idle",
-            agentId: event.agent.id,
-            agentModel: event.agent.role,
-            engineManaged: true,
-          },
-        });
+            position,
+            data: {
+              nodeType: "agentSession",
+              title: event.agent.name ?? event.agent.id,
+              status: mapEngineStatus(event.agent.status),
+              agentId: event.agent.id,
+              agentModel: event.agent.role,
+              engineManaged: true,
+            },
+          }),
+          id: event.agent.id,
+        };
+
+        actions.addNodeDirect(agentNode);
       }),
     );
 
@@ -386,7 +400,7 @@ export function useEngineBoardBridge(engine: SwarmOrchestrator | null): void {
               taskId: event.task.id,
               agentId: event.task.assignedTo,
               engineManaged: true,
-              taskPrompt: event.task.type,
+              taskPrompt: event.task.taskPrompt ?? event.task.description,
             },
           }),
           id: event.task.id,
@@ -596,7 +610,7 @@ export function useEngineBoardBridge(engine: SwarmOrchestrator | null): void {
       unsubs.forEach((fn) => fn());
 
       for (const nodeId of Array.from(timeouts.keys())) {
-        clearPendingGuardGlow(nodeId);
+        clearPendingGuardGlow(nodeId, { restore: true });
       }
     };
   }, [engine]);

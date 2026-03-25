@@ -217,19 +217,33 @@ export class TaskGraph {
       throw new Error(`Task ${taskId} is blocked by dependencies`);
     }
 
-    task.assignedTo = agentId;
-    this.updateTaskStatus(taskId, "assigned");
-
     this.agentRegistry.assignTask(agentId, taskId);
+    const previousAssignedTo = task.assignedTo;
+    const previousStatus = task.status;
 
-    this.events.emit("task.assigned", {
-      kind: "task.assigned",
-      taskId,
-      agentId,
-      receipt: null,
-      sourceAgentId: null,
-      timestamp: Date.now(),
-    });
+    try {
+      task.assignedTo = agentId;
+      this.updateTaskStatus(taskId, "assigned");
+
+      this.events.emit("task.assigned", {
+        kind: "task.assigned",
+        taskId,
+        agentId,
+        receipt: null,
+        sourceAgentId: null,
+        timestamp: Date.now(),
+      });
+    } catch (error) {
+      task.assignedTo = previousAssignedTo;
+      task.status = previousStatus;
+      task.updatedAt = Date.now();
+      try {
+        this.agentRegistry.unassignTask(agentId, taskId);
+      } catch {
+        // Preserve the original failure; caller already gets the thrown error.
+      }
+      throw error;
+    }
   }
 
   /** @throws If task is not assigned. */
@@ -488,7 +502,7 @@ export class TaskGraph {
   }
 
   getState(): Record<string, Task> {
-    return Object.fromEntries(this.tasks);
+    return globalThis.structuredClone(Object.fromEntries(this.tasks));
   }
 
   getTasksByStatus(status: TaskStatus): Task[] {

@@ -621,6 +621,21 @@ describe("TopologyManager - getState", () => {
     expect(state).toHaveProperty("partitions");
     expect(state).toHaveProperty("snapshotAt");
   });
+
+  it("returns a defensive copy of nested topology data", () => {
+    const { manager } = makeManager({ type: "mesh" });
+    manager.addNode("a1", "worker");
+
+    const state = manager.getState();
+    expect(state.partitions.length).toBeGreaterThan(0);
+
+    state.nodes[0]!.role = "queen";
+    state.partitions[0]!.nodeIds.push("forged-node");
+
+    const freshState = manager.getState();
+    expect(freshState.nodes[0]!.role).toBe("peer");
+    expect(freshState.partitions[0]!.nodeIds).not.toContain("forged-node");
+  });
 });
 
 // ============================================================================

@@ -215,7 +215,7 @@ export class SwarmOrchestrator {
 
     const tasks = this.taskGraph.getState();
 
-    return {
+    return globalThis.structuredClone({
       id: this.id,
       namespace: this.config.namespace,
       version: "0.1.0",
@@ -232,7 +232,7 @@ export class SwarmOrchestrator {
       createdAt: this.createdAt,
       startedAt: this.startedAt,
       updatedAt: Date.now(),
-    };
+    });
   }
 
   /** Returns live swarm engine metrics. Computed on-demand, not cached. */

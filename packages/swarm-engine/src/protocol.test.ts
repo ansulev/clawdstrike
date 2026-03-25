@@ -329,6 +329,31 @@ describe("ProtocolBridge", () => {
     bridge.disconnect();
   });
 
+  it("connect() is idempotent", async () => {
+    const { emitter, published, bridge } = createBridge();
+
+    bridge.connect();
+    bridge.connect();
+
+    const totalListeners = Object.keys(EVENT_TO_CHANNEL).reduce(
+      (sum, key) => sum + emitter.listenerCount(key as keyof SwarmEngineEventMap),
+      0,
+    );
+    expect(totalListeners).toBe(23);
+
+    emitter.emit("agent.heartbeat", {
+      kind: "agent.heartbeat",
+      agentId: "agt_test",
+      health: 1,
+      workload: 0,
+      sourceAgentId: "agt_test",
+      timestamp: Date.now(),
+    });
+
+    await vi.waitFor(() => expect(published).toHaveLength(1));
+    bridge.disconnect();
+  });
+
   it("emits correct envelope when agent.spawned fires", async () => {
     const { emitter, published, bridge } = createBridge();
     bridge.connect();

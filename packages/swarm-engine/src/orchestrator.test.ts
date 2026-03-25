@@ -604,6 +604,55 @@ describe("SwarmOrchestrator", () => {
       expect(state.metrics.activeAgents).toBe(metrics.activeAgents);
       expect(state.metrics.totalTasks).toBe(metrics.totalTasks);
     });
+
+    it("returns a defensive copy of subsystem snapshots", () => {
+      orchestrator.initialize();
+
+      const agentId = registry.register({
+        name: "snapshot-agent",
+        role: "worker",
+        capabilities: {
+          codeGeneration: true,
+          codeReview: false,
+          testing: false,
+          documentation: false,
+          research: false,
+          analysis: false,
+          coordination: false,
+          securityAnalysis: false,
+          languages: [],
+          frameworks: [],
+          domains: [],
+          tools: [],
+          maxConcurrentTasks: 1,
+          maxMemoryUsageBytes: 0,
+          maxExecutionTimeMs: 0,
+        },
+      });
+      registry.spawn(agentId);
+      topology.addNode(agentId, "worker");
+
+      const task = taskGraph.addTask({
+        type: "coding",
+        name: "snapshot-task",
+        description: "snapshot task",
+        priority: "normal",
+      });
+
+      const state = orchestrator.getState();
+      state.agents[agentId]!.name = "mutated-agent";
+      state.tasks[task.id]!.name = "mutated-task";
+      const topologyNode = state.topology.nodes.find((node) => node.agentId === agentId);
+      expect(topologyNode).toBeDefined();
+      topologyNode!.role = "queen";
+
+      const freshState = orchestrator.getState();
+      expect(freshState.agents[agentId]!.name).toBe("snapshot-agent");
+      expect(freshState.tasks[task.id]!.name).toBe("snapshot-task");
+      expect(
+        freshState.topology.nodes.find((node) => node.agentId === agentId)?.role,
+      ).toBe("peer");
+    });
   });
 
   // =========================================================================

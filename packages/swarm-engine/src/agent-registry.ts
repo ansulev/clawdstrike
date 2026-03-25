@@ -209,6 +209,23 @@ export class AgentRegistry {
     this.updateStatus(agentId, "running");
   }
 
+  /** Roll back an assignment without counting it as a task failure. */
+  unassignTask(agentId: string, taskId: string): void {
+    const session = this.sessions.get(agentId);
+    if (!session) {
+      throw new Error(`Agent ${agentId} is not spawned`);
+    }
+
+    if (session.currentTaskId !== taskId) {
+      throw new Error(
+        `Agent ${agentId} current task is ${session.currentTaskId}, not ${taskId}`,
+      );
+    }
+
+    session.currentTaskId = null;
+    this.updateStatus(agentId, "idle");
+  }
+
   /** @throws If the agent is not spawned or taskId doesn't match. */
   completeTask(agentId: string, taskId: string, durationMs?: number): void {
     const session = this.sessions.get(agentId);
@@ -276,7 +293,7 @@ export class AgentRegistry {
   }
 
   getState(): Record<string, AgentSession> {
-    return Object.fromEntries(this.sessions);
+    return globalThis.structuredClone(Object.fromEntries(this.sessions));
   }
 
   getActiveAgents(): AgentSession[] {

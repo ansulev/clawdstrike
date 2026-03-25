@@ -319,13 +319,13 @@ export class TopologyManager {
   }
 
   getState(): TopologyState {
-    return {
+    return globalThis.structuredClone({
       ...this.state,
       nodes: [...this.state.nodes],
       edges: [...this.state.edges],
       partitions: [...this.state.partitions],
       snapshotAt: Date.now(),
-    };
+    });
   }
 
   getNode(agentId: string): TopologyNode | undefined {

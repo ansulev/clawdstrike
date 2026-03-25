@@ -175,6 +175,40 @@ describe("useEngineBoardBridge", () => {
     unmount();
   });
 
+  it("uses engine IDs for runtime-spawned agent nodes", () => {
+    const events = new TypedEventEmitter<SwarmEngineEventMap>();
+    const engine = {
+      getState: () => makeEngineState(),
+      getEvents: () => events,
+    };
+
+    const { unmount } = renderHook(() =>
+      useEngineBoardBridge(engine as any),
+    );
+
+    try {
+      act(() => {
+        events.emit("agent.spawned", {
+          agent: {
+            id: "agt_runtime_1",
+            name: "Runtime Agent",
+            role: "worker",
+            status: "idle",
+          },
+        } as any);
+      });
+
+      const runtimeNode = useSwarmBoardStore
+        .getState()
+        .nodes.find((node) => node.data.agentId === "agt_runtime_1");
+
+      expect(runtimeNode?.id).toBe("agt_runtime_1");
+      expect(runtimeNode?.data.engineManaged).toBe(true);
+    } finally {
+      unmount();
+    }
+  });
+
   it("replaces topology edges from the latest topology event and preserves non-topology edges", () => {
     const events = new TypedEventEmitter<SwarmEngineEventMap>();
     const engineState = makeEngineState();
@@ -520,6 +554,52 @@ describe("useEngineBoardBridge", () => {
     }
   });
 
+  it("restores the pre-glow status when the bridge cleans up mid-evaluation", () => {
+    vi.useFakeTimers();
+
+    const events = new TypedEventEmitter<SwarmEngineEventMap>();
+    const engine = {
+      getState: () => makeEngineState(),
+      getEvents: () => events,
+    };
+
+    const { unmount } = renderHook(() =>
+      useEngineBoardBridge(engine as any),
+    );
+
+    try {
+      act(() => {
+        events.emit("agent.status_changed", {
+          agentId: "agt_pool_1",
+          newStatus: "running",
+        } as any);
+        events.emit("guard.evaluated", {
+          action: { agentId: "agt_pool_1" },
+          result: {
+            verdict: "allow",
+            guardResults: [],
+            receipt: {
+              signature: "deed".repeat(32),
+              publicKey: "1234".repeat(16),
+            },
+          },
+        } as any);
+      });
+
+      expect(
+        useSwarmBoardStore.getState().nodes.find((node) => node.id === "agt_pool_1")?.data.status,
+      ).toBe("evaluating");
+
+      unmount();
+
+      expect(
+        useSwarmBoardStore.getState().nodes.find((node) => node.id === "agt_pool_1")?.data.status,
+      ).toBe("running");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("stacks runtime-created tasks under the same agent instead of overlapping them", () => {
     const events = new TypedEventEmitter<SwarmEngineEventMap>();
     const engine = {
@@ -566,6 +646,56 @@ describe("useEngineBoardBridge", () => {
         { id: "tsk_1", position: { x: 240, y: 320 } },
         { id: "tsk_2", position: { x: 240, y: 344 } },
       ]);
+    } finally {
+      unmount();
+    }
+  });
+
+  it("preserves task prompts from live task.created events", () => {
+    const events = new TypedEventEmitter<SwarmEngineEventMap>();
+    const engine = {
+      getState: () => makeEngineState(),
+      getEvents: () => events,
+    };
+
+    const { unmount } = renderHook(() =>
+      useEngineBoardBridge(engine as any),
+    );
+
+    try {
+      act(() => {
+        events.emit("task.created", {
+          task: {
+            id: "tsk_prompt",
+            name: "Investigate auth",
+            type: "analysis",
+            status: "created",
+            assignedTo: "agt_pool_1",
+            taskPrompt: "Inspect the last failing auth trace",
+          },
+        } as any);
+
+        events.emit("task.created", {
+          task: {
+            id: "tsk_desc",
+            name: "Fallback task",
+            type: "analysis",
+            status: "created",
+            assignedTo: "agt_pool_1",
+            description: "Use description when no task prompt exists",
+          },
+        } as any);
+      });
+
+      expect(
+        useSwarmBoardStore.getState().nodes.find((node) => node.data.taskId === "tsk_prompt")
+          ?.data.taskPrompt,
+      ).toBe("Inspect the last failing auth trace");
+
+      expect(
+        useSwarmBoardStore.getState().nodes.find((node) => node.data.taskId === "tsk_desc")
+          ?.data.taskPrompt,
+      ).toBe("Use description when no task prompt exists");
     } finally {
       unmount();
     }

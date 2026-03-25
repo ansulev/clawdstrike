@@ -625,7 +625,8 @@ export class TopologyManager {
     }
 
     const nodesPerPartition = Math.ceil(this.config.maxAgents / 10);
-    const partitionIndex = Math.floor(this.state.nodes.length / nodesPerPartition);
+    // Use length - 1 because the node was already pushed to state.nodes before this call
+    const partitionIndex = Math.floor((this.state.nodes.length - 1) / nodesPerPartition);
 
     if (this.state.partitions.length <= partitionIndex) {
       // Create new partition
@@ -699,6 +700,16 @@ export class TopologyManager {
         // Bidirectional
         target.connections.push(node.agentId);
         this.adjacencyList.get(target.agentId)?.add(node.agentId);
+
+        // Keep edges in sync so getState().edges reflects the new connection
+        this.state.edges.push({
+          from: node.agentId,
+          to: target.agentId,
+          weight: 1,
+          bidirectional: true,
+          latencyMs: null,
+          edgeType: "topology",
+        });
       }
     }
   }

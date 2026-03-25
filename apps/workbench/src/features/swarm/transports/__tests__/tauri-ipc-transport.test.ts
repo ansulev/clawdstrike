@@ -1,7 +1,7 @@
 /**
  * Unit tests for TauriIpcTransport.
  *
- * Mocks Tauri APIs (listen, invoke) and window.__TAURI__ to test all
+ * Mocks Tauri APIs (listen, invoke) and window.__TAURI_INTERNALS__ to test all
  * TransportAdapter behaviors without a real Tauri runtime.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
@@ -63,9 +63,9 @@ describe("TauriIpcTransport", () => {
   });
 
   afterEach(() => {
-    // Clean up __TAURI__ between tests
-    if ("__TAURI__" in window) {
-      delete (window as Record<string, unknown>).__TAURI__;
+    // Clean up __TAURI_INTERNALS__ between tests
+    if ("__TAURI_INTERNALS__" in window) {
+      delete (window as Record<string, unknown>).__TAURI_INTERNALS__;
     }
   });
 
@@ -73,12 +73,12 @@ describe("TauriIpcTransport", () => {
   // isConnected
   // -----------------------------------------------------------------------
   describe("isConnected", () => {
-    it("returns false when window.__TAURI__ is not present", () => {
+    it("returns false when window.__TAURI_INTERNALS__ is not present", () => {
       expect(transport.isConnected()).toBe(false);
     });
 
-    it("returns true when window.__TAURI__ is present", () => {
-      Object.defineProperty(window, "__TAURI__", {
+    it("returns true when window.__TAURI_INTERNALS__ is present", () => {
+      Object.defineProperty(window, "__TAURI_INTERNALS__", {
         value: {},
         writable: true,
         configurable: true,
@@ -137,7 +137,7 @@ describe("TauriIpcTransport", () => {
   // -----------------------------------------------------------------------
   describe("publish", () => {
     it("calls Tauri invoke with swarm_publish command", async () => {
-      Object.defineProperty(window, "__TAURI__", {
+      Object.defineProperty(window, "__TAURI_INTERNALS__", {
         value: {},
         writable: true,
         configurable: true,

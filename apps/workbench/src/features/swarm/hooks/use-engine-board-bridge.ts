@@ -316,7 +316,7 @@ export function useEngineBoardBridge(engine: SwarmOrchestrator | null): void {
             event.result?.verdict ?? "deny",
             (event.result?.guardResults ?? []).map((g: any) => ({
               guard: g.guard ?? g.guardId ?? "unknown",
-              allowed: g.verdict === "allow",
+              allowed: g.verdict !== "deny",
               duration_ms: g.duration_ms ?? g.durationMs,
             })),
             event.result?.receipt?.signature,

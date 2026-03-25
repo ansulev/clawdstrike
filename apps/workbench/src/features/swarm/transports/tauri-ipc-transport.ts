@@ -62,7 +62,7 @@ export class TauriIpcTransport implements TransportAdapter {
    * Tauri JS bridge was injected at page load.
    */
   isConnected(): boolean {
-    return typeof window !== "undefined" && "__TAURI__" in window;
+    return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
   }
 
   /**

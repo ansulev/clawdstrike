@@ -200,7 +200,7 @@ describe("Store without engine context", () => {
 
   it("addNode creates a node without engine fields", () => {
     const { actions } = useSwarmBoardStore.getState();
-    const node = actions.addNode({
+    actions.addNode({
       nodeType: "agentSession",
       title: "Test Agent",
       position: { x: 0, y: 0 },

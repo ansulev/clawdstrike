@@ -172,17 +172,17 @@ export class SwarmOrchestrator {
       this.recentGuardActions.shift();
     }
 
+    const redactedAction = this.redactGuardAction(action);
     this.events.emit("guard.evaluated", {
       kind: "guard.evaluated",
       sourceAgentId: action.agentId,
       timestamp: Date.now(),
-      action,
+      action: redactedAction,
       result,
       durationMs,
     });
 
     if (result.verdict === "deny") {
-      const redactedAction: GuardedAction = { ...action, context: {} };
       this.events.emit("action.denied", {
         kind: "action.denied",
         sourceAgentId: action.agentId,
@@ -199,7 +199,7 @@ export class SwarmOrchestrator {
         kind: "action.completed",
         sourceAgentId: action.agentId,
         timestamp: Date.now(),
-        action,
+        action: redactedAction,
         receipt: this.envelopeReceiptFromReceipt(result.receipt),
         durationMs,
       });
@@ -539,6 +539,13 @@ export class SwarmOrchestrator {
       signature: "",
       publicKey: "",
       valid: false,
+    };
+  }
+
+  private redactGuardAction(action: GuardedAction): GuardedAction {
+    return {
+      ...action,
+      context: {},
     };
   }
 

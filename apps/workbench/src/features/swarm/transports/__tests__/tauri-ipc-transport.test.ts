@@ -135,6 +135,20 @@ describe("TauriIpcTransport", () => {
       expect(mockUnlisten).toHaveBeenCalledTimes(1);
     });
 
+    it("rolls back the subscription marker when listen rejects so callers can retry", async () => {
+      mockListen
+        .mockRejectedValueOnce(new Error("listen failed"))
+        .mockResolvedValueOnce(mockUnlisten);
+
+      transport.subscribe("swarm/intel");
+      await new Promise((r) => setTimeout(r, 0));
+
+      transport.subscribe("swarm/intel");
+      await new Promise((r) => setTimeout(r, 0));
+
+      expect(mockListen).toHaveBeenCalledTimes(2);
+    });
+
     it("unsubscribe on an unsubscribed topic is a no-op", () => {
       // Should not throw
       expect(() => transport.unsubscribe("nonexistent")).not.toThrow();

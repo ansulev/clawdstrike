@@ -403,11 +403,16 @@ describe("SwarmOrchestrator", () => {
 
     it("emits guard.evaluated event with result", async () => {
       orchestrator.initialize();
-      const guardEvents: unknown[] = [];
-      events.on("guard.evaluated", (e) => guardEvents.push(e));
+      const guardEvents: Array<{ action: GuardedAction }> = [];
+      events.on("guard.evaluated", (e) =>
+        guardEvents.push(e as unknown as { action: GuardedAction }),
+      );
 
-      await orchestrator.evaluateGuard(makeAction());
+      await orchestrator.evaluateGuard(
+        makeAction({ context: { prompt: "secret prompt", cwd: "/tmp/secret" } }),
+      );
       expect(guardEvents).toHaveLength(1);
+      expect(guardEvents[0]!.action.context).toEqual({});
     });
 
     it("on deny emits action.denied event", async () => {
@@ -457,6 +462,35 @@ describe("SwarmOrchestrator", () => {
 
       await orch.evaluateGuard(action);
       expect(completedEvents).toHaveLength(1);
+      orch.dispose();
+    });
+
+    it("on allow redacts context from completed action broadcasts", async () => {
+      const action = makeAction({
+        context: { prompt: "secret prompt", cwd: "/tmp/secret" },
+      });
+      const result = makeAllowResult(action);
+      const evaluator: GuardEvaluator = {
+        evaluate: vi.fn().mockResolvedValue(result),
+      };
+      const orch = new SwarmOrchestrator(
+        events,
+        registry,
+        taskGraph,
+        topology,
+        makeConfig({ guardEvaluator: evaluator }),
+      );
+      orch.initialize();
+
+      const completedEvents: Array<{ action: GuardedAction }> = [];
+      events.on("action.completed", (e) =>
+        completedEvents.push(e as unknown as { action: GuardedAction }),
+      );
+
+      await orch.evaluateGuard(action);
+
+      expect(completedEvents).toHaveLength(1);
+      expect(completedEvents[0]!.action.context).toEqual({});
       orch.dispose();
     });
 

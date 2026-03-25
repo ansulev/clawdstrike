@@ -34,6 +34,10 @@ export class TauriIpcTransport implements TransportAdapter {
       }
     });
     this.unlistenPromises.set(topic, promise);
+    void promise.catch(() => {
+      this.subscriptions.delete(topic);
+      this.unlistenPromises.delete(topic);
+    });
   }
 
   unsubscribe(topic: string): void {

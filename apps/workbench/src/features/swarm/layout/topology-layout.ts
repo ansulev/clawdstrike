@@ -120,6 +120,15 @@ interface SimNode {
   vy: number;
 }
 
+/**
+ * Force-directed mesh layout.
+ *
+ * Complexity: O(n^2) per iteration due to all-pairs charge repulsion,
+ * run for MESH_ITERATIONS (100) ticks. This is fine for typical board
+ * sizes (<50 nodes). For >50 nodes, consider debouncing layout calls
+ * or offloading the simulation to a Web Worker to avoid blocking the
+ * main thread.
+ */
 function meshLayout(
   nodes: Node<SwarmBoardNodeData>[],
   edges: SwarmBoardEdge[],

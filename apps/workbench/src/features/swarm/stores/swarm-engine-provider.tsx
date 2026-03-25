@@ -19,6 +19,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ReactNode,
@@ -32,6 +33,7 @@ import {
   TopologyManager,
   type GuardedAction,
   type SwarmEngineEventMap,
+  type SwarmEngineState,
   type SwarmOrchestratorConfig,
 } from "@clawdstrike/swarm-engine";
 import type { SwarmBoardNodeData } from "../swarm-board-types";
@@ -45,9 +47,18 @@ import {
 // ---------------------------------------------------------------------------
 
 export interface SwarmEngineContextValue {
+  /**
+   * The SwarmOrchestrator is the primary API. All mutations should go through
+   * it so that the guard pipeline is enforced. Use the read-only accessors
+   * (getAgent, getTask, getTopologyState) for UI reads instead of touching
+   * raw subsystems directly.
+   */
   engine: SwarmOrchestrator | null;
+  /** @deprecated Use engine.getState().agents instead. Kept for migration. */
   agentRegistry: AgentRegistry | null;
+  /** @deprecated Use engine.getState().tasks instead. Kept for migration. */
   taskGraph: TaskGraph | null;
+  /** @deprecated Use engine.getState().topology instead. Kept for migration. */
   topology: TopologyManager | null;
   isReady: boolean;
   /** "engine" = orchestrator running, "manual" = fallback/disabled, "error" = init failed */
@@ -219,6 +230,9 @@ export function SwarmEngineProvider({
   // spawnEngineSession -- wraps spawnFn with guard pipeline + receipt creation
   // ---------------------------------------------------------------------------
 
+  // Empty dependency array is intentional: the callback reads from `engineRef`
+  // (a stable ref) and `useSwarmBoardStore.getState()` (Zustand's static
+  // accessor), neither of which are React state or props.
   const spawnEngineSession = useCallback(
     async (
       spawnFn: (opts: SpawnSessionOptions) => Promise<Node<SwarmBoardNodeData>>,
@@ -231,21 +245,31 @@ export function SwarmEngineProvider({
         return spawnFn(opts);
       }
 
-      // Step 1: Guard pipeline evaluation
-      const guardAction: GuardedAction = {
-        agentId: `pending_${Date.now()}`,
-        taskId: null,
-        actionType: "shell_command",
-        target: opts.cwd,
-        context: {
-          operation: "agent_spawn",
-          launchClaude: opts.launchClaude ?? false,
-          command: opts.command,
-        },
-        requestedAt: Date.now(),
-      };
+      // Step 1: Guard pipeline evaluation (wrapped in try/catch -- on error,
+      // log warning and fall back to manual spawn so the user isn't blocked).
+      let result: Awaited<ReturnType<SwarmOrchestrator["evaluateGuard"]>>;
+      try {
+        const guardAction: GuardedAction = {
+          agentId: `pending_${Date.now()}`,
+          taskId: null,
+          actionType: "shell_command",
+          target: opts.cwd,
+          context: {
+            operation: "agent_spawn",
+            launchClaude: opts.launchClaude ?? false,
+            command: opts.command,
+          },
+          requestedAt: Date.now(),
+        };
 
-      const result = await engine.evaluateGuard(guardAction);
+        result = await engine.evaluateGuard(guardAction);
+      } catch (guardErr) {
+        console.warn(
+          "[SwarmEngineProvider] Guard evaluation failed, falling back to manual spawn:",
+          guardErr instanceof Error ? guardErr.message : String(guardErr),
+        );
+        return spawnFn(opts);
+      }
 
       // Step 2: If denied, create receipt-only node (no session spawned)
       if (!result.allowed) {
@@ -296,7 +320,10 @@ export function SwarmEngineProvider({
   );
 
   // Merge spawnEngineSession into the context value when it changes
-  const valueWithSpawn = { ...contextValue, spawnEngineSession };
+  const valueWithSpawn = useMemo(
+    () => ({ ...contextValue, spawnEngineSession }),
+    [contextValue, spawnEngineSession],
+  );
 
   return (
     <SwarmEngineContext.Provider value={valueWithSpawn}>
@@ -325,25 +352,40 @@ export function useSwarmEngine(): SwarmEngineContextValue {
 }
 
 /**
- * Returns the AgentRegistry from the engine context, or null if engine is not ready.
- * Throws if called outside of SwarmEngineProvider.
+ * Returns a read-only snapshot of the agent registry state via the orchestrator.
+ * Returns null if the engine is not ready. Does NOT expose the mutable
+ * AgentRegistry -- all mutations must go through SwarmOrchestrator methods
+ * so that the guard pipeline is enforced.
+ *
+ * @deprecated Prefer `useSwarmEngine().engine?.getState().agents` for one-off reads.
  */
-export function useAgentRegistry(): AgentRegistry | null {
-  return useSwarmEngine().agentRegistry;
+export function useAgentRegistry(): ReturnType<AgentRegistry["getState"]> | null {
+  const { engine } = useSwarmEngine();
+  return engine?.getState().agents ?? null;
 }
 
 /**
- * Returns the TaskGraph from the engine context, or null if engine is not ready.
- * Throws if called outside of SwarmEngineProvider.
+ * Returns a read-only snapshot of the task graph state via the orchestrator.
+ * Returns null if the engine is not ready. Does NOT expose the mutable
+ * TaskGraph -- all mutations must go through SwarmOrchestrator methods
+ * so that the guard pipeline is enforced.
+ *
+ * @deprecated Prefer `useSwarmEngine().engine?.getState().tasks` for one-off reads.
  */
-export function useTaskGraph(): TaskGraph | null {
-  return useSwarmEngine().taskGraph;
+export function useTaskGraph(): ReturnType<TaskGraph["getState"]> | null {
+  const { engine } = useSwarmEngine();
+  return engine?.getState().tasks ?? null;
 }
 
 /**
- * Returns the TopologyManager from the engine context, or null if engine is not ready.
- * Throws if called outside of SwarmEngineProvider.
+ * Returns a read-only snapshot of the topology state via the orchestrator.
+ * Returns null if the engine is not ready. Does NOT expose the mutable
+ * TopologyManager -- all mutations must go through SwarmOrchestrator methods
+ * so that the guard pipeline is enforced.
+ *
+ * @deprecated Prefer `useSwarmEngine().engine?.getState().topology` for one-off reads.
  */
-export function useTopology(): TopologyManager | null {
-  return useSwarmEngine().topology;
+export function useTopology(): SwarmEngineState["topology"] | null {
+  const { engine } = useSwarmEngine();
+  return engine?.getState().topology ?? null;
 }

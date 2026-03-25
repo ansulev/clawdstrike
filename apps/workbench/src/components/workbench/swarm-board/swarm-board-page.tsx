@@ -9,7 +9,7 @@
  * to manage node/edge state.
  */
 
-import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { useCoordinatorBoardBridge } from "@/features/swarm/hooks/use-coordinator-board-bridge";
 import { usePolicyEvalBoardBridge } from "@/features/swarm/hooks/use-policy-eval-board-bridge";
@@ -812,6 +812,52 @@ function SwarmBoardStatsBar({
 }
 
 // ---------------------------------------------------------------------------
+// Error Boundary — catches render errors in the engine-dependent subtree
+// ---------------------------------------------------------------------------
+
+interface SwarmBoardErrorBoundaryState {
+  hasError: boolean;
+  error: Error | null;
+}
+
+class SwarmBoardErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  SwarmBoardErrorBoundaryState
+> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error: Error): SwarmBoardErrorBoundaryState {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, info: React.ErrorInfo): void {
+    console.error("[SwarmBoardErrorBoundary] Render error:", error, info.componentStack);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div
+          className="flex flex-col items-center justify-center h-full w-full gap-2"
+          style={{ backgroundColor: "#05060a" }}
+        >
+          <p className="text-[13px] font-mono text-[#6f7f9a]">
+            SwarmBoard encountered an error. Refresh to retry.
+          </p>
+          <p className="text-[10px] font-mono text-[#2a3040]">
+            {this.state.error?.message ?? "Unknown error"}
+          </p>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Page wrapper — sets up providers in correct order
 // ---------------------------------------------------------------------------
 
@@ -836,7 +882,9 @@ export function SwarmBoardPage() {
     <SwarmEngineProvider>
       <SwarmBoardProvider bundlePath={bundlePath}>
         <ReactFlowProvider>
-          <SwarmBoardCanvas />
+          <SwarmBoardErrorBoundary>
+            <SwarmBoardCanvas />
+          </SwarmBoardErrorBoundary>
         </ReactFlowProvider>
       </SwarmBoardProvider>
     </SwarmEngineProvider>

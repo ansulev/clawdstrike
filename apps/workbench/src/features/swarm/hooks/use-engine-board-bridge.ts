@@ -148,7 +148,10 @@ export function useEngineBoardBridge(engine: SwarmOrchestrator | null): void {
     );
 
     // -----------------------------------------------------------------------
-    // 3. agent.heartbeat -> setSessionMetadata (INTG-02)
+    // 3. agent.heartbeat -> updateNode (INTG-02)
+    //    Engine-managed nodes don't have a sessionId, so setSessionMetadata
+    //    (which matches by sessionId) would be a no-op. Use updateNode which
+    //    matches by node.id directly.
     // -----------------------------------------------------------------------
     unsubs.push(
       events.on("agent.heartbeat", (event: any) => {
@@ -159,7 +162,7 @@ export function useEngineBoardBridge(engine: SwarmOrchestrator | null): void {
         );
         if (!node) return;
 
-        actions.setSessionMetadata(node.id, {
+        actions.updateNode(node.id, {
           toolBoundaryEvents: event.metricsSnapshot?.tasksCompleted,
           confidence: Math.round((event.health ?? 0) * 100),
         });
@@ -324,83 +327,56 @@ export function useEngineBoardBridge(engine: SwarmOrchestrator | null): void {
     );
 
     // -----------------------------------------------------------------------
-    // 9. topology.updated -> computeLayout + topologyLayout action (INTG-02)
+    // 9 & 10. Shared handler for topology.updated and topology.rebalanced
     // -----------------------------------------------------------------------
-    unsubs.push(
-      events.on("topology.updated", (event: any) => {
-        const { nodes, edges, actions } = store();
+    function handleTopologyEvent(topologyState: { type?: string; edges?: Array<{ from: string; to: string }> } | undefined): void {
+      const { nodes, edges, actions } = store();
+      const topoType = (topologyState?.type ?? "mesh") as Parameters<typeof computeLayout>[2];
 
-        const result = computeLayout(
-          nodes as Node<SwarmBoardNodeData>[],
-          edges,
-          event.newTopology?.type ?? "mesh",
-          { width: 1200, height: 800 },
-        );
+      const result = computeLayout(
+        nodes as Node<SwarmBoardNodeData>[],
+        edges,
+        topoType,
+        { width: 1200, height: 800 },
+      );
 
-        actions.topologyLayout(event.newTopology?.type ?? "mesh", result.positions);
+      actions.topologyLayout(topoType, result.positions);
 
-        // Create topology edges from event.newTopology.edges
-        if (event.newTopology?.edges) {
-          for (const topoEdge of event.newTopology.edges) {
-            // Map topology node IDs to board node IDs via agentId matching
-            const fromNode = nodes.find(
-              (n: Node<SwarmBoardNodeData>) =>
-                n.data.agentId === topoEdge.from || n.id === topoEdge.from,
-            );
-            const toNode = nodes.find(
-              (n: Node<SwarmBoardNodeData>) =>
-                n.data.agentId === topoEdge.to || n.id === topoEdge.to,
-            );
-            if (fromNode && toNode) {
-              actions.addEdge({
-                id: `edge-topo-${topoEdge.from}-${topoEdge.to}`,
-                source: fromNode.id,
-                target: toNode.id,
-                type: "topology",
-              });
-            }
+      // Create topology edges from the topology state
+      if (topologyState?.edges) {
+        for (const topoEdge of topologyState.edges) {
+          // Map topology node IDs to board node IDs via agentId matching
+          const fromNode = nodes.find(
+            (n: Node<SwarmBoardNodeData>) =>
+              n.data.agentId === topoEdge.from || n.id === topoEdge.from,
+          );
+          const toNode = nodes.find(
+            (n: Node<SwarmBoardNodeData>) =>
+              n.data.agentId === topoEdge.to || n.id === topoEdge.to,
+          );
+          if (fromNode && toNode) {
+            actions.addEdge({
+              id: `edge-topo-${topoEdge.from}-${topoEdge.to}`,
+              source: fromNode.id,
+              target: toNode.id,
+              type: "topology",
+            });
           }
         }
+      }
+    }
+
+    // 9. topology.updated (INTG-02)
+    unsubs.push(
+      events.on("topology.updated", (event: any) => {
+        handleTopologyEvent(event.newTopology);
       }),
     );
 
-    // -----------------------------------------------------------------------
-    // 10. topology.rebalanced -> same as topology.updated (INTG-02)
-    // -----------------------------------------------------------------------
+    // 10. topology.rebalanced (INTG-02)
     unsubs.push(
       events.on("topology.rebalanced", (event: any) => {
-        const { nodes, edges, actions } = store();
-
-        const result = computeLayout(
-          nodes as Node<SwarmBoardNodeData>[],
-          edges,
-          event.topology?.type ?? "mesh",
-          { width: 1200, height: 800 },
-        );
-
-        actions.topologyLayout(event.topology?.type ?? "mesh", result.positions);
-
-        // Create topology edges from event.topology.edges
-        if (event.topology?.edges) {
-          for (const topoEdge of event.topology.edges) {
-            const fromNode = nodes.find(
-              (n: Node<SwarmBoardNodeData>) =>
-                n.data.agentId === topoEdge.from || n.id === topoEdge.from,
-            );
-            const toNode = nodes.find(
-              (n: Node<SwarmBoardNodeData>) =>
-                n.data.agentId === topoEdge.to || n.id === topoEdge.to,
-            );
-            if (fromNode && toNode) {
-              actions.addEdge({
-                id: `edge-topo-${topoEdge.from}-${topoEdge.to}`,
-                source: fromNode.id,
-                target: toNode.id,
-                type: "topology",
-              });
-            }
-          }
-        }
+        handleTopologyEvent(event.topology);
       }),
     );
 

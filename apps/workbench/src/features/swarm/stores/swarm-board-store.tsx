@@ -902,6 +902,15 @@ const useSwarmBoardStoreBase = create<SwarmBoardStoreState>()((set, get) => ({
       const agentNode = current.nodes.find((n) => n.id === agentNodeId);
       if (!agentNode) return;
 
+      // Dedup: skip if a receipt with the same signature already exists
+      if (signature) {
+        const duplicate = current.nodes.some(
+          (n) => (n.data as SwarmBoardNodeData).nodeType === "receipt" &&
+                 (n.data as SwarmBoardNodeData).signature === signature,
+        );
+        if (duplicate) return;
+      }
+
       const receiptNode = createBoardNode({
         nodeType: "receipt",
         title: `Guard: ${verdict.toUpperCase()}`,

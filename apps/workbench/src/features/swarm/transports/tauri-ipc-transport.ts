@@ -53,7 +53,14 @@ export class TauriIpcTransport implements TransportAdapter {
   // TransportAdapter implementation
   // -----------------------------------------------------------------------
 
-  /** Whether the Tauri runtime is available. */
+  /**
+   * Whether the Tauri runtime is available.
+   *
+   * Note: This performs a static check for `window.__TAURI__` presence.
+   * It does NOT detect backend crashes, IPC channel failures, or the
+   * Rust process being unresponsive. A `true` return only means the
+   * Tauri JS bridge was injected at page load.
+   */
   isConnected(): boolean {
     return typeof window !== "undefined" && "__TAURI__" in window;
   }
@@ -82,7 +89,7 @@ export class TauriIpcTransport implements TransportAdapter {
     this.subscriptions.delete(topic);
     const promise = this.unlistenPromises.get(topic);
     if (promise) {
-      promise.then((unlisten) => unlisten());
+      promise.then((unlisten) => unlisten()).catch(() => {});
       this.unlistenPromises.delete(topic);
     }
   }

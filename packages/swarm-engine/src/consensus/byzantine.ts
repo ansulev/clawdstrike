@@ -416,7 +416,8 @@ export class ByzantineConsensus {
 
   getMaxFaultyNodes(): number {
     const n = this.nodes.size + 1;
-    return Math.floor((n - 1) / 3);
+    const computedFaultBudget = Math.floor((n - 1) / 3);
+    return Math.max(0, Math.min(this.config.maxFaultyNodes, computedFaultBudget));
   }
 
   canTolerate(faultyCount: number): boolean {

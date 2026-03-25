@@ -385,6 +385,33 @@ describe("ByzantineConsensus", () => {
     expect(bft.canTolerate(2)).toBe(false);
   });
 
+  it("respects configured maxFaultyNodes without exceeding the PBFT bound", () => {
+    const strictBudget = new ByzantineConsensus(events, "node-1", {
+      viewChangeTimeoutMs: 1000,
+      maxFaultyNodes: 0,
+    });
+    strictBudget.addNode("node-2");
+    strictBudget.addNode("node-3");
+    strictBudget.addNode("node-4");
+
+    expect(strictBudget.getMaxFaultyNodes()).toBe(0);
+    expect(strictBudget.canTolerate(1)).toBe(false);
+
+    strictBudget.dispose();
+
+    const cappedBudget = new ByzantineConsensus(events, "node-1", {
+      viewChangeTimeoutMs: 1000,
+      maxFaultyNodes: 3,
+    });
+    cappedBudget.addNode("node-2");
+    cappedBudget.addNode("node-3");
+    cappedBudget.addNode("node-4");
+
+    expect(cappedBudget.getMaxFaultyNodes()).toBe(1);
+
+    cappedBudget.dispose();
+  });
+
   it("propose creates proposal with csn_ ID and emits consensus.proposed", () => {
     const proposed: ConsensusProposedEvent[] = [];
     events.on("consensus.proposed", (e) => proposed.push(e));

@@ -912,8 +912,14 @@ const useSwarmBoardStoreBase = create<SwarmBoardStoreState>()((set, get) => ({
       });
       const nodes = [...preservedNodes, ...reconciledNodes];
       const nodeIds = new Set(nodes.map((node) => node.id));
+      const isSnapshotManagedEdge = (edge: SwarmBoardEdge): boolean =>
+        edge.type === "spawned" || edge.type === "topology";
 
-      const edgesById = new Map(current.edges.map((edge) => [edge.id, edge]));
+      const edgesById = new Map(
+        current.edges
+          .filter((edge) => !isSnapshotManagedEdge(edge))
+          .map((edge) => [edge.id, edge]),
+      );
       for (const engineEdge of engineEdges) {
         edgesById.set(engineEdge.id, engineEdge);
       }

@@ -441,6 +441,72 @@ describe("SwarmBoardStore (Zustand)", () => {
     expect(state.edges.find((edge) => edge.id === "edge-spawn-stale")).toBeUndefined();
   });
 
+  it("engineSync drops stale snapshot-managed edges while keeping live nodes", () => {
+    const { actions } = useSwarmBoardStore.getState();
+
+    actions.addNodeDirect({
+      id: "agt_alpha",
+      type: "agentSession",
+      position: { x: 0, y: 0 },
+      data: {
+        title: "Alpha",
+        status: "running",
+        nodeType: "agentSession",
+        agentId: "agt_alpha",
+        engineManaged: true,
+      },
+    });
+    actions.addNodeDirect({
+      id: "agt_beta",
+      type: "agentSession",
+      position: { x: 300, y: 0 },
+      data: {
+        title: "Beta",
+        status: "running",
+        nodeType: "agentSession",
+        agentId: "agt_beta",
+        engineManaged: true,
+      },
+    });
+    actions.addEdge({
+      id: "edge-topo-agt_alpha-agt_beta",
+      source: "agt_alpha",
+      target: "agt_beta",
+      type: "topology",
+    });
+
+    actions.engineSync(
+      [
+        {
+          id: "agt_alpha",
+          agentId: "agt_alpha",
+          data: {
+            nodeType: "agentSession",
+            title: "Alpha",
+            status: "running",
+          },
+          position: { x: 0, y: 0 },
+        },
+        {
+          id: "agt_beta",
+          agentId: "agt_beta",
+          data: {
+            nodeType: "agentSession",
+            title: "Beta",
+            status: "running",
+          },
+          position: { x: 300, y: 0 },
+        },
+      ],
+      [],
+    );
+
+    const state = useSwarmBoardStore.getState();
+    expect(state.nodes.find((node) => node.id === "agt_alpha")).toBeDefined();
+    expect(state.nodes.find((node) => node.id === "agt_beta")).toBeDefined();
+    expect(state.edges.find((edge) => edge.id === "edge-topo-agt_alpha-agt_beta")).toBeUndefined();
+  });
+
   // Test 16
   it("createBoardNode factory returns properly shaped node", () => {
     const node = createBoardNode({

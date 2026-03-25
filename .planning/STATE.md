@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: executing
-stopped_at: Completed 05-03-PLAN.md
-last_updated: "2026-03-25T00:08:15.202Z"
-last_activity: 2026-03-24 -- Completed 05-02 (Topology layout module)
+status: completed
+stopped_at: Completed 05-04-PLAN.md
+last_updated: "2026-03-25T00:22:47.793Z"
+last_activity: 2026-03-25 -- Completed 05-04 (spawnEngineSession gap closure)
 progress:
   total_phases: 6
   completed_phases: 5
-  total_plans: 15
-  completed_plans: 15
+  total_plans: 16
+  completed_plans: 16
   percent: 100
 ---
 
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-24)
 
 **Core value:** Every agent action passes through ClawdStrike's guard pipeline -- orchestration and security share a single wire format, transport, and audit trail.
-**Current focus:** Phase 5 complete. All 15 plans across 6 phases executed. Engine provider, event bridge, and page wiring done.
+**Current focus:** Phase 5 complete (all 4 plans). 16 plans across 6 phases executed. spawnEngineSession closes last INTG-04 gap.
 
 ## Current Position
 
 Phase: 5 of 6 (React Integration)
-Plan: 3 of 3 in current phase
+Plan: 4 of 4 in current phase
 Status: Phase Complete
-Last activity: 2026-03-25 -- Completed 05-03 (Engine provider + bridge + page wiring)
+Last activity: 2026-03-25 -- Completed 05-04 (spawnEngineSession gap closure)
 
 Progress: [██████████] 100%
 
@@ -67,6 +67,7 @@ Progress: [██████████] 100%
 | Phase 05 P02 | 3min | 1 task | 2 files |
 | Phase 05 P01 | 3min | 2 tasks | 4 files |
 | Phase 05 P03 | 4min | 3 tasks | 3 files |
+| Phase 05 P04 | 3min | 1 task | 1 file |
 
 ## Accumulated Context
 
@@ -127,6 +128,10 @@ Recent decisions affecting current work:
 - [Phase 05-02]: Type-only import from @xyflow/react (erased at compile time, zero runtime React dependency)
 - [Phase 05]: Access private events field via (engine as any).events for bridge subscriptions -- standard integration pattern
 - [Phase 05]: mapEngineStatus covers all 11 AgentSessionStatus values with explicit busy->running and offline->failed mappings
+- [Phase 05-04]: spawnEngineSession accepts spawnFn parameter instead of accessing session context directly -- avoids cross-provider coupling
+- [Phase 05-04]: manualSpawnEngineSession as module-level const reused across MANUAL_CONTEXT, success, and error paths
+- [Phase 05-04]: valueWithSpawn spread merge at render time ensures useCallback identity is stable while context updates
+- [Phase 05-04]: GuardSimResult.guardId mapped to guard field and verdict!='deny' mapped to allowed for guardEvaluate store compat
 
 ### Pending Todos
 
@@ -141,6 +146,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-25T00:08:15.197Z
-Stopped at: Completed 05-03-PLAN.md
+Last session: 2026-03-25T00:22:47Z
+Stopped at: Completed 05-04-PLAN.md
 Resume file: None

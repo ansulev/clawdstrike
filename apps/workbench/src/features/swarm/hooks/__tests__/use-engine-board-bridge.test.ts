@@ -447,6 +447,61 @@ describe("useEngineBoardBridge", () => {
     }
   });
 
+  it("updates the pending guard-glow restore status when agent lifecycle events land mid-glow", () => {
+    vi.useFakeTimers();
+
+    const events = new TypedEventEmitter<SwarmEngineEventMap>();
+    const engine = {
+      getState: () => makeEngineState(),
+      getEvents: () => events,
+    };
+
+    const { unmount } = renderHook(() =>
+      useEngineBoardBridge(engine as any),
+    );
+
+    try {
+      act(() => {
+        events.emit("guard.evaluated", {
+          action: { agentId: "agt_pool_1" },
+          result: {
+            verdict: "allow",
+            guardResults: [],
+            receipt: {
+              signature: "fade".repeat(32),
+              publicKey: "1234".repeat(16),
+            },
+          },
+        } as any);
+      });
+
+      act(() => {
+        events.emit("agent.status_changed", {
+          agentId: "agt_pool_1",
+          newStatus: "running",
+        } as any);
+      });
+
+      act(() => {
+        events.emit("agent.status_changed", {
+          agentId: "agt_pool_1",
+          newStatus: "evaluating",
+        } as any);
+      });
+
+      act(() => {
+        vi.advanceTimersByTime(2000);
+      });
+
+      expect(
+        useSwarmBoardStore.getState().nodes.find((node) => node.id === "agt_pool_1")?.data.status,
+      ).toBe("running");
+    } finally {
+      unmount();
+      vi.useRealTimers();
+    }
+  });
+
   it("stacks runtime-created tasks under the same agent instead of overlapping them", () => {
     const events = new TypedEventEmitter<SwarmEngineEventMap>();
     const engine = {

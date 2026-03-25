@@ -310,6 +310,9 @@ export function useEngineBoardBridge(engine: SwarmOrchestrator | null): void {
         if (!node) return;
 
         const mappedStatus = mapEngineStatus(event.newStatus);
+        if (timeouts.has(node.id) && mappedStatus !== "evaluating") {
+          restoreStatuses.set(node.id, mappedStatus);
+        }
         actions.updateNode(node.id, { status: mappedStatus });
       }),
     );

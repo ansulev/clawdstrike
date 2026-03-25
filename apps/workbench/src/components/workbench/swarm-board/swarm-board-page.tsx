@@ -4,7 +4,7 @@ import { useCoordinatorBoardBridge } from "@/features/swarm/hooks/use-coordinato
 import { usePolicyEvalBoardBridge } from "@/features/swarm/hooks/use-policy-eval-board-bridge";
 import { useTrustGraphBridge } from "@/features/swarm/hooks/use-trust-graph-bridge";
 import { useReceiptFlowBridge, receiptEdgeTimestamps } from "@/features/swarm/hooks/use-receipt-flow-bridge";
-import { SwarmEngineProvider, useSwarmEngine } from "@/features/swarm/stores/swarm-engine-provider";
+import { SwarmEngineProvider, useOptionalSwarmEngine } from "@/features/swarm/stores/swarm-engine-provider";
 import { useEngineBoardBridge } from "@/features/swarm/hooks/use-engine-board-bridge";
 import { getCoordinator } from "@/features/swarm/coordinator-instance";
 import {
@@ -100,8 +100,8 @@ function SwarmBoardCanvas() {
   useTrustGraphBridge(coordinator);
 
   useReceiptFlowBridge();
-  const engineCtx = useSwarmEngine();
-  useEngineBoardBridge(engineCtx.engine);
+  const engineCtx = useOptionalSwarmEngine();
+  useEngineBoardBridge(engineCtx?.engine ?? null);
 
   const coordinatorConnected = coordinator?.isConnected ?? false;
   const outboxSize = coordinator?.outboxSize ?? 0;

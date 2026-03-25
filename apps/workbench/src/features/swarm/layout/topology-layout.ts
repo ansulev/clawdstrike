@@ -282,36 +282,38 @@ function centralizedLayout(
     degreeByNodeId.set(edge.target, (degreeByNodeId.get(edge.target) ?? 0) + 1);
   }
 
-  let hub =
-    nodes.find((node) => (degreeByNodeId.get(node.id) ?? 0) > 0) ?? null;
+  const connectedNodes = nodes.filter(
+    (node) => (degreeByNodeId.get(node.id) ?? 0) > 0,
+  );
 
-  for (const node of nodes) {
-    const degree = degreeByNodeId.get(node.id) ?? 0;
-    if (degree === 0) {
-      continue;
-    }
+  const hub = connectedNodes.reduce<Node<SwarmBoardNodeData> | null>(
+    (best, node) => {
+      if (!best) {
+        return node;
+      }
 
-    if (!hub) {
-      hub = node;
-      continue;
-    }
+      const degree = degreeByNodeId.get(node.id) ?? 0;
+      const bestDegree = degreeByNodeId.get(best.id) ?? 0;
+      if (degree !== bestDegree) {
+        return degree > bestDegree ? node : best;
+      }
 
-    const hubDegree = degreeByNodeId.get(hub.id) ?? 0;
-    if (degree > hubDegree) {
-      hub = node;
-      continue;
-    }
+      const nodeIsAgent = node.data.nodeType === "agentSession";
+      const bestIsAgent = best.data.nodeType === "agentSession";
+      if (nodeIsAgent !== bestIsAgent) {
+        return nodeIsAgent ? node : best;
+      }
 
-    if (
-      degree === hubDegree &&
-      node.data.nodeType === "agentSession" &&
-      hub.data.nodeType !== "agentSession"
-    ) {
-      hub = node;
-    }
-  }
+      const nodeLayer = NODE_TYPE_LAYER[node.data.nodeType] ?? Number.MAX_SAFE_INTEGER;
+      const bestLayer = NODE_TYPE_LAYER[best.data.nodeType] ?? Number.MAX_SAFE_INTEGER;
+      if (nodeLayer !== bestLayer) {
+        return nodeLayer < bestLayer ? node : best;
+      }
 
-  hub ??= nodes.find((n) => n.data.nodeType === "agentSession") ?? nodes[0];
+      return node.id.localeCompare(best.id) < 0 ? node : best;
+    },
+    null,
+  ) ?? (nodes.find((n) => n.data.nodeType === "agentSession") ?? nodes[0]);
   const spokes = nodes.filter((n) => n.id !== hub.id);
 
   const positions = new Map<string, { x: number; y: number }>();

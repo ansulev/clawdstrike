@@ -240,6 +240,25 @@ describe("computeLayout -- centralized", () => {
     expect(hubPos.x).toBeCloseTo(400, 0);
     expect(hubPos.y).toBeCloseTo(300, 0);
   });
+
+  it("breaks equal-degree non-agent ties deterministically by node id", () => {
+    const nodes = [
+      mockNode("task-b", "terminalTask"),
+      mockNode("task-a", "terminalTask"),
+      mockNode("artifact-1", "artifact"),
+      mockNode("receipt-1", "receipt"),
+    ];
+    const edges = [
+      mockEdge("task-b", "artifact-1"),
+      mockEdge("task-a", "receipt-1"),
+    ];
+
+    const result = computeLayout(nodes, edges, "centralized", viewport);
+    const hubPos = result.positions.get("task-a")!;
+
+    expect(hubPos.x).toBeCloseTo(400, 0);
+    expect(hubPos.y).toBeCloseTo(300, 0);
+  });
 });
 
 // ---------------------------------------------------------------------------

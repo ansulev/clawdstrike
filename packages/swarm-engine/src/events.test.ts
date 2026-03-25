@@ -116,7 +116,7 @@ function makeTask(overrides?: Partial<Task>): Task {
 }
 
 // ============================================================================
-// All 19 event kind strings
+// All 23 event kind strings
 // ============================================================================
 
 const ALL_EVENT_KINDS = [
@@ -129,6 +129,7 @@ const ALL_EVENT_KINDS = [
   "task.status_changed",
   "task.completed",
   "task.failed",
+  "task.progress",
   "topology.updated",
   "topology.rebalanced",
   "topology.leader_elected",
@@ -139,6 +140,9 @@ const ALL_EVENT_KINDS = [
   "memory.search",
   "hooks.triggered",
   "hooks.completed",
+  "guard.evaluated",
+  "action.denied",
+  "action.completed",
 ] as const;
 
 // ============================================================================
@@ -456,12 +460,12 @@ describe("SwarmEngineEvent", () => {
     expect(getEventCategory(hookEvent)).toBe("hooks");
   });
 
-  it("SwarmEngineEventMap has 19 entries (all distinct)", () => {
-    expect(ALL_EVENT_KINDS.length).toBe(19);
-    expect(new Set(ALL_EVENT_KINDS).size).toBe(19);
+  it("SwarmEngineEventMap has 23 entries (all distinct)", () => {
+    expect(ALL_EVENT_KINDS.length).toBe(23);
+    expect(new Set(ALL_EVENT_KINDS).size).toBe(23);
   });
 
-  it("all 19 kind strings match known event categories", () => {
+  it("all 23 kind strings match known event categories", () => {
     const categories = {
       agent: ALL_EVENT_KINDS.filter((k) => k.startsWith("agent.")),
       task: ALL_EVENT_KINDS.filter((k) => k.startsWith("task.")),
@@ -469,13 +473,15 @@ describe("SwarmEngineEvent", () => {
       consensus: ALL_EVENT_KINDS.filter((k) => k.startsWith("consensus.")),
       memory: ALL_EVENT_KINDS.filter((k) => k.startsWith("memory.")),
       hooks: ALL_EVENT_KINDS.filter((k) => k.startsWith("hooks.")),
+      guard: ALL_EVENT_KINDS.filter((k) => k.startsWith("guard.") || k.startsWith("action.")),
     };
 
     expect(categories.agent).toHaveLength(4);
-    expect(categories.task).toHaveLength(5);
+    expect(categories.task).toHaveLength(6);
     expect(categories.topology).toHaveLength(3);
     expect(categories.consensus).toHaveLength(3);
     expect(categories.memory).toHaveLength(2);
     expect(categories.hooks).toHaveLength(2);
+    expect(categories.guard).toHaveLength(3);
   });
 });

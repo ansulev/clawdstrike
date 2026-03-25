@@ -14,8 +14,12 @@ import type {
   TransportAdapter,
   SwarmEnvelope,
 } from "@/features/swarm/swarm-coordinator";
+import type { SwarmEngineEnvelope } from "@clawdstrike/swarm-engine";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
+
+/** Union of both envelope types for internal handling. */
+type AnySwarmEnvelope = SwarmEnvelope | SwarmEngineEnvelope;
 
 /**
  * Transport adapter for Tauri desktop applications.
@@ -30,7 +34,7 @@ export class TauriIpcTransport implements TransportAdapter {
 
   /** Registered message handlers. */
   private readonly handlers = new Set<
-    (topic: string, envelope: SwarmEnvelope) => void
+    (topic: string, envelope: AnySwarmEnvelope) => void
   >();
 
   /**
@@ -62,7 +66,7 @@ export class TauriIpcTransport implements TransportAdapter {
     if (this.subscriptions.has(topic)) return;
     this.subscriptions.add(topic);
 
-    const promise = listen<SwarmEnvelope>(topic, (event) => {
+    const promise = listen<AnySwarmEnvelope>(topic, (event) => {
       for (const handler of this.handlers) {
         handler(topic, event.payload);
       }
@@ -87,7 +91,7 @@ export class TauriIpcTransport implements TransportAdapter {
    * Publish an envelope to a topic via Tauri `invoke`.
    * Rejects if the transport is not connected.
    */
-  async publish(topic: string, envelope: SwarmEnvelope): Promise<void> {
+  async publish(topic: string, envelope: AnySwarmEnvelope): Promise<void> {
     if (!this.isConnected()) {
       throw new Error("TauriIpcTransport: not connected");
     }
@@ -96,14 +100,14 @@ export class TauriIpcTransport implements TransportAdapter {
 
   /** Register a handler for incoming messages on any subscribed topic. */
   onMessage(
-    handler: (topic: string, envelope: SwarmEnvelope) => void,
+    handler: (topic: string, envelope: AnySwarmEnvelope) => void,
   ): void {
     this.handlers.add(handler);
   }
 
   /** Remove a previously registered message handler. */
   offMessage(
-    handler: (topic: string, envelope: SwarmEnvelope) => void,
+    handler: (topic: string, envelope: AnySwarmEnvelope) => void,
   ): void {
     this.handlers.delete(handler);
   }

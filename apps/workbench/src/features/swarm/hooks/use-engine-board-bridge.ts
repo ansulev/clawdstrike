@@ -99,47 +99,8 @@ export function useEngineBoardBridge(engine: SwarmOrchestrator | null): void {
     const timeouts = timeoutsRef.current;
     const restoreStatuses = restoreStatusRef.current;
 
-    // Access the shared event emitter via subscribing through
-    // the orchestrator's subsystem accessors (registry, taskGraph, topology).
-    // The engine exposes `.on()` via the injected TypedEventEmitter.
-
-    // For event subscriptions we need the events object. The orchestrator
-    // stores it privately but all subsystems share the same TypedEventEmitter.
-    // We subscribe through getState().engine which IS the orchestrator; the
-    // plan instructs us to call engine events. Since the orchestrator does
-    // not expose the emitter directly, we leverage the fact that events are
-    // emitted by the orchestrator and its subsystems onto the same emitter.
-    // The correct approach: re-construct a reference to the shared emitter
-    // from one of the exposed subsystems -- but they also don't expose it.
-    //
-    // RESOLUTION: We subscribe using the orchestrator's event emitter.
-    // Since SwarmOrchestrator stores `events` as a private field, we create
-    // a lightweight proxy that wraps the emitter. However, looking at the
-    // actual code, the TypedEventEmitter is passed to the constructor and
-    // stored as `private readonly events`. We can access it by creating
-    // a new emitter reference at the provider level. But the plan says to
-    // subscribe to engine.events.on(). Since the orchestrator doesn't expose
-    // events publicly, the SwarmEngineProvider passes the emitter reference
-    // as part of the context. BUT the plan's interface only passes `engine`.
-    //
-    // The simplest correct approach: The SwarmOrchestrator emits events
-    // through the shared TypedEventEmitter. Since subsystems (AgentRegistry,
-    // TaskGraph, TopologyManager) also emit onto the same emitter, and the
-    // provider has access to all of them, we need the emitter.
-    //
-    // Looking at the plan again: it says `engine.events.on()`. This suggests
-    // the orchestrator should have a public events accessor. Let's check if
-    // there's a way to access it. The private field can be accessed via
-    // (engine as any).events, but that's fragile.
-    //
-    // PRACTICAL FIX: Use (engine as any) to access the private events field.
-    // This is standard in bridge/integration code and matches how ruflo did it.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const events = (engine as any).events as {
-      on: <K extends string>(event: K, handler: (data: any) => void) => () => void;
-    };
-
-    if (!events || typeof events.on !== "function") return;
+    // Access the shared event emitter via the orchestrator's public accessor.
+    const events = engine.getEvents();
 
     // -----------------------------------------------------------------------
     // 1. agent.spawned -> addNode({ nodeType: "agentSession" }) (INTG-02, INTG-08)

@@ -117,11 +117,11 @@ Plans:
   3. Existing bridge hooks (coordinator, policy-eval, receipt-flow, trust-graph) work unchanged alongside the new engine bridge
   4. SwarmBoardAction type is extended (not modified) -- existing action type values preserved, detection workflow (_dispatchSwarmNodes) unaffected
   5. TauriIpcTransport implements TransportAdapter via Tauri invoke/listen APIs for desktop swarm communication
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 06-01: TBD
-- [ ] 06-02: TBD
+- [ ] 06-01-PLAN.md — TauriIpcTransport implementing TransportAdapter via Tauri invoke/listen APIs with full test suite
+- [ ] 06-02-PLAN.md — Backward compatibility verification: store without engine, bridge hooks unchanged, action type preservation, detection workflow compat, full regression run
 
 ## Progress
 

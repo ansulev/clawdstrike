@@ -211,6 +211,30 @@ const FileEditorShell = lazy(() =>
   })),
 );
 
+const SpiritChamberTab = lazy(() =>
+  import("@/features/spirit/components/spirit-chamber-tab").then((m) => ({
+    default: m.SpiritChamberTab,
+  })),
+);
+
+const ObservatoryTab = lazy(() =>
+  import("@/features/observatory/components/ObservatoryTab").then((m) => ({
+    default: m.ObservatoryTab,
+  })),
+);
+
+const NexusTab = lazy(() =>
+  import("@/features/nexus/components/NexusTab").then((m) => ({
+    default: m.NexusTab,
+  })),
+);
+
+const ReceiptPreviewTab = lazy(() =>
+  import("@/features/evidence/components/ReceiptPreviewTab").then((m) => ({
+    default: m.ReceiptPreviewTab,
+  })),
+);
+
 function parseRoute(route: string): URL {
   const normalized = route.startsWith("/") ? route : `/${route}`;
   return new URL(normalized, "https://clawdstrike.local");
@@ -321,6 +345,10 @@ export function getWorkbenchRouteLabel(route: string): string {
   if (url.pathname === "/trustprint/patterns") return "TrustPrint Patterns";
   if (url.pathname === "/trustprint/providers") return "TrustPrint Providers";
   if (url.pathname === "/trustprint/thresholds") return "TrustPrint Thresholds";
+  if (url.pathname === "/observatory") return "Observatory";
+  if (url.pathname === "/spirit-chamber") return "Spirit Chamber";
+  if (url.pathname === "/nexus") return "Nexus";
+  if (url.pathname === "/receipt-preview") return "Receipt Preview";
   if (url.pathname.startsWith("/file/")) {
     const segments = url.pathname.split("/").filter(Boolean);
     return segments[segments.length - 1] ?? "File";
@@ -395,6 +423,10 @@ export const WORKBENCH_ROUTE_OBJECTS: RouteObject[] = [
   { path: "trustprint/providers", element: <TrustprintProvidersPage /> },
   { path: "trustprint/thresholds", element: <TrustprintThresholdsPage /> },
   { path: "overview", element: <Navigate to="/home" replace /> },
+  { path: "observatory", element: <Suspense fallback={<div className="flex-1" />}><ObservatoryTab /></Suspense> },
+  { path: "spirit-chamber", element: <Suspense fallback={<div className="flex-1" />}><SpiritChamberTab /></Suspense> },
+  { path: "nexus", element: <Suspense fallback={<div className="flex-1" />}><NexusTab /></Suspense> },
+  { path: "receipt-preview", element: <Suspense fallback={<div className="flex-1" />}><ReceiptPreviewTab /></Suspense> },
   { path: "file/*", element: <FeatureErrorBoundary feature="Editor"><FileEditorShell /></FeatureErrorBoundary> },
   { path: "*", element: <Navigate to="/home" replace /> },
 ];

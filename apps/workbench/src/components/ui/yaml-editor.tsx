@@ -1,6 +1,6 @@
 import { useRef, useEffect, useMemo, useCallback } from "react";
 import { EditorView, keymap, lineNumbers, highlightActiveLine, highlightSpecialChars, drawSelection, rectangularSelection, highlightActiveLineGutter, type ViewUpdate } from "@codemirror/view";
-import { Compartment, EditorState, type Extension } from "@codemirror/state";
+import { EditorSelection, Compartment, EditorState, type Extension } from "@codemirror/state";
 import { yaml } from "@codemirror/lang-yaml";
 import { json } from "@codemirror/lang-json";
 import { syntaxHighlighting, HighlightStyle, foldGutter, bracketMatching, indentOnInput, foldKeymap } from "@codemirror/language";
@@ -23,6 +23,12 @@ import { coverageGapGutter, updateCoverageGaps } from "@/lib/workbench/codemirro
 import { parseGuardRanges, computeCoverageGaps } from "@/lib/workbench/codemirror/gutter-types";
 import { presenceCursors, presenceFilePath } from "@/lib/workbench/codemirror/presence-cursors";
 import { toPresencePath } from "@/features/presence/presence-paths";
+import { useSpiritStore } from "@/features/spirit/stores/spirit-store";
+import {
+  consumePendingEditorReveal,
+  listenForEditorReveal,
+  type EditorRevealTarget,
+} from "@/lib/workbench/editor-reveal";
 
 // ---- Active editor tracking ----
 
@@ -56,7 +62,26 @@ export interface YamlEditorProps {
   /** Enable detection gutters (Run Test + coverage gaps). Only for clawdstrike_policy files. */
   showDetectionGutters?: boolean;
   /** Absolute file path for presence cursor scoping. */
-  filePath?: string;
+  filePath?: string | null;
+}
+
+function applyEditorReveal(view: EditorView, target: EditorRevealTarget): void {
+  const lineNumber = Math.min(Math.max(target.lineNumber, 1), view.state.doc.lines);
+  const line = view.state.doc.line(lineNumber);
+  const lineLength = line.to - line.from;
+  const startOffset = Math.min(Math.max((target.startColumn ?? 1) - 1, 0), lineLength);
+  const endOffset = Math.min(
+    Math.max((target.endColumn ?? target.startColumn ?? 1) - 1, startOffset),
+    lineLength,
+  );
+  const anchor = line.from + startOffset;
+  const head = line.from + endOffset;
+
+  view.dispatch({
+    selection: EditorSelection.range(anchor, head),
+    effects: EditorView.scrollIntoView(anchor, { y: "center" }),
+  });
+  view.focus();
 }
 
 // ---- ClawdStrike brand theme ----
@@ -67,7 +92,22 @@ const FONT_SIZE_MAP: Record<FontSize, string> = {
   large: "14px",
 };
 
-function createClawdTheme(fontSize: FontSize) {
+function blendHex(base: string, target: string, t: number): string {
+  const parse = (h: string) => [
+    parseInt(h.slice(1, 3), 16),
+    parseInt(h.slice(3, 5), 16),
+    parseInt(h.slice(5, 7), 16),
+  ];
+  const [br, bg, bb] = parse(base);
+  const [tr, tg, tb] = parse(target);
+  const r = Math.round(br + (tr - br) * t).toString(16).padStart(2, "0");
+  const g = Math.round(bg + (tg - bg) * t).toString(16).padStart(2, "0");
+  const b = Math.round(bb + (tb - bb) * t).toString(16).padStart(2, "0");
+  return `#${r}${g}${b}`;
+}
+
+function createClawdTheme(fontSize: FontSize, accentColor?: string | null) {
+  const accent = accentColor ?? "#d4a84b";
   return EditorView.theme(
   {
     "&": {
@@ -85,11 +125,11 @@ function createClawdTheme(fontSize: FontSize) {
       lineHeight: "1.6",
     },
     ".cm-content": {
-      caretColor: "#d4a84b",
+      caretColor: accent,
       padding: "8px 0",
     },
     ".cm-cursor, .cm-dropCursor": {
-      borderLeftColor: "#d4a84b",
+      borderLeftColor: accent,
       borderLeftWidth: "2px",
     },
     ".cm-selectionBackground": {
@@ -122,7 +162,7 @@ function createClawdTheme(fontSize: FontSize) {
       fontSize: "11px",
     },
     ".cm-foldGutter .cm-gutterElement:hover": {
-      color: "#d4a84b",
+      color: accent,
     },
     // Lint gutter (error dots)
     ".cm-lint-marker-error": {
@@ -169,11 +209,11 @@ function createClawdTheme(fontSize: FontSize) {
       borderBottom: "1px solid #2d3240",
     },
     ".cm-searchMatch": {
-      backgroundColor: "#d4a84b30",
-      outline: "1px solid #d4a84b50",
+      backgroundColor: accent + "30",
+      outline: `1px solid ${accent}50`,
     },
     ".cm-searchMatch.cm-searchMatch-selected": {
-      backgroundColor: "#d4a84b50",
+      backgroundColor: accent + "50",
     },
     ".cm-panel input": {
       backgroundColor: "#0b0d13",
@@ -185,7 +225,7 @@ function createClawdTheme(fontSize: FontSize) {
       outline: "none",
     },
     ".cm-panel input:focus": {
-      borderColor: "#d4a84b",
+      borderColor: accent,
     },
     ".cm-panel button": {
       backgroundColor: "#2d3240",
@@ -205,9 +245,9 @@ function createClawdTheme(fontSize: FontSize) {
     },
     // Matching brackets
     ".cm-matchingBracket": {
-      backgroundColor: "#d4a84b20",
-      outline: "1px solid #d4a84b40",
-      color: "#d4a84b",
+      backgroundColor: accent + "20",
+      outline: `1px solid ${accent}40`,
+      color: accent,
     },
     // Autocomplete tooltip
     ".cm-tooltip-autocomplete": {
@@ -269,34 +309,41 @@ function createClawdTheme(fontSize: FontSize) {
   );
 }
 
-// Syntax highlighting colors
-const clawdHighlightStyle = HighlightStyle.define([
-  // YAML keys (property names) - gold
-  { tag: tags.propertyName, color: "#d4a84b" },
-  { tag: tags.definition(tags.propertyName), color: "#d4a84b" },
-  // Strings - green
-  { tag: tags.string, color: "#3dbf84" },
-  // Numbers - steel
-  { tag: tags.number, color: "#6f7f9a" },
-  { tag: tags.integer, color: "#6f7f9a" },
-  { tag: tags.float, color: "#6f7f9a" },
-  // Booleans and null - muted gold
-  { tag: tags.bool, color: "#d4a84b", fontStyle: "italic" },
-  { tag: tags.null, color: "#6f7f9a", fontStyle: "italic" },
-  // Comments - steel with transparency
-  { tag: tags.comment, color: "#6f7f9a80", fontStyle: "italic" },
-  { tag: tags.lineComment, color: "#6f7f9a80", fontStyle: "italic" },
-  { tag: tags.blockComment, color: "#6f7f9a80", fontStyle: "italic" },
-  // Keywords
-  { tag: tags.keyword, color: "#d4a84b" },
-  // Operators (: and -)
-  { tag: tags.operator, color: "#6f7f9a" },
-  { tag: tags.punctuation, color: "#6f7f9a" },
-  // Atoms (true/false/null in some contexts)
-  { tag: tags.atom, color: "#d4a84b", fontStyle: "italic" },
-  // Meta / document markers (---)
-  { tag: tags.meta, color: "#6f7f9a" },
-]);
+// Syntax highlighting — Compartment-driven, blends token colors toward spirit accent
+function createHighlightStyle(accentColor?: string | null): ReturnType<typeof HighlightStyle.define> {
+  const acc = accentColor ?? "#d4a84b";
+  const propColor = blendHex("#d4a84b", acc, 0.35);  // property names / keywords
+  const strColor  = blendHex("#3dbf84", acc, 0.25);  // strings (subtle)
+  const opColor   = blendHex("#6f7f9a", acc, 0.35);  // operators / punctuation
+
+  return HighlightStyle.define([
+    // YAML keys (property names) - shifted toward spirit accent
+    { tag: tags.propertyName, color: propColor },
+    { tag: tags.definition(tags.propertyName), color: propColor },
+    // Strings - subtly shifted toward spirit accent
+    { tag: tags.string, color: strColor },
+    // Numbers - steel (neutral, no shift)
+    { tag: tags.number, color: "#6f7f9a" },
+    { tag: tags.integer, color: "#6f7f9a" },
+    { tag: tags.float, color: "#6f7f9a" },
+    // Booleans - shifted toward spirit accent
+    { tag: tags.bool, color: propColor, fontStyle: "italic" },
+    { tag: tags.null, color: "#6f7f9a", fontStyle: "italic" },
+    // Comments - steel with transparency (neutral)
+    { tag: tags.comment, color: "#6f7f9a80", fontStyle: "italic" },
+    { tag: tags.lineComment, color: "#6f7f9a80", fontStyle: "italic" },
+    { tag: tags.blockComment, color: "#6f7f9a80", fontStyle: "italic" },
+    // Keywords - shifted toward spirit accent
+    { tag: tags.keyword, color: propColor },
+    // Operators (: and -) - shifted toward spirit accent
+    { tag: tags.operator, color: opColor },
+    { tag: tags.punctuation, color: opColor },
+    // Atoms (true/false/null in some contexts) - shifted toward spirit accent
+    { tag: tags.atom, color: propColor, fontStyle: "italic" },
+    // Meta / document markers (---) - neutral
+    { tag: tags.meta, color: "#6f7f9a" },
+  ]);
+}
 
 // ---- Language & completion helpers ----
 
@@ -374,12 +421,20 @@ export function YamlEditor({
     onRunGuardTestRef.current?.(guardId);
   }, []);
 
-  // Build the list of extensions (rebuilds when readOnly, fontSize, showLineNumbers, or detection gutters change)
+  // Read spirit accent color — drives Compartment reconfiguration below
+  const accentColor = useSpiritStore.use.accentColor();
+
+  // Stable Compartment refs — never recreated (empty dep array)
+  const themeCompartment = useMemo(() => new Compartment(), []);
+  const highlightCompartment = useMemo(() => new Compartment(), []);
+
+  // Build the list of extensions (rebuilds when readOnly, fontSize, showLineNumbers, fileType, or detection gutters change)
+  // IMPORTANT: accentColor is NOT in this dep array — theme updates go through Compartments below
   const extensions = useMemo<Extension[]>(() => {
     const base: Extension[] = [
       getLanguageExtension(fileType),
-      createClawdTheme(fontSize),
-      syntaxHighlighting(clawdHighlightStyle),
+      themeCompartment.of(createClawdTheme(fontSize, accentColor)),
+      highlightCompartment.of(syntaxHighlighting(createHighlightStyle(accentColor))),
       highlightActiveLine(),
       highlightSpecialChars(),
       drawSelection(),
@@ -447,7 +502,18 @@ export function YamlEditor({
     }
 
     return base;
-  }, [readOnly, fontSize, showLineNumbers, fileType, showDetectionGutters, handleRunGuardTest, filePath]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    readOnly,
+    fontSize,
+    showLineNumbers,
+    fileType,
+    showDetectionGutters,
+    handleRunGuardTest,
+    filePath,
+    themeCompartment,
+    highlightCompartment,
+  ]);
 
   // Create / destroy the editor view
   useEffect(() => {
@@ -478,6 +544,8 @@ export function YamlEditor({
   }, [extensions]);
 
   // Reconfigure plugin gutter extensions dynamically (without recreating the editor)
+  // Spirit theme reconfiguration — dispatched via Compartment to avoid editor destroy/recreate
+  // Watches accentColor so theme shifts when spirit kind changes, preserving cursor + scroll
   useEffect(() => {
     const view = viewRef.current;
     if (!view) return;
@@ -485,6 +553,41 @@ export function YamlEditor({
       effects: gutterCompartmentRef.current.reconfigure(pluginGutterExtensions),
     });
   }, [pluginGutterExtensions]);
+
+  useEffect(() => {
+    const view = viewRef.current;
+    if (!view) return;
+    view.dispatch({
+      effects: [
+        themeCompartment.reconfigure(createClawdTheme(fontSize, accentColor)),
+        highlightCompartment.reconfigure(syntaxHighlighting(createHighlightStyle(accentColor))),
+      ],
+    });
+  }, [accentColor, fontSize, themeCompartment, highlightCompartment]);
+
+  useEffect(() => {
+    if (!filePath) return;
+
+    return listenForEditorReveal((target) => {
+      if (target.filePath !== filePath) return;
+
+      consumePendingEditorReveal(filePath);
+      const view = viewRef.current;
+      if (view) {
+        applyEditorReveal(view, target);
+      }
+    });
+  }, [filePath]);
+
+  useEffect(() => {
+    if (!filePath) return;
+
+    const view = viewRef.current;
+    const pendingReveal = consumePendingEditorReveal(filePath);
+    if (view && pendingReveal) {
+      applyEditorReveal(view, pendingReveal);
+    }
+  }, [filePath, value]);
 
   // Sync external value changes into the editor (e.g. when visual panel edits arrive)
   useEffect(() => {

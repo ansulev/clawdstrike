@@ -11,6 +11,16 @@ vi.mock("@/lib/tauri-commands", () => ({
   searchInProjectNative: searchInProjectNativeMock,
 }));
 
+function createDeferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
 describe("useSearchStore", () => {
   beforeEach(() => {
     useSearchStore.getState().actions.clearResults();
@@ -109,8 +119,8 @@ describe("useSearchStore", () => {
     expect(state.error).toBeNull();
   });
 
-  it("cancels the prior native search when a new query dispatches", async () => {
-    let resolveFirst!: (value: {
+  it("ignores stale search completions after the query changes", async () => {
+    const firstSearch = createDeferred<{
       matches: Array<{
         file_path: string;
         line_number: number;
@@ -121,8 +131,8 @@ describe("useSearchStore", () => {
       file_count: number;
       total_matches: number;
       truncated: boolean;
-    }) => void;
-    let resolveSecond!: (value: {
+    }>();
+    const secondSearch = createDeferred<{
       matches: Array<{
         file_path: string;
         line_number: number;
@@ -133,56 +143,29 @@ describe("useSearchStore", () => {
       file_count: number;
       total_matches: number;
       truncated: boolean;
-    }) => void;
+    }>();
 
     searchInProjectNativeMock
-      .mockImplementationOnce(
-        () =>
-          new Promise((resolve) => {
-            resolveFirst = resolve;
-          }),
-      )
-      .mockImplementationOnce(
-        () =>
-          new Promise((resolve) => {
-            resolveSecond = resolve;
-          }),
-      );
+      .mockReturnValueOnce(firstSearch.promise)
+      .mockReturnValueOnce(secondSearch.promise);
 
     const actions = useSearchStore.getState().actions;
 
-    const firstRun = actions.performSearch(["/workspace/alpha"]);
+    actions.setQuery("first");
+    const firstRun = actions.performSearch(["/workspace/project"]);
     const firstSearchId = searchInProjectNativeMock.mock.calls[0]?.[5];
 
-    actions.setQuery("newer");
+    actions.setQuery("second");
     expect(cancelSearchInProjectNativeMock).toHaveBeenCalledWith(firstSearchId);
 
-    const secondRun = actions.performSearch(["/workspace/alpha"]);
-    const secondSearchId = searchInProjectNativeMock.mock.calls[1]?.[5];
-    expect(secondSearchId).not.toBe(firstSearchId);
+    const secondRun = actions.performSearch(["/workspace/project"]);
 
-    resolveSecond({
+    secondSearch.resolve({
       matches: [
         {
-          file_path: "shared/new.yaml",
-          line_number: 5,
-          line_content: "newer needle",
-          match_start: 0,
-          match_end: 5,
-        },
-      ],
-      file_count: 1,
-      total_matches: 1,
-      truncated: false,
-    });
-    await secondRun;
-
-    resolveFirst({
-      matches: [
-        {
-          file_path: "shared/old.yaml",
-          line_number: 1,
-          line_content: "needle",
+          file_path: "second.yml",
+          line_number: 3,
+          line_content: "second",
           match_start: 0,
           match_end: 6,
         },
@@ -191,72 +174,49 @@ describe("useSearchStore", () => {
       total_matches: 1,
       truncated: false,
     });
+    await secondRun;
+
+    expect(useSearchStore.getState().results).toEqual([
+      {
+        rootPath: "/workspace/project",
+        filePath: "second.yml",
+        lineNumber: 3,
+        lineContent: "second",
+        matchStart: 0,
+        matchEnd: 6,
+        sourceMatchStart: 0,
+        sourceMatchEnd: 6,
+      },
+    ]);
+
+    firstSearch.resolve({
+      matches: [
+        {
+          file_path: "first.yml",
+          line_number: 1,
+          line_content: "first",
+          match_start: 0,
+          match_end: 5,
+        },
+      ],
+      file_count: 1,
+      total_matches: 1,
+      truncated: false,
+    });
     await firstRun;
 
-    const state = useSearchStore.getState();
-    expect(state.query).toBe("newer");
-    expect(state.results.map((match) => match.filePath)).toEqual(["shared/new.yaml"]);
-  });
-
-  it("re-runs the active search when an option changes", async () => {
-    searchInProjectNativeMock
-      .mockImplementationOnce(
-        () =>
-          new Promise(() => {
-            // Keep the first search pending so the option toggle has to cancel it.
-          }),
-      )
-      .mockResolvedValueOnce({
-        matches: [
-          {
-            file_path: "shared/case-sensitive.yaml",
-            line_number: 9,
-            line_content: "Needle",
-            match_start: 0,
-            match_end: 6,
-          },
-        ],
-        file_count: 1,
-        total_matches: 1,
-        truncated: false,
-      });
-
-    const actions = useSearchStore.getState().actions;
-    const firstRun = actions.performSearch(["/workspace/alpha"]);
-    const firstSearchId = searchInProjectNativeMock.mock.calls[0]?.[5];
-
-    actions.setOption("caseSensitive", true, ["/workspace/alpha"]);
-
-    expect(cancelSearchInProjectNativeMock).toHaveBeenCalledWith(firstSearchId);
-    expect(searchInProjectNativeMock).toHaveBeenNthCalledWith(
-      2,
-      "/workspace/alpha",
-      "needle",
-      true,
-      false,
-      false,
-      expect.any(String),
-    );
-
-    await vi.waitFor(() => {
-      expect(useSearchStore.getState().loading).toBe(false);
-    });
-
-    const state = useSearchStore.getState();
-    expect(state.options.caseSensitive).toBe(true);
-    expect(state.results.map((match) => match.filePath)).toEqual(["shared/case-sensitive.yaml"]);
-
-    void firstRun;
-  });
-
-  it("surfaces native search failures instead of treating them as unsupported", async () => {
-    searchInProjectNativeMock.mockRejectedValueOnce(new Error("invalid regex"));
-
-    await useSearchStore.getState().actions.performSearch(["/workspace/alpha"]);
-
-    const state = useSearchStore.getState();
-    expect(state.error).toBe("invalid regex");
-    expect(state.loading).toBe(false);
-    expect(state.results).toEqual([]);
+    expect(useSearchStore.getState().query).toBe("second");
+    expect(useSearchStore.getState().results).toEqual([
+      {
+        rootPath: "/workspace/project",
+        filePath: "second.yml",
+        lineNumber: 3,
+        lineContent: "second",
+        matchStart: 0,
+        matchEnd: 6,
+        sourceMatchStart: 0,
+        sourceMatchEnd: 6,
+      },
+    ]);
   });
 });

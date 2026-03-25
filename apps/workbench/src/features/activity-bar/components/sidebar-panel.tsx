@@ -5,6 +5,7 @@ import { useProjectStore } from "@/features/project/stores/project-store";
 import { getProjectFileStatusKey } from "@/features/project/stores/project-store";
 import type { DetectionProject, ProjectFile } from "@/features/project/stores/project-store";
 import { usePaneStore, getActivePaneRoute } from "@/features/panes/pane-store";
+import { useWorkbenchState } from "@/features/policy/hooks/use-policy-actions";
 import { HeartbeatPanel } from "../panels/heartbeat-panel";
 import { SentinelPanel } from "../panels/sentinel-panel";
 import { FindingsPanel } from "../panels/findings-panel";
@@ -13,6 +14,7 @@ import { FleetPanel } from "../panels/fleet-panel";
 import { CompliancePanel } from "../panels/compliance-panel";
 import { SearchPanelConnected } from "@/features/search/components/search-panel";
 import { AnalystRosterPanel } from "@/features/presence/components/analyst-roster-panel";
+import { ObservatoryMinimapPanel } from "@/features/observatory/panels/observatory-minimap-panel";
 import type { ActivityBarItemId } from "../types";
 import { useMemo } from "react";
 import {
@@ -38,6 +40,7 @@ function ExplorerPanelConnected() {
   const formatFilter = useProjectStore.use.formatFilter();
   const fileStatuses = useProjectStore.use.fileStatuses();
   const actions = useProjectStore.use.actions();
+  const { openFileByPath } = useWorkbenchState();
 
   // Build ordered projects array from roots.
   // When loading is true, roots may exist but projects Map is not yet populated,
@@ -96,7 +99,7 @@ function ExplorerPanelConnected() {
       onToggleDir={(rootPath, dirPath) => {
         actions.toggleDirForRoot(rootPath, dirPath);
       }}
-      onOpenFile={(rootPath, file) => {
+      onOpenFile={async (rootPath, file) => {
         const absPath = joinWorkspacePath(rootPath, file.path);
         if (file.fileType === "swarm_bundle") {
           usePaneStore.getState().openApp(
@@ -104,6 +107,7 @@ function ExplorerPanelConnected() {
             file.name.replace(/\.swarm$/, ""),
           );
         } else {
+          await openFileByPath(absPath);
           usePaneStore.getState().openFile(absPath, file.name);
         }
       }}
@@ -137,6 +141,7 @@ function ExplorerPanelConnected() {
         const savedPath = await actions.createFile(parentPath, fileName, "clawdstrike_policy");
         if (savedPath) {
           actions.setFileStatus(savedPath, { modified: true });
+          await openFileByPath(savedPath);
           usePaneStore.getState().openFile(savedPath, fileName);
         }
       }}
@@ -195,6 +200,8 @@ function renderPanel(activeItem: ActivityBarItemId) {
   switch (activeItem) {
     case "heartbeat":
       return <HeartbeatPanel />;
+    case "hunt":
+      return <FindingsPanel />;
     case "sentinels":
       return <SentinelPanel />;
     case "findings":
@@ -211,6 +218,8 @@ function renderPanel(activeItem: ActivityBarItemId) {
       return <CompliancePanel />;
     case "people":
       return <AnalystRosterPanel />;
+    case "observatory":
+      return <ObservatoryMinimapPanel />;
   }
 }
 
@@ -228,7 +237,7 @@ export function SidebarPanel() {
       role="tabpanel"
       id="sidebar-panel"
       aria-labelledby={`activity-bar-tab-${activeItem}`}
-      className="shrink-0 bg-[#0b0d13] overflow-hidden transition-[width] duration-[250ms] ease-[cubic-bezier(0.25,0.1,0.25,1)]"
+      className="shrink-0 bg-[#0b0d13] overflow-hidden transition-[width] duration-[250ms] ease-[cubic-bezier(0.25,0.1,0.25,1)] spirit-field-stain-host"
       style={{ width: sidebarVisible ? sidebarWidth : 0 }}
     >
       {sidebarVisible && (

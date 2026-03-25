@@ -9,21 +9,16 @@ import type {
   SearchResultGroup,
 } from "@/features/search/stores/search-store";
 import { useProjectStore } from "@/features/project/stores/project-store";
+import { resolveProjectPath } from "@/features/project/utils/resolve-project-path";
 import { usePaneStore } from "@/features/panes/pane-store";
-import { joinWorkspacePath } from "@/lib/workbench/path-utils";
-
-function sliceByCharacterRange(
-  value: string,
-  start: number,
-  end: number,
-): { before: string; match: string; after: string } {
-  const characters = Array.from(value);
-  return {
-    before: characters.slice(0, start).join(""),
-    match: characters.slice(start, end).join(""),
-    after: characters.slice(end).join(""),
-  };
-}
+import { useWorkbenchState } from "@/features/policy/hooks/use-policy-actions";
+import { usePolicyEditStore } from "@/features/policy/stores/policy-edit-store";
+import { usePolicyTabsStore } from "@/features/policy/stores/policy-tabs-store";
+import { requestEditorReveal } from "@/lib/workbench/editor-reveal";
+import {
+  characterOffsetToCodeUnitIndex,
+  getLineTextAt,
+} from "@/features/search/utils/search-offsets";
 
 // ---- Types ----
 
@@ -74,6 +69,19 @@ function OptionToggle({
 
 // ---- Highlighted match line ----
 
+function getOpenDocumentLineText(filePath: string, lineNumber: number): string | null {
+  const tab = usePolicyTabsStore
+    .getState()
+    .tabs.find((candidate) => candidate.filePath === filePath);
+
+  if (!tab) {
+    return null;
+  }
+
+  const yaml = usePolicyEditStore.getState().editStates.get(tab.id)?.yaml;
+  return typeof yaml === "string" ? getLineTextAt(yaml, lineNumber) : null;
+}
+
 function HighlightedLine({
   lineContent,
   matchStart,
@@ -83,11 +91,14 @@ function HighlightedLine({
   matchStart: number;
   matchEnd: number;
 }) {
-  const { before, match, after } = sliceByCharacterRange(
-    lineContent,
-    matchStart,
-    matchEnd,
+  const previewMatchStart = characterOffsetToCodeUnitIndex(lineContent, matchStart);
+  const previewMatchEnd = Math.max(
+    previewMatchStart,
+    characterOffsetToCodeUnitIndex(lineContent, matchEnd),
   );
+  const before = lineContent.slice(0, previewMatchStart);
+  const match = lineContent.slice(previewMatchStart, previewMatchEnd);
+  const after = lineContent.slice(previewMatchEnd);
 
   return (
     <span className="overflow-hidden text-ellipsis whitespace-nowrap">
@@ -333,6 +344,8 @@ export function SearchPanelConnected() {
   const error = useSearchStore.use.error();
   const actions = useSearchStore.use.actions();
   const projectRoots = useProjectStore.use.projectRoots();
+  const { openFileByPath } = useWorkbenchState();
+  const latestResultClickTokenRef = useRef(0);
 
   return (
     <SearchPanel
@@ -347,11 +360,32 @@ export function SearchPanelConnected() {
       onQueryChange={actions.setQuery}
       onOptionToggle={(key) => actions.setOption(key, !options[key], projectRoots)}
       onSearch={() => actions.performSearch(projectRoots)}
-      onResultClick={(match) => {
-        const absolutePath = joinWorkspacePath(match.rootPath, match.filePath);
+      onResultClick={async (match) => {
+        latestResultClickTokenRef.current += 1;
+        const clickToken = latestResultClickTokenRef.current;
+        const filePath = resolveProjectPath(match.rootPath, match.filePath);
+        await openFileByPath(filePath, {
+          shouldApply: () => latestResultClickTokenRef.current === clickToken,
+        });
+        if (latestResultClickTokenRef.current !== clickToken) {
+          return;
+        }
+        const sourceLine = getOpenDocumentLineText(filePath, match.lineNumber) ?? match.lineContent;
+        const startColumn =
+          characterOffsetToCodeUnitIndex(sourceLine, match.sourceMatchStart) + 1;
+        const endColumn = Math.max(
+          startColumn,
+          characterOffsetToCodeUnitIndex(sourceLine, match.sourceMatchEnd) + 1,
+        );
+        requestEditorReveal({
+          filePath,
+          lineNumber: match.lineNumber,
+          startColumn,
+          endColumn,
+        });
         usePaneStore
           .getState()
-          .openFile(absolutePath, match.filePath.split("/").pop() ?? match.filePath);
+          .openFile(filePath, match.filePath.split("/").pop() ?? match.filePath);
       }}
     />
   );

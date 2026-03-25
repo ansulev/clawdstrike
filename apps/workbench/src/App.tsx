@@ -2,13 +2,13 @@ import { Component, Suspense, useEffect, useRef } from "react";
 import type { ErrorInfo, ReactNode } from "react";
 import { HashRouter, useRoutes } from "react-router-dom";
 import { ToastProvider } from "@/components/ui/toast";
+import { HintSettingsProvider, useHintSettingsSafe } from "@/features/settings/use-hint-settings";
 import { DesktopLayout } from "@/components/desktop/desktop-layout";
 import { IdentityPrompt } from "@/components/workbench/identity/identity-prompt";
 import { useOperator } from "@/features/operator/stores/operator-store";
 import { useFleetConnection } from "@/features/fleet/use-fleet-connection";
 import { usePresenceConnection } from "@/features/presence/use-presence-connection";
 import { usePresenceFileTracking } from "@/features/presence/use-presence-file-tracking";
-import { HintSettingsProvider, useHintSettingsSafe } from "@/features/settings/use-hint-settings";
 import { usePolicyBootstrap } from "@/features/policy/hooks/use-policy-bootstrap";
 import { secureStore, migrateCredentialsToStronghold } from "@/features/settings/secure-store";
 import { bootstrapThreatIntelPlugins } from "@/lib/plugins/threat-intel/bootstrap";
@@ -84,12 +84,21 @@ function useWorkspaceBootstrap(toastRef: React.RefObject<ReturnType<typeof useTo
   useEffect(() => {
     async function init() {
       const { isDesktop } = await import("@/lib/tauri-bridge");
-      if (!isDesktop()) return;
+      const { getWorkbenchE2EBridge } = await import("@/lib/workbench/e2e-bridge");
+      const isWorkbenchE2E = getWorkbenchE2EBridge() !== null;
+      if (!isDesktop() && !isWorkbenchE2E) return;
 
       const store = useProjectStore.getState();
       store.actions.setLoading(true);
 
       try {
+        if (!isDesktop()) {
+          if (store.projectRoots.length > 0) {
+            await store.actions.initFromPersistedRoots();
+          }
+          return;
+        }
+
         // Always ensure the default workspace directory structure exists.
         const { bootstrapDefaultWorkspace, getDefaultWorkspacePath } = await import(
           "@/features/project/workspace-bootstrap"
@@ -270,9 +279,9 @@ class ErrorBoundary extends Component<{ children: ReactNode }, ErrorBoundaryStat
 
 function AppProviders({ children }: { children: ReactNode }) {
   return (
-    <ToastProvider>
-      <HintSettingsProvider>{children}</HintSettingsProvider>
-    </ToastProvider>
+    <HintSettingsProvider>
+      <ToastProvider>{children}</ToastProvider>
+    </HintSettingsProvider>
   );
 }
 

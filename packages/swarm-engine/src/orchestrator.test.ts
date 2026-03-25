@@ -214,6 +214,28 @@ describe("SwarmOrchestrator", () => {
       expect(Object.keys(poolState.agents).length).toBeGreaterThanOrEqual(1);
     });
 
+    it("mirrors pooled agents into public state and metrics", () => {
+      orchestrator.initialize();
+
+      const poolAgentIds = Object.keys(orchestrator.getPool().getState().agents);
+      const state = orchestrator.getState();
+      const mirroredAgents = poolAgentIds.map((agentId) => state.agents[agentId]);
+
+      expect(poolAgentIds.length).toBeGreaterThan(0);
+      expect(mirroredAgents.every((agent) => agent?.agentModel === "pooled")).toBe(true);
+      expect(orchestrator.getMetrics().activeAgents).toBe(poolAgentIds.length);
+    });
+
+    it("emits agent.spawned for pooled agents created during initialize", () => {
+      const emitted: string[] = [];
+      events.on("agent.spawned", (event) => emitted.push(event.agent.id));
+
+      orchestrator.initialize();
+
+      const poolAgentIds = Object.keys(orchestrator.getPool().getState().agents);
+      expect(emitted.sort()).toEqual(poolAgentIds.sort());
+    });
+
     it("throws error from invalid status", () => {
       orchestrator.initialize();
       expect(() => orchestrator.initialize()).toThrow();
@@ -245,6 +267,19 @@ describe("SwarmOrchestrator", () => {
       const poolState = orchestrator.getPool().getState();
       // After shutdown, pool should be cleared
       expect(Object.keys(poolState.agents)).toHaveLength(0);
+    });
+
+    it("emits agent.terminated for mirrored pool agents and clears public state", () => {
+      const terminated: string[] = [];
+      events.on("agent.terminated", (event) => terminated.push(event.agentId));
+
+      orchestrator.initialize();
+      const poolAgentIds = Object.keys(orchestrator.getPool().getState().agents);
+
+      orchestrator.shutdown();
+
+      expect(terminated.sort()).toEqual(poolAgentIds.sort());
+      expect(Object.keys(orchestrator.getState().agents)).toHaveLength(0);
     });
   });
 

@@ -4,7 +4,9 @@
  * Bridges the web frontend SwarmCoordinator to the Rust backend via
  * Tauri's `invoke` (publish) and `listen` (subscribe) APIs.
  *
- * Topic-agnostic: all existing and new channels work automatically.
+ * This adapter intentionally implements only the coordinator's legacy
+ * `SwarmEnvelope` transport contract. Engine-native channels use the
+ * orchestrator event bridge instead of this adapter.
  *
  * @see swarm-coordinator.ts -- TransportAdapter interface
  * @see PROTOCOL-SPEC.md -- section 6.4 (Tauri IPC transport design)
@@ -14,12 +16,8 @@ import type {
   TransportAdapter,
   SwarmEnvelope,
 } from "@/features/swarm/swarm-coordinator";
-import type { SwarmEngineEnvelope } from "@clawdstrike/swarm-engine";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
-
-/** Union of both envelope types for internal handling. */
-type AnySwarmEnvelope = SwarmEnvelope | SwarmEngineEnvelope;
 
 /**
  * Transport adapter for Tauri desktop applications.
@@ -34,7 +32,7 @@ export class TauriIpcTransport implements TransportAdapter {
 
   /** Registered message handlers. */
   private readonly handlers = new Set<
-    (topic: string, envelope: AnySwarmEnvelope) => void
+    (topic: string, envelope: SwarmEnvelope) => void
   >();
 
   /**
@@ -73,7 +71,7 @@ export class TauriIpcTransport implements TransportAdapter {
     if (this.subscriptions.has(topic)) return;
     this.subscriptions.add(topic);
 
-    const promise = listen<AnySwarmEnvelope>(topic, (event) => {
+    const promise = listen<SwarmEnvelope>(topic, (event) => {
       for (const handler of this.handlers) {
         handler(topic, event.payload);
       }
@@ -98,7 +96,7 @@ export class TauriIpcTransport implements TransportAdapter {
    * Publish an envelope to a topic via Tauri `invoke`.
    * Rejects if the transport is not connected.
    */
-  async publish(topic: string, envelope: AnySwarmEnvelope): Promise<void> {
+  async publish(topic: string, envelope: SwarmEnvelope): Promise<void> {
     if (!this.isConnected()) {
       throw new Error("TauriIpcTransport: not connected");
     }
@@ -107,14 +105,14 @@ export class TauriIpcTransport implements TransportAdapter {
 
   /** Register a handler for incoming messages on any subscribed topic. */
   onMessage(
-    handler: (topic: string, envelope: AnySwarmEnvelope) => void,
+    handler: (topic: string, envelope: SwarmEnvelope) => void,
   ): void {
     this.handlers.add(handler);
   }
 
   /** Remove a previously registered message handler. */
   offMessage(
-    handler: (topic: string, envelope: AnySwarmEnvelope) => void,
+    handler: (topic: string, envelope: SwarmEnvelope) => void,
   ): void {
     this.handlers.delete(handler);
   }

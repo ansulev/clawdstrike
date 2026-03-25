@@ -49,6 +49,7 @@ import { SwarmBoardToolbar } from "./swarm-board-toolbar";
 import { SwarmBoardLeftRail } from "./swarm-board-left-rail";
 import { SwarmBoardInspector } from "./swarm-board-inspector";
 import type { SwarmBoardNodeData, SwarmNodeType } from "@/features/swarm/swarm-board-types";
+import { useTerminalSessions } from "@/lib/workbench/use-terminal-sessions";
 
 // ---------------------------------------------------------------------------
 // Styles
@@ -112,7 +113,8 @@ interface NodeContextMenuState {
 // ---------------------------------------------------------------------------
 
 function SwarmBoardCanvas() {
-  const { state, selectNode, removeNode, addNode, updateNode, rfEdges, killSession, spawnSession } = useSwarmBoard();
+  const { state, selectNode, removeNode, addNode, updateNode, rfEdges, killSession } = useSwarmBoard();
+  const { spawnSession } = useTerminalSessions();
   const { nodes, edges } = state;
   const storeActions = useSwarmBoardStore((s) => s.actions);
   const reactFlow = useReactFlow();

@@ -12,13 +12,14 @@ import type { SwarmEnvelope } from "@/features/swarm/swarm-coordinator";
 // ---------------------------------------------------------------------------
 
 const mockUnlisten = vi.fn();
-const mockListen = vi.fn<
-  [string, (event: { payload: SwarmEnvelope }) => void],
-  Promise<() => void>
->(() => Promise.resolve(mockUnlisten));
+type ListenCallback = (event: { payload: SwarmEnvelope }) => void;
 
-const mockInvoke = vi.fn<[string, Record<string, unknown>?], Promise<void>>(
-  () => Promise.resolve(),
+const mockListen = vi.fn(
+  (_topic: string, _handler: ListenCallback) => Promise.resolve(mockUnlisten),
+);
+
+const mockInvoke = vi.fn(
+  (_command: string, _payload?: Record<string, unknown>) => Promise.resolve(),
 );
 
 vi.mock("@tauri-apps/api/event", () => ({
@@ -48,6 +49,15 @@ function makeEnvelope(
     ttl: 5,
     created: Date.now(),
   };
+}
+
+function getListenCallback(index: number): ListenCallback {
+  const callback = mockListen.mock.calls[index]?.[1];
+  expect(callback).toBeDefined();
+  if (!callback) {
+    throw new Error(`Missing listen callback at index ${index}`);
+  }
+  return callback;
 }
 
 // ---------------------------------------------------------------------------
@@ -173,11 +183,10 @@ describe("TauriIpcTransport", () => {
       await new Promise((r) => setTimeout(r, 0));
 
       // Simulate an incoming Tauri event by invoking the listen callback
-      const listenCallback = mockListen.mock.calls[0]?.[1];
-      expect(listenCallback).toBeDefined();
+      const listenCallback = getListenCallback(0);
 
       const envelope = makeEnvelope();
-      listenCallback!({ payload: envelope });
+      listenCallback({ payload: envelope });
 
       expect(handler).toHaveBeenCalledWith("swarm/intel", envelope);
     });
@@ -193,9 +202,9 @@ describe("TauriIpcTransport", () => {
       transport.offMessage(handler);
 
       // Simulate incoming event
-      const listenCallback = mockListen.mock.calls[0]?.[1];
+      const listenCallback = getListenCallback(0);
       const envelope = makeEnvelope();
-      listenCallback!({ payload: envelope });
+      listenCallback({ payload: envelope });
 
       expect(handler).not.toHaveBeenCalled();
     });
@@ -209,9 +218,9 @@ describe("TauriIpcTransport", () => {
 
       await new Promise((r) => setTimeout(r, 0));
 
-      const listenCallback = mockListen.mock.calls[0]?.[1];
+      const listenCallback = getListenCallback(0);
       const envelope = makeEnvelope();
-      listenCallback!({ payload: envelope });
+      listenCallback({ payload: envelope });
 
       expect(handler1).toHaveBeenCalledWith("swarm/intel", envelope);
       expect(handler2).toHaveBeenCalledWith("swarm/intel", envelope);
@@ -231,14 +240,14 @@ describe("TauriIpcTransport", () => {
       expect(mockListen).toHaveBeenCalledTimes(2);
 
       // Simulate messages on both topics
-      const intelCallback = mockListen.mock.calls[0]?.[1];
-      const signalCallback = mockListen.mock.calls[1]?.[1];
+      const intelCallback = getListenCallback(0);
+      const signalCallback = getListenCallback(1);
 
       const intelEnvelope = makeEnvelope("intel");
       const signalEnvelope = makeEnvelope("signal");
 
-      intelCallback!({ payload: intelEnvelope });
-      signalCallback!({ payload: signalEnvelope });
+      intelCallback({ payload: intelEnvelope });
+      signalCallback({ payload: signalEnvelope });
 
       expect(handler).toHaveBeenCalledTimes(2);
       expect(handler).toHaveBeenCalledWith("swarm/intel", intelEnvelope);

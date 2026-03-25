@@ -25,6 +25,8 @@ import type { TopologyManager } from "./topology.js";
 import { AgentPool } from "./agent-pool.js";
 import { generateSwarmId } from "./ids.js";
 import type {
+  AgentSession,
+  AgentSessionStatus,
   AgentPoolConfig,
   ConsensusConfig,
   EnvelopeReceipt,
@@ -95,6 +97,7 @@ export interface SwarmOrchestratorConfig {
  */
 export class SwarmOrchestrator {
   private readonly pool: AgentPool;
+  private readonly mirroredPoolAgents = new Map<string, AgentSession>();
   private status: SwarmEngineStatus = "initializing";
   private startedAt: number | null = null;
   private readonly createdAt: number = Date.now();
@@ -136,6 +139,7 @@ export class SwarmOrchestrator {
 
     // Initialize pool first (creates minSize agents)
     this.pool.initialize();
+    this.syncPoolAgents({ emitLifecycleEvents: true });
 
     // Start registry health checks
     this.registry.startHealthChecks();
@@ -166,6 +170,7 @@ export class SwarmOrchestrator {
 
     // Shut down pool (clears agents, stops its health checks)
     this.pool.shutdown();
+    this.syncPoolAgents({ emitLifecycleEvents: true });
 
     // Stop registry health checks
     this.registry.stopHealthChecks();
@@ -213,6 +218,7 @@ export class SwarmOrchestrator {
 
     // Dispose pool (stops its health check timer)
     this.pool.dispose();
+    this.mirroredPoolAgents.clear();
 
     // Dispose the shared emitter -- ONLY here
     this.events.dispose();
@@ -317,8 +323,8 @@ export class SwarmOrchestrator {
    * Aggregates state from all subsystems into a single serializable object.
    */
   getState(): SwarmEngineState {
-    // Agent sessions from registry
-    const agents = this.registry.getState();
+    this.syncPoolAgents({ emitLifecycleEvents: false });
+    const agents = this.getMergedAgentState();
 
     // Tasks from task graph
     const tasks = this.taskGraph.getState();
@@ -349,8 +355,9 @@ export class SwarmOrchestrator {
    * Computed on-demand from subsystem state. Not cached.
    */
   getMetrics(): SwarmEngineMetrics {
+    this.syncPoolAgents({ emitLifecycleEvents: false });
     const now = Date.now();
-    const agentSessions = Object.values(this.registry.getState());
+    const agentSessions = Object.values(this.getMergedAgentState());
     const allTasks = Object.values(this.taskGraph.getState());
     const activeSessions = agentSessions.filter(
       (s) => s.status !== "terminated" && s.status !== "offline",
@@ -442,6 +449,221 @@ export class SwarmOrchestrator {
     for (const agentId of Object.keys(poolState.agents)) {
       this.pool.updateAgentHeartbeat(agentId);
     }
+    this.syncPoolAgents({ emitLifecycleEvents: true, emitHeartbeats: true });
+  }
+
+  private getMergedAgentState(): Record<string, AgentSession> {
+    return {
+      ...Object.fromEntries(this.mirroredPoolAgents),
+      ...this.registry.getState(),
+    };
+  }
+
+  private syncPoolAgents(options: {
+    emitLifecycleEvents: boolean;
+    emitHeartbeats?: boolean;
+  }): void {
+    const poolAgents = this.pool.getState().agents;
+    const registryState = this.registry.getState();
+    const registryAgentIds = new Set(Object.keys(registryState));
+    const seenPoolAgentIds = new Set<string>();
+
+    for (const [agentId, pooled] of Object.entries(poolAgents)) {
+      seenPoolAgentIds.add(agentId);
+
+      if (registryAgentIds.has(agentId)) {
+        this.mirroredPoolAgents.delete(agentId);
+        continue;
+      }
+
+      const nextStatus = this.mapPooledStatusToSessionStatus(pooled.status);
+      const now = Date.now();
+      const existing = this.mirroredPoolAgents.get(agentId);
+
+      if (!existing) {
+        const created = this.createMirroredPoolAgent(
+          agentId,
+          pooled,
+          nextStatus,
+          now,
+        );
+        this.mirroredPoolAgents.set(agentId, created);
+
+        if (options.emitLifecycleEvents) {
+          this.events.emit("agent.spawned", {
+            kind: "agent.spawned",
+            agent: created,
+            receipt: null,
+            sourceAgentId: null,
+            timestamp: now,
+          });
+        }
+
+        if (options.emitHeartbeats) {
+          this.events.emit("agent.heartbeat", {
+            kind: "agent.heartbeat",
+            agentId,
+            health: created.health,
+            workload: created.workload,
+            metricsSnapshot: created.metrics,
+            sourceAgentId: null,
+            timestamp: now,
+          });
+        }
+
+        continue;
+      }
+
+      const updated: AgentSession = {
+        ...existing,
+        status: nextStatus,
+        workload: pooled.status === "busy" ? 1 : 0,
+        health: pooled.health,
+        lastHeartbeatAt: now,
+        metrics: {
+          ...existing.metrics,
+          health: pooled.health,
+          lastActivityAt: now,
+        },
+        updatedAt: now,
+      };
+      this.mirroredPoolAgents.set(agentId, updated);
+
+      if (options.emitLifecycleEvents && existing.status !== nextStatus) {
+        this.events.emit("agent.status_changed", {
+          kind: "agent.status_changed",
+          agentId,
+          previousStatus: existing.status,
+          newStatus: nextStatus,
+          reason: "pool_sync",
+          sourceAgentId: null,
+          timestamp: now,
+        });
+      }
+
+      if (options.emitHeartbeats) {
+        this.events.emit("agent.heartbeat", {
+          kind: "agent.heartbeat",
+          agentId,
+          health: updated.health,
+          workload: updated.workload,
+          metricsSnapshot: updated.metrics,
+          sourceAgentId: null,
+          timestamp: now,
+        });
+      }
+    }
+
+    for (const [agentId, mirrored] of Array.from(
+      this.mirroredPoolAgents.entries(),
+    )) {
+      if (seenPoolAgentIds.has(agentId) || registryAgentIds.has(agentId)) {
+        continue;
+      }
+
+      this.mirroredPoolAgents.delete(agentId);
+
+      if (options.emitLifecycleEvents) {
+        this.events.emit("agent.terminated", {
+          kind: "agent.terminated",
+          agentId,
+          exitCode: null,
+          reason: "pool_removed",
+          finalMetrics: mirrored.metrics,
+          sourceAgentId: null,
+          timestamp: Date.now(),
+        });
+      }
+    }
+  }
+
+  private mapPooledStatusToSessionStatus(
+    pooledStatus: "available" | "busy" | "unhealthy",
+  ): AgentSessionStatus {
+    switch (pooledStatus) {
+      case "available":
+        return "idle";
+      case "busy":
+        return "running";
+      case "unhealthy":
+        return "offline";
+    }
+  }
+
+  private createMirroredPoolAgent(
+    agentId: string,
+    pooled: {
+      agentId: string;
+      status: "available" | "busy" | "unhealthy";
+      usageCount: number;
+      health: number;
+    },
+    status: AgentSessionStatus,
+    now: number,
+  ): AgentSession {
+    return {
+      id: agentId,
+      name: `Pool Agent ${agentId}`,
+      role: "worker",
+      status,
+      capabilities: {
+        codeGeneration: false,
+        codeReview: false,
+        testing: false,
+        documentation: false,
+        research: false,
+        analysis: false,
+        coordination: false,
+        securityAnalysis: false,
+        languages: [],
+        frameworks: [],
+        domains: [],
+        tools: [],
+        maxConcurrentTasks: 1,
+        maxMemoryUsageBytes: 0,
+        maxExecutionTimeMs: 0,
+      },
+      metrics: {
+        tasksCompleted: 0,
+        tasksFailed: 0,
+        averageExecutionTimeMs: 0,
+        successRate: 0,
+        cpuUsage: 0,
+        memoryUsageBytes: 0,
+        messagesProcessed: 0,
+        lastActivityAt: now,
+        responseTimeMs: 0,
+        health: pooled.health,
+      },
+      quality: {
+        reliability: 0.5,
+        speed: 0.5,
+        quality: 0.5,
+      },
+      currentTaskId: null,
+      workload: pooled.status === "busy" ? 1 : 0,
+      health: pooled.health,
+      lastHeartbeatAt: now,
+      topologyRole: null,
+      connections: [],
+      worktreePath: null,
+      branch: null,
+      risk: "low",
+      policyMode: null,
+      agentModel: "pooled",
+      receiptCount: 0,
+      blockedActionCount: 0,
+      changedFilesCount: 0,
+      filesTouched: [],
+      toolBoundaryEvents: pooled.usageCount,
+      confidence: null,
+      guardResults: [],
+      receipt: null,
+      sentinelId: null,
+      createdAt: now,
+      updatedAt: now,
+      exitCode: null,
+    };
   }
 
   // =========================================================================

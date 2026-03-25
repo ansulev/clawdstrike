@@ -77,6 +77,99 @@ function mapEngineStatus(engineStatus: string): SessionStatus {
   }
 }
 
+function seedBoardFromEngineSnapshot(engine: SwarmOrchestrator): void {
+  const snapshot = engine.getState();
+  const { actions } = useSwarmBoardStore.getState();
+
+  const topologyNodeById = new Map(
+    snapshot.topology.nodes.map((topologyNode) => [topologyNode.id, topologyNode]),
+  );
+  const agentPositions = new Map(
+    snapshot.topology.nodes
+      .filter(
+        (topologyNode) =>
+          topologyNode.positionX !== null && topologyNode.positionY !== null,
+      )
+      .map((topologyNode) => [
+        topologyNode.agentId,
+        { x: topologyNode.positionX ?? 0, y: topologyNode.positionY ?? 0 },
+      ]),
+  );
+
+  const agentNodes = Object.values(snapshot.agents).map((agent) => ({
+    id: agent.id,
+    agentId: agent.id,
+    data: {
+      nodeType: "agentSession" as const,
+      title: agent.name,
+      status: mapEngineStatus(agent.status),
+      agentId: agent.id,
+      agentModel: agent.agentModel ?? agent.role,
+      branch: agent.branch ?? undefined,
+      worktreePath: agent.worktreePath ?? undefined,
+      risk: agent.risk,
+      policyMode: agent.policyMode ?? undefined,
+      receiptCount: agent.receiptCount,
+      blockedActionCount: agent.blockedActionCount,
+      changedFilesCount: agent.changedFilesCount,
+      filesTouched: agent.filesTouched,
+      toolBoundaryEvents: agent.toolBoundaryEvents,
+      confidence: agent.confidence ?? undefined,
+      engineManaged: true,
+    },
+    position: agentPositions.get(agent.id),
+  }));
+
+  const taskNodes = Object.values(snapshot.tasks).map((task, index) => {
+    const agentPosition = task.assignedTo
+      ? agentPositions.get(task.assignedTo)
+      : undefined;
+    return {
+      id: task.id,
+      taskId: task.id,
+      agentId: task.assignedTo ?? undefined,
+      data: {
+        nodeType: "terminalTask" as const,
+        title: task.type ?? task.name ?? "Task",
+        status: mapEngineStatus(task.status),
+        taskId: task.id,
+        agentId: task.assignedTo ?? undefined,
+        engineManaged: true,
+        taskPrompt: task.taskPrompt ?? task.description,
+        previewLines: task.previewLines,
+      },
+      position: agentPosition
+        ? { x: agentPosition.x, y: agentPosition.y + 200 + index * 24 }
+        : undefined,
+    };
+  });
+
+  const taskEdges = Object.values(snapshot.tasks)
+    .filter((task) => task.assignedTo)
+    .map((task) => ({
+      id: `edge-spawn-${task.id}`,
+      source: task.assignedTo!,
+      target: task.id,
+      type: "spawned" as const,
+    }));
+
+  const topologyEdges = snapshot.topology.edges.map((topologyEdge) => {
+    const fromNode = topologyNodeById.get(topologyEdge.from);
+    const toNode = topologyNodeById.get(topologyEdge.to);
+    return {
+      id: `edge-topo-${topologyEdge.from}-${topologyEdge.to}`,
+      source: fromNode?.agentId ?? topologyEdge.from,
+      target: toNode?.agentId ?? topologyEdge.to,
+      type: "topology" as const,
+    };
+  });
+
+  actions.engineSync(
+    [...agentNodes, ...taskNodes],
+    [...taskEdges, ...topologyEdges],
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Hook
 // ---------------------------------------------------------------------------
@@ -101,6 +194,7 @@ export function useEngineBoardBridge(engine: SwarmOrchestrator | null): void {
 
     // Access the shared event emitter via the orchestrator's public accessor.
     const events = engine.getEvents();
+    seedBoardFromEngineSnapshot(engine);
 
     // -----------------------------------------------------------------------
     // 1. agent.spawned -> addNode({ nodeType: "agentSession" }) (INTG-02, INTG-08)

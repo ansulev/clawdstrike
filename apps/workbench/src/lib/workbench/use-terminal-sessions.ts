@@ -17,6 +17,7 @@ import {
 } from "./swarm-board-store";
 import type { SwarmBoardNodeData } from "./swarm-board-types";
 import type { Node } from "@xyflow/react";
+import { useOptionalSwarmEngine } from "@/features/swarm/stores/swarm-engine-provider";
 
 // ---------------------------------------------------------------------------
 // Types re-exported for convenience
@@ -31,14 +32,45 @@ export type { SpawnSessionOptions, SpawnClaudeSessionOptions, SpawnWorktreeSessi
 export function useTerminalSessions() {
   const {
     state,
-    spawnSession,
-    spawnClaudeSession,
-    spawnWorktreeSession,
+    spawnSession: rawSpawnSession,
+    spawnClaudeSession: rawSpawnClaudeSession,
+    spawnWorktreeSession: rawSpawnWorktreeSession,
     killSession,
     removeNode,
   } = useSwarmBoard();
+  const engineCtx = useOptionalSwarmEngine();
 
   const repoRoot = state.repoRoot;
+
+  const spawnSession = useCallback(
+    async (opts: SpawnSessionOptions): Promise<Node<SwarmBoardNodeData>> => {
+      if (engineCtx?.mode === "engine") {
+        return engineCtx.spawnEngineSession(rawSpawnSession, opts);
+      }
+      return rawSpawnSession(opts);
+    },
+    [engineCtx, rawSpawnSession],
+  );
+
+  const spawnClaudeSession = useCallback(
+    async (opts: SpawnClaudeSessionOptions): Promise<Node<SwarmBoardNodeData>> => {
+      if (engineCtx?.mode === "engine") {
+        return engineCtx.spawnEngineClaudeSession(rawSpawnClaudeSession, opts);
+      }
+      return rawSpawnClaudeSession(opts);
+    },
+    [engineCtx, rawSpawnClaudeSession],
+  );
+
+  const spawnWorktreeSession = useCallback(
+    async (opts: SpawnWorktreeSessionOptions): Promise<Node<SwarmBoardNodeData>> => {
+      if (engineCtx?.mode === "engine") {
+        return engineCtx.spawnEngineWorktreeSession(rawSpawnWorktreeSession, opts);
+      }
+      return rawSpawnWorktreeSession(opts);
+    },
+    [engineCtx, rawSpawnWorktreeSession],
+  );
 
   // -----------------------------------------------------------------------
   // Quick-spawn helpers (use defaults from the store's repoRoot)

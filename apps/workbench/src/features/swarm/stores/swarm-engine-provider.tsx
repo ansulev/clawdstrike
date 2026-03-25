@@ -40,7 +40,10 @@ import type { SwarmBoardNodeData } from "../swarm-board-types";
 import {
   useSwarmBoardStore,
   type SpawnSessionOptions,
+  type SpawnClaudeSessionOptions,
+  type SpawnWorktreeSessionOptions,
 } from "./swarm-board-store";
+import { workbenchGuardEvaluator } from "./workbench-guard-evaluator";
 
 // ---------------------------------------------------------------------------
 // Context value type
@@ -72,6 +75,14 @@ export interface SwarmEngineContextValue {
   spawnEngineSession: (
     spawnFn: (opts: SpawnSessionOptions) => Promise<Node<SwarmBoardNodeData>>,
     opts: SpawnSessionOptions,
+  ) => Promise<Node<SwarmBoardNodeData>>;
+  spawnEngineClaudeSession: (
+    spawnFn: (opts: SpawnClaudeSessionOptions) => Promise<Node<SwarmBoardNodeData>>,
+    opts: SpawnClaudeSessionOptions,
+  ) => Promise<Node<SwarmBoardNodeData>>;
+  spawnEngineWorktreeSession: (
+    spawnFn: (opts: SpawnWorktreeSessionOptions) => Promise<Node<SwarmBoardNodeData>>,
+    opts: SpawnWorktreeSessionOptions,
   ) => Promise<Node<SwarmBoardNodeData>>;
 }
 
@@ -115,6 +126,7 @@ const WORKBENCH_CONFIG: SwarmOrchestratorConfig = {
   healthCheckIntervalMs: 10_000,
   taskTimeoutMs: 300_000,
   maxGuardActionHistory: 100,
+  guardEvaluator: workbenchGuardEvaluator,
 };
 
 // ---------------------------------------------------------------------------
@@ -123,6 +135,12 @@ const WORKBENCH_CONFIG: SwarmOrchestratorConfig = {
 
 const manualSpawnEngineSession: SwarmEngineContextValue["spawnEngineSession"] =
   (spawnFn, opts) => spawnFn(opts);
+const manualSpawnEngineClaudeSession:
+  SwarmEngineContextValue["spawnEngineClaudeSession"] =
+    (spawnFn, opts) => spawnFn(opts);
+const manualSpawnEngineWorktreeSession:
+  SwarmEngineContextValue["spawnEngineWorktreeSession"] =
+    (spawnFn, opts) => spawnFn(opts);
 
 // ---------------------------------------------------------------------------
 // Initial context value (manual/disabled state)
@@ -137,7 +155,108 @@ const MANUAL_CONTEXT: SwarmEngineContextValue = {
   mode: "manual",
   error: null,
   spawnEngineSession: manualSpawnEngineSession,
+  spawnEngineClaudeSession: manualSpawnEngineClaudeSession,
+  spawnEngineWorktreeSession: manualSpawnEngineWorktreeSession,
 };
+
+interface PositionedSpawnOptions {
+  position?: { x: number; y: number };
+}
+
+function fallbackSpawnPosition(
+  position?: { x: number; y: number },
+): { x: number; y: number } {
+  return position ?? {
+    x: 100 + Math.random() * 400,
+    y: 100 + Math.random() * 300,
+  };
+}
+
+function receiptNodeFromGuardResult(
+  opts: PositionedSpawnOptions,
+  verdict: "allow" | "deny" | "warn",
+  guardResults: Array<{ guard: string; allowed: boolean; duration_ms?: number }>,
+  signature?: string,
+  publicKey?: string,
+  detail?: string,
+): Node<SwarmBoardNodeData> {
+  const { actions } = useSwarmBoardStore.getState();
+  const position = fallbackSpawnPosition(opts.position);
+
+  return actions.addNode({
+    nodeType: "receipt",
+    title: `Guard: ${verdict.toUpperCase()}`,
+    position: { x: position.x, y: position.y + 340 },
+    data: {
+      verdict,
+      guardResults,
+      signature,
+      publicKey,
+      status: "completed",
+      engineManaged: true,
+      ...(detail ? { previewLines: [detail] } : {}),
+    },
+  });
+}
+
+function buildSpawnGuardAction(
+  kind: "terminal" | "claude" | "worktree",
+  opts: SpawnSessionOptions | SpawnClaudeSessionOptions | SpawnWorktreeSessionOptions,
+): GuardedAction {
+  const repoRoot = useSwarmBoardStore.getState().repoRoot || "/tmp";
+
+  if (kind === "terminal") {
+    const terminalOpts = opts as SpawnSessionOptions;
+    return {
+      agentId: `pending_${Date.now()}`,
+      taskId: null,
+      actionType: "shell_command",
+      target:
+        terminalOpts.command ??
+        (terminalOpts.launchClaude ? "claude" : terminalOpts.shell ?? "shell"),
+      context: {
+        operation: "agent_spawn",
+        cwd: terminalOpts.cwd,
+        launchClaude: terminalOpts.launchClaude ?? false,
+        command: terminalOpts.command ?? null,
+      },
+      requestedAt: Date.now(),
+    };
+  }
+
+  if (kind === "claude") {
+    const claudeOpts = opts as SpawnClaudeSessionOptions;
+    return {
+      agentId: `pending_${Date.now()}`,
+      taskId: null,
+      actionType: "shell_command",
+      target: "claude",
+      context: {
+        operation: "claude_spawn",
+        cwd: claudeOpts.cwd ?? repoRoot,
+        worktree: claudeOpts.worktree ?? false,
+        branch: claudeOpts.branch ?? null,
+        prompt: claudeOpts.prompt ?? null,
+      },
+      requestedAt: Date.now(),
+    };
+  }
+
+  const worktreeOpts = opts as SpawnWorktreeSessionOptions;
+  return {
+    agentId: `pending_${Date.now()}`,
+    taskId: null,
+    actionType: "shell_command",
+    target: `git worktree add ${worktreeOpts.branch ?? "(auto)"}`,
+    context: {
+      operation: "worktree_spawn",
+      cwd: repoRoot,
+      branch: worktreeOpts.branch ?? null,
+      shell: worktreeOpts.shell ?? null,
+    },
+    requestedAt: Date.now(),
+  };
+}
 
 // ---------------------------------------------------------------------------
 // Provider
@@ -196,6 +315,8 @@ export function SwarmEngineProvider({
         mode: "engine",
         error: null,
         spawnEngineSession: manualSpawnEngineSession, // overridden by valueWithSpawn
+        spawnEngineClaudeSession: manualSpawnEngineClaudeSession,
+        spawnEngineWorktreeSession: manualSpawnEngineWorktreeSession,
       });
     } catch (err) {
       if (cancelled) return;
@@ -214,6 +335,8 @@ export function SwarmEngineProvider({
         mode: "error",
         error: message,
         spawnEngineSession: manualSpawnEngineSession,
+        spawnEngineClaudeSession: manualSpawnEngineClaudeSession,
+        spawnEngineWorktreeSession: manualSpawnEngineWorktreeSession,
       });
     }
 
@@ -227,102 +350,119 @@ export function SwarmEngineProvider({
   }, [enabled]);
 
   // ---------------------------------------------------------------------------
-  // spawnEngineSession -- wraps spawnFn with guard pipeline + receipt creation
+  // Engine spawn wrappers -- route mutable session creation through the guard
+  // pipeline and fail closed when evaluation errors.
   // ---------------------------------------------------------------------------
 
-  // Empty dependency array is intentional: the callback reads from `engineRef`
-  // (a stable ref) and `useSwarmBoardStore.getState()` (Zustand's static
-  // accessor), neither of which are React state or props.
-  const spawnEngineSession = useCallback(
-    async (
-      spawnFn: (opts: SpawnSessionOptions) => Promise<Node<SwarmBoardNodeData>>,
-      opts: SpawnSessionOptions,
-    ): Promise<Node<SwarmBoardNodeData>> => {
-      const engine = engineRef.current;
+  const finalizeAllowedSpawn = useCallback((
+    nodeId: string,
+    result: Awaited<ReturnType<SwarmOrchestrator["evaluateGuard"]>>,
+  ): void => {
+    const { actions } = useSwarmBoardStore.getState();
+    actions.guardEvaluate(
+      nodeId,
+      result.verdict,
+      result.guardResults.map((guardResult) => ({
+        guard: guardResult.guardId,
+        allowed: guardResult.verdict !== "deny",
+        duration_ms: guardResult.duration_ms,
+      })),
+      result.receipt.signature,
+      result.receipt.publicKey,
+    );
+  }, []);
 
-      // Fallback to manual mode -- just call the original spawnSession
-      if (!engine) {
-        return spawnFn(opts);
-      }
+  async function runGuardedSpawn<Opts extends PositionedSpawnOptions>(
+    kind: "terminal" | "claude" | "worktree",
+    spawnFn: (opts: Opts) => Promise<Node<SwarmBoardNodeData>>,
+    opts: Opts,
+  ): Promise<Node<SwarmBoardNodeData>> {
+    const engine = engineRef.current;
+    if (!engine) {
+      return spawnFn(opts);
+    }
 
-      // Step 1: Guard pipeline evaluation (wrapped in try/catch -- on error,
-      // log warning and fall back to manual spawn so the user isn't blocked).
-      let result: Awaited<ReturnType<SwarmOrchestrator["evaluateGuard"]>>;
-      try {
-        const guardAction: GuardedAction = {
-          agentId: `pending_${Date.now()}`,
-          taskId: null,
-          actionType: "shell_command",
-          target: opts.cwd,
-          context: {
-            operation: "agent_spawn",
-            launchClaude: opts.launchClaude ?? false,
-            command: opts.command,
-          },
-          requestedAt: Date.now(),
-        };
+    let result: Awaited<ReturnType<SwarmOrchestrator["evaluateGuard"]>>;
+    try {
+      result = await engine.evaluateGuard(buildSpawnGuardAction(kind, opts));
+    } catch (guardErr) {
+      const message =
+        guardErr instanceof Error ? guardErr.message : String(guardErr);
+      console.warn(
+        "[SwarmEngineProvider] Guard evaluation failed; denying spawn:",
+        message,
+      );
 
-        result = await engine.evaluateGuard(guardAction);
-      } catch (guardErr) {
-        console.warn(
-          "[SwarmEngineProvider] Guard evaluation failed, falling back to manual spawn:",
-          guardErr instanceof Error ? guardErr.message : String(guardErr),
-        );
-        return spawnFn(opts);
-      }
+      return receiptNodeFromGuardResult(
+        opts,
+        "deny",
+        [{ guard: "engine_error", allowed: false }],
+        undefined,
+        undefined,
+        message,
+      );
+    }
 
-      // Step 2: If denied, create receipt-only node (no session spawned)
-      if (!result.allowed) {
-        const { actions } = useSwarmBoardStore.getState();
-        const position = opts.position ?? {
-          x: 100 + Math.random() * 400,
-          y: 100 + Math.random() * 300,
-        };
-        return actions.addNode({
-          nodeType: "receipt",
-          title: "Guard: DENY",
-          position: { x: position.x, y: position.y + 340 },
-          data: {
-            verdict: "deny",
-            guardResults: result.guardResults.map((gr) => ({
-              guard: gr.guardId,
-              allowed: gr.verdict !== "deny",
-              duration_ms: gr.duration_ms,
-            })),
-            signature: result.receipt.signature,
-            publicKey: result.receipt.publicKey,
-            status: "completed",
-            engineManaged: true,
-          },
-        });
-      }
-
-      // Step 3: Guard allowed -- spawn the real session
-      const node = await spawnFn(opts);
-
-      // Step 4: Create receipt node + receipt edge attached to the spawned node
-      const { actions } = useSwarmBoardStore.getState();
-      actions.guardEvaluate(
-        node.id,
+    if (!result.allowed) {
+      return receiptNodeFromGuardResult(
+        opts,
         result.verdict,
-        result.guardResults.map((gr) => ({
-          guard: gr.guardId,
-          allowed: gr.verdict !== "deny",
-          duration_ms: gr.duration_ms,
+        result.guardResults.map((guardResult) => ({
+          guard: guardResult.guardId,
+          allowed: guardResult.verdict !== "deny",
+          duration_ms: guardResult.duration_ms,
         })),
         result.receipt.signature,
         result.receipt.publicKey,
       );
+    }
 
-      return node;
-    },
-    [],
+    const node = await spawnFn(opts);
+    finalizeAllowedSpawn(node.id, result);
+    return node;
+  }
+
+  const spawnEngineSession = useCallback(
+    async (
+      spawnFn: (opts: SpawnSessionOptions) => Promise<Node<SwarmBoardNodeData>>,
+      opts: SpawnSessionOptions,
+    ): Promise<Node<SwarmBoardNodeData>> =>
+      runGuardedSpawn("terminal", spawnFn, opts),
+    [finalizeAllowedSpawn],
   );
 
-  // Merge spawnEngineSession into the context value when it changes
+  const spawnEngineClaudeSession = useCallback(
+    async (
+      spawnFn: (opts: SpawnClaudeSessionOptions) => Promise<Node<SwarmBoardNodeData>>,
+      opts: SpawnClaudeSessionOptions,
+    ): Promise<Node<SwarmBoardNodeData>> =>
+      runGuardedSpawn("claude", spawnFn, opts),
+    [finalizeAllowedSpawn],
+  );
+
+  const spawnEngineWorktreeSession = useCallback(
+    async (
+      spawnFn: (opts: SpawnWorktreeSessionOptions) => Promise<Node<SwarmBoardNodeData>>,
+      opts: SpawnWorktreeSessionOptions,
+    ): Promise<Node<SwarmBoardNodeData>> =>
+      runGuardedSpawn("worktree", spawnFn, opts),
+    [finalizeAllowedSpawn],
+  );
+
+  // Merge engine spawn wrappers into the context value when they change
   const valueWithSpawn = useMemo(
-    () => ({ ...contextValue, spawnEngineSession }),
-    [contextValue, spawnEngineSession],
+    () => ({
+      ...contextValue,
+      spawnEngineSession,
+      spawnEngineClaudeSession,
+      spawnEngineWorktreeSession,
+    }),
+    [
+      contextValue,
+      spawnEngineSession,
+      spawnEngineClaudeSession,
+      spawnEngineWorktreeSession,
+    ],
   );
 
   return (
@@ -349,6 +489,15 @@ export function useSwarmEngine(): SwarmEngineContextValue {
     );
   }
   return ctx;
+}
+
+/**
+ * Returns the engine context when present, otherwise null.
+ * Use this in compatibility layers that must continue working without the
+ * provider mounted.
+ */
+export function useOptionalSwarmEngine(): SwarmEngineContextValue | null {
+  return useContext(SwarmEngineContext);
 }
 
 /**

@@ -667,6 +667,27 @@ describe("TaskGraph", () => {
       expect(researcherNext?.type).toBe("research");
     });
 
+    it("does not double-assign: getNextTask(agentId) removes task from PriorityQueue", () => {
+      const coderId = registry.register(
+        makeRegistration({
+          name: "coder",
+          capabilities: makeCapabilities({ codeGeneration: true }),
+        }),
+      );
+      registry.spawn(coderId);
+
+      const task = graph.addTask(makeSubmission({ type: "coding", name: "Only Task" }));
+      graph.queueTask(task.id);
+
+      // Capability-filtered dequeue should return the task
+      const first = graph.getNextTask(coderId);
+      expect(first?.id).toBe(task.id);
+
+      // A subsequent plain dequeue must NOT return the same task
+      const second = graph.getNextTask();
+      expect(second).toBeUndefined();
+    });
+
     it("returns undefined when no tasks match capabilities", () => {
       const agentId = registry.register(
         makeRegistration({

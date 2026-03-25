@@ -12,8 +12,7 @@
  * @module
  */
 
-import type { TypedEventEmitter } from "./events.js";
-import type { SwarmEngineEventMap } from "./events.js";
+import type { TypedEventEmitter, SwarmEngineEventMap } from "./events.js";
 import { generateSwarmId } from "./ids.js";
 import type {
   AgentCapabilities,
@@ -55,6 +54,8 @@ const TASK_TYPE_TO_CAPABILITY: Partial<Record<TaskType, keyof AgentCapabilities>
   coordination: "coordination",
   detection: "securityAnalysis",
   hunt: "securityAnalysis",
+  consensus: "coordination",
+  guard_evaluation: "securityAnalysis",
 };
 
 // ============================================================================

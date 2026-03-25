@@ -114,8 +114,11 @@ export class TaskGraph {
 
     const id = generateSwarmId("tsk");
 
-    // Check for cycles before adding
-    // Temporarily add edges to the dependency graph and check
+    // Check for cycles before adding.
+    // We insert into dependencyGraph (but NOT dependentGraph) before the cycle
+    // check because wouldCreateCycle only walks dependencyGraph edges. The new
+    // node's entry must be present so the DFS can discover a back-edge to `id`.
+    // If a cycle is detected, the temporary entries are rolled back below.
     this.dependencyGraph.set(id, new Set(deps));
     this.dependentGraph.set(id, new Set());
 
@@ -384,13 +387,17 @@ export class TaskGraph {
   ): void {
     const task = this.getTaskOrThrow(taskId);
 
+    // Capture the assigned agent before any mutations so events reference the
+    // correct agent even after the agent's task state has been cleared.
+    const previousAgent = task.assignedTo;
+
     task.metadata.lastErrorCategory = category;
     task.retries++;
 
     if (task.retries < task.maxRetries) {
       // Retryable: re-queue
-      if (task.assignedTo) {
-        this.agentRegistry.failTask(task.assignedTo, taskId);
+      if (previousAgent) {
+        this.agentRegistry.failTask(previousAgent, taskId);
       }
       task.assignedTo = null;
       this.updateTaskStatus(taskId, "queued");
@@ -399,7 +406,7 @@ export class TaskGraph {
       this.events.emit("task.failed", {
         kind: "task.failed",
         taskId,
-        agentId: null,
+        agentId: previousAgent,
         error,
         retryable: true,
         sourceAgentId: null,
@@ -407,15 +414,15 @@ export class TaskGraph {
       });
     } else {
       // Permanent failure
-      if (task.assignedTo) {
-        this.agentRegistry.failTask(task.assignedTo, taskId);
+      if (previousAgent) {
+        this.agentRegistry.failTask(previousAgent, taskId);
       }
       this.updateTaskStatus(taskId, "failed");
 
       this.events.emit("task.failed", {
         kind: "task.failed",
         taskId,
-        agentId: task.assignedTo,
+        agentId: previousAgent,
         error,
         retryable: false,
         sourceAgentId: null,
@@ -573,7 +580,32 @@ export class TaskGraph {
         return a.createdAt - b.createdAt;
       });
 
-    return matchingTasks[0];
+    const matched = matchingTasks[0];
+    if (!matched) {
+      return undefined;
+    }
+
+    // Remove the matched task from the PriorityQueue so it is not
+    // double-assigned by a subsequent getNextTask() call.
+    const requeue: Array<{ id: string; priority: TaskPriority }> = [];
+    while (this.priorityQueue.length > 0) {
+      const dequeuedId = this.priorityQueue.dequeue();
+      if (dequeuedId === matched.id) {
+        break; // found and removed
+      }
+      if (dequeuedId !== undefined) {
+        const t = this.tasks.get(dequeuedId);
+        if (t) {
+          requeue.push({ id: dequeuedId, priority: t.priority });
+        }
+      }
+    }
+    // Re-enqueue the non-matching tasks we popped
+    for (const item of requeue) {
+      this.priorityQueue.enqueue(item.id, item.priority);
+    }
+
+    return matched;
   }
 
   // ==========================================================================

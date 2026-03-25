@@ -678,26 +678,27 @@ export class TopologyManager {
     const targetConnections = Math.min(5, this.state.nodes.length - 1);
 
     for (const node of this.state.nodes) {
+      const connectionSet = new Set(node.connections);
       while (node.connections.length < targetConnections) {
-        const candidates = this.state.nodes
-          .filter(
-            (n) =>
-              n.agentId !== node.agentId &&
-              !node.connections.includes(n.agentId),
-          )
-          .sort(() => Math.random() - 0.5);
+        const candidates = this.state.nodes.filter(
+          (n) =>
+            n.agentId !== node.agentId &&
+            !connectionSet.has(n.agentId),
+        );
 
-        if (candidates.length > 0) {
-          const target = candidates[0]!;
-          node.connections.push(target.agentId);
-          this.adjacencyList.get(node.agentId)?.add(target.agentId);
+        if (candidates.length === 0) break;
 
-          // Bidirectional
-          target.connections.push(node.agentId);
-          this.adjacencyList.get(target.agentId)?.add(node.agentId);
-        } else {
-          break;
-        }
+        // Deterministic Fisher-Yates shuffle seeded from snapshot timestamp
+        fisherYatesShuffle(candidates, this.state.snapshotAt);
+
+        const target = candidates[0]!;
+        node.connections.push(target.agentId);
+        connectionSet.add(target.agentId);
+        this.adjacencyList.get(node.agentId)?.add(target.agentId);
+
+        // Bidirectional
+        target.connections.push(node.agentId);
+        this.adjacencyList.get(target.agentId)?.add(node.agentId);
       }
     }
   }
@@ -716,12 +717,17 @@ export class TopologyManager {
     }
 
     // Ensure all workers are connected to queen
+    const queenConnectionSet = new Set(queen.connections);
     for (const node of this.state.nodes) {
-      if (node.role === "worker" && !node.connections.includes(queen.agentId)) {
+      const nodeConnectionSet = new Set(node.connections);
+      if (node.role === "worker" && !nodeConnectionSet.has(queen.agentId)) {
         node.connections.push(queen.agentId);
         this.adjacencyList.get(node.agentId)?.add(queen.agentId);
-        queen.connections.push(node.agentId);
-        this.adjacencyList.get(queen.agentId)?.add(node.agentId);
+        if (!queenConnectionSet.has(node.agentId)) {
+          queen.connections.push(node.agentId);
+          queenConnectionSet.add(node.agentId);
+          this.adjacencyList.get(queen.agentId)?.add(node.agentId);
+        }
       }
     }
   }
@@ -740,15 +746,20 @@ export class TopologyManager {
     }
 
     // Ensure all nodes are connected to coordinator
+    const coordConnectionSet = new Set(coordinator.connections);
     for (const node of this.state.nodes) {
+      const nodeConnectionSet = new Set(node.connections);
       if (
         node.role !== "coordinator" &&
-        !node.connections.includes(coordinator.agentId)
+        !nodeConnectionSet.has(coordinator.agentId)
       ) {
         node.connections = [coordinator.agentId];
         this.adjacencyList.set(node.agentId, new Set([coordinator.agentId]));
-        coordinator.connections.push(node.agentId);
-        this.adjacencyList.get(coordinator.agentId)?.add(node.agentId);
+        if (!coordConnectionSet.has(node.agentId)) {
+          coordinator.connections.push(node.agentId);
+          coordConnectionSet.add(node.agentId);
+          this.adjacencyList.get(coordinator.agentId)?.add(node.agentId);
+        }
       }
     }
   }
@@ -757,28 +768,33 @@ export class TopologyManager {
     const coordinators = this.state.nodes.filter(
       (n) => n.role === "queen" || n.role === "coordinator",
     );
+    const coordinatorIdSet = new Set(coordinators.map((c) => c.agentId));
     const workers = this.state.nodes.filter(
       (n) => n.role === "worker" || n.role === "peer",
     );
+    const workerIdSet = new Set(workers.map((w) => w.agentId));
 
     // Connect workers in mesh (limited connections)
     for (const worker of workers) {
       const targetConnections = Math.min(3, workers.length - 1);
-      const currentWorkerConnections = worker.connections.filter((c) =>
-        workers.some((w) => w.agentId === c),
+      const workerConnectionSet = new Set(
+        worker.connections.filter((c) => workerIdSet.has(c)),
       );
 
-      while (currentWorkerConnections.length < targetConnections) {
+      while (workerConnectionSet.size < targetConnections) {
         const candidates = workers.filter(
           (w) =>
             w.agentId !== worker.agentId &&
-            !currentWorkerConnections.includes(w.agentId),
+            !workerConnectionSet.has(w.agentId),
         );
         if (candidates.length === 0) break;
 
-        const target = candidates[Math.floor(Math.random() * candidates.length)]!;
+        // Deterministic Fisher-Yates shuffle seeded from snapshot timestamp
+        fisherYatesShuffle(candidates, this.state.snapshotAt);
+
+        const target = candidates[0]!;
         worker.connections.push(target.agentId);
-        currentWorkerConnections.push(target.agentId);
+        workerConnectionSet.add(target.agentId);
         this.adjacencyList.get(worker.agentId)?.add(target.agentId);
       }
     }
@@ -786,16 +802,20 @@ export class TopologyManager {
     // Connect all workers to at least one coordinator
     if (coordinators.length > 0) {
       for (const worker of workers) {
-        const hasCoordinator = worker.connections.some((c) =>
-          coordinators.some((coord) => coord.agentId === c),
+        const connectionSet = new Set(worker.connections);
+        const hasCoordinator = coordinators.some((coord) =>
+          connectionSet.has(coord.agentId),
         );
         if (!hasCoordinator) {
-          const coord =
-            coordinators[Math.floor(Math.random() * coordinators.length)]!;
+          // Deterministic selection based on snapshot timestamp
+          const idx = this.state.snapshotAt % coordinators.length;
+          const coord = coordinators[idx]!;
           worker.connections.push(coord.agentId);
           this.adjacencyList.get(worker.agentId)?.add(coord.agentId);
-          coord.connections.push(worker.agentId);
-          this.adjacencyList.get(coord.agentId)?.add(worker.agentId);
+          if (!new Set(coord.connections).has(worker.agentId)) {
+            coord.connections.push(worker.agentId);
+            this.adjacencyList.get(coord.agentId)?.add(worker.agentId);
+          }
         }
       }
     }
@@ -843,9 +863,14 @@ export class TopologyManager {
   // ==========================================================================
 
   private emitTopologyUpdated(): void {
+    const previousType = this.lastEffectiveType;
+    const currentEffective = this.resolveEffectiveType();
+    // Update tracked effective type so the next emit reports the correct previous
+    this.lastEffectiveType = currentEffective;
+
     this.events.emit("topology.updated", {
       kind: "topology.updated",
-      previousType: this.config.type,
+      previousType,
       newTopology: this.getState(),
       sourceAgentId: null,
       timestamp: Date.now(),
@@ -861,5 +886,28 @@ export class TopologyManager {
       sourceAgentId: null,
       timestamp: Date.now(),
     });
+  }
+}
+
+// ============================================================================
+// Deterministic Fisher-Yates shuffle (seeded from timestamp)
+// ============================================================================
+
+/**
+ * In-place Fisher-Yates shuffle using a simple seeded PRNG derived from
+ * the topology snapshot timestamp. Replaces the non-deterministic
+ * `Math.random() - 0.5` sort used previously in rebalance methods.
+ */
+function fisherYatesShuffle<T>(arr: T[], seed: number): void {
+  // Simple xorshift-style hash for deterministic pseudo-random indices
+  let s = seed | 0;
+  for (let i = arr.length - 1; i > 0; i--) {
+    s = (s ^ (s << 13)) | 0;
+    s = (s ^ (s >> 17)) | 0;
+    s = (s ^ (s << 5)) | 0;
+    const j = ((s >>> 0) % (i + 1));
+    const tmp = arr[i]!;
+    arr[i] = arr[j]!;
+    arr[j] = tmp;
   }
 }

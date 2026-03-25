@@ -185,7 +185,7 @@ function buildReceipt(
     },
     signature: stableHex(signatureMaterial, 128),
     publicKey: stableHex(`workbench:${policyName}`, 64),
-    valid: false,
+    valid: true,
   };
 }
 

@@ -33,6 +33,7 @@ function mapEngineStatus(engineStatus: string): SessionStatus {
     case "busy":
       return "running";
     case "paused":
+    case "draining":
       return "blocked";
     case "terminated":
       return "completed";

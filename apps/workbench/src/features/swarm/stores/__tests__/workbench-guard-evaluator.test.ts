@@ -47,6 +47,7 @@ describe("workbenchGuardEvaluator", () => {
     expect(scenario?.category).toBe("benign");
     expect(result.receipt.signature).toMatch(/^[0-9a-f]{128}$/);
     expect(result.receipt.publicKey).toMatch(/^[0-9a-f]{64}$/);
+    expect(result.receipt.valid).toBe(true);
   });
 
   it("treats non-spawn shell commands as edge cases", async () => {

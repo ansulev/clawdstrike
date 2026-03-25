@@ -581,7 +581,7 @@ describe("useEngineBoardBridge", () => {
 
       expect(
         useSwarmBoardStore.getState().nodes.find((node) => node.id === "agt_pool_1")?.data.status,
-      ).toBe("idle");
+      ).toBe("blocked");
     } finally {
       unmount();
     }

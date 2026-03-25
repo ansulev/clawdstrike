@@ -440,6 +440,8 @@ function edgeColor(type?: SwarmBoardEdge["type"]): string {
       return "#3dbf84";
     case "receipt":
       return "#8b5cf6";
+    case "topology":
+      return "#3d4250";
     default:
       return "#2d3240";
   }
@@ -454,6 +456,7 @@ function toRfEdges(edges: SwarmBoardEdge[]): Edge[] {
     type: "swarmEdge",
     data: { edgeType: e.type },
     animated: e.type === "spawned",
+    style: { stroke: edgeColor(e.type) },
     markerEnd:
       e.type === "handoff" || e.type === "spawned"
         ? { type: MarkerType.ArrowClosed, color: edgeColor(e.type) }

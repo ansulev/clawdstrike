@@ -440,6 +440,25 @@ describe("SwarmBoardStore derived state", () => {
     expect(state.rfEdges[0].source).toBe(n1.id);
     expect(state.rfEdges[0].target).toBe(n2.id);
     expect(state.rfEdges[0].animated).toBe(true); // spawned edges are animated
+    expect(state.rfEdges[0].style).toMatchObject({ stroke: "#d4a84b" });
+    expect(state.rfEdges[0].markerEnd).toMatchObject({ color: "#d4a84b" });
+  });
+
+  it("rfEdges applies topology edge styling consistently", () => {
+    const { actions } = useSwarmBoardStore.getState();
+    const n1 = actions.addNode({ nodeType: "agentSession", title: "A1", position: { x: 0, y: 0 } });
+    const n2 = actions.addNode({ nodeType: "agentSession", title: "A2", position: { x: 100, y: 0 } });
+    actions.addEdge({
+      id: "topo-1",
+      source: n1.id,
+      target: n2.id,
+      type: "topology",
+    });
+
+    const state = useSwarmBoardStore.getState();
+    expect(state.rfEdges).toHaveLength(1);
+    expect(state.rfEdges[0].style).toMatchObject({ stroke: "#3d4250" });
+    expect(state.rfEdges[0].markerEnd).toBeUndefined();
   });
 
   it("MAX_ACTIVE_TERMINALS is exported and equals 8", () => {

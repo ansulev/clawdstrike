@@ -80,7 +80,7 @@ export class WasmJailbreakDetector {
             var ptr3 = ret[0];
             var len3 = ret[1];
             if (ret[3]) {
-                ptr3 = 0; len3 = 0;
+                ptr3 = 0;
                 throw takeFromExternrefTable0(ret[2]);
             }
             deferred4_0 = ptr3;

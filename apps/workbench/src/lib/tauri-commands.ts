@@ -10,10 +10,8 @@
  */
 
 import { isDesktop } from "./tauri-bridge";
+import { getWorkbenchE2EBridge, hasWorkbenchE2EInvoke } from "@/lib/workbench/e2e-bridge";
 
-// ---------------------------------------------------------------------------
-// Response types — mirrors the Rust structs in commands/workbench.rs
-// ---------------------------------------------------------------------------
 
 export interface TauriValidationError {
   path: string;
@@ -102,6 +100,13 @@ export interface TauriExportResponse {
   message: string;
 }
 
+export interface TauriDetectionDiagnostic {
+  severity: "error" | "warning" | "info";
+  message: string;
+  line?: number | null;
+  column?: number | null;
+}
+
 export interface TauriImportResponse {
   valid: boolean;
   yaml: string;
@@ -109,6 +114,30 @@ export interface TauriImportResponse {
   version: string | null;
   errors: TauriValidationError[];
   parse_error: string | null;
+}
+
+export interface TauriDetectionImportResponse {
+  content: string;
+  file_type: string;
+}
+
+export interface TauriSigmaValidationResponse {
+  valid: boolean;
+  diagnostics: TauriDetectionDiagnostic[];
+  compiled_preview: string | null;
+}
+
+export interface TauriYaraValidationResponse {
+  valid: boolean;
+  diagnostics: TauriDetectionDiagnostic[];
+  rule_count: number;
+}
+
+export interface TauriOcsfValidationResponse {
+  valid: boolean;
+  diagnostics: TauriDetectionDiagnostic[];
+  class_uid: number | null;
+  event_class: string | null;
 }
 
 export interface TauriChainReceiptInput {
@@ -142,18 +171,45 @@ export interface TauriChainVerificationResponse {
   summary: string;
 }
 
-// ---------------------------------------------------------------------------
-// Lazy invoke helper
-// ---------------------------------------------------------------------------
 
 async function tauriInvoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
+  const e2eInvoke = getWorkbenchE2EBridge()?.invoke;
+  if (e2eInvoke) {
+    return e2eInvoke<T>(cmd, args);
+  }
+
   const { invoke } = await import("@tauri-apps/api/core");
   return invoke<T>(cmd, args);
 }
 
-// ---------------------------------------------------------------------------
-// Command wrappers
-// ---------------------------------------------------------------------------
+function normalizeTauriCommandError(command: string, err: unknown): Error {
+  if (err instanceof Error) {
+    return err;
+  }
+
+  if (
+    typeof err === "object" &&
+    err !== null &&
+    "message" in err &&
+    typeof err.message === "string" &&
+    err.message.trim()
+  ) {
+    return new Error(err.message);
+  }
+  if (typeof err === "object" && err !== null) {
+    const record = err as { error?: unknown };
+    if (typeof record.error === "string" && record.error.trim()) {
+      return new Error(record.error);
+    }
+  }
+
+  if (typeof err === "string" && err.trim()) {
+    return new Error(err);
+  }
+
+  return new Error(`${command} failed`);
+}
+
 
 /**
  * Validate policy YAML via the Rust policy engine.
@@ -165,6 +221,42 @@ export async function validatePolicyNative(yaml: string): Promise<TauriValidatio
     return await tauriInvoke<TauriValidationResponse>("validate_policy", { yaml });
   } catch (err) {
     console.error("[tauri-commands] validate_policy failed:", err);
+    return null;
+  }
+}
+
+export async function validateSigmaRuleNative(
+  source: string,
+): Promise<TauriSigmaValidationResponse | null> {
+  if (!isDesktop()) return null;
+  try {
+    return await tauriInvoke<TauriSigmaValidationResponse>("validate_sigma_rule", { source });
+  } catch (err) {
+    console.error("[tauri-commands] validate_sigma_rule failed:", err);
+    return null;
+  }
+}
+
+export async function validateYaraRuleNative(
+  source: string,
+): Promise<TauriYaraValidationResponse | null> {
+  if (!isDesktop()) return null;
+  try {
+    return await tauriInvoke<TauriYaraValidationResponse>("validate_yara_rule", { source });
+  } catch (err) {
+    console.error("[tauri-commands] validate_yara_rule failed:", err);
+    return null;
+  }
+}
+
+export async function validateOcsfEventNative(
+  json: string,
+): Promise<TauriOcsfValidationResponse | null> {
+  if (!isDesktop()) return null;
+  try {
+    return await tauriInvoke<TauriOcsfValidationResponse>("validate_ocsf_event", { json });
+  } catch (err) {
+    console.error("[tauri-commands] validate_ocsf_event failed:", err);
     return null;
   }
 }
@@ -306,6 +398,36 @@ export async function importPolicyFileNative(
   }
 }
 
+export async function importDetectionFileNative(
+  path: string,
+): Promise<TauriDetectionImportResponse | null> {
+  if (!isDesktop()) return null;
+  try {
+    return await tauriInvoke<TauriDetectionImportResponse>("import_detection_file", { path });
+  } catch (err) {
+    console.error("[tauri-commands] import_detection_file failed:", err);
+    return null;
+  }
+}
+
+export async function exportDetectionFileNative(
+  content: string,
+  path: string,
+  fileType: string,
+): Promise<TauriExportResponse | null> {
+  if (!isDesktop()) return null;
+  try {
+    return await tauriInvoke<TauriExportResponse>("export_detection_file", {
+      content,
+      path,
+      fileType,
+    });
+  } catch (err) {
+    console.error("[tauri-commands] export_detection_file failed:", err);
+    return null;
+  }
+}
+
 /**
  * Verify a chain of receipts using the Rust Ed25519 crypto layer.
  * Checks signature validity, timestamp ordering, and computes chain hash.
@@ -323,9 +445,6 @@ export async function verifyReceiptChainNative(
   }
 }
 
-// ---------------------------------------------------------------------------
-// P4-3: Persistent signing key commands
-// ---------------------------------------------------------------------------
 
 /**
  * Generate or retrieve a persistent Ed25519 keypair stored in Stronghold.
@@ -391,9 +510,174 @@ export async function signReceiptPersistentNative(
   }
 }
 
-// ---------------------------------------------------------------------------
-// MCP sidecar commands
-// ---------------------------------------------------------------------------
+
+// ---- Detection Lab Command Types ----
+
+export interface TauriSigmaTestResponse {
+  matched: boolean;
+  findings: Array<{
+    title: string;
+    severity: string;
+    evidence_refs: string[];
+    event_index: number | null;
+  }>;
+  events_tested: number;
+  events_matched: number;
+}
+
+export interface TauriSigmaCompileResponse {
+  valid: boolean;
+  title: string | null;
+  compiled_artifact: string | null;
+  diagnostics: TauriDetectionDiagnostic[];
+}
+
+export interface TauriOcsfNormalizeResponse {
+  valid: boolean;
+  class_uid: number | null;
+  event_class: string | null;
+  missing_fields: string[];
+  invalid_fields: Array<{ field: string; error: string }>;
+  diagnostics: TauriDetectionDiagnostic[];
+}
+
+export interface TauriSigmaConvertResponse {
+  success: boolean;
+  target_format: string;
+  output: string | null;
+  diagnostics: TauriDetectionDiagnostic[];
+  converter_version: string;
+}
+
+// ---- Detection Lab Command Wrappers ----
+
+/**
+ * Test a Sigma rule against a set of events via the Rust backend.
+ * Returns null when not running inside Tauri.
+ */
+export async function testSigmaRuleNative(
+  source: string,
+  eventsJson: string,
+): Promise<TauriSigmaTestResponse | null> {
+  if (!isDesktop()) return null;
+  try {
+    return await tauriInvoke<TauriSigmaTestResponse>("test_sigma_rule", { source, eventsJson });
+  } catch (err) {
+    console.warn("[tauri-commands] test_sigma_rule failed:", err);
+    return null;
+  }
+}
+
+/**
+ * Compile a Sigma rule and return diagnostics via the Rust backend.
+ * Returns null when not running inside Tauri.
+ */
+export async function compileSigmaRuleNative(
+  source: string,
+): Promise<TauriSigmaCompileResponse | null> {
+  if (!isDesktop()) return null;
+  try {
+    return await tauriInvoke<TauriSigmaCompileResponse>("compile_sigma_rule", { source });
+  } catch (err) {
+    console.warn("[tauri-commands] compile_sigma_rule failed:", err);
+    return null;
+  }
+}
+
+/**
+ * Normalize and validate an OCSF event via the Rust backend.
+ * Returns null when not running inside Tauri.
+ */
+export async function normalizeOcsfEventNative(
+  json: string,
+): Promise<TauriOcsfNormalizeResponse | null> {
+  if (!isDesktop()) return null;
+  try {
+    return await tauriInvoke<TauriOcsfNormalizeResponse>("normalize_ocsf_event", { json });
+  } catch (err) {
+    console.warn("[tauri-commands] normalize_ocsf_event failed:", err);
+    return null;
+  }
+}
+
+/**
+ * Convert a Sigma rule to a target format (e.g. SPL, KQL) via the Rust backend.
+ * Returns null when not running inside Tauri.
+ */
+export async function convertSigmaRuleNative(
+  source: string,
+  targetFormat: string,
+): Promise<TauriSigmaConvertResponse | null> {
+  if (!isDesktop()) return null;
+  try {
+    return await tauriInvoke<TauriSigmaConvertResponse>("convert_sigma_rule", {
+      source,
+      targetFormat,
+    });
+  } catch (err) {
+    console.warn("[tauri-commands] convert_sigma_rule failed:", err);
+    return null;
+  }
+}
+
+
+// ---- Global Search Types ----
+
+export interface TauriSearchMatch {
+  file_path: string;
+  line_number: number;
+  line_content: string;
+  match_start: number;
+  match_end: number;
+  source_match_start?: number;
+  source_match_end?: number;
+}
+
+export interface TauriSearchResult {
+  matches: TauriSearchMatch[];
+  file_count: number;
+  total_matches: number;
+  truncated: boolean;
+}
+
+/**
+ * Search for text across all eligible files in a project directory.
+ * Supports case-sensitive, whole-word, and regex modes.
+ * Returns null when not running inside Tauri or the browser E2E bridge.
+ */
+export async function searchInProjectNative(
+  rootPath: string,
+  query: string,
+  caseSensitive: boolean,
+  wholeWord: boolean,
+  useRegex: boolean,
+  searchId?: string,
+): Promise<TauriSearchResult | null> {
+  if (!isDesktop() && !hasWorkbenchE2EInvoke()) return null;
+  try {
+    return await tauriInvoke<TauriSearchResult>("search_in_project", {
+      rootPath,
+      query,
+      caseSensitive,
+      wholeWord,
+      useRegex,
+      searchId,
+    });
+  } catch (err) {
+    console.error("[tauri-commands] search_in_project failed:", err);
+    throw normalizeTauriCommandError("search_in_project", err);
+  }
+}
+
+export async function cancelSearchInProjectNative(searchId: string): Promise<void> {
+  if (!isDesktop() && !hasWorkbenchE2EInvoke()) return;
+  try {
+    await tauriInvoke("cancel_search_in_project", { searchId });
+  } catch (err) {
+    console.warn("[tauri-commands] cancel_search_in_project failed:", err);
+  }
+}
+
 
 export interface TauriMcpStatusResponse {
   url: string;

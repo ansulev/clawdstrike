@@ -15,9 +15,6 @@ import type {
 import type { AuditEvent } from "./fleet-client";
 import { ALL_GUARD_IDS, GUARD_DISPLAY_NAMES } from "./guard-registry";
 
-// ---------------------------------------------------------------------------
-// Public types
-// ---------------------------------------------------------------------------
 
 export interface TrafficSummary {
   totalEvents: number;
@@ -58,9 +55,6 @@ export interface WhatIfSummary {
   deltas: WhatIfDelta[];
 }
 
-// ---------------------------------------------------------------------------
-// Action type normalization
-// ---------------------------------------------------------------------------
 
 /** Map hushd action_type strings to workbench TestActionType. */
 function normalizeActionType(raw: string): TestActionType | null {
@@ -86,7 +80,11 @@ function normalizeActionType(raw: string): TestActionType | null {
     user_input: "user_input",
     input: "user_input",
   };
-  return map[raw.toLowerCase()] ?? null;
+  const result = map[raw.toLowerCase()] ?? null;
+  if (result === null) {
+    console.warn(`[traffic-replay] normalizeActionType: unknown action type "${raw}"`);
+  }
+  return result;
 }
 
 /** Map a decision string from hushd to a Verdict. */
@@ -96,6 +94,7 @@ function normalizeDecision(raw: string): Verdict {
   if (lower === "deny" || lower === "denied" || lower === "blocked" || lower === "block") return "deny";
   if (lower === "warn" || lower === "warning") return "warn";
   // Fail-closed: unknown decisions default to deny
+  console.warn(`[traffic-replay] normalizeDecision: unknown decision "${raw}", defaulting to deny`);
   return "deny";
 }
 
@@ -107,9 +106,6 @@ function categoryFromDecision(decision: string): "benign" | "attack" | "edge_cas
   return "benign";
 }
 
-// ---------------------------------------------------------------------------
-// Build payload from audit event
-// ---------------------------------------------------------------------------
 
 function buildPayload(
   actionType: TestActionType,
@@ -139,9 +135,6 @@ function buildPayload(
   }
 }
 
-// ---------------------------------------------------------------------------
-// Core functions
-// ---------------------------------------------------------------------------
 
 /**
  * Convert audit events from hushd into TestScenarios.
@@ -195,6 +188,8 @@ export function summarizeTraffic(events: AuditEvent[]): TrafficSummary {
   const byGuard: Record<string, number> = {};
   let earliest = "";
   let latest = "";
+  let earliestMs = Infinity;
+  let latestMs = -Infinity;
 
   for (const event of events) {
     // Action type counts
@@ -210,10 +205,17 @@ export function summarizeTraffic(events: AuditEvent[]): TrafficSummary {
       byGuard[event.guard] = (byGuard[event.guard] ?? 0) + 1;
     }
 
-    // Time range (use Date-based comparison to handle TZ offsets correctly)
+    // Time range (parse once, compare numeric ms values)
     if (event.timestamp) {
-      if (!earliest || new Date(event.timestamp).getTime() < new Date(earliest).getTime()) earliest = event.timestamp;
-      if (!latest || new Date(event.timestamp).getTime() > new Date(latest).getTime()) latest = event.timestamp;
+      const ms = new Date(event.timestamp).getTime();
+      if (ms < earliestMs) {
+        earliestMs = ms;
+        earliest = event.timestamp;
+      }
+      if (ms > latestMs) {
+        latestMs = ms;
+        latest = event.timestamp;
+      }
     }
   }
 
@@ -302,15 +304,29 @@ export function identifyCoverageGaps(
     }
   }
 
-  // Sort by percentage descending (highest-impact gaps first)
-  gaps.sort((a, b) => b.percentage - a.percentage);
+  // Deduplicate by guardId, aggregating eventCount across action types
+  const deduped = new Map<GuardId, CoverageGap>();
+  for (const gap of gaps) {
+    const existing = deduped.get(gap.guardId);
+    if (existing) {
+      existing.eventCount += gap.eventCount;
+      existing.percentage = Math.round((existing.eventCount / totalEvents) * 100);
+      existing.severity =
+        existing.percentage >= 20 ? "high" : existing.percentage >= 5 ? "medium" : "low";
+      existing.message = `${existing.percentage}% of traffic involves actions needing ${existing.guardName} but it is disabled`;
+    } else {
+      deduped.set(gap.guardId, { ...gap });
+    }
+  }
 
-  return gaps;
+  const dedupedGaps = Array.from(deduped.values());
+
+  // Sort by percentage descending (highest-impact gaps first)
+  dedupedGaps.sort((a, b) => b.percentage - a.percentage);
+
+  return dedupedGaps;
 }
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 function truncate(s: string, maxLen: number): string {
   if (s.length <= maxLen) return s;

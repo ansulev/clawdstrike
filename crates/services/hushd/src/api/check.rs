@@ -335,10 +335,10 @@ pub async fn check_action(
 
     if let Some(session_id) = request.session_id.clone() {
         // Validate session existence + liveness.
-        let validation = state
-            .sessions
-            .validate_session(&session_id)
-            .map_err(|e| V1Error::internal("INTERNAL_ERROR", e.to_string()))?;
+        let validation = state.sessions.validate_session(&session_id).map_err(|e| {
+            tracing::error!(error = %e, "session validation failed");
+            V1Error::internal("INTERNAL_ERROR", "internal server error")
+        })?;
 
         if !validation.valid {
             return Err(V1Error::forbidden(
@@ -412,7 +412,10 @@ pub async fn check_action(
             let perms = state
                 .rbac
                 .effective_permission_strings_for_roles(&roles)
-                .map_err(|e| V1Error::internal("RBAC_RESOLUTION_ERROR", e.to_string()))?;
+                .map_err(|e| {
+                    tracing::error!(error = %e, "RBAC permission resolution failed");
+                    V1Error::internal("RBAC_RESOLUTION_ERROR", "internal server error")
+                })?;
             principal_for_audit = Some(principal.clone());
             roles_for_audit = Some(roles.clone());
             permissions_for_audit = Some(perms.clone());
@@ -456,7 +459,10 @@ pub async fn check_action(
                     format!("identity_rate_limited_retry_after_secs={retry_after_secs}"),
                 )
                 .with_retry_after(retry_after_secs)),
-                other => Err(V1Error::internal("INTERNAL_ERROR", other.to_string())),
+                other => {
+                    tracing::error!(error = %other, "identity rate limit check failed");
+                    Err(V1Error::internal("INTERNAL_ERROR", "internal server error"))
+                }
             };
         }
     }
@@ -465,12 +471,15 @@ pub async fn check_action(
     let resolved = state
         .policy_resolver
         .resolve_policy(&default_policy, &context)
-        .map_err(|e| V1Error::internal("INTERNAL_ERROR", e.to_string()))?;
+        .map_err(|e| {
+            tracing::error!(error = %e, "policy resolution failed");
+            V1Error::internal("INTERNAL_ERROR", "internal server error")
+        })?;
 
-    let resolved_yaml = resolved
-        .policy
-        .to_yaml()
-        .map_err(|e| V1Error::internal("INTERNAL_ERROR", e.to_string()))?;
+    let resolved_yaml = resolved.policy.to_yaml().map_err(|e| {
+        tracing::error!(error = %e, "policy YAML serialization failed");
+        V1Error::internal("INTERNAL_ERROR", "internal server error")
+    })?;
     let policy_hash = hush_core::sha256(resolved_yaml.as_bytes()).to_hex();
 
     let resolved_origin_enclave = resolve_request_origin_enclave(&request, &resolved.policy);
@@ -612,7 +621,10 @@ pub async fn check_action(
             ));
         }
     }
-    .map_err(|e| V1Error::internal("INTERNAL_ERROR", e.to_string()))?;
+    .map_err(|e| {
+        tracing::error!(error = %e, "guard evaluation failed");
+        V1Error::internal("INTERNAL_ERROR", "internal server error")
+    })?;
 
     let result = posture_report.guard_report.overall.clone();
     let mut response_posture: Option<PostureInfo> = posture_runtime
@@ -622,23 +634,26 @@ pub async fn check_action(
     if let Some(session_id) = request.session_id.as_deref() {
         let mut combined_patch: HashMap<String, serde_json::Value> = HashMap::new();
         if let Some(posture) = posture_runtime.as_ref() {
-            combined_patch.extend(
-                posture_state_patch(posture)
-                    .map_err(|e| V1Error::internal("INTERNAL_ERROR", e.to_string()))?,
-            );
+            combined_patch.extend(posture_state_patch(posture).map_err(|e| {
+                tracing::error!(error = %e, "posture state patch failed");
+                V1Error::internal("INTERNAL_ERROR", "internal server error")
+            })?);
         }
         if let Some(origin) = origin_runtime.as_ref() {
-            combined_patch.extend(
-                origin_state_patch(origin)
-                    .map_err(|e| V1Error::internal("INTERNAL_ERROR", e.to_string()))?,
-            );
+            combined_patch.extend(origin_state_patch(origin).map_err(|e| {
+                tracing::error!(error = %e, "origin state patch failed");
+                V1Error::internal("INTERNAL_ERROR", "internal server error")
+            })?);
         }
 
         if !combined_patch.is_empty() {
             let updated = state
                 .sessions
                 .merge_state(session_id, combined_patch)
-                .map_err(|e| V1Error::internal("INTERNAL_ERROR", e.to_string()))?;
+                .map_err(|e| {
+                    tracing::error!(error = %e, "session state merge failed");
+                    V1Error::internal("INTERNAL_ERROR", "internal server error")
+                })?;
 
             let updated_session = updated.ok_or_else(|| {
                 V1Error::not_found(
@@ -655,10 +670,10 @@ pub async fn check_action(
                     });
         }
 
-        state
-            .sessions
-            .touch_session(session_id)
-            .map_err(|e| V1Error::internal("INTERNAL_ERROR", e.to_string()))?;
+        state.sessions.touch_session(session_id).map_err(|e| {
+            tracing::error!(error = %e, "session touch failed");
+            V1Error::internal("INTERNAL_ERROR", "internal server error")
+        })?;
     }
     drop(session_lock);
 
@@ -1156,5 +1171,44 @@ mod tests {
         let enclave =
             resolve_request_origin_enclave(&request, &policy).expect("origin should resolve");
         assert!(!origin_budget_session_required(&request, Some(&enclave)));
+    }
+
+    #[test]
+    fn parse_egress_target_supports_host_port_and_ipv6() {
+        assert_eq!(
+            parse_egress_target("api.example.com").expect("default port"),
+            ("api.example.com".to_string(), 443)
+        );
+        assert_eq!(
+            parse_egress_target("api.example.com:8443").expect("custom port"),
+            ("api.example.com".to_string(), 8443)
+        );
+        assert_eq!(
+            parse_egress_target("[2001:db8::1]:9443").expect("ipv6 literal"),
+            ("2001:db8::1".to_string(), 9443)
+        );
+        assert!(parse_egress_target("[2001:db8::1").is_err());
+    }
+
+    #[test]
+    fn normalize_and_validate_agent_identity_enforces_pairing_rules() {
+        let missing_kind = normalize_and_validate_agent_identity(None, Some("runtime"), None)
+            .expect_err("runtime id without kind should fail");
+        assert_eq!(missing_kind.code, "INVALID_AGENT_IDENTITY");
+
+        let missing_endpoint =
+            normalize_and_validate_agent_identity(None, Some("runtime"), Some("claude_code"))
+                .expect_err("runtime attribution requires endpoint id");
+        assert_eq!(missing_endpoint.code, "INVALID_AGENT_IDENTITY");
+
+        let (endpoint, runtime_id, runtime_kind) = normalize_and_validate_agent_identity(
+            Some(" endpoint-1 "),
+            Some(" runtime-1 "),
+            Some(" Claude_Code "),
+        )
+        .expect("valid identity tuple");
+        assert_eq!(endpoint.as_deref(), Some("endpoint-1"));
+        assert_eq!(runtime_id.as_deref(), Some("runtime-1"));
+        assert_eq!(runtime_kind.as_deref(), Some("claude_code"));
     }
 }

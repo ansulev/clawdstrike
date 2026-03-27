@@ -2,7 +2,8 @@ import React from "react";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import YAML from "yaml";
-import { MultiPolicyProvider, useMultiPolicy } from "../multi-policy-store";
+import { PolicyBootstrapProvider } from "@/features/policy/hooks/use-policy-bootstrap";
+import { usePolicyTabs } from "@/features/policy/hooks/use-policy-actions";
 import {
   clearAutosave,
   readAutosave,
@@ -11,12 +12,10 @@ import {
   useAutoSave,
 } from "../use-auto-save";
 
-// ---------------------------------------------------------------------------
 // We test the exported utility functions (readAutosave, clearAutosave,
 // writeAutosave is private so we simulate it via localStorage.setItem
 // directly). The hook itself (useAutoSave) requires the full WorkbenchProvider
 // context, so we focus on the underlying logic.
-// ---------------------------------------------------------------------------
 
 const AUTOSAVE_KEY = "clawdstrike_workbench_autosave";
 
@@ -31,9 +30,6 @@ function makeEntry(overrides?: Partial<AutosaveEntry>): AutosaveEntry {
   };
 }
 
-// ---------------------------------------------------------------------------
-// localStorage mock (jsdom in this project doesn't provide full localStorage)
-// ---------------------------------------------------------------------------
 
 let store: Record<string, string>;
 
@@ -46,9 +42,6 @@ const localStorageMock = {
   key: (index: number) => Object.keys(store)[index] ?? null,
 };
 
-// ---------------------------------------------------------------------------
-// Setup / teardown
-// ---------------------------------------------------------------------------
 
 beforeEach(() => {
   store = {};
@@ -62,7 +55,7 @@ afterEach(() => {
 
 function AutosaveHarness() {
   useAutoSave();
-  const { multiDispatch, tabs } = useMultiPolicy();
+  const { multiDispatch, tabs } = usePolicyTabs();
 
   return React.createElement(
     "div",
@@ -104,9 +97,6 @@ guards:
   );
 }
 
-// ---------------------------------------------------------------------------
-// readAutosave
-// ---------------------------------------------------------------------------
 
 describe("readAutosave", () => {
   it("returns null when nothing is stored", () => {
@@ -225,9 +215,6 @@ guards:
   });
 });
 
-// ---------------------------------------------------------------------------
-// clearAutosave
-// ---------------------------------------------------------------------------
 
 describe("clearAutosave", () => {
   it("removes the autosave entry from localStorage", () => {
@@ -250,9 +237,6 @@ describe("clearAutosave", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// write + read roundtrip (via localStorage.setItem simulating writeAutosave)
-// ---------------------------------------------------------------------------
 
 describe("write + read roundtrip", () => {
   it("stores and retrieves yaml content correctly", () => {
@@ -302,7 +286,7 @@ describe("useAutoSave", () => {
 
     render(
       React.createElement(
-        MultiPolicyProvider,
+        PolicyBootstrapProvider,
         null,
         React.createElement(AutosaveHarness),
       ),
@@ -326,7 +310,7 @@ describe("useAutoSave", () => {
 
     render(
       React.createElement(
-        MultiPolicyProvider,
+        PolicyBootstrapProvider,
         null,
         React.createElement(AutosaveHarness),
       ),

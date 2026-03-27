@@ -4,9 +4,6 @@ import userEvent from "@testing-library/user-event";
 import { TrustprintProviderWizard } from "../trustprint-provider-wizard";
 import type { ConnectionTestResult } from "@/lib/workbench/trustprint-connection";
 
-// ---------------------------------------------------------------------------
-// Mocks
-// ---------------------------------------------------------------------------
 
 const connectionMocks = vi.hoisted(() => ({
   testEmbeddingConnection: vi.fn<
@@ -21,9 +18,6 @@ vi.mock("@/lib/tauri-bridge", () => ({
   isMacOS: vi.fn(() => false),
 }));
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 const defaultConfig = {
   embedding_api_url: undefined as string | undefined,
@@ -51,9 +45,6 @@ function renderWizard(
   };
 }
 
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -240,7 +231,7 @@ describe("TrustprintProviderWizard", () => {
     await user.click(screen.getByRole("button", { name: /next/i }));
 
     // Should show free text input for model
-    expect(screen.getByPlaceholderText("model-name")).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("e.g., text-embedding-3-small")).toBeInTheDocument();
   });
 
   // ---- Step 3: Connection test ----

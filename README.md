@@ -4,12 +4,9 @@
 
 <p align="center">
   <a href="https://github.com/backbay-labs/clawdstrike/actions"><img src="https://img.shields.io/github/actions/workflow/status/backbay-labs/clawdstrike/ci.yml?branch=main&style=flat-square&logo=github&label=CI" alt="CI Status"></a>
-  <a href="https://crates.io/crates/clawdstrike"><img src="https://img.shields.io/crates/v/clawdstrike?style=flat-square&logo=rust" alt="crates.io"></a>
   <a href="https://www.npmjs.com/package/@clawdstrike/sdk"><img src="https://img.shields.io/npm/v/@clawdstrike/sdk?style=flat-square&logo=npm&label=npm" alt="npm"></a>
   <a href="https://pypi.org/project/clawdstrike/"><img src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fpypi.org%2Fpypi%2Fclawdstrike%2Fjson&query=%24.info.version&prefix=v&label=PyPI&logo=python&logoColor=white&color=fe7d37&style=flat-square" alt="PyPI"></a>
-  <a href="https://docs.rs/clawdstrike"><img src="https://img.shields.io/docsrs/clawdstrike?style=flat-square&logo=docs.rs" alt="docs.rs"></a>
   <a href="https://github.com/backbay-labs/homebrew-tap/blob/main/Formula/clawdstrike.rb"><img src="https://img.shields.io/badge/homebrew-clawdstrike-FBB040?style=flat-square&logo=homebrew" alt="Homebrew"></a>
-  <a href="https://crates.io/crates/clawdstrike"><img src="https://img.shields.io/crates/d/clawdstrike?style=flat-square&logo=rust&label=downloads" alt="crates.io downloads"></a>
   <a href="https://artifacthub.io/packages/search?repo=clawdstrike"><img src="https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/clawdstrike" alt="Artifact Hub"></a>
   <a href="https://discord.gg/dbCZHm8zM"><img src="https://img.shields.io/badge/discord-join-5865F2?style=flat-square&logo=discord&logoColor=white" alt="Discord"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue?style=flat-square" alt="License: Apache-2.0"></a>
@@ -43,13 +40,15 @@
 </p>
 
 <p align="center">
-  <picture><source media="(prefers-color-scheme: dark)" srcset=".github/assets/sigils/boundary-dark.svg"><img src=".github/assets/sigils/boundary-light.svg" width="16" height="16" alt=""  style="vertical-align:-3px;" ></picture>&nbsp;Kernel to chain
+  <span style="display:inline-block; white-space:nowrap;"><picture><source media="(prefers-color-scheme: dark)" srcset=".github/assets/sigils/boundary-dark.svg"><img src=".github/assets/sigils/boundary-light.svg" width="16" height="16" alt=""  style="vertical-align:-3px;" ></picture>&nbsp;Kernel to chain</span>
    <span style="opacity:0.55;">&nbsp;&nbsp;&middot;&nbsp;&nbsp;</span>
-  <picture><source media="(prefers-color-scheme: dark)" srcset=".github/assets/sigils/seal-dark.svg"><img src=".github/assets/sigils/seal-light.svg" width="16" height="16" alt=""  style="vertical-align:-3px;" ></picture>&nbsp;Tool-boundary enforcement
+  <span style="display:inline-block; white-space:nowrap;"><picture><source media="(prefers-color-scheme: dark)" srcset=".github/assets/sigils/seal-dark.svg"><img src=".github/assets/sigils/seal-light.svg" width="16" height="16" alt=""  style="vertical-align:-3px;" ></picture>&nbsp;Tool-boundary enforcement</span>
   <span style="opacity:0.55;">&nbsp;&nbsp;&middot;&nbsp;&nbsp;</span>
-  <picture><source media="(prefers-color-scheme: dark)" srcset=".github/assets/sigils/plugin-dark.svg"><img src=".github/assets/sigils/plugin-light.svg" width="16" height="16" alt=""  style="vertical-align:-3px;" ></picture>&nbsp;Swarm-native security
+  <span style="display:inline-block; white-space:nowrap;"><picture><source media="(prefers-color-scheme: dark)" srcset=".github/assets/sigils/plugin-dark.svg"><img src=".github/assets/sigils/plugin-light.svg" width="16" height="16" alt=""  style="vertical-align:-3px;" ></picture>&nbsp;Swarm-native security</span>
   <span style="opacity:0.55;">&nbsp;&nbsp;&middot;&nbsp;&nbsp;</span>
-  <picture><source media="(prefers-color-scheme: dark)" srcset=".github/assets/sigils/registry-dark.svg"><img src=".github/assets/sigils/registry-light.svg" width="16" height="16" alt=""  style="vertical-align:-3px;" ></picture>&nbsp;AgentSec Registry
+  <span style="display:inline-block; white-space:nowrap;"><picture><source media="(prefers-color-scheme: dark)" srcset=".github/assets/sigils/registry-dark.svg"><img src=".github/assets/sigils/registry-light.svg" width="16" height="16" alt=""  style="vertical-align:-3px;" ></picture>&nbsp;AgentSec Registry</span>
+  <span style="opacity:0.55;">&nbsp;&nbsp;&middot;&nbsp;&nbsp;</span>
+  <span style="display:inline-block; white-space:nowrap;"><picture><source media="(prefers-color-scheme: dark)" srcset=".github/assets/sigils/seal-dark.svg"><img src=".github/assets/sigils/seal-light.svg" width="16" height="16" alt=""  style="vertical-align:-3px;" ></picture>&nbsp;Formally verified</span>
 </p>
 
 <p align="center">
@@ -175,7 +174,7 @@ clawdstrike daemon start
 
 # Verify it's running
 clawdstrike daemon status
-# → Status: healthy | Version: 0.2.5 | Uptime: 2s
+# → Status: healthy | Version: 0.2.7 | Uptime: 2s
 
 # Stop when done
 clawdstrike daemon stop
@@ -206,6 +205,17 @@ clawdstrike policy diff strict default
 
 # Enforce policy while running a real command
 clawdstrike run --policy clawdstrike:strict -- python my_agent.py
+```
+
+#### Verify
+
+Prove your policy is internally consistent before deploying it.
+
+```bash
+clawdstrike verify --policy strict
+# Consistency:  PASS  (47 formulas, 0 conflicts)
+# Completeness: PASS  (4/4 action types covered)
+# Inheritance:  PASS  (0 weakened prohibitions)
 ```
 
 #### Hunt
@@ -714,6 +724,38 @@ clawdstrike policy diff clawdstrike:default candidate.yaml
 ```
 
 See [Policy Schema](docs/src/reference/policy-schema.md), [Posture Schema](docs/src/reference/posture-schema.md), and [Observe -> Synth -> Tighten](docs/src/guides/observe-synth.md).
+
+### Formal Verification
+
+The policy engine's core decision logic is formally specified in Lean 4 and verified against the actual Rust implementation via the Aeneas translation pipeline.
+
+**What's proved:**
+- If any guard denies, the overall verdict denies (deny monotonicity)
+- Severity ordering is a consistent total order
+- Circular `extends` chains are always caught and rejected
+- Ed25519 sign-then-verify roundtrips succeed
+- Disabled guards produce allow (no phantom denials)
+- 39+ properties machine-checked, 44/45 core functions translated
+
+**Policy analysis** (via `clawdstrike verify`):
+- Consistency: no action is both permitted and forbidden
+- Completeness: all configured action types are covered
+- Inheritance soundness: `extends` chains don't weaken parent rules
+
+**Differential testing:** Property-based tests compare the Lean specification against the Rust implementation across millions of random inputs nightly.
+
+```bash
+# Verify a policy
+clawdstrike verify --policy strict
+
+# Run differential tests
+cargo test -p formal-diff-tests
+
+# Build the Lean specification
+cd formal/lean4/ClawdStrike && lake build
+```
+
+See the [formal verification guide](docs/src/formal-verification.md) for details.
 
 ---
 

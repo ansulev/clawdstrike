@@ -15,7 +15,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useMultiPolicy, type PolicyTab, type BulkGuardUpdate } from "@/lib/workbench/multi-policy-store";
+import { usePolicyTabs } from "@/features/policy/hooks/use-policy-actions";
+import type { PolicyTab, BulkGuardUpdate } from "@/features/policy/types/policy-tab";
 import { GUARD_REGISTRY } from "@/lib/workbench/guard-registry";
 import type { GuardId, GuardConfigMap } from "@/lib/workbench/types";
 import { cn } from "@/lib/utils";
@@ -25,9 +26,6 @@ import {
   IconAlertTriangle,
 } from "@tabler/icons-react";
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
 
 type BulkOperationType = "toggle_guard" | "set_config";
 
@@ -48,18 +46,12 @@ interface ChangePreview {
   willChange: boolean;
 }
 
-// ---------------------------------------------------------------------------
-// Hook for the dialog state
-// ---------------------------------------------------------------------------
 
 export function useBulkOperations() {
   const [open, setOpen] = useState(false);
   return { open, setOpen };
 }
 
-// ---------------------------------------------------------------------------
-// Component
-// ---------------------------------------------------------------------------
 
 export function BulkOperationsDialog({
   open,
@@ -68,7 +60,7 @@ export function BulkOperationsDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
-  const { multiDispatch, tabs } = useMultiPolicy();
+  const { multiDispatch, tabs } = usePolicyTabs();
   const [operation, setOperation] = useState<BulkOperation>({
     type: "toggle_guard",
     guardId: "spider_sense",
@@ -241,7 +233,7 @@ export function BulkOperationsDialog({
         <div className="flex flex-col gap-4 py-2">
           {/* Operation type */}
           <div className="flex flex-col gap-2">
-            <label className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[#6f7f9a]">
+            <label className="text-[10px] font-semibold uppercase tracking-wider text-[#6f7f9a]">
               Operation
             </label>
             <div className="flex gap-2">
@@ -280,7 +272,7 @@ export function BulkOperationsDialog({
 
           {/* Guard selector */}
           <div className="flex flex-col gap-1.5">
-            <label className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[#6f7f9a]">
+            <label className="text-[10px] font-semibold uppercase tracking-wider text-[#6f7f9a]">
               Guard
             </label>
             <Select
@@ -453,7 +445,7 @@ export function BulkOperationsDialog({
           {/* Tab selection */}
           <div className="flex flex-col gap-1.5">
             <div className="flex items-center justify-between">
-              <label className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[#6f7f9a]">
+              <label className="text-[10px] font-semibold uppercase tracking-wider text-[#6f7f9a]">
                 Apply to
               </label>
               <div className="flex gap-2">

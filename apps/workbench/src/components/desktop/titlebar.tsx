@@ -1,11 +1,16 @@
 import { useEffect } from "react";
 import { ClawLogo } from "@/components/brand/claw-logo";
-import { useWorkbench } from "@/lib/workbench/multi-policy-store";
 import { minimizeWindow, maximizeWindow, closeWindow, isDesktop, isMacOS } from "@/lib/tauri-bridge";
+import { usePolicyTabsStore } from "@/features/policy/stores/policy-tabs-store";
+import { usePolicyEditStore } from "@/features/policy/stores/policy-edit-store";
 
 export function Titlebar() {
-  const { state } = useWorkbench();
-  const { activePolicy, dirty, filePath } = state;
+  const activeTabId = usePolicyTabsStore(s => s.activeTabId);
+  const activeTab = usePolicyTabsStore(s => s.tabs.find(t => t.id === s.activeTabId));
+  const editState = usePolicyEditStore(s => s.editStates.get(activeTabId));
+  const activePolicy = editState?.policy ?? { version: "1.1.0", name: "", description: "", guards: {}, settings: {} };
+  const dirty = activeTab?.dirty ?? false;
+  const filePath = activeTab?.filePath ?? null;
 
   // Update the native window title when the policy name or dirty state changes
   useEffect(() => {

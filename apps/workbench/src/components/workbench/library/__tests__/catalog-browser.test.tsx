@@ -10,9 +10,9 @@ const fleetClientMocks = vi.hoisted(() => ({
   forkCatalogTemplate: vi.fn(),
 }));
 
-vi.mock("@/lib/workbench/fleet-client", async () => {
-  const actual = await vi.importActual<typeof import("@/lib/workbench/fleet-client")>(
-    "@/lib/workbench/fleet-client",
+vi.mock("@/features/fleet/fleet-client", async () => {
+  const actual = await vi.importActual<typeof import("@/features/fleet/fleet-client")>(
+    "@/features/fleet/fleet-client",
   );
   return {
     ...actual,
@@ -23,9 +23,9 @@ vi.mock("@/lib/workbench/fleet-client", async () => {
   };
 });
 
-vi.mock("@/lib/workbench/use-fleet-connection", async () => {
-  const actual = await vi.importActual<typeof import("@/lib/workbench/use-fleet-connection")>(
-    "@/lib/workbench/use-fleet-connection",
+vi.mock("@/features/fleet/use-fleet-connection", async () => {
+  const actual = await vi.importActual<typeof import("@/features/fleet/use-fleet-connection")>(
+    "@/features/fleet/use-fleet-connection",
   );
   return {
     ...actual,
@@ -34,13 +34,13 @@ vi.mock("@/lib/workbench/use-fleet-connection", async () => {
         connected: true,
         hushdUrl: "http://localhost:9876",
         controlApiUrl: "http://localhost:9877",
-        apiKey: "test-api-key",
-        controlApiToken: "test-control-token",
         hushdHealth: null,
         agentCount: 0,
       },
       isConnecting: false,
       error: null,
+      pollError: null,
+      secureStorageWarning: false,
       agents: [],
       remotePolicyInfo: null,
       connect: vi.fn(),
@@ -48,6 +48,8 @@ vi.mock("@/lib/workbench/use-fleet-connection", async () => {
       testConnection: vi.fn(),
       refreshAgents: vi.fn(),
       refreshRemotePolicy: vi.fn(),
+      getCredentials: () => ({ apiKey: "test-api-key", controlApiToken: "test-control-token" }),
+      getAuthenticatedConnection: () => ({ connected: true, hushdUrl: "http://localhost:9876", controlApiUrl: "http://localhost:9877", apiKey: "test-api-key", controlApiToken: "test-control-token", hushdHealth: null, agentCount: 0 }),
     }),
   };
 });

@@ -10,8 +10,7 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Button as MovingBorderButton } from "@/components/ui/moving-border";
-import { useWorkbench } from "@/lib/workbench/multi-policy-store";
-import { useFleetConnection } from "@/lib/workbench/use-fleet-connection";
+import { useFleetConnection } from "@/features/fleet/use-fleet-connection";
 import type {
   TestScenario,
   TestActionType,
@@ -28,6 +27,8 @@ import type {
 } from "@/lib/workbench/types";
 import { IconWorld, IconChevronDown, IconBolt, IconUser, IconX, IconPlug } from "@tabler/icons-react";
 import { cn } from "@/lib/utils";
+import { usePolicyTabsStore } from "@/features/policy/stores/policy-tabs-store";
+import { usePolicyEditStore } from "@/features/policy/stores/policy-edit-store";
 
 const ACTION_TYPES: { value: TestActionType; label: string }[] = [
   { value: "file_access", label: "File Access" },
@@ -76,9 +77,11 @@ export function ScenarioBuilder({
   onRun,
   isCreating,
 }: ScenarioBuilderProps) {
-  const { state } = useWorkbench();
-  const isV14 = state.activePolicy.version === "1.4.0";
-  const hasOrigins = Boolean(state.activePolicy.origins);
+  const activeTabId = usePolicyTabsStore(s => s.activeTabId);
+  const activeTab = usePolicyTabsStore(s => s.tabs.find(t => t.id === s.activeTabId));
+  const editState = usePolicyEditStore(s => s.editStates.get(activeTabId));
+  const isV14 = (editState?.policy ?? { version: "1.1.0", name: "", description: "", guards: {}, settings: {} }).version === "1.4.0";
+  const hasOrigins = Boolean((editState?.policy ?? { version: "1.1.0", name: "", description: "", guards: {}, settings: {} }).origins);
 
   const update = useCallback(
     (patch: Partial<TestScenario>) => {
@@ -282,9 +285,6 @@ export function ScenarioBuilder({
   );
 }
 
-// ---------------------------------------------------------------------------
-// Agent Profile Section (dynamic, fleet-aware)
-// ---------------------------------------------------------------------------
 
 const DEFAULT_AGENT_PROFILE: AgentProfile = {
   agentName: "autonomous-agent-01",
@@ -520,9 +520,6 @@ function AgentProfileSection({
   );
 }
 
-// ---------------------------------------------------------------------------
-// Payload Fields with improved labels and help text
-// ---------------------------------------------------------------------------
 
 function PayloadFields({
   actionType,
@@ -745,9 +742,6 @@ function PayloadFields({
   }
 }
 
-// ---------------------------------------------------------------------------
-// Origin Context Section
-// ---------------------------------------------------------------------------
 
 const ORIGIN_PROVIDERS: { value: OriginProvider; label: string }[] = [
   { value: "slack", label: "Slack" },
@@ -856,7 +850,7 @@ function OriginContextSection({
                 size={14}
                 stroke={1.5}
                 className={cn(
-                  "transition-transform duration-200",
+                  "transition-transform duration-150",
                   expanded && "rotate-180",
                 )}
               />

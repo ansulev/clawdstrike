@@ -1,5 +1,4 @@
 import { useState, useCallback, useMemo, useEffect, useRef } from "react";
-import { useWorkbench } from "@/lib/workbench/multi-policy-store";
 import { usePersistedReceipts } from "@/lib/workbench/use-persisted-receipts";
 import type { Receipt, Verdict, GuardId, TestActionType } from "@/lib/workbench/types";
 import { GUARD_REGISTRY } from "@/lib/workbench/guard-registry";
@@ -16,17 +15,19 @@ import {
 import { signReceiptNative, signReceiptPersistentNative, simulateActionNative } from "@/lib/tauri-commands";
 import { isDesktop } from "@/lib/tauri-bridge";
 import { emitAuditEvent } from "@/lib/workbench/local-audit";
-import { useFleetConnection } from "@/lib/workbench/use-fleet-connection";
+import { useFleetConnection } from "@/features/fleet/use-fleet-connection";
 import {
   storeReceiptsBatch,
   fetchReceipts as apiFetchReceipts,
   type FleetReceipt,
-} from "@/lib/workbench/fleet-client";
+} from "@/features/fleet/fleet-client";
 import {
   verdictFromNativeGuardResult,
   verdictFromNativeSimulation,
 } from "@/lib/workbench/native-simulation";
-import { IconCloudUpload, IconCloudDownload, IconCircleDot } from "@tabler/icons-react";
+import { IconCloudUpload, IconCloudDownload, IconCircleDot, IconDots } from "@tabler/icons-react";
+import { usePolicyTabsStore } from "@/features/policy/stores/policy-tabs-store";
+import { usePolicyEditStore } from "@/features/policy/stores/policy-edit-store";
 
 function randomHex(len: number): string {
   const bytes = new Uint8Array(len / 2);
@@ -148,9 +149,6 @@ function isFleetSyncEligible(receipt: Receipt): boolean {
   return receiptSyncSkipReason(receipt) === null;
 }
 
-// ---------------------------------------------------------------------------
-// Fleet sync helpers
-// ---------------------------------------------------------------------------
 
 /** Convert a local Receipt to the backend FleetReceipt wire format. */
 function receiptToFleet(r: Receipt): FleetReceipt {
@@ -298,7 +296,9 @@ function writeSyncedIds(ids: Set<string>): void {
 }
 
 export function ReceiptInspector() {
-  const { state } = useWorkbench();
+  const activeTabId = usePolicyTabsStore(s => s.activeTabId);
+  const activeTab = usePolicyTabsStore(s => s.tabs.find(t => t.id === s.activeTabId));
+  const editState = usePolicyEditStore(s => s.editStates.get(activeTabId));
   const { receipts, setReceipts, clearReceipts } = usePersistedReceipts();
   const [jsonInput, setJsonInput] = useState("");
   const [importError, setImportError] = useState("");
@@ -310,9 +310,10 @@ export function ReceiptInspector() {
   const [generating, setGenerating] = useState(false);
   const [selectedAction, setSelectedAction] = useState(0); // index into SAMPLE_ACTIONS
   const [generateError, setGenerateError] = useState("");
+  const [showMore, setShowMore] = useState(false);
 
   // Fleet sync state (P3-4)
-  const { connection } = useFleetConnection();
+  const { connection, getAuthenticatedConnection } = useFleetConnection();
   const fleetConnected = connection.connected;
   const [syncedIds, setSyncedIds] = useState<Set<string>>(() => readSyncedIds());
   const [syncing, setSyncing] = useState(false);
@@ -339,7 +340,7 @@ export function ReceiptInspector() {
       const newest = receipts[0];
       if (!syncedIds.has(newest.id) && isFleetSyncEligible(newest)) {
         // Fire-and-forget upload of the single new receipt
-        storeReceiptsBatch(connection, [receiptToFleet(newest)])
+        storeReceiptsBatch(getAuthenticatedConnection(), [receiptToFleet(newest)])
           .then((res) => {
             if (res.success) {
               setSyncedIds((prev) => {
@@ -377,7 +378,7 @@ export function ReceiptInspector() {
     setFleetError("");
     try {
       const fleetReceipts = eligible.map(receiptToFleet);
-      const res = await storeReceiptsBatch(connection, fleetReceipts);
+      const res = await storeReceiptsBatch(getAuthenticatedConnection(), fleetReceipts);
       if (res.success) {
         const newSynced = new Set(syncedIds);
         for (const r of eligible) newSynced.add(r.id);
@@ -411,7 +412,7 @@ export function ReceiptInspector() {
     setLoadingFleet(true);
     setFleetError("");
     try {
-      const res = await apiFetchReceipts(connection, { limit: 200 });
+      const res = await apiFetchReceipts(getAuthenticatedConnection(), { limit: 200 });
       if (res.receipts.length === 0) {
         setFleetError("No receipts found on fleet");
         return;
@@ -494,8 +495,8 @@ export function ReceiptInspector() {
 
   const handleGenerate = useCallback(() => {
     const receipt = generateTestReceipt(
-      state.activePolicy.name,
-      state.activePolicy.guards as unknown as Record<string, unknown>
+      (editState?.policy ?? { version: "1.1.0", name: "", description: "", guards: {}, settings: {} }).name,
+      (editState?.policy ?? { version: "1.1.0", name: "", description: "", guards: {}, settings: {} }).guards as unknown as Record<string, unknown>
     );
     setReceipts((prev) => [receipt, ...prev]);
     emitAuditEvent({
@@ -504,7 +505,7 @@ export function ReceiptInspector() {
       summary: `Generated test receipt — ${receipt.verdict} (${receipt.guard})`,
       details: { receiptId: receipt.id, verdict: receipt.verdict, guard: receipt.guard, policyName: receipt.policyName },
     });
-  }, [state.activePolicy]);
+  }, [(editState?.policy ?? { version: "1.1.0", name: "", description: "", guards: {}, settings: {} })]);
 
   /**
    * Generate a real receipt using the native Rust policy engine + Ed25519 signing.
@@ -519,8 +520,7 @@ export function ReceiptInspector() {
   const handleGenerateReal = useCallback(async () => {
     setGenerateError("");
 
-    // Fallback: if not running in desktop mode, generate a test receipt
-    if (!isDesktop()) {
+        if (!isDesktop()) {
       handleGenerate();
       return;
     }
@@ -528,8 +528,8 @@ export function ReceiptInspector() {
     setGenerating(true);
     try {
       const sample = SAMPLE_ACTIONS[selectedAction];
-      const policyYaml = state.yaml;
-      const policyName = state.activePolicy.name;
+      const policyYaml = (editState?.yaml ?? "");
+      const policyName = (editState?.policy ?? { version: "1.1.0", name: "", description: "", guards: {}, settings: {} }).name;
 
       // Step 1: Simulate the action against the current policy via the Rust engine
       const simResp = await simulateActionNative(
@@ -663,7 +663,7 @@ export function ReceiptInspector() {
     } finally {
       setGenerating(false);
     }
-  }, [state.yaml, state.activePolicy.name, selectedAction, handleGenerate]);
+  }, [(editState?.yaml ?? ""), (editState?.policy ?? { version: "1.1.0", name: "", description: "", guards: {}, settings: {} }).name, selectedAction, handleGenerate]);
 
   const handleClear = useCallback(() => {
     clearReceipts();
@@ -678,12 +678,12 @@ export function ReceiptInspector() {
     setSigning(true);
     try {
       // Generate a SHA-256 content hash from the current policy YAML
-      const yamlBytes = new TextEncoder().encode(state.yaml);
+      const yamlBytes = new TextEncoder().encode((editState?.yaml ?? ""));
       const hashBuffer = await crypto.subtle.digest("SHA-256", yamlBytes.buffer as ArrayBuffer);
       const hashArray = Array.from(new Uint8Array(hashBuffer));
       const contentHash = hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
 
-      const verdictPassed = state.validation.valid && state.validation.errors.length === 0;
+      const verdictPassed = (editState?.validation ?? { valid: true, errors: [], warnings: [] }).valid && (editState?.validation ?? { valid: true, errors: [], warnings: [] }).errors.length === 0;
       // Prefer persistent key signing; fall back to ephemeral.
       const resp =
         (await signReceiptPersistentNative(contentHash, verdictPassed)) ??
@@ -720,7 +720,7 @@ export function ReceiptInspector() {
           timestamp: signedReceiptTimestamp(resp.signed_receipt) ?? new Date().toISOString(),
           verdict: verdictPassed ? "allow" : "deny",
           guard: "policy_validation",
-          policyName: state.activePolicy.name,
+          policyName: (editState?.policy ?? { version: "1.1.0", name: "", description: "", guards: {}, settings: {} }).name,
           action: { type: "file_access", target: "policy.yaml" },
           evidence: {
             content_hash: contentHash,
@@ -757,7 +757,7 @@ export function ReceiptInspector() {
     } finally {
       setSigning(false);
     }
-  }, [state.yaml, state.validation, state.activePolicy.name]);
+  }, [(editState?.yaml ?? ""), (editState?.validation ?? { valid: true, errors: [], warnings: [] }), (editState?.policy ?? { version: "1.1.0", name: "", description: "", guards: {}, settings: {} }).name]);
 
   // Get unique guard names for the guard filter
   const guardNames = useMemo(() => {
@@ -856,19 +856,7 @@ export function ReceiptInspector() {
                       : "text-[#3dbf84] bg-[#3dbf84]/10 border-[#3dbf84]/20 hover:bg-[#3dbf84]/20"
                   )}
                 >
-                  {generating ? "Generating..." : "Generate Real"}
-                </button>
-                <button
-                  onClick={handleSignReceipt}
-                  disabled={signing}
-                  className={cn(
-                    "px-3 py-1.5 text-xs font-medium border rounded-md transition-colors",
-                    signing
-                      ? "text-[#6f7f9a] bg-[#131721] border-[#2d3240] cursor-wait"
-                      : "text-[#6f7f9a] bg-[#131721] border-[#2d3240] hover:border-[#d4a84b]/40 hover:text-[#ece7dc]"
-                  )}
-                >
-                  {signing ? "Signing..." : "Sign Only"}
+                  {generating ? "Generating..." : "Generate"}
                 </button>
               </>
             ) : (
@@ -876,25 +864,48 @@ export function ReceiptInspector() {
                 onClick={handleGenerate}
                 className="px-3 py-1.5 text-xs font-medium text-[#d4a84b] bg-[#d4a84b]/10 border border-[#d4a84b]/20 rounded-md hover:bg-[#d4a84b]/20 transition-colors"
               >
-                Generate Test
+                Generate
               </button>
             )}
-            {receipts.length >= 2 && (
+
+            {/* More Actions dropdown */}
+            <div className="relative">
               <button
-                onClick={() => setShowChainView(true)}
-                className="px-3 py-1.5 text-xs font-medium text-[#d4a84b] bg-[#d4a84b]/10 border border-[#d4a84b]/20 rounded-md hover:bg-[#d4a84b]/20 transition-colors"
+                onClick={() => setShowMore(!showMore)}
+                className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium text-[#6f7f9a] bg-[#131721] border border-[#2d3240] rounded-md hover:border-[#d4a84b]/40 hover:text-[#ece7dc] transition-colors"
               >
-                Verify Chain
+                <IconDots size={14} /> More
               </button>
-            )}
-            {receipts.length > 0 && (
-              <button
-                onClick={handleClear}
-                className="px-3 py-1.5 text-xs font-medium text-[#6f7f9a] bg-transparent border border-[#2d3240] rounded-md hover:text-[#c45c5c] hover:border-[#c45c5c]/30 transition-colors"
-              >
-                Clear All
-              </button>
-            )}
+              {showMore && (
+                <div className="absolute right-0 top-full mt-1 z-50 rounded-lg border border-[#2d3240] bg-[#131721] py-1 shadow-xl min-w-[180px]">
+                  {isDesktop() && (
+                    <button
+                      onClick={() => { handleSignReceipt(); setShowMore(false); }}
+                      disabled={signing}
+                      className="px-3 py-2 text-[11px] text-[#6f7f9a] hover:text-[#ece7dc] hover:bg-[#0b0d13] flex items-center gap-2 w-full transition-colors"
+                    >
+                      {signing ? "Signing..." : "Sign Only"}
+                    </button>
+                  )}
+                  {receipts.length >= 2 && (
+                    <button
+                      onClick={() => { setShowChainView(true); setShowMore(false); }}
+                      className="px-3 py-2 text-[11px] text-[#6f7f9a] hover:text-[#ece7dc] hover:bg-[#0b0d13] flex items-center gap-2 w-full transition-colors"
+                    >
+                      Verify Chain
+                    </button>
+                  )}
+                  {receipts.length > 0 && (
+                    <button
+                      onClick={() => { handleClear(); setShowMore(false); }}
+                      className="px-3 py-2 text-[11px] text-[#c45c5c]/70 hover:text-[#c45c5c] hover:bg-[#0b0d13] flex items-center gap-2 w-full transition-colors"
+                    >
+                      Clear All
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -1006,7 +1017,7 @@ export function ReceiptInspector() {
         <ReceiptTimeline
           receipts={filteredReceipts}
           syncedIds={fleetConnected ? syncedIds : undefined}
-          fleetConnection={fleetConnected ? connection : undefined}
+          fleetConnection={fleetConnected ? getAuthenticatedConnection() : undefined}
         />
       </div>
     </div>

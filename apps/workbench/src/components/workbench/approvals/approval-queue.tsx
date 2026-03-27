@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { motion } from "motion/react";
 import {
   IconSearch,
   IconDatabase,
@@ -25,8 +26,9 @@ import {
   SelectContent,
   SelectItem,
 } from "@/components/ui/select";
-import { fleetClient } from "@/lib/workbench/fleet-client";
-import { useFleetConnection } from "@/lib/workbench/use-fleet-connection";
+import { fleetClient } from "@/features/fleet/fleet-client";
+import { useFleetConnection } from "@/features/fleet/use-fleet-connection";
+import { useOperator } from "@/features/operator/stores/operator-store";
 import type {
   ApprovalRequest,
   ApprovalDecision,
@@ -42,7 +44,7 @@ import {
 
 const ALL_STATUSES: ApprovalStatus[] = ["pending", "approved", "denied", "expired"];
 const ALL_RISK_LEVELS: RiskLevel[] = ["critical", "high", "medium", "low"];
-const ALL_PROVIDERS: OriginProvider[] = ["slack", "teams", "github", "jira", "cli", "api"];
+const ALL_PROVIDERS: OriginProvider[] = ["slack", "teams", "github", "jira", "email", "discord", "webhook", "cli", "api"];
 
 const STATUS_CONFIG: Record<ApprovalStatus, { label: string; color: string; bg: string }> = {
   pending: { label: "Pending", color: "#d4a84b", bg: "#d4a84b20" },
@@ -63,6 +65,9 @@ const PROVIDER_CONFIG: Record<OriginProvider, { label: string; color: string; ab
   teams: { label: "Teams", color: "#6264A7", abbr: "T" },
   github: { label: "GitHub", color: "#8b949e", abbr: "G" },
   jira: { label: "Jira", color: "#0052CC", abbr: "J" },
+  email: { label: "Email", color: "#D44638", abbr: "E" },
+  discord: { label: "Discord", color: "#5865F2", abbr: "D" },
+  webhook: { label: "Webhook", color: "#FF6B35", abbr: "W" },
   cli: { label: "CLI", color: "#6f7f9a", abbr: "C" },
   api: { label: "API", color: "#5b8def", abbr: "A" },
 };
@@ -124,15 +129,20 @@ function formatRelativeTime(iso: string): string {
 
 export function ApprovalQueue({ currentUser }: { currentUser?: string } = {}) {
   const { connection } = useFleetConnection();
+  const { currentOperator } = useOperator();
   const fleetConnected = connection.connected;
-  // Finding M17: Use provided currentUser or fall back to anonymous.
-  // TODO: This should come from a proper auth context once authentication is implemented.
-  const decidedByUser = currentUser || "workbench-anonymous";
+  const controlApiConfigured = connection.controlApiUrl.trim().length > 0;
+  const liveApprovalsReady = fleetConnected && controlApiConfigured;
+  const liveApprovalsHint = !fleetConnected
+    ? "Connect to fleet in Settings to view live approvals"
+    : !controlApiConfigured
+      ? "Configure control-api in Settings to view live approvals"
+      : null;
+  const decidedByUser = currentOperator?.fingerprint ?? currentUser ?? "workbench-anonymous";
 
   const [requests, setRequests] = useState<ApprovalRequest[]>(DEMO_APPROVAL_REQUESTS);
   const [decisions, setDecisions] = useState<ApprovalDecision[]>(DEMO_APPROVAL_DECISIONS);
   const [isLiveData, setIsLiveData] = useState(false);
-  const [liveAvailable, setLiveAvailable] = useState(false);
   const [liveFetchError, setLiveFetchError] = useState<string | null>(null);
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -150,8 +160,7 @@ export function ApprovalQueue({ currentUser }: { currentUser?: string } = {}) {
   const [denyReason, setDenyReason] = useState("");
   const [scopeDropdownOpen, setScopeDropdownOpen] = useState<string | null>(null);
 
-  // Drives per-second countdown re-renders + auto-expires pending requests
-  const [tick, setTick] = useState(0);
+    const [tick, setTick] = useState(0);
   useEffect(() => {
     const interval = setInterval(() => setTick((t) => t + 1), 1000);
     return () => clearInterval(interval);
@@ -172,16 +181,22 @@ export function ApprovalQueue({ currentUser }: { currentUser?: string } = {}) {
     });
   }, [tick]);
 
-  useEffect(() => {
-    let cancelled = false;
-    fleetClient.healthCheck().then((ok) => {
-      if (!cancelled) setLiveAvailable(ok);
-    });
-    return () => { cancelled = true; };
-  }, []);
+  const fetchLiveApprovals = useCallback(async (force?: boolean) => {
+    // Guard: only clear/fetch when actually in live mode. In demo mode the
+    // callback can still fire (e.g. via the poll timer race) and would
+    // otherwise wipe the demo data.  The `force` param lets
+    // toggleDataSource bypass this check when it has just set isLiveData
+    // (avoiding stale closure).
+    if (!force && !isLiveData) return;
 
-  const fetchLiveApprovals = useCallback(async () => {
-    if (!fleetConnected) return;
+    if (!liveApprovalsReady) {
+      if (isLiveData) {
+        setRequests([]);
+        setDecisions([]);
+      }
+      setLiveFetchError(liveApprovalsHint);
+      return;
+    }
     try {
       const result = await fleetClient.fetchApprovals();
       if (result && result.requests.length > 0) {
@@ -198,16 +213,17 @@ export function ApprovalQueue({ currentUser }: { currentUser?: string } = {}) {
       setRequests([]);
       setDecisions([]);
     }
-  }, [fleetConnected]);
+  }, [isLiveData, liveApprovalsHint, liveApprovalsReady]);
 
   useEffect(() => {
     if (pollTimerRef.current) clearInterval(pollTimerRef.current);
     pollTimerRef.current = null;
-    if (isLiveData && fleetConnected) {
+    if (isLiveData && liveApprovalsReady) {
+      void fetchLiveApprovals();
       pollTimerRef.current = setInterval(fetchLiveApprovals, 30_000);
     }
     return () => { if (pollTimerRef.current) clearInterval(pollTimerRef.current); };
-  }, [isLiveData, fleetConnected, fetchLiveApprovals]);
+  }, [isLiveData, liveApprovalsReady, fetchLiveApprovals]);
 
   const toggleDataSource = useCallback(async () => {
     if (isLiveData) {
@@ -215,13 +231,13 @@ export function ApprovalQueue({ currentUser }: { currentUser?: string } = {}) {
       setDecisions(DEMO_APPROVAL_DECISIONS);
       setIsLiveData(false);
       setLiveFetchError(null);
-    } else if (fleetConnected) {
+    } else if (liveApprovalsReady) {
       setIsLiveData(true);
-      await fetchLiveApprovals();
+      await fetchLiveApprovals(true);
     }
     setSelectedRequest(null);
     setConfirmAction(null);
-  }, [isLiveData, fleetConnected, fetchLiveApprovals]);
+  }, [fetchLiveApprovals, isLiveData, liveApprovalsReady]);
 
   const filteredRequests = useMemo(() => {
     let list = [...requests];
@@ -287,13 +303,14 @@ export function ApprovalQueue({ currentUser }: { currentUser?: string } = {}) {
     const decision: "approved" | "denied" =
       confirmAction.type === "approve" ? "approved" : "denied";
 
-    if (isLiveData && fleetConnected) {
+    if (isLiveData && liveApprovalsReady) {
       const result = await fleetClient.resolveApproval(
         confirmAction.requestId,
         decision,
         {
           scope: confirmAction.scope,
           reason: confirmAction.type === "deny" ? denyReason || undefined : undefined,
+          decidedBy: decidedByUser,
         },
       );
       if (!result.success) {
@@ -347,7 +364,7 @@ export function ApprovalQueue({ currentUser }: { currentUser?: string } = {}) {
 
     setConfirmAction(null);
     setDenyReason("");
-  }, [confirmAction, denyReason, selectedRequest, isLiveData, fleetConnected]);
+  }, [confirmAction, decidedByUser, denyReason, isLiveData, liveApprovalsReady, selectedRequest]);
 
   const cancelAction = useCallback(() => {
     setConfirmAction(null);
@@ -381,10 +398,10 @@ export function ApprovalQueue({ currentUser }: { currentUser?: string } = {}) {
 
           <div className="flex-1" />
 
-          {isLiveData && fleetConnected && (
+          {isLiveData && liveApprovalsReady && (
             <button
-              onClick={fetchLiveApprovals}
-              className="flex h-7 items-center gap-1 rounded-md bg-[#2d3240]/50 px-2 text-[10px] text-[#6f7f9a] transition-colors hover:text-[#ece7dc]"
+              onClick={() => fetchLiveApprovals()}
+              className="flex h-7 items-center gap-1 rounded-md bg-[#2d3240]/50 px-2 text-[10px] text-[#6f7f9a] transition-colors hover:text-[#ece7dc] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d4a84b]/40 focus-visible:ring-offset-1 focus-visible:ring-offset-[#05060a]"
               title="Refresh live approvals"
             >
               <IconRefresh size={13} stroke={1.5} />
@@ -393,20 +410,20 @@ export function ApprovalQueue({ currentUser }: { currentUser?: string } = {}) {
 
           <button
             onClick={toggleDataSource}
-            disabled={!isLiveData && !fleetConnected}
+            disabled={!isLiveData && !liveApprovalsReady}
             className={cn(
-              "flex h-7 items-center gap-1.5 rounded-md px-2.5 text-[10px] font-medium transition-colors",
+              "flex h-7 items-center gap-1.5 rounded-md px-2.5 text-[10px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d4a84b]/40 focus-visible:ring-offset-1 focus-visible:ring-offset-[#05060a]",
               isLiveData
                 ? "bg-[#3dbf84]/15 text-[#3dbf84]"
-                : !fleetConnected
+                : !liveApprovalsReady
                   ? "bg-[#2d3240]/30 text-[#6f7f9a]/40 cursor-not-allowed"
                   : "bg-[#2d3240]/50 text-[#6f7f9a] hover:text-[#ece7dc]",
             )}
-            title={!fleetConnected && !isLiveData ? "Connect to fleet in Settings to view live approvals" : undefined}
+            title={!isLiveData ? liveApprovalsHint ?? undefined : undefined}
           >
             {isLiveData ? <IconDatabase size={13} stroke={1.5} /> : <IconTestPipe size={13} stroke={1.5} />}
             {isLiveData ? "Live" : "Demo"}
-            {liveAvailable && !isLiveData && fleetConnected && (
+            {liveApprovalsReady && !isLiveData && (
               <span className="ml-1 h-1.5 w-1.5 rounded-full bg-[#3dbf84]" title="Live data available" />
             )}
           </button>
@@ -466,11 +483,11 @@ export function ApprovalQueue({ currentUser }: { currentUser?: string } = {}) {
               <span className="text-[11px] text-[#6f7f9a]">{liveFetchError}</span>
             </div>
           )}
-          {!isLiveData && !fleetConnected && liveAvailable === false && (
+          {!isLiveData && liveApprovalsHint && (
             <div className="mb-3 flex items-center gap-2 rounded-md border border-[#2d3240] bg-[#131721]/40 px-4 py-2.5">
               <IconPlugConnected size={14} className="text-[#6f7f9a]/50 shrink-0" />
               <span className="text-[11px] text-[#6f7f9a]/60">
-                Connect to fleet in Settings to view live approvals
+                {liveApprovalsHint}
               </span>
             </div>
           )}
@@ -485,25 +502,31 @@ export function ApprovalQueue({ currentUser }: { currentUser?: string } = {}) {
             </div>
           ) : (
             <div className="flex flex-col gap-2">
-              {filteredRequests.map((request) => (
-                <ApprovalCard
+              {filteredRequests.map((request, index) => (
+                <motion.div
                   key={request.id}
-                  request={request}
-                  decision={decisionMap.get(request.id)}
-                  isSelected={selectedRequest?.id === request.id}
-                  confirmAction={confirmAction?.requestId === request.id ? confirmAction : null}
-                  denyReason={denyReason}
-                  scopeDropdownOpen={scopeDropdownOpen === request.id}
-                  onSelect={() => setSelectedRequest(request)}
-                  onApprove={(scope) => handleApprove(request.id, scope)}
-                  onDeny={() => handleDenyInit(request.id)}
-                  onConfirm={executeAction}
-                  onCancel={cancelAction}
-                  onDenyReasonChange={setDenyReason}
-                  onToggleScopeDropdown={() =>
-                    setScopeDropdownOpen((prev) => (prev === request.id ? null : request.id))
-                  }
-                />
+                  initial={{ opacity: 0, x: -12 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ duration: 0.25, delay: Math.min(index * 0.03, 0.3) }}
+                >
+                  <ApprovalCard
+                    request={request}
+                    decision={decisionMap.get(request.id)}
+                    isSelected={selectedRequest?.id === request.id}
+                    confirmAction={confirmAction?.requestId === request.id ? confirmAction : null}
+                    denyReason={denyReason}
+                    scopeDropdownOpen={scopeDropdownOpen === request.id}
+                    onSelect={() => setSelectedRequest(request)}
+                    onApprove={(scope) => handleApprove(request.id, scope)}
+                    onDeny={() => handleDenyInit(request.id)}
+                    onConfirm={executeAction}
+                    onCancel={cancelAction}
+                    onDenyReasonChange={setDenyReason}
+                    onToggleScopeDropdown={() =>
+                      setScopeDropdownOpen((prev) => (prev === request.id ? null : request.id))
+                    }
+                  />
+                </motion.div>
               ))}
             </div>
           )}
@@ -511,12 +534,19 @@ export function ApprovalQueue({ currentUser }: { currentUser?: string } = {}) {
       </div>
 
       {selectedRequest && (
-        <DetailDrawer
-          request={selectedRequest}
-          decision={decisionMap.get(selectedRequest.id)}
-          relatedRequests={relatedRequests}
-          onClose={() => setSelectedRequest(null)}
-        />
+        <motion.div
+          key={selectedRequest.id}
+          initial={{ x: 40, opacity: 0 }}
+          animate={{ x: 0, opacity: 1 }}
+          transition={{ type: "spring", bounce: 0.08, duration: 0.35 }}
+        >
+          <DetailDrawer
+            request={selectedRequest}
+            decision={decisionMap.get(selectedRequest.id)}
+            relatedRequests={relatedRequests}
+            onClose={() => setSelectedRequest(null)}
+          />
+        </motion.div>
       )}
     </div>
   );
@@ -533,15 +563,31 @@ function SummaryBadge({
   color: string;
   pulse?: boolean;
 }) {
+  const isPending = pulse && count > 0;
+
   return (
-    <div className="flex items-center gap-2">
-      <span className="text-[10px] font-medium uppercase tracking-wider text-[#6f7f9a]">
+    <div
+      className={cn(
+        "flex items-center gap-2 rounded-md px-2.5 py-1.5 transition-colors",
+        isPending
+          ? "border border-[#d4a84b]/40 bg-[#d4a84b]/[0.06] shadow-[0_0_8px_rgba(212,168,75,0.10)]"
+          : "border border-transparent",
+      )}
+    >
+      <span
+        className={cn(
+          "text-[10px] font-medium uppercase tracking-wider",
+          isPending ? "text-[#d4a84b]" : "text-[#6f7f9a]",
+        )}
+      >
         {label}
       </span>
       <span
         className={cn(
-          "inline-flex h-5 min-w-[20px] items-center justify-center rounded-full px-1.5 text-[10px] font-semibold",
-          pulse && count > 0 && "animate-pulse",
+          "inline-flex items-center justify-center rounded-full",
+          isPending
+            ? "h-6 min-w-[24px] px-2 text-[12px] font-bold animate-pulse"
+            : "h-5 min-w-[20px] px-1.5 text-[10px] font-semibold",
         )}
         style={{ backgroundColor: color + "20", color }}
       >
@@ -744,10 +790,12 @@ function ApprovalCard({
                 </div>
               )}
               <div className="flex items-center gap-1.5 ml-auto">
-                <button
+                <motion.button
+                  whileTap={{ scale: 0.92 }}
+                  transition={{ type: "spring", bounce: 0.4, duration: 0.2 }}
                   onClick={(e) => { e.stopPropagation(); onConfirm(); }}
                   className={cn(
-                    "flex h-7 items-center gap-1 rounded-md px-3 text-[11px] font-medium transition-colors",
+                    "flex h-7 items-center gap-1 rounded-md px-3 text-[11px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d4a84b]/40 focus-visible:ring-offset-1 focus-visible:ring-offset-[#05060a]",
                     confirmAction.type === "approve"
                       ? "bg-[#3dbf84]/15 text-[#3dbf84] hover:bg-[#3dbf84]/25"
                       : "bg-[#c45c5c]/15 text-[#c45c5c] hover:bg-[#c45c5c]/25",
@@ -755,26 +803,30 @@ function ApprovalCard({
                 >
                   <IconCheck size={13} />
                   Confirm
-                </button>
-                <button
+                </motion.button>
+                <motion.button
+                  whileTap={{ scale: 0.92 }}
+                  transition={{ type: "spring", bounce: 0.4, duration: 0.2 }}
                   onClick={(e) => { e.stopPropagation(); onCancel(); }}
-                  className="flex h-7 items-center gap-1 rounded-md bg-[#2d3240]/50 px-3 text-[11px] text-[#6f7f9a] transition-colors hover:text-[#ece7dc]"
+                  className="flex h-7 items-center gap-1 rounded-md bg-[#2d3240]/50 px-3 text-[11px] text-[#6f7f9a] transition-colors hover:text-[#ece7dc] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d4a84b]/40 focus-visible:ring-offset-1 focus-visible:ring-offset-[#05060a]"
                 >
                   Cancel
-                </button>
+                </motion.button>
               </div>
             </div>
           ) : (
             <>
               <div className="relative">
-                <button
+                <motion.button
+                  whileTap={{ scale: 0.92 }}
+                  transition={{ type: "spring", bounce: 0.4, duration: 0.2 }}
                   onClick={(e) => { e.stopPropagation(); onToggleScopeDropdown(); }}
-                  className="flex h-7 items-center gap-1 rounded-md bg-[#3dbf84]/10 px-3 text-[11px] font-medium text-[#3dbf84] transition-colors hover:bg-[#3dbf84]/20"
+                  className="flex h-7 items-center gap-1 rounded-md bg-[#3dbf84]/10 px-3 text-[11px] font-medium text-[#3dbf84] transition-colors hover:bg-[#3dbf84]/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d4a84b]/40 focus-visible:ring-offset-1 focus-visible:ring-offset-[#05060a]"
                 >
                   <IconCheck size={13} />
                   Approve
                   <IconChevronDown size={11} />
-                </button>
+                </motion.button>
 
                 {scopeDropdownOpen && (
                   <div className="absolute left-0 top-full z-30 mt-1 w-56 rounded-lg border border-[#2d3240] bg-[#131721] py-1 shadow-xl">
@@ -782,7 +834,7 @@ function ApprovalCard({
                       <button
                         key={preset.label}
                         onClick={(e) => { e.stopPropagation(); onApprove(preset.scope); }}
-                        className="flex w-full flex-col px-3 py-2 text-left transition-colors hover:bg-[#2d3240]/50"
+                        className="flex w-full flex-col px-3 py-2 text-left transition-colors hover:bg-[#2d3240]/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d4a84b]/40 focus-visible:ring-offset-1 focus-visible:ring-offset-[#05060a]"
                       >
                         <span className="text-xs font-medium text-[#ece7dc]">
                           {preset.label}
@@ -796,13 +848,15 @@ function ApprovalCard({
                 )}
               </div>
 
-              <button
+              <motion.button
+                whileTap={{ scale: 0.92 }}
+                transition={{ type: "spring", bounce: 0.4, duration: 0.2 }}
                 onClick={(e) => { e.stopPropagation(); onDeny(); }}
-                className="flex h-7 items-center gap-1 rounded-md bg-[#c45c5c]/10 px-3 text-[11px] font-medium text-[#c45c5c] transition-colors hover:bg-[#c45c5c]/20"
+                className="flex h-7 items-center gap-1 rounded-md bg-[#c45c5c]/10 px-3 text-[11px] font-medium text-[#c45c5c] transition-colors hover:bg-[#c45c5c]/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d4a84b]/40 focus-visible:ring-offset-1 focus-visible:ring-offset-[#05060a]"
               >
                 <IconBan size={13} />
                 Deny
-              </button>
+              </motion.button>
 
               <div className="flex-1" />
 
@@ -836,14 +890,14 @@ function DetailDrawer({
   const status = STATUS_CONFIG[request.status];
 
   return (
-    <div className="flex w-80 flex-col border-l border-[#2d3240] bg-[#131721]/80 backdrop-blur-md">
+    <div className="flex w-80 flex-col border-l border-lifted bg-[#131721]/80 backdrop-blur-md max-lg:hidden">
       <div className="flex items-center justify-between border-b border-[#2d3240] px-4 py-3">
-        <h2 className="text-xs font-semibold uppercase tracking-wider text-[#6f7f9a]">
+        <h2 className="font-syne text-xs font-semibold uppercase tracking-wider text-[#6f7f9a]">
           Request Details
         </h2>
         <button
           onClick={onClose}
-          className="text-[#6f7f9a] transition-colors hover:text-[#ece7dc]"
+          className="text-[#6f7f9a] transition-colors hover:text-[#ece7dc] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d4a84b]/40 focus-visible:ring-offset-1 focus-visible:ring-offset-[#05060a]"
         >
           <IconX size={14} />
         </button>
@@ -874,7 +928,7 @@ function DetailDrawer({
         </div>
 
         <div className="border-b border-[#2d3240] px-4 py-3">
-          <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-[#6f7f9a]">
+          <h3 className="font-syne mb-2 text-[10px] font-semibold uppercase tracking-wider text-[#6f7f9a]">
             Origin Context
           </h3>
           <div className="flex flex-col gap-1.5">
@@ -911,7 +965,7 @@ function DetailDrawer({
         </div>
 
         <div className="border-b border-[#2d3240] px-4 py-3">
-          <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-[#6f7f9a]">
+          <h3 className="font-syne mb-2 text-[10px] font-semibold uppercase tracking-wider text-[#6f7f9a]">
             Agent Identity
           </h3>
           <div className="flex flex-col gap-1.5">
@@ -935,7 +989,7 @@ function DetailDrawer({
         </div>
 
         <div className="border-b border-[#2d3240] px-4 py-3">
-          <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-[#6f7f9a]">
+          <h3 className="font-syne mb-2 text-[10px] font-semibold uppercase tracking-wider text-[#6f7f9a]">
             Timeline
           </h3>
           <div className="flex flex-col gap-2">
@@ -976,7 +1030,7 @@ function DetailDrawer({
 
         {decision && (
           <div className="border-b border-[#2d3240] px-4 py-3">
-            <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-[#6f7f9a]">
+            <h3 className="font-syne mb-2 text-[10px] font-semibold uppercase tracking-wider text-[#6f7f9a]">
               Decision
             </h3>
             <div className="flex flex-col gap-1.5">
@@ -1011,7 +1065,7 @@ function DetailDrawer({
 
         {relatedRequests.length > 0 && (
           <div className="px-4 py-3">
-            <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-[#6f7f9a]">
+            <h3 className="font-syne mb-2 text-[10px] font-semibold uppercase tracking-wider text-[#6f7f9a]">
               Related ({relatedRequests.length})
             </h3>
             <div className="flex flex-col gap-1.5">

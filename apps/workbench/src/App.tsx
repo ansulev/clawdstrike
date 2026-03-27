@@ -1,99 +1,21 @@
-import { Component, lazy, Suspense, useEffect } from "react";
+import { Component, Suspense, useEffect, useRef } from "react";
 import type { ErrorInfo, ReactNode } from "react";
-import { HashRouter, Routes, Route, Navigate } from "react-router-dom";
-import { MultiPolicyProvider } from "@/lib/workbench/multi-policy-store";
-import { FleetConnectionProvider } from "@/lib/workbench/use-fleet-connection";
-import { GeneralSettingsProvider } from "@/lib/workbench/use-general-settings";
-import { HintSettingsProvider } from "@/lib/workbench/use-hint-settings";
+import { HashRouter, useRoutes } from "react-router-dom";
 import { ToastProvider } from "@/components/ui/toast";
+import { HintSettingsProvider, useHintSettingsSafe } from "@/features/settings/use-hint-settings";
 import { DesktopLayout } from "@/components/desktop/desktop-layout";
-import { secureStore, migrateCredentialsToStronghold } from "@/lib/workbench/secure-store";
-
-// ---------------------------------------------------------------------------
-// Lazy-loaded route components (code-split into separate chunks)
-// ---------------------------------------------------------------------------
-
-const PolicyEditor = lazy(() =>
-  import("@/components/workbench/editor/policy-editor").then((m) => ({
-    default: m.PolicyEditor,
-  })),
-);
-
-const SimulatorLayout = lazy(() =>
-  import("@/components/workbench/simulator/simulator-layout").then((m) => ({
-    default: m.SimulatorLayout,
-  })),
-);
-
-const CompareLayout = lazy(() =>
-  import("@/components/workbench/compare/compare-layout").then((m) => ({
-    default: m.CompareLayout,
-  })),
-);
-
-const ComplianceDashboard = lazy(() =>
-  import("@/components/workbench/compliance/compliance-dashboard").then(
-    (m) => ({ default: m.ComplianceDashboard }),
-  ),
-);
-
-const ReceiptInspector = lazy(() =>
-  import("@/components/workbench/receipts/receipt-inspector").then((m) => ({
-    default: m.ReceiptInspector,
-  })),
-);
-
-const LibraryGallery = lazy(() =>
-  import("@/components/workbench/library/library-gallery").then((m) => ({
-    default: m.LibraryGallery,
-  })),
-);
-
-const SettingsPage = lazy(() =>
-  import("@/components/workbench/settings/settings-page").then((m) => ({
-    default: m.SettingsPage,
-  })),
-);
-
-const DelegationPage = lazy(() =>
-  import("@/components/workbench/delegation/delegation-page").then((m) => ({
-    default: m.DelegationPage,
-  })),
-);
-
-const ApprovalQueue = lazy(() =>
-  import("@/components/workbench/approvals/approval-queue").then((m) => ({
-    default: m.ApprovalQueue,
-  })),
-);
-
-const HierarchyPage = lazy(() =>
-  import("@/components/workbench/hierarchy/hierarchy-page").then((m) => ({
-    default: m.HierarchyPage,
-  })),
-);
-
-const FleetDashboard = lazy(() =>
-  import("@/components/workbench/fleet/fleet-dashboard").then((m) => ({
-    default: m.FleetDashboard,
-  })),
-);
-
-const AuditLog = lazy(() =>
-  import("@/components/workbench/audit/audit-log").then((m) => ({
-    default: m.AuditLog,
-  })),
-);
-
-const HomePage = lazy(() =>
-  import("@/components/workbench/home/home-page").then((m) => ({
-    default: m.HomePage,
-  })),
-);
-
-// ---------------------------------------------------------------------------
-// Loading fallback — dark-themed to prevent white flash in Tauri shell
-// ---------------------------------------------------------------------------
+import { IdentityPrompt } from "@/components/workbench/identity/identity-prompt";
+import { useOperator } from "@/features/operator/stores/operator-store";
+import { useFleetConnection } from "@/features/fleet/use-fleet-connection";
+import { usePresenceConnection } from "@/features/presence/use-presence-connection";
+import { usePresenceFileTracking } from "@/features/presence/use-presence-file-tracking";
+import { usePolicyBootstrap } from "@/features/policy/hooks/use-policy-bootstrap";
+import { secureStore, migrateCredentialsToStronghold } from "@/features/settings/secure-store";
+import { bootstrapThreatIntelPlugins } from "@/lib/plugins/threat-intel/bootstrap";
+import { useProjectStore } from "@/features/project/stores/project-store";
+import { useToast } from "@/components/ui/toast";
+import { usePaneStore } from "@/features/panes/pane-store";
+import { useSignalCorrelator } from "@/features/findings/hooks/use-signal-correlator";
 
 function LoadingFallback() {
   return (
@@ -145,9 +67,122 @@ function LoadingFallback() {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Error boundary — prevents white-screen-of-death on unhandled errors (#3)
-// ---------------------------------------------------------------------------
+/**
+ * Bootstrap the workspace on first launch or restore persisted roots.
+ *
+ * - Always ensures ~/.clawdstrike/workspace/ exists (creates it if missing).
+ * - If persisted roots exist (subsequent launches), restores them. If the
+ *   default workspace path is not among the persisted roots it is added
+ *   automatically so the Explorer never shows the raw ~/.clawdstrike config
+ *   directory.
+ * - If no roots exist (first launch), scaffolds the default workspace
+ *   at ~/.clawdstrike/workspace/ and mounts it.
+ *
+ * Fire-and-forget: errors are logged but never thrown.
+ */
+function useWorkspaceBootstrap(toastRef: React.RefObject<ReturnType<typeof useToast>["toast"] | null>) {
+  useEffect(() => {
+    async function init() {
+      const { isDesktop } = await import("@/lib/tauri-bridge");
+      const { getWorkbenchE2EBridge } = await import("@/lib/workbench/e2e-bridge");
+      const isWorkbenchE2E = getWorkbenchE2EBridge() !== null;
+      if (!isDesktop() && !isWorkbenchE2E) return;
+
+      const store = useProjectStore.getState();
+      store.actions.setLoading(true);
+
+      try {
+        if (!isDesktop()) {
+          if (store.projectRoots.length > 0) {
+            await store.actions.initFromPersistedRoots();
+          }
+          return;
+        }
+
+        // Always ensure the default workspace directory structure exists.
+        const { bootstrapDefaultWorkspace, getDefaultWorkspacePath } = await import(
+          "@/features/project/workspace-bootstrap"
+        );
+        const workspacePath = await bootstrapDefaultWorkspace();
+        const defaultPath = workspacePath ?? await getDefaultWorkspacePath();
+
+        const roots = store.projectRoots;
+
+        if (roots.length > 0) {
+          // Restore persisted workspace roots.
+          await store.actions.initFromPersistedRoots();
+
+          // If the default workspace path is missing from persisted roots,
+          // add it so the user always sees the workspace (not the raw config dir).
+          const currentRoots = useProjectStore.getState().projectRoots;
+          if (!currentRoots.includes(defaultPath)) {
+            store.actions.addRoot(defaultPath);
+          }
+        } else {
+          // First launch: mount the default workspace.
+          store.actions.addRoot(defaultPath);
+          await store.actions.loadRoot(defaultPath);
+        }
+
+        // Safety net: if after all bootstrap paths the projects Map is still
+        // empty (e.g. stale persisted roots pointing to deleted directories),
+        // ensure the default workspace is loaded as a fallback.
+        const finalProjects = useProjectStore.getState().projects;
+        if (finalProjects.size === 0) {
+          const finalRoots = useProjectStore.getState().projectRoots;
+          if (!finalRoots.includes(defaultPath)) {
+            store.actions.addRoot(defaultPath);
+          }
+          await store.actions.loadRoot(defaultPath);
+        }
+      } finally {
+        useProjectStore.getState().actions.setLoading(false);
+      }
+
+      // Restore the previous pane session AFTER workspace roots are loaded
+      // so that restored file panes can resolve against mounted projects.
+      const count = usePaneStore.getState().restoreSession();
+      if (count > 0 && toastRef.current) {
+        toastRef.current({
+          type: "info",
+          title: `Restored ${count} file${count === 1 ? "" : "s"}`,
+          description: "Your previous session has been restored",
+          duration: 3000,
+        });
+      }
+    }
+    init().catch((err) => {
+      console.warn("[workspace-bootstrap] Init failed:", err);
+      useProjectStore.getState().actions.setLoading(false);
+    });
+  }, []);
+}
+
+function WorkbenchBootstraps() {
+  const { toast } = useToast();
+  const toastRef = useRef<typeof toast | null>(null);
+  toastRef.current = toast;
+
+  useOperator();
+  useFleetConnection();
+  usePresenceConnection();
+  usePresenceFileTracking();
+  useHintSettingsSafe();
+  usePolicyBootstrap();
+  useSignalCorrelator();
+  useWorkspaceBootstrap(toastRef);
+  return null;
+}
+
+function WorkbenchRouter() {
+  return useRoutes([
+    {
+      path: "*",
+      element: <DesktopLayout />,
+    },
+  ]);
+}
+
 
 interface ErrorBoundaryState {
   error: Error | null;
@@ -242,9 +277,13 @@ class ErrorBoundary extends Component<{ children: ReactNode }, ErrorBoundaryStat
   }
 }
 
-// ---------------------------------------------------------------------------
-// App root
-// ---------------------------------------------------------------------------
+function AppProviders({ children }: { children: ReactNode }) {
+  return (
+    <HintSettingsProvider>
+      <ToastProvider>{children}</ToastProvider>
+    </HintSettingsProvider>
+  );
+}
 
 /**
  * Root application component for the Tauri desktop workbench.
@@ -253,52 +292,40 @@ class ErrorBoundary extends Component<{ children: ReactNode }, ErrorBoundaryStat
  * support HTML5 history pushState).
  */
 export function App() {
-  // Initialise Stronghold vault + migrate legacy localStorage credentials on first launch.
+  // Initialise Stronghold vault, migrate legacy credentials, then bootstrap threat intel plugins.
   useEffect(() => {
-    secureStore.init().then(() => migrateCredentialsToStronghold()).catch((err) => {
-      console.warn("[secure-store] Stronghold init failed:", err);
+    async function bootstrapSecureStore() {
+      try {
+        await secureStore.init();
+      } catch (err) {
+        console.warn("[secure-store] Startup init failed:", err);
+        return;
+      }
+
+      try {
+        await migrateCredentialsToStronghold();
+      } catch (err) {
+        console.warn("[secure-store] Credential migration failed (non-fatal):", err);
+      }
+
+      await bootstrapThreatIntelPlugins();
+    }
+
+    bootstrapSecureStore().catch((err) => {
+      console.warn("[plugins] Threat intel bootstrap failed:", err);
     });
   }, []);
 
   return (
     <HashRouter>
       <ErrorBoundary>
-        <ToastProvider>
-          <GeneralSettingsProvider>
-            <HintSettingsProvider>
-              <MultiPolicyProvider>
-                <FleetConnectionProvider>
-                  <Suspense fallback={<LoadingFallback />}>
-                    <Routes>
-                      <Route element={<DesktopLayout />}>
-                        {/* Default redirect */}
-                        <Route index element={<Navigate to="/home" replace />} />
-
-                        {/* Workbench pages */}
-                        <Route path="home" element={<HomePage />} />
-                        <Route path="editor" element={<PolicyEditor />} />
-                        <Route path="simulator" element={<SimulatorLayout />} />
-                        <Route path="compare" element={<CompareLayout />} />
-                        <Route path="compliance" element={<ComplianceDashboard />} />
-                        <Route path="receipts" element={<ReceiptInspector />} />
-                        <Route path="delegation" element={<DelegationPage />} />
-                        <Route path="approvals" element={<ApprovalQueue />} />
-                        <Route path="hierarchy" element={<HierarchyPage />} />
-                        <Route path="fleet" element={<FleetDashboard />} />
-                        <Route path="audit" element={<AuditLog />} />
-                        <Route path="library" element={<LibraryGallery />} />
-                        <Route path="settings" element={<SettingsPage />} />
-
-                        {/* Catch-all */}
-                        <Route path="*" element={<Navigate to="/home" replace />} />
-                      </Route>
-                    </Routes>
-                  </Suspense>
-                </FleetConnectionProvider>
-              </MultiPolicyProvider>
-            </HintSettingsProvider>
-          </GeneralSettingsProvider>
-        </ToastProvider>
+        <AppProviders>
+          <Suspense fallback={<LoadingFallback />}>
+            <WorkbenchBootstraps />
+            <IdentityPrompt />
+            <WorkbenchRouter />
+          </Suspense>
+        </AppProviders>
       </ErrorBoundary>
     </HashRouter>
   );

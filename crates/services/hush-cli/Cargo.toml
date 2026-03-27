@@ -22,6 +22,7 @@ path = "src/clawdstrike.rs"
 hush-core.workspace = true
 hush-proxy.workspace = true
 clawdstrike = { workspace = true, features = ["full"] }
+clawdstrike-logos.workspace = true
 clap.workspace = true
 clap_complete = "4.5"
 tokio.workspace = true
@@ -61,9 +62,10 @@ tempfile = "3"
 default = ["rego-runtime", "wasm-plugin-runtime"]
 rego-runtime = ["dep:regorus"]
 wasm-plugin-runtime = ["clawdstrike/wasm-plugin-runtime"]
+z3 = ["clawdstrike-logos/z3"]
 
 [dev-dependencies]
-async-nats = "0.39"
+async-nats = "0.40"
 spine.workspace = true
 
 [lints]

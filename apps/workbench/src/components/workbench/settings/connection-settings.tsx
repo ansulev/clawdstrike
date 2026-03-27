@@ -12,8 +12,8 @@ import {
   IconAlertTriangle,
 } from "@tabler/icons-react";
 import { cn } from "@/lib/utils";
-import { useFleetConnection } from "@/lib/workbench/use-fleet-connection";
-import type { HealthResponse } from "@/lib/workbench/fleet-client";
+import { useFleetConnection } from "@/features/fleet/use-fleet-connection";
+import type { HealthResponse } from "@/features/fleet/fleet-client";
 import { emitAuditEvent } from "@/lib/workbench/local-audit";
 
 /** Ensure a URL has an http(s):// prefix — normalizes bare "localhost:PORT" inputs. */
@@ -51,13 +51,15 @@ export function ConnectionSettings() {
     disconnect,
     testConnection,
     refreshAgents,
+    getCredentials,
   } = useFleetConnection();
 
+  const credentials = getCredentials();
   const [hushdUrl, setHushdUrl] = useState(connection.hushdUrl || "http://localhost:9876");
   const [controlApiUrl, setControlApiUrl] = useState(connection.controlApiUrl || "");
-  const [apiKey, setApiKey] = useState(connection.apiKey || "");
+  const [apiKey, setApiKey] = useState(credentials.apiKey || "");
   const [showApiKey, setShowApiKey] = useState(false);
-  const [controlApiToken, setControlApiToken] = useState(connection.controlApiToken || "");
+  const [controlApiToken, setControlApiToken] = useState(credentials.controlApiToken || "");
   const [showControlToken, setShowControlToken] = useState(false);
 
   const [testResult, setTestResult] = useState<
@@ -180,7 +182,7 @@ export function ConnectionSettings() {
       {connection.connected && (
         <div className="flex flex-col gap-3 p-4 rounded-lg border border-[#2d3240] bg-[#131721]/50">
           <div className="flex items-center justify-between">
-            <h4 className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[#6f7f9a]">
+            <h4 className="text-[10px] font-semibold uppercase tracking-wider text-[#6f7f9a]">
               Fleet Summary
             </h4>
             <button

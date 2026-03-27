@@ -13,7 +13,7 @@
 import { createHmac, generateKeyPairSync } from "crypto";
 
 const HUSHD_URL = process.env.HUSHD_URL ?? "http://localhost:9876";
-const CONTROL_API_URL = process.env.CONTROL_API_URL ?? "http://localhost:8080";
+const CONTROL_API_URL = process.env.CONTROL_API_URL ?? "http://localhost:8090";
 const HUSHD_API_KEY =
   process.env.HUSHD_API_KEY ?? "3cg5Q2lAY-Xnf9N_-D3L90d-QYbIsBhd8g9b8Iur3Pw";
 const JWT_SECRET =
@@ -192,14 +192,14 @@ interface HeartbeatDef {
 }
 
 const HEARTBEATS: HeartbeatDef[] = [
-  { endpoint_agent_id: "agent-orchestrator-001", posture: "strict", daemon_version: "0.2.5", policy_version: "sha256:fleet-test" },
-  { endpoint_agent_id: "agent-planner-002", posture: "strict", daemon_version: "0.2.5", policy_version: "sha256:fleet-test" },
+  { endpoint_agent_id: "agent-orchestrator-001", posture: "strict", daemon_version: "0.2.7", policy_version: "sha256:fleet-test" },
+  { endpoint_agent_id: "agent-planner-002", posture: "strict", daemon_version: "0.2.7", policy_version: "sha256:fleet-test" },
   { endpoint_agent_id: "agent-coder-003", posture: "default", daemon_version: "0.2.4", policy_version: "sha256:fleet-test" },
-  { endpoint_agent_id: "agent-tester-004", posture: "strict", daemon_version: "0.2.5", policy_version: "sha256:fleet-test" },
+  { endpoint_agent_id: "agent-tester-004", posture: "strict", daemon_version: "0.2.7", policy_version: "sha256:fleet-test" },
   { endpoint_agent_id: "agent-researcher-005", posture: "permissive", daemon_version: "0.2.3", policy_version: "sha256:old-version" },
-  { endpoint_agent_id: "agent-deployer-006", posture: "strict", daemon_version: "0.2.5", policy_version: "sha256:fleet-test" },
-  { endpoint_agent_id: "agent-monitor-007", posture: "strict", daemon_version: "0.2.5", policy_version: "sha256:fleet-test" },
-  { endpoint_agent_id: "agent-reviewer-008", posture: "default", daemon_version: "0.2.5", policy_version: "sha256:fleet-test" },
+  { endpoint_agent_id: "agent-deployer-006", posture: "strict", daemon_version: "0.2.7", policy_version: "sha256:fleet-test" },
+  { endpoint_agent_id: "agent-monitor-007", posture: "strict", daemon_version: "0.2.7", policy_version: "sha256:fleet-test" },
+  { endpoint_agent_id: "agent-reviewer-008", posture: "default", daemon_version: "0.2.7", policy_version: "sha256:fleet-test" },
 ];
 
 interface RuntimeHeartbeatDef {
@@ -327,8 +327,6 @@ const FIXTURE_HIERARCHY: FixtureHierarchyNode[] = [
   },
 ];
 
-// -- Phases --
-
 async function registerAgents(jwt: string): Promise<void> {
   log("Registering 8 agents...");
   let registered = 0;
@@ -436,7 +434,6 @@ async function generateAuditEvents(): Promise<void> {
         agent_id: check.agent_id,
         session_id: check.session_id,
       });
-      // Both 2xx and non-2xx responses generate audit records.
       sent++;
     } catch (err) {
       log(`  FAIL check "${check.description}" -- ${(err as Error).message}`);
@@ -573,7 +570,7 @@ async function cleanup(jwt: string): Promise<void> {
       if (res.ok) {
         deleted++;
       } else if (res.status === 404) {
-        // already gone
+        // no-op
       } else {
         const text = await res.text().catch(() => "");
         log(`  FAIL ${agent.agent_id} -- ${res.status} ${text}`);

@@ -1,24 +1,65 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from "react";
-import { useWorkbench } from "@/lib/workbench/multi-policy-store";
 import { useToast } from "@/components/ui/toast";
 import { YamlEditor, type YamlEditorError } from "@/components/ui/yaml-editor";
 import { cn } from "@/lib/utils";
+import type { FileType } from "@/lib/workbench/file-type-registry";
+import { generateScenariosFromPolicy } from "@/lib/workbench/scenario-generator";
+import { useTestRunnerOptional } from "@/lib/workbench/test-store";
+import type { SuiteScenario } from "@/lib/workbench/suite-parser";
+import type { TestScenario } from "@/lib/workbench/types";
+import { usePolicyTabsStore } from "@/features/policy/stores/policy-tabs-store";
+import { usePolicyEditStore } from "@/features/policy/stores/policy-edit-store";
+import { useWorkbenchUIStore } from "@/features/policy/stores/workbench-ui-store";
+import { DEFAULT_POLICY } from "@/features/policy/stores/policy-store";
 
 type Tab = "preview" | "edit";
 
-export function YamlPreviewPanel() {
-  const { state, dispatch } = useWorkbench();
+/** Convert a TestScenario to the SuiteScenario format used by the test runner. */
+function extractTarget(s: TestScenario): string {
+  const p = s.payload;
+  if (typeof p.path === "string") return p.path;
+  if (typeof p.host === "string") return p.host;
+  if (typeof p.command === "string") return p.command;
+  if (typeof p.tool === "string") return p.tool;
+  if (typeof p.text === "string") return p.text.slice(0, 120);
+  return JSON.stringify(p).slice(0, 120);
+}
+
+function testScenarioToSuite(s: TestScenario): SuiteScenario {
+  const suite: SuiteScenario = {
+    id: s.id,
+    name: s.name,
+    action: s.actionType,
+    target: extractTarget(s),
+    description: s.description,
+  };
+  if (s.expectedVerdict) suite.expect = s.expectedVerdict;
+  if (typeof s.payload.content === "string") suite.content = s.payload.content;
+  if (s.category) suite.tags = [s.category];
+  return suite;
+}
+
+interface YamlPreviewPanelProps {
+  fileType?: FileType;
+}
+
+export function YamlPreviewPanel({ fileType }: YamlPreviewPanelProps) {
+  const activeTabId = usePolicyTabsStore(s => s.activeTabId);
+  const storeTab = usePolicyTabsStore(s => s.tabs.find(t => t.id === s.activeTabId));
+  const editState = usePolicyEditStore(s => s.editStates.get(activeTabId));
   const { toast } = useToast();
+  const testRunner = useTestRunnerOptional();
+  const editorSyncDirection = useWorkbenchUIStore(s => s.editorSyncDirection);
   const [activeTab, setActiveTab] = useState<Tab>("preview");
-  const [localYaml, setLocalYaml] = useState(state.yaml);
+  const [localYaml, setLocalYaml] = useState((editState?.yaml ?? ""));
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Sync local yaml when state changes from visual panel edits
   useEffect(() => {
-    if (state.ui.editorSyncDirection !== "yaml") {
-      setLocalYaml(state.yaml);
+    if (editorSyncDirection !== "yaml") {
+      setLocalYaml((editState?.yaml ?? ""));
     }
-  }, [state.yaml, state.ui.editorSyncDirection]);
+  }, [(editState?.yaml ?? ""), editorSyncDirection]);
 
   const handleYamlChange = useCallback(
     (value: string) => {
@@ -28,10 +69,11 @@ export function YamlPreviewPanel() {
         clearTimeout(debounceRef.current);
       }
       debounceRef.current = setTimeout(() => {
-        dispatch({ type: "SET_YAML", yaml: value });
+        usePolicyEditStore.getState().setYaml(activeTabId, value, storeTab?.fileType ?? "clawdstrike_policy", storeTab?.filePath ?? null, storeTab?.name ?? "Untitled");
+      usePolicyTabsStore.getState().setDirty(activeTabId, true);
       }, 500);
     },
-    [dispatch]
+    [activeTabId, storeTab?.fileType]
   );
 
   // Cleanup debounce on unmount
@@ -43,7 +85,49 @@ export function YamlPreviewPanel() {
     };
   }, []);
 
-  const { errors, warnings } = state.validation;
+  // Gutter "Run Test" callback: generates scenarios for the clicked guard and imports into test runner
+  const handleRunGuardTest = useCallback(
+    (guardId: string) => {
+      const result = generateScenariosFromPolicy((editState?.policy ?? DEFAULT_POLICY));
+      const prefix = `auto-${guardId}-`;
+      const guardScenarios = result.scenarios.filter((s) => s.id.startsWith(prefix));
+
+      if (guardScenarios.length === 0) {
+        toast({
+          type: "info",
+          title: "No scenarios generated",
+          description: `No test scenarios could be generated for guard "${guardId}". Enable the guard first.`,
+        });
+        return;
+      }
+
+      if (testRunner) {
+        const suiteScenarios: SuiteScenario[] = guardScenarios.map(testScenarioToSuite);
+        testRunner.dispatch({ type: "IMPORT_SCENARIOS", scenarios: suiteScenarios });
+        toast({
+          type: "success",
+          title: "Tests imported",
+          description: `${suiteScenarios.length} scenario${suiteScenarios.length !== 1 ? "s" : ""} imported for ${guardId}`,
+        });
+      } else {
+        toast({
+          type: "info",
+          title: "Test Runner not available",
+          description: `Open Test Runner to execute tests for ${guardId}`,
+        });
+      }
+    },
+    [(editState?.policy ?? DEFAULT_POLICY), testRunner, toast],
+  );
+
+  const isPolicyFile = fileType === "clawdstrike_policy";
+
+  const { errors, warnings } = (editState?.validation ?? { valid: true, errors: [], warnings: [] });
+  const editLabel = fileType === "yara_rule"
+    ? "Edit Source"
+    : fileType === "ocsf_event"
+    ? "Edit JSON"
+    : "Edit YAML";
 
   // Show toast when new YAML parse errors appear (only while editing)
   const prevErrorCountRef = useRef(errors.length);
@@ -69,7 +153,7 @@ export function YamlPreviewPanel() {
 
   // Merge native validation errors (from Rust engine via the store's useNativeValidation hook)
   // with client-side issues. Native errors are authoritative.
-  const nv = state.nativeValidation;
+  const nv = (editState?.nativeValidation ?? { guardErrors: {}, topLevelErrors: [], topLevelWarnings: [], loading: false, valid: null });
   const nativeIssues = useMemo(() => {
     if (nv.valid === null && !nv.loading) return [];
 
@@ -125,7 +209,7 @@ export function YamlPreviewPanel() {
               : "text-[#6f7f9a] hover:text-[#ece7dc]"
           )}
         >
-          Edit YAML
+          {editLabel}
           {activeTab === "edit" && (
             <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-[#d4a84b]" />
           )}
@@ -136,15 +220,23 @@ export function YamlPreviewPanel() {
       <div className="flex-1 overflow-hidden">
         {activeTab === "preview" ? (
           <YamlEditor
-            value={state.yaml}
+            value={(editState?.yaml ?? "")}
             onChange={() => {}}
             readOnly
+            fileType={fileType}
+            showDetectionGutters={isPolicyFile}
+            onRunGuardTest={isPolicyFile ? handleRunGuardTest : undefined}
+            filePath={storeTab?.filePath ?? null}
           />
         ) : (
           <YamlEditor
             value={localYaml}
             onChange={handleYamlChange}
             errors={editorErrors}
+            fileType={fileType}
+            showDetectionGutters={isPolicyFile}
+            onRunGuardTest={isPolicyFile ? handleRunGuardTest : undefined}
+            filePath={storeTab?.filePath ?? null}
           />
         )}
       </div>

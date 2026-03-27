@@ -1,6 +1,3 @@
-// ---------------------------------------------------------------------------
-// Deploy Panel — deploy local policy to fleet, import from production
-// ---------------------------------------------------------------------------
 import { useState, useCallback } from "react";
 import {
   IconRocket,
@@ -12,6 +9,7 @@ import {
   IconCircleDot,
   IconShieldCheck,
   IconArrowRight,
+  IconFileExport,
 } from "@tabler/icons-react";
 import { emitAuditEvent } from "@/lib/workbench/local-audit";
 import {
@@ -24,15 +22,16 @@ import {
   DialogClose,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
-import { useFleetConnection } from "@/lib/workbench/use-fleet-connection";
-import { useWorkbench } from "@/lib/workbench/multi-policy-store";
+import { useFleetConnection } from "@/features/fleet/use-fleet-connection";
+import { useWorkbenchState, usePolicyTabs } from "@/features/policy/hooks/use-policy-actions";
+import { isPolicyFileType } from "@/lib/workbench/file-type-registry";
 import {
   deployPolicy,
   validateRemotely,
   fetchRemotePolicy,
   type DeployResponse,
   type ValidateResponse,
-} from "@/lib/workbench/fleet-client";
+} from "@/features/fleet/fleet-client";
 import { useToast } from "@/components/ui/toast";
 
 // ---- Deploy confirmation text ----
@@ -40,7 +39,29 @@ const CONFIRM_TEXT = "deploy";
 
 export function DeployPanel() {
   const { connection, agents, remotePolicyInfo, refreshRemotePolicy } = useFleetConnection();
-  const { state } = useWorkbench();
+  const { state } = useWorkbenchState();
+  const { activeTab } = usePolicyTabs();
+
+  // Hard gate: non-policy tabs cannot use direct fleet deploy
+  const activeFileType = activeTab?.fileType;
+  if (activeFileType && !isPolicyFileType(activeFileType)) {
+    return (
+      <div className="flex flex-col gap-3 p-4 border-t border-[#2d3240]/60">
+        <div className="flex items-center justify-between">
+          <h3 className="text-[10px] font-semibold uppercase tracking-wider text-[#6f7f9a]">
+            Fleet Deployment
+          </h3>
+        </div>
+        <div className="flex items-center gap-2 px-3 py-2 rounded-md text-[10px] border bg-[#d4a84b]/5 border-[#d4a84b]/15 text-[#d4a84b]">
+          <IconFileExport size={12} stroke={1.5} />
+          <span>
+            Direct fleet deploy is only available for native policy files.
+            Use the <strong>Publish</strong> panel to convert and export this {activeTab?.fileType ?? "file"}.
+          </span>
+        </div>
+      </div>
+    );
+  }
 
   const [deployOpen, setDeployOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
@@ -58,7 +79,7 @@ export function DeployPanel() {
     <div className="flex flex-col gap-3 p-4 border-t border-[#2d3240]/60">
       {/* ---- Section header ---- */}
       <div className="flex items-center justify-between">
-        <h3 className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[#6f7f9a]">
+        <h3 className="text-[10px] font-semibold uppercase tracking-wider text-[#6f7f9a]">
           Fleet Deployment
         </h3>
         <div className="flex items-center gap-1.5 text-[10px] text-[#3dbf84]">
@@ -139,9 +160,6 @@ export function DeployPanel() {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Deploy Confirmation Dialog
-// ---------------------------------------------------------------------------
 
 function DeployConfirmDialog({
   onClose,
@@ -150,8 +168,8 @@ function DeployConfirmDialog({
   onClose: () => void;
   onSuccess: () => void;
 }) {
-  const { connection, agents } = useFleetConnection();
-  const { state } = useWorkbench();
+  const { connection, agents, getAuthenticatedConnection: getAuthedConn } = useFleetConnection();
+  const { state } = useWorkbenchState();
   const { toast } = useToast();
 
   const [confirmText, setConfirmText] = useState("");
@@ -167,7 +185,7 @@ function DeployConfirmDialog({
   const handleValidate = useCallback(async () => {
     setIsValidating(true);
     try {
-      const result = await validateRemotely(connection, state.yaml);
+      const result = await validateRemotely(getAuthedConn(), state.yaml);
       setValidationResult(result);
     } catch (err) {
       setValidationResult({
@@ -177,14 +195,14 @@ function DeployConfirmDialog({
     } finally {
       setIsValidating(false);
     }
-  }, [connection, state.yaml]);
+  }, [getAuthedConn, state.yaml]);
 
   // ---- Deploy ----
   const handleDeploy = useCallback(async () => {
     setIsDeploying(true);
     setDeployResult(null);
     try {
-      const result = await deployPolicy(connection, state.yaml);
+      const result = await deployPolicy(getAuthedConn(), state.yaml);
       setDeployResult(result);
       if (result.success) {
         toast({
@@ -232,7 +250,7 @@ function DeployConfirmDialog({
     } finally {
       setIsDeploying(false);
     }
-  }, [connection, state.yaml, toast, onSuccess]);
+  }, [getAuthedConn, state.yaml, toast, onSuccess]);
 
   return (
     <DialogContent
@@ -397,13 +415,10 @@ function DeployConfirmDialog({
   );
 }
 
-// ---------------------------------------------------------------------------
-// Import from Production Dialog
-// ---------------------------------------------------------------------------
 
 function ImportConfirmDialog({ onClose }: { onClose: () => void }) {
-  const { connection } = useFleetConnection();
-  const { state, dispatch } = useWorkbench();
+  const { connection, getAuthenticatedConnection: getAuthedImport } = useFleetConnection();
+  const { state, dispatch } = useWorkbenchState();
   const { toast } = useToast();
 
   const [isImporting, setIsImporting] = useState(false);
@@ -411,7 +426,7 @@ function ImportConfirmDialog({ onClose }: { onClose: () => void }) {
   const handleImport = useCallback(async () => {
     setIsImporting(true);
     try {
-      const remote = await fetchRemotePolicy(connection);
+      const remote = await fetchRemotePolicy(getAuthedImport());
       if (!remote.yaml) {
         toast({ type: "warning", title: "No remote policy", description: "The remote daemon has no active policy." });
         return;
@@ -433,7 +448,7 @@ function ImportConfirmDialog({ onClose }: { onClose: () => void }) {
     } finally {
       setIsImporting(false);
     }
-  }, [connection, dispatch, toast, onClose]);
+  }, [getAuthedImport, dispatch, toast, onClose]);
 
   return (
     <DialogContent

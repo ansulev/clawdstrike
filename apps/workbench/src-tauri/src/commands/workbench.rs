@@ -3,9 +3,11 @@
 //! These commands integrate directly with the `clawdstrike` and `hush-core` crates
 //! without requiring a running daemon. All evaluation happens in-process.
 
+use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Instant;
 
 #[cfg(unix)]
@@ -74,9 +76,7 @@ const SENSITIVE_SUFFIXES: &[&str] = &[
     "/.pypirc",
 ];
 
-// ---------------------------------------------------------------------------
 // L3: Rate limiting for signing commands
-// ---------------------------------------------------------------------------
 
 /// Minimum interval between signing operations (50 ms).
 const SIGN_RATE_LIMIT_MS: u128 = 50;
@@ -106,7 +106,7 @@ fn reset_sign_rate_limit() {
 }
 
 /// Check a normalized, lowercased path string against the sensitive patterns.
-fn check_sensitive_path(check_str: &str) -> Result<(), String> {
+pub(crate) fn check_sensitive_path(check_str: &str) -> Result<(), String> {
     // Check sensitive prefixes.
     for pattern in SENSITIVE_PATTERNS {
         if check_str.contains(pattern) {
@@ -128,7 +128,7 @@ fn check_sensitive_path(check_str: &str) -> Result<(), String> {
 ///
 /// Rejects paths with `..` segments after normalization and paths that target
 /// sensitive directories or files.
-fn validate_file_path(path: &str) -> Result<PathBuf, String> {
+pub(crate) fn validate_file_path(path: &str) -> Result<PathBuf, String> {
     if path.is_empty() {
         return Err("Empty file path".into());
     }
@@ -219,7 +219,7 @@ fn open_file_write_no_follow(path: &Path) -> Result<std::fs::File, String> {
     })
 }
 
-async fn read_text_file_secure(path: PathBuf) -> Result<String, String> {
+pub(crate) async fn read_text_file_secure(path: PathBuf) -> Result<String, String> {
     tokio::task::spawn_blocking(move || {
         let mut file = open_file_read_no_follow(&path)?;
         let mut yaml = String::new();
@@ -236,7 +236,7 @@ async fn read_text_file_secure(path: PathBuf) -> Result<String, String> {
     })?
 }
 
-async fn write_text_file_secure(path: PathBuf, output: String) -> Result<(), String> {
+pub(crate) async fn write_text_file_secure(path: PathBuf, output: String) -> Result<(), String> {
     let bytes = output.into_bytes();
     tokio::task::spawn_blocking(move || {
         let mut file = open_file_write_no_follow(&path)?;
@@ -257,9 +257,7 @@ async fn write_text_file_secure(path: PathBuf, output: String) -> Result<(), Str
     })?
 }
 
-// ---------------------------------------------------------------------------
 // Response types
-// ---------------------------------------------------------------------------
 
 #[derive(Debug, Clone, Serialize)]
 pub struct ValidationError {
@@ -454,9 +452,7 @@ pub struct ChainVerificationResponse {
     pub summary: String,
 }
 
-// ---------------------------------------------------------------------------
 // Helpers
-// ---------------------------------------------------------------------------
 
 /// Try to parse YAML into a `Policy` without validation so we can extract
 /// metadata even when validation fails.
@@ -691,9 +687,7 @@ fn verify_signed_receipt_signature(
     verify_receipt_signature(public_key_hex, signature_hex, canonical_receipt.as_bytes())
 }
 
-// ---------------------------------------------------------------------------
 // Tauri commands
-// ---------------------------------------------------------------------------
 
 /// Parse and validate policy YAML, returning structured results.
 #[tauri::command]
@@ -1161,7 +1155,7 @@ pub async fn sign_receipt_persistent(
 /// existing chain hashes stable.
 #[tauri::command]
 pub async fn verify_receipt_chain(
-    receipts: Vec<ChainReceiptInput>,
+    mut receipts: Vec<ChainReceiptInput>,
 ) -> Result<ChainVerificationResponse, String> {
     if receipts.len() > MAX_CHAIN_LENGTH {
         return Err(format!(
@@ -1183,25 +1177,25 @@ pub async fn verify_receipt_chain(
         });
     }
 
-    // Sort by timestamp (stable sort preserves original order for equal timestamps).
-    let mut sorted = receipts.clone();
-    sorted.sort_by(|a, b| a.timestamp.cmp(&b.timestamp));
-
     // Validate that all timestamps conform to ISO 8601 with Z suffix so that
     // lexicographic comparison is correct (Fix #19).
-    let non_conforming_timestamps: Vec<&str> = sorted
+    let non_conforming_timestamps = receipts
         .iter()
         .filter(|r| !is_valid_utc_timestamp(&r.timestamp))
-        .map(|r| r.timestamp.as_str())
-        .collect();
+        .count();
 
-    let mut per_receipt: Vec<ChainReceiptVerification> = Vec::with_capacity(sorted.len());
+    let input_was_sorted = receipts
+        .windows(2)
+        .all(|pair| pair[0].timestamp <= pair[1].timestamp);
+    receipts.sort_by(|a, b| a.timestamp.cmp(&b.timestamp));
+
+    let mut per_receipt: Vec<ChainReceiptVerification> = Vec::with_capacity(receipts.len());
     let mut any_sig_failed = false;
     let mut any_sig_verified = false;
     let mut timestamps_ordered = true;
     let mut chain_hash_input = Vec::new();
 
-    for (i, r) in sorted.iter().enumerate() {
+    for (i, r) in receipts.iter().enumerate() {
         // Chain-level canonical format: "id:timestamp:verdict:guard:policy_name".
         // This is used for the chain hash (always) and as the *first* signature
         // verification attempt.
@@ -1216,7 +1210,7 @@ pub async fn verify_receipt_chain(
         let (ts_valid, ts_note) = if i == 0 {
             (true, "First receipt in chain.".to_string())
         } else {
-            let prev = &sorted[i - 1];
+            let prev = &receipts[i - 1];
             if r.timestamp >= prev.timestamp {
                 (true, "Timestamp >= previous.".to_string())
             } else {
@@ -1283,19 +1277,19 @@ pub async fn verify_receipt_chain(
     // ordered, and at least one signature was positively verified (or the chain
     // is empty). Unparseable signatures alone no longer count as "valid". (#20)
     let chain_intact =
-        !any_sig_failed && timestamps_ordered && (any_sig_verified || sorted.is_empty());
+        !any_sig_failed && timestamps_ordered && (any_sig_verified || receipts.is_empty());
 
     let mut summary = if chain_intact {
         format!(
             "Chain of {} receipt(s) verified successfully.",
-            sorted.len()
+            receipts.len()
         )
     } else {
         let mut issues = Vec::new();
         if any_sig_failed {
             issues.push("signature verification failure(s)");
         }
-        if !any_sig_verified && !sorted.is_empty() {
+        if !any_sig_verified && !receipts.is_empty() {
             issues.push("no signatures could be positively verified");
         }
         if !timestamps_ordered {
@@ -1303,18 +1297,21 @@ pub async fn verify_receipt_chain(
         }
         format!(
             "Chain of {} receipt(s) has issues: {}.",
-            sorted.len(),
+            receipts.len(),
             issues.join(", ")
         )
     };
 
     // Append a warning if any timestamps don't conform to the expected format.
-    if !non_conforming_timestamps.is_empty() {
+    if non_conforming_timestamps > 0 {
         summary.push_str(&format!(
             " Warning: {} timestamp(s) do not conform to ISO 8601 UTC format (expected *T*Z); \
              lexicographic ordering may be unreliable.",
-            non_conforming_timestamps.len()
+            non_conforming_timestamps
         ));
+    }
+    if !input_was_sorted {
+        summary.push_str(" Input receipts were normalized by timestamp before verification.");
     }
 
     Ok(ChainVerificationResponse {
@@ -1323,7 +1320,7 @@ pub async fn verify_receipt_chain(
         all_signatures_valid: !any_sig_failed,
         timestamps_ordered,
         chain_intact,
-        chain_length: sorted.len(),
+        chain_length: receipts.len(),
         summary,
     })
 }
@@ -1492,15 +1489,442 @@ pub async fn import_policy_file(path: String) -> Result<ImportResponse, String> 
 }
 
 // ---------------------------------------------------------------------------
-// Tests
+// Global project search
 // ---------------------------------------------------------------------------
+
+/// A single search match within a file.
+#[derive(Debug, Clone, Serialize)]
+pub struct SearchMatch {
+    /// Relative path within the project root.
+    pub file_path: String,
+    /// 1-indexed line number.
+    pub line_number: usize,
+    /// Preview line text (trimmed to 500 chars max).
+    pub line_content: String,
+    /// Character offset of match start within `line_content`.
+    pub match_start: usize,
+    /// Character offset of match end within `line_content`.
+    pub match_end: usize,
+    /// Character offset of match start within the full source line.
+    pub source_match_start: usize,
+    /// Character offset of match end within the full source line.
+    pub source_match_end: usize,
+}
+
+/// Aggregate search results.
+#[derive(Debug, Clone, Serialize)]
+pub struct SearchResult {
+    pub matches: Vec<SearchMatch>,
+    /// Number of files that contained at least one match.
+    pub file_count: usize,
+    /// Total match count across all files.
+    pub total_matches: usize,
+    /// True if results were capped at the maximum.
+    pub truncated: bool,
+}
+
+/// Maximum number of matches before truncation.
+const MAX_SEARCH_MATCHES: usize = 10_000;
+
+/// Maximum file size to search (1 MiB).
+const MAX_SEARCH_FILE_SIZE: u64 = 1_048_576;
+
+/// Maximum characters per line_content in a search match.
+const MAX_LINE_CONTENT_LEN: usize = 500;
+
+/// File extensions eligible for search.
+const SEARCHABLE_EXTENSIONS: &[&str] = &[
+    "yaml", "yml", "yar", "yara", "json", "toml", "md", "txt", "rs", "ts", "tsx", "js",
+];
+
+/// Directory names to skip during search.
+const SKIP_DIRS: &[&str] = &[".git", "node_modules", "target"];
+
+#[derive(Debug)]
+struct SearchCancellationEntry {
+    flag: Arc<AtomicBool>,
+    refs: usize,
+}
+
+fn search_cancellation_registry() -> &'static Mutex<HashMap<String, SearchCancellationEntry>> {
+    static REGISTRY: OnceLock<Mutex<HashMap<String, SearchCancellationEntry>>> = OnceLock::new();
+    REGISTRY.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn register_search_cancellation(search_id: &str) -> Arc<AtomicBool> {
+    let mut registry = search_cancellation_registry()
+        .lock()
+        .expect("search cancellation registry poisoned");
+
+    if let Some(entry) = registry.get_mut(search_id) {
+        entry.refs += 1;
+        return entry.flag.clone();
+    }
+
+    let flag = Arc::new(AtomicBool::new(false));
+    registry.insert(
+        search_id.to_string(),
+        SearchCancellationEntry {
+            flag: flag.clone(),
+            refs: 1,
+        },
+    );
+    flag
+}
+
+fn cancel_registered_search(search_id: &str) {
+    let flag = search_cancellation_registry()
+        .lock()
+        .expect("search cancellation registry poisoned")
+        .get(search_id)
+        .map(|entry| entry.flag.clone());
+
+    if let Some(flag) = flag {
+        flag.store(true, Ordering::Relaxed);
+    }
+}
+
+fn unregister_search_cancellation(search_id: &str) {
+    let mut registry = search_cancellation_registry()
+        .lock()
+        .expect("search cancellation registry poisoned");
+
+    if let Some(entry) = registry.get_mut(search_id) {
+        entry.refs -= 1;
+        if entry.refs == 0 {
+            registry.remove(search_id);
+        }
+    }
+}
+
+fn is_search_cancelled(cancellation_flag: Option<&AtomicBool>) -> bool {
+    cancellation_flag.is_some_and(|flag| flag.load(Ordering::Relaxed))
+}
+
+/// Check whether a character is a word boundary delimiter (not alphanumeric or underscore).
+fn is_word_boundary_char(c: char) -> bool {
+    !c.is_alphanumeric() && c != '_'
+}
+
+fn is_match_on_word_boundary(line: &str, match_start: usize, match_end: usize) -> bool {
+    let before_ok = if match_start == 0 {
+        true
+    } else {
+        line[..match_start]
+            .chars()
+            .next_back()
+            .map_or(true, is_word_boundary_char)
+    };
+    let after_ok = if match_end >= line.len() {
+        true
+    } else {
+        line[match_end..]
+            .chars()
+            .next()
+            .map_or(true, is_word_boundary_char)
+    };
+    before_ok && after_ok
+}
+
+fn build_search_regex(
+    query: &str,
+    case_sensitive: bool,
+    whole_word: bool,
+    use_regex: bool,
+) -> Result<regex::Regex, String> {
+    let pattern = if use_regex {
+        if whole_word {
+            format!(r"\b(?:{})\b", query)
+        } else {
+            query.to_string()
+        }
+    } else {
+        regex::escape(query)
+    };
+
+    regex::RegexBuilder::new(&pattern)
+        .case_insensitive(!case_sensitive)
+        .build()
+        .map_err(|e| format!("Invalid regex: {e}"))
+}
+
+struct SearchLinePreview {
+    content: String,
+    char_len: usize,
+}
+
+fn truncate_search_line(line: &str) -> SearchLinePreview {
+    let char_len = line.chars().count();
+    if char_len <= MAX_LINE_CONTENT_LEN {
+        return SearchLinePreview {
+            content: line.to_string(),
+            char_len,
+        };
+    }
+
+    let truncate_at = line
+        .char_indices()
+        .nth(MAX_LINE_CONTENT_LEN)
+        .map(|(idx, _)| idx)
+        .unwrap_or(line.len());
+
+    SearchLinePreview {
+        content: line[..truncate_at].to_string(),
+        char_len: MAX_LINE_CONTENT_LEN,
+    }
+}
+
+fn byte_index_to_char_index(line: &str, byte_index: usize) -> usize {
+    line[..byte_index.min(line.len())].chars().count()
+}
+
+/// Walk a directory tree recursively, collecting file paths that are eligible for search.
+///
+/// Returns `false` when the active search was cancelled.
+fn collect_search_files(
+    dir: &Path,
+    files: &mut Vec<PathBuf>,
+    cancellation_flag: Option<&AtomicBool>,
+) -> bool {
+    if is_search_cancelled(cancellation_flag) {
+        return false;
+    }
+    let entries = match std::fs::read_dir(dir) {
+        Ok(e) => e,
+        Err(_) => return true,
+    };
+    for entry in entries {
+        if is_search_cancelled(cancellation_flag) {
+            return false;
+        }
+
+        let entry = match entry {
+            Ok(e) => e,
+            Err(_) => continue,
+        };
+        let name = entry.file_name();
+        let name_str = name.to_string_lossy();
+
+        // Skip hidden files/dirs.
+        if name_str.starts_with('.') {
+            continue;
+        }
+
+        let file_type = match entry.file_type() {
+            Ok(file_type) => file_type,
+            Err(_) => continue,
+        };
+
+        if file_type.is_symlink() {
+            continue;
+        }
+
+        if file_type.is_dir() {
+            // Skip well-known large directories.
+            if SKIP_DIRS.contains(&name_str.as_ref()) {
+                continue;
+            }
+            if !collect_search_files(&entry.path(), files, cancellation_flag) {
+                return false;
+            }
+        } else if file_type.is_file() {
+            let meta = match entry.metadata() {
+                Ok(meta) => meta,
+                Err(_) => continue,
+            };
+            // Only include files with searchable extensions.
+            if meta.len() > MAX_SEARCH_FILE_SIZE {
+                continue;
+            }
+            let path = entry.path();
+            if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
+                let normalized_ext = ext.to_ascii_lowercase();
+                if SEARCHABLE_EXTENSIONS.contains(&normalized_ext.as_str()) {
+                    files.push(path);
+                }
+            }
+        }
+    }
+
+    true
+}
+
+/// Search for a pattern in all eligible files under `root_path`.
+#[tauri::command]
+pub async fn search_in_project(
+    root_path: String,
+    query: String,
+    case_sensitive: bool,
+    whole_word: bool,
+    use_regex: bool,
+    search_id: Option<String>,
+) -> Result<SearchResult, String> {
+    // Validate root path.
+    let root = validate_file_path(&root_path)?;
+    if !root.is_dir() {
+        return Err("Root path is not a directory".into());
+    }
+
+    if query.is_empty() {
+        return Ok(SearchResult {
+            matches: Vec::new(),
+            file_count: 0,
+            total_matches: 0,
+            truncated: false,
+        });
+    }
+
+    let cancellation_flag = search_id.as_deref().map(register_search_cancellation);
+    let search_result = tokio::task::spawn_blocking(move || {
+        if is_search_cancelled(cancellation_flag.as_deref()) {
+            return Err("Search canceled".into());
+        }
+        let compiled_regex =
+            build_search_regex(&query, case_sensitive, whole_word, use_regex)?;
+
+        // Collect eligible files.
+        let mut file_paths = Vec::new();
+        if !collect_search_files(&root, &mut file_paths, cancellation_flag.as_deref()) {
+            return Err("Search canceled".into());
+        }
+
+        let mut all_matches: Vec<SearchMatch> = Vec::new();
+        let mut files_with_matches = 0usize;
+        let mut truncated = false;
+        let mut search_limit_hit = false;
+
+        for file_path in &file_paths {
+            if is_search_cancelled(cancellation_flag.as_deref()) {
+                return Err("Search canceled".into());
+            }
+            let content = match std::fs::read_to_string(file_path) {
+                Ok(c) => c,
+                Err(_) => continue, // skip binary/unreadable files
+            };
+
+            let rel_path = file_path
+                .strip_prefix(&root)
+                .unwrap_or(file_path)
+                .to_string_lossy()
+                .to_string();
+
+            let mut file_had_match = false;
+
+            for (line_idx, line) in content.lines().enumerate() {
+                if is_search_cancelled(cancellation_flag.as_deref()) {
+                    return Err("Search canceled".into());
+                }
+
+                let line_number = line_idx + 1;
+
+                // Collect matches for this line.
+                let line_matches: Vec<(usize, usize)> = compiled_regex
+                    .find_iter(line)
+                    .filter_map(|m| {
+                        let match_start = m.start();
+                        let match_end = m.end();
+                        if !use_regex
+                            && whole_word
+                            && !is_match_on_word_boundary(line, match_start, match_end)
+                        {
+                            return None;
+                        }
+                        Some((match_start, match_end))
+                    })
+                    .collect();
+
+                if line_matches.is_empty() {
+                    continue;
+                }
+
+                // Truncate line content once per line; every match on the line shares it.
+                let line_preview = truncate_search_line(line);
+
+                for (match_start, match_end) in line_matches {
+                    if is_search_cancelled(cancellation_flag.as_deref()) {
+                        return Err("Search canceled".into());
+                    }
+
+                    if all_matches.len() >= MAX_SEARCH_MATCHES {
+                        truncated = true;
+                        search_limit_hit = true;
+                        break;
+                    }
+
+                    let match_start_chars = byte_index_to_char_index(line, match_start);
+                    let match_end_chars = byte_index_to_char_index(line, match_end);
+                    let preview_match_start = match_start_chars.min(line_preview.char_len);
+                    let preview_match_end =
+                        match_end_chars.clamp(preview_match_start, line_preview.char_len);
+
+                    file_had_match = true;
+                    all_matches.push(SearchMatch {
+                        file_path: rel_path.clone(),
+                        line_number,
+                        line_content: line_preview.content.clone(),
+                        match_start: preview_match_start,
+                        match_end: preview_match_end,
+                        source_match_start: match_start_chars,
+                        source_match_end: match_end_chars,
+                    });
+                }
+
+                if search_limit_hit {
+                    break;
+                }
+            }
+
+            if file_had_match {
+                files_with_matches += 1;
+            }
+
+            if search_limit_hit {
+                break;
+            }
+        }
+
+        let total_matches = all_matches.len();
+        Ok(SearchResult {
+            matches: all_matches,
+            file_count: files_with_matches,
+            total_matches,
+            truncated,
+        })
+    })
+    .await
+    .map_err(|e| {
+        eprintln!("[workbench] search task join error: {e}");
+        "Search failed".to_string()
+    });
+
+    if let Some(search_id) = search_id.as_deref() {
+        unregister_search_cancellation(search_id);
+    }
+
+    search_result?
+}
+
+#[tauri::command]
+pub fn cancel_search_in_project(search_id: String) -> Result<(), String> {
+    let trimmed = search_id.trim();
+    if trimmed.is_empty() {
+        return Err("Search id is required".into());
+    }
+
+    cancel_registered_search(trimmed);
+    Ok(())
+}
+
+// Tests
 
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used)]
 
     use super::*;
-    use tempfile::NamedTempFile;
+    #[cfg(unix)]
+    use std::os::unix::fs::symlink;
+    use tempfile::{tempdir, NamedTempFile};
 
     /// A minimal valid policy YAML string for testing.
     fn minimal_valid_policy() -> String {
@@ -1514,6 +1938,218 @@ guards:
       - "**/.ssh/**"
 "#
         .to_string()
+    }
+
+    #[test]
+    fn search_byte_offsets_convert_to_character_offsets() {
+        let line = "漢漢needle";
+        let byte_start = line.find("needle").unwrap();
+        let byte_end = byte_start + "needle".len();
+
+        assert_eq!(byte_index_to_char_index(line, byte_start), 2);
+        assert_eq!(byte_index_to_char_index(line, byte_end), 8);
+    }
+
+    #[test]
+    fn shared_search_ids_reuse_one_cancellation_flag() {
+        let search_id = "shared-search-id";
+        let flag1 = register_search_cancellation(search_id);
+        let flag2 = register_search_cancellation(search_id);
+
+        assert!(Arc::ptr_eq(&flag1, &flag2));
+        assert!(!flag1.load(Ordering::Relaxed));
+
+        cancel_registered_search(search_id);
+        assert!(flag1.load(Ordering::Relaxed));
+        assert!(flag2.load(Ordering::Relaxed));
+
+        unregister_search_cancellation(search_id);
+        assert!(search_cancellation_registry()
+            .lock()
+            .expect("search cancellation registry poisoned")
+            .contains_key(search_id));
+        unregister_search_cancellation(search_id);
+        assert!(!search_cancellation_registry()
+            .lock()
+            .expect("search cancellation registry poisoned")
+            .contains_key(search_id));
+    }
+
+    #[tokio::test]
+    async fn search_in_project_truncates_multibyte_lines_without_panicking() {
+        let root = tempdir().unwrap();
+        let file_path = root.path().join("search.txt");
+        let content = format!("{}needle\n", "漢".repeat(MAX_LINE_CONTENT_LEN + 10));
+        std::fs::write(&file_path, content).unwrap();
+
+        let result = search_in_project(
+            root.path().to_string_lossy().to_string(),
+            "needle".to_string(),
+            false,
+            false,
+            false,
+            None,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(result.matches.len(), 1);
+        let first_match = &result.matches[0];
+        assert_eq!(first_match.file_path, "search.txt");
+        assert_eq!(
+            first_match.line_content.chars().count(),
+            MAX_LINE_CONTENT_LEN
+        );
+        assert_eq!(first_match.match_start, MAX_LINE_CONTENT_LEN);
+        assert_eq!(first_match.match_end, MAX_LINE_CONTENT_LEN);
+        assert_eq!(first_match.source_match_start, MAX_LINE_CONTENT_LEN + 10);
+        assert_eq!(
+            first_match.source_match_end,
+            MAX_LINE_CONTENT_LEN + 10 + "needle".chars().count()
+        );
+    }
+
+    #[tokio::test]
+    async fn search_in_project_groups_regex_before_applying_whole_word_bounds() {
+        let root = tempdir().unwrap();
+        std::fs::write(root.path().join("search.txt"), "foo\nfoobar\nbar\n").unwrap();
+
+        let result = search_in_project(
+            root.path().to_string_lossy().to_string(),
+            "foo|bar".to_string(),
+            false,
+            true,
+            true,
+            None,
+        )
+        .await
+        .unwrap();
+
+        let matched_lines: Vec<_> = result
+            .matches
+            .iter()
+            .map(|entry| entry.line_content.as_str())
+            .collect();
+
+        assert_eq!(matched_lines, vec!["foo", "bar"]);
+    }
+
+    #[tokio::test]
+    async fn search_in_project_includes_uppercase_searchable_extensions() {
+        let root = tempdir().unwrap();
+        std::fs::write(root.path().join("RULE.YAML"), "needle\n").unwrap();
+
+        let result = search_in_project(
+            root.path().to_string_lossy().to_string(),
+            "needle".to_string(),
+            true,
+            false,
+            false,
+            None,
+        )
+        .await
+        .unwrap();
+
+        let matched_files: Vec<_> = result
+            .matches
+            .iter()
+            .map(|entry| entry.file_path.as_str())
+            .collect();
+
+        assert_eq!(matched_files, vec!["RULE.YAML"]);
+        assert_eq!(result.file_count, 1);
+    }
+
+    #[tokio::test]
+    async fn search_in_project_counts_the_file_that_hits_the_match_limit() {
+        let root = tempdir().unwrap();
+        let file_path = root.path().join("many-matches.txt");
+        let content = std::iter::repeat_n("needle\n", MAX_SEARCH_MATCHES + 1).collect::<String>();
+        std::fs::write(&file_path, content).unwrap();
+
+        let result = search_in_project(
+            root.path().to_string_lossy().to_string(),
+            "needle".to_string(),
+            true,
+            false,
+            false,
+            None,
+        )
+        .await
+        .unwrap();
+
+        assert!(result.truncated);
+        assert_eq!(result.file_count, 1);
+        assert_eq!(result.total_matches, MAX_SEARCH_MATCHES);
+        assert_eq!(result.matches.len(), MAX_SEARCH_MATCHES);
+    }
+
+    #[tokio::test]
+    async fn search_in_project_skips_git_directories() {
+        let root = tempdir().unwrap();
+        let repo_metadata_dir = root.path().join(".git").join("objects");
+        let source_dir = root.path().join("src");
+
+        std::fs::create_dir_all(&repo_metadata_dir).unwrap();
+        std::fs::create_dir_all(&source_dir).unwrap();
+        std::fs::write(repo_metadata_dir.join("ignored.yaml"), "needle\n").unwrap();
+        std::fs::write(source_dir.join("main.yaml"), "needle\n").unwrap();
+
+        let result = search_in_project(
+            root.path().to_string_lossy().to_string(),
+            "needle".to_string(),
+            true,
+            false,
+            false,
+            None,
+        )
+        .await
+        .unwrap();
+
+        let matched_files: Vec<_> = result
+            .matches
+            .iter()
+            .map(|entry| entry.file_path.as_str())
+            .collect();
+
+        assert_eq!(matched_files, vec!["src/main.yaml"]);
+        assert_eq!(result.file_count, 1);
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn search_in_project_skips_symlinked_directories() {
+        let root = tempdir().unwrap();
+        let outside_root = tempdir().unwrap();
+        let real_dir = root.path().join("real");
+        let external_dir = outside_root.path().join("external");
+        let symlink_dir = root.path().join("linked");
+
+        std::fs::create_dir_all(&real_dir).unwrap();
+        std::fs::create_dir_all(&external_dir).unwrap();
+        std::fs::write(real_dir.join("inside.yaml"), "needle\n").unwrap();
+        std::fs::write(external_dir.join("outside.yaml"), "needle\n").unwrap();
+        symlink(&external_dir, &symlink_dir).unwrap();
+
+        let result = search_in_project(
+            root.path().to_string_lossy().to_string(),
+            "needle".to_string(),
+            true,
+            false,
+            false,
+            None,
+        )
+        .await
+        .unwrap();
+
+        let matched_files: Vec<_> = result
+            .matches
+            .iter()
+            .map(|entry| entry.file_path.as_str())
+            .collect();
+
+        assert_eq!(matched_files, vec!["real/inside.yaml"]);
+        assert_eq!(result.file_count, 1);
     }
 
     // =======================================================================
@@ -2205,6 +2841,85 @@ guards: {}
         assert_eq!(err, "Refusing to access sensitive file");
     }
 
+    #[tokio::test]
+    async fn search_in_project_handles_case_insensitive_unicode_literal_offsets() {
+        let dir = tempfile::tempdir().unwrap();
+        let file_path = dir.path().join("unicode.txt");
+        std::fs::write(&file_path, "foo ẞ bar\n").unwrap();
+
+        let result = search_in_project(
+            dir.path().to_string_lossy().to_string(),
+            "ß".into(),
+            false,
+            true,
+            false,
+            None,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(result.file_count, 1);
+        assert_eq!(result.total_matches, 1);
+        assert_eq!(result.matches.len(), 1);
+
+        let first_match = &result.matches[0];
+        assert_eq!(first_match.file_path, "unicode.txt");
+        assert_eq!(first_match.line_number, 1);
+        assert_eq!(first_match.line_content, "foo ẞ bar");
+        assert_eq!(first_match.match_start, 4);
+        assert_eq!(first_match.match_end, 5);
+        assert_eq!(first_match.source_match_start, 4);
+        assert_eq!(first_match.source_match_end, 5);
+    }
+
+    #[test]
+    fn build_search_regex_wraps_whole_word_regex_queries_in_non_capturing_group() {
+        let regex = build_search_regex("foo|bar", true, true, true).unwrap();
+
+        assert!(regex.is_match("foo"));
+        assert!(regex.is_match("bar"));
+        assert!(!regex.is_match("foobar"));
+        assert!(!regex.is_match("barista"));
+    }
+
+    #[tokio::test]
+    async fn search_in_project_truncates_multibyte_lines_without_panic() {
+        let dir = tempfile::tempdir().unwrap();
+        let file_path = dir.path().join("emoji.txt");
+        let prefix = "😀".repeat(MAX_LINE_CONTENT_LEN);
+        std::fs::write(&file_path, format!("{prefix}needle\n")).unwrap();
+
+        let result = search_in_project(
+            dir.path().to_string_lossy().to_string(),
+            "needle".into(),
+            true,
+            false,
+            false,
+            None,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(result.file_count, 1);
+        assert_eq!(result.total_matches, 1);
+        assert_eq!(result.matches.len(), 1);
+
+        let first_match = &result.matches[0];
+        assert_eq!(first_match.file_path, "emoji.txt");
+        assert_eq!(first_match.line_content, prefix);
+        assert_eq!(
+            first_match.line_content.chars().count(),
+            MAX_LINE_CONTENT_LEN
+        );
+        assert_eq!(first_match.match_start, MAX_LINE_CONTENT_LEN);
+        assert_eq!(first_match.match_end, MAX_LINE_CONTENT_LEN);
+        assert_eq!(first_match.source_match_start, MAX_LINE_CONTENT_LEN);
+        assert_eq!(
+            first_match.source_match_end,
+            MAX_LINE_CONTENT_LEN + "needle".chars().count()
+        );
+    }
+
     // =======================================================================
     // simulate_action_with_posture
     // =======================================================================
@@ -2366,9 +3081,7 @@ posture:
     }
 
     #[tokio::test]
-    async fn verify_chain_unordered_input_is_sorted_before_verification() {
-        // Input arrives out of order; verify_receipt_chain sorts by timestamp
-        // before checking ordering, so the result should be ordered.
+    async fn verify_chain_unordered_input_is_normalized_before_verification() {
         let chain = vec![
             make_chain_receipt("r1", "2026-03-01T00:02:00Z", "allow"),
             make_chain_receipt("r2", "2026-03-01T00:00:00Z", "deny"),
@@ -2377,6 +3090,18 @@ posture:
         let res = verify_receipt_chain(chain).await.unwrap();
         assert!(res.timestamps_ordered);
         assert_eq!(res.chain_length, 3);
+        assert_eq!(
+            res.receipts
+                .iter()
+                .map(|r| r.id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["r2", "r3", "r1"]
+        );
+        assert!(res
+            .receipts
+            .iter()
+            .all(|receipt| receipt.timestamp_order_valid));
+        assert!(res.summary.contains("normalized by timestamp"));
     }
 
     #[tokio::test]
@@ -2472,6 +3197,24 @@ posture:
             res1.chain_hash, res2.chain_hash,
             "chain hash should be deterministic"
         );
+    }
+
+    #[tokio::test]
+    async fn verify_chain_hash_is_order_independent_after_normalization() {
+        let ordered = vec![
+            make_chain_receipt("r1", "2026-03-01T00:00:00Z", "allow"),
+            make_chain_receipt("r2", "2026-03-01T00:01:00Z", "deny"),
+        ];
+        let reordered = vec![
+            make_chain_receipt("r2", "2026-03-01T00:01:00Z", "deny"),
+            make_chain_receipt("r1", "2026-03-01T00:00:00Z", "allow"),
+        ];
+
+        let ordered_res = verify_receipt_chain(ordered).await.unwrap();
+        let reordered_res = verify_receipt_chain(reordered).await.unwrap();
+
+        assert_eq!(ordered_res.chain_hash, reordered_res.chain_hash);
+        assert!(reordered_res.timestamps_ordered);
     }
 
     /// P1-4: Receipts signed over the exact canonical hush-core payload should

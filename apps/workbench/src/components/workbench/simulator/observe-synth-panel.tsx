@@ -3,7 +3,6 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
 import { VerdictBadge } from "@/components/workbench/shared/verdict-badge";
 import { Button as MovingBorderButton } from "@/components/ui/moving-border";
-import { useWorkbench } from "@/lib/workbench/multi-policy-store";
 import { useToast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
 import {
@@ -39,10 +38,9 @@ import {
 } from "@tabler/icons-react";
 import type { TestActionType } from "@/lib/workbench/types";
 import { ClaudeCodeHint } from "@/components/workbench/shared/claude-code-hint";
+import { usePolicyTabsStore } from "@/features/policy/stores/policy-tabs-store";
+import { usePolicyEditStore } from "@/features/policy/stores/policy-edit-store";
 
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
 
 const ACTION_ICONS: Record<string, typeof IconFile> = {
   file_access: IconFile,
@@ -63,9 +61,6 @@ const RISK_STYLES: Record<EventRiskLevel, { bg: string; border: string; text: st
 type FilterActionType = TestActionType | "all";
 type FilterRiskLevel = EventRiskLevel | "all";
 
-// ---------------------------------------------------------------------------
-// Sub-components
-// ---------------------------------------------------------------------------
 
 function RiskBadge({ level }: { level: EventRiskLevel }) {
   const style = RISK_STYLES[level];
@@ -272,12 +267,11 @@ function SynthGuardConfig({ synth }: { synth: SynthResult }) {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Main Panel
-// ---------------------------------------------------------------------------
 
 export function ObserveSynthPanel() {
-  const { state, dispatch } = useWorkbench();
+  const activeTabId = usePolicyTabsStore(s => s.activeTabId);
+  const activeTab = usePolicyTabsStore(s => s.tabs.find(t => t.id === s.activeTabId));
+  const editState = usePolicyEditStore(s => s.editStates.get(activeTabId));
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -398,14 +392,15 @@ export function ObserveSynthPanel() {
   // Apply synth to active policy
   const handleApplyToPolicy = useCallback(() => {
     if (!synthResult) return;
-    const merged = mergeSynthIntoPolicy(state.activePolicy, synthResult.guards);
-    dispatch({ type: "SET_POLICY", policy: merged });
+    const merged = mergeSynthIntoPolicy((editState?.policy ?? { version: "1.1.0", name: "", description: "", guards: {}, settings: {} }), synthResult.guards);
+    usePolicyEditStore.getState().updatePolicy(activeTabId, merged, activeTab?.fileType ?? "clawdstrike_policy");
+      usePolicyTabsStore.getState().setDirty(activeTabId, true);
     toast({
       type: "success",
       title: "Policy updated",
       description: "Synthesized configuration merged into active policy",
     });
-  }, [synthResult, state.activePolicy, dispatch, toast]);
+  }, [synthResult, editState?.policy, activeTabId, activeTab?.fileType, toast]);
 
   // Clear all
   const handleClear = useCallback(() => {
@@ -423,9 +418,6 @@ export function ObserveSynthPanel() {
     return { safe, suspicious, blocked };
   }, [events]);
 
-  // ---------------------------------------------------------------------------
-  // Render: Empty state
-  // ---------------------------------------------------------------------------
   if (events.length === 0) {
     return (
       <div className="flex flex-col h-full">
@@ -455,7 +447,7 @@ export function ObserveSynthPanel() {
               onDragLeave={handleDragLeave}
               onDrop={handleDrop}
               className={cn(
-                "relative border-2 border-dashed rounded-xl p-8 text-center transition-all duration-200 mb-6",
+                "relative border-2 border-dashed rounded-xl p-8 text-center transition-all duration-150 mb-6",
                 isDragOver
                   ? "border-[#d4a84b] bg-[#d4a84b]/5 scale-[1.01]"
                   : "border-[#2d3240] bg-[#0b0d13]/50 hover:border-[#d4a84b]/40",
@@ -549,9 +541,6 @@ export function ObserveSynthPanel() {
     );
   }
 
-  // ---------------------------------------------------------------------------
-  // Render: Events loaded
-  // ---------------------------------------------------------------------------
   return (
     <div className="flex flex-col h-full">
       {/* Toolbar */}

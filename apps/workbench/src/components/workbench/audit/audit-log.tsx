@@ -8,8 +8,11 @@ import {
   IconTrash,
   IconCircleDot,
   IconDeviceDesktop,
+  IconFilter,
 } from "@tabler/icons-react";
 import { cn } from "@/lib/utils";
+import { PageHeader } from "../shared/page-header";
+import { SkeletonTable } from "../shared/skeleton-loader";
 import {
   Select,
   SelectTrigger,
@@ -17,12 +20,12 @@ import {
   SelectContent,
   SelectItem,
 } from "@/components/ui/select";
-import { useFleetConnection } from "@/lib/workbench/use-fleet-connection";
+import { useFleetConnection } from "@/features/fleet/use-fleet-connection";
 import {
   fetchAuditEvents,
   type AuditEvent,
   type AuditFilters,
-} from "@/lib/workbench/fleet-client";
+} from "@/features/fleet/fleet-client";
 import { useLocalAudit, type LocalAuditEvent } from "@/lib/workbench/local-audit";
 import { Link } from "react-router-dom";
 
@@ -81,7 +84,7 @@ const LOCAL_EVENT_TYPE_COLORS: Record<string, string> = {
 };
 
 const TH =
-  "px-3 py-2.5 text-left text-[9px] uppercase tracking-[0.08em] font-semibold text-[#6f7f9a]/50";
+  "px-3 py-2.5 text-left text-[9px] uppercase tracking-[0.08em] font-semibold text-[#6f7f9a]/80";
 
 function formatTimestamp(iso: string): string {
   try {
@@ -98,9 +101,6 @@ function formatTimestamp(iso: string): string {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Unified event type used in the table (can be fleet or local)
-// ---------------------------------------------------------------------------
 
 interface UnifiedAuditEvent {
   id: string;
@@ -138,12 +138,9 @@ function localToUnified(e: LocalAuditEvent): UnifiedAuditEvent {
   };
 }
 
-// ---------------------------------------------------------------------------
-// Main Component
-// ---------------------------------------------------------------------------
 
 export function AuditLog() {
-  const { connection, agents } = useFleetConnection();
+  const { connection, agents, getAuthenticatedConnection } = useFleetConnection();
   const { events: localEvents, clear: clearLocalEvents } = useLocalAudit();
 
   const [sourceMode, setSourceMode] = useState<EventSourceMode>("auto");
@@ -155,6 +152,13 @@ export function AuditLog() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [showFilters, setShowFilters] = useState(false);
+
+  const activeFilterCount =
+    (timeRange !== "24h" ? 1 : 0) +
+    (decisionFilter !== "all" ? 1 : 0) +
+    (actionFilter !== "all" ? 1 : 0) +
+    (agentFilter !== "all" ? 1 : 0);
 
   const agentIds = useMemo(
     () => agents.map((a) => a.endpoint_agent_id),
@@ -185,7 +189,7 @@ export function AuditLog() {
       if (actionFilter !== "all") filters.action_type = actionFilter;
       if (agentFilter !== "all") filters.agent_id = agentFilter;
 
-      const result = await fetchAuditEvents(connection, filters);
+      const result = await fetchAuditEvents(getAuthenticatedConnection(), filters);
       setFleetEvents(result);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to fetch events");
@@ -193,7 +197,7 @@ export function AuditLog() {
     } finally {
       setIsLoading(false);
     }
-  }, [connection, timeRange, decisionFilter, actionFilter, agentFilter]);
+  }, [getAuthenticatedConnection, timeRange, decisionFilter, actionFilter, agentFilter]);
 
   useEffect(() => {
     if (connection.connected && showFleet) {
@@ -250,167 +254,178 @@ export function AuditLog() {
   return (
     <div className="flex h-full w-full flex-col overflow-hidden bg-[#05060a]">
       {/* Header */}
-      <div className="shrink-0 border-b border-[#2d3240]/60 px-6 py-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <IconFileAnalytics
-              size={18}
-              className="text-[#d4a84b]"
-              stroke={1.5}
-            />
-            <div>
-              <h1 className="text-sm font-semibold text-[#ece7dc] tracking-[-0.01em]">
-                Audit Log
-              </h1>
-              <p className="text-[11px] text-[#6f7f9a] mt-0.5">
-                {showFleet
-                  ? "Policy evaluation events from the fleet"
-                  : "Local workbench activity events"}
-              </p>
-            </div>
-
-            {/* Source mode indicator */}
-            <SourceBadge
-              mode={showFleet ? "fleet" : "local"}
-              connected={connection.connected}
-            />
-          </div>
-          <div className="flex items-center gap-2">
-            {/* Source selector */}
-            <div className="flex items-center rounded-md border border-[#2d3240] overflow-hidden">
-              {(["auto", "local", "fleet"] as EventSourceMode[]).map((mode) => (
-                <button
-                  key={mode}
-                  onClick={() => setSourceMode(mode)}
-                  disabled={mode === "fleet" && !connection.connected}
-                  className={cn(
-                    "px-2.5 py-1 text-[10px] font-medium capitalize transition-colors",
-                    sourceMode === mode
-                      ? "bg-[#d4a84b]/10 text-[#d4a84b]"
-                      : mode === "fleet" && !connection.connected
-                        ? "text-[#6f7f9a]/20 cursor-not-allowed"
-                        : "text-[#6f7f9a]/50 hover:text-[#ece7dc] hover:bg-[#131721]/40",
-                  )}
-                >
-                  {mode}
-                </button>
-              ))}
-            </div>
-
-            {/* Clear local events */}
-            {showLocal && localEvents.length > 0 && (
-              <button
-                onClick={clearLocalEvents}
-                className="flex items-center gap-1.5 rounded-md border border-[#2d3240] px-3 py-1.5 text-[11px] text-[#6f7f9a] hover:text-[#c45c5c] hover:border-[#c45c5c]/30 transition-colors"
-              >
-                <IconTrash size={13} stroke={1.5} />
-                Clear
-              </button>
-            )}
-
+      <PageHeader
+        title="Audit Log"
+        subtitle={<>
+          {showFleet
+            ? "Policy evaluation events from the fleet"
+            : "Local workbench activity events"}
+          {" "}
+          <SourceBadge
+            mode={showFleet ? "fleet" : "local"}
+            connected={connection.connected}
+          />
+        </>}
+        icon={IconFileAnalytics}
+        sectionAccent="#7b6b8b"
+      >
+        {/* Source selector */}
+        <div className="flex items-center rounded-md border border-[#2d3240] overflow-hidden">
+          {(["auto", "local", "fleet"] as EventSourceMode[]).map((mode) => (
             <button
-              onClick={handleExport}
-              disabled={unifiedEvents.length === 0}
+              key={mode}
+              onClick={() => setSourceMode(mode)}
+              disabled={mode === "fleet" && !connection.connected}
               className={cn(
-                "flex items-center gap-1.5 rounded-md border border-[#2d3240] px-3 py-1.5 text-[11px] transition-colors",
-                unifiedEvents.length === 0
-                  ? "text-[#6f7f9a]/20 cursor-not-allowed"
-                  : "text-[#6f7f9a] hover:text-[#ece7dc] hover:border-[#d4a84b]/30",
+                "px-2.5 py-1 text-[10px] font-medium capitalize transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d4a84b]/40 focus-visible:ring-offset-1 focus-visible:ring-offset-[#05060a]",
+                sourceMode === mode
+                  ? "bg-[#d4a84b]/10 text-[#d4a84b]"
+                  : mode === "fleet" && !connection.connected
+                    ? "text-[#6f7f9a]/50 cursor-not-allowed"
+                    : "text-[#6f7f9a]/50 hover:text-[#ece7dc] hover:bg-[#131721]/40",
               )}
             >
-              <IconDownload size={13} stroke={1.5} />
-              Export
+              {mode}
             </button>
-
-            {showFleet && (
-              <button
-                onClick={loadFleetEvents}
-                disabled={isLoading || !connection.connected}
-                className={cn(
-                  "flex items-center gap-1.5 rounded-md border border-[#2d3240] px-3 py-1.5 text-[11px] transition-colors",
-                  isLoading || !connection.connected
-                    ? "text-[#6f7f9a]/40 cursor-not-allowed"
-                    : "text-[#6f7f9a] hover:text-[#ece7dc] hover:border-[#d4a84b]/30",
-                )}
-              >
-                <IconRefresh
-                  size={13}
-                  stroke={1.5}
-                  className={isLoading ? "animate-spin" : ""}
-                />
-                Fetch
-              </button>
-            )}
-          </div>
+          ))}
         </div>
-      </div>
 
-      {/* Filter bar */}
-      <div className="shrink-0 border-b border-[#2d3240]/60 px-6 py-3">
-        <div className="flex flex-wrap items-center gap-4">
-          <FilterGroup label="Time">
-            {(["1h", "24h", "7d", "30d"] as TimeRange[]).map((tr) => (
-              <FilterPill
-                key={tr}
-                label={tr}
-                active={timeRange === tr}
-                onClick={() => setTimeRange(tr)}
-              />
-            ))}
-          </FilterGroup>
+        {/* Clear local events */}
+        {showLocal && localEvents.length > 0 && (
+          <button
+            onClick={clearLocalEvents}
+            className="flex items-center gap-1.5 rounded-md border border-[#2d3240] px-3 py-1.5 text-[11px] text-[#6f7f9a] hover:text-[#c45c5c] hover:border-[#c45c5c]/30 transition-colors active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d4a84b]/40 focus-visible:ring-offset-1 focus-visible:ring-offset-[#05060a]"
+          >
+            <IconTrash size={13} stroke={1.5} />
+            Clear
+          </button>
+        )}
 
-          {showFleet && (
-            <>
-              <FilterGroup label="Decision">
-                {(["all", "allow", "deny", "warn"] as DecisionFilter[]).map(
-                  (d) => (
+        <button
+          onClick={handleExport}
+          disabled={unifiedEvents.length === 0}
+          className={cn(
+            "flex items-center gap-1.5 rounded-md border border-[#2d3240] px-3 py-1.5 text-[11px] transition-colors active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d4a84b]/40 focus-visible:ring-offset-1 focus-visible:ring-offset-[#05060a]",
+            unifiedEvents.length === 0
+              ? "text-[#6f7f9a]/50 cursor-not-allowed"
+              : "text-[#6f7f9a] hover:text-[#ece7dc] hover:border-[#d4a84b]/30",
+          )}
+        >
+          <IconDownload size={13} stroke={1.5} />
+          Export
+        </button>
+
+        {showFleet && (
+          <button
+            onClick={loadFleetEvents}
+            disabled={isLoading || !connection.connected}
+            className={cn(
+              "flex items-center gap-1.5 rounded-md border border-[#2d3240] px-3 py-1.5 text-[11px] transition-colors active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d4a84b]/40 focus-visible:ring-offset-1 focus-visible:ring-offset-[#05060a]",
+              isLoading || !connection.connected
+                ? "text-[#6f7f9a]/40 cursor-not-allowed"
+                : "text-[#6f7f9a] hover:text-[#ece7dc] hover:border-[#d4a84b]/30",
+            )}
+          >
+            <IconRefresh
+              size={13}
+              stroke={1.5}
+              className={isLoading ? "animate-spin" : ""}
+            />
+            Fetch
+          </button>
+        )}
+      </PageHeader>
+
+      {/* Filter bar + summary stats (collapsed) */}
+      <div className="shrink-0 border-b border-[#2d3240]/60 px-6 py-2 flex items-center gap-3">
+        {/* Filters dropdown button */}
+        <div className="relative">
+          <button
+            onClick={() => setShowFilters(!showFilters)}
+            className="flex items-center gap-1.5 rounded-md border border-[#2d3240] px-3 py-1.5 text-[11px] text-[#6f7f9a] hover:text-[#ece7dc] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d4a84b]/40 focus-visible:ring-offset-1 focus-visible:ring-offset-[#05060a]"
+          >
+            <IconFilter size={13} stroke={1.5} />
+            Filters
+            {activeFilterCount > 0 && (
+              <span className="ml-1 rounded-full bg-[#d4a84b]/15 text-[#d4a84b] px-1.5 text-[9px] font-semibold">
+                {activeFilterCount}
+              </span>
+            )}
+          </button>
+          {showFilters && (
+            <div className="absolute left-0 top-full mt-1 z-50 rounded-lg border border-[#2d3240] bg-[#131721] p-4 shadow-xl min-w-[400px]">
+              {/* Time range row */}
+              <div className="mb-3">
+                <FilterGroup label="Time">
+                  {(["1h", "24h", "7d", "30d"] as TimeRange[]).map((tr) => (
                     <FilterPill
-                      key={d}
-                      label={d}
-                      active={decisionFilter === d}
-                      onClick={() => setDecisionFilter(d)}
+                      key={tr}
+                      label={tr}
+                      active={timeRange === tr}
+                      onClick={() => setTimeRange(tr)}
                     />
-                  ),
-                )}
-              </FilterGroup>
+                  ))}
+                </FilterGroup>
+              </div>
 
-              <FilterGroup label="Action">
-                <Select value={actionFilter} onValueChange={(v) => { if (v !== null) setActionFilter(v); }}>
-                  <SelectTrigger className="h-7 text-xs bg-[#131721] border-[#2d3240] text-[#ece7dc]">
-                    <SelectValue placeholder="All types" />
-                  </SelectTrigger>
-                  <SelectContent className="bg-[#131721] border-[#2d3240]">
-                    {ACTION_TYPES.map((at) => (
-                      <SelectItem key={at} value={at} className="text-xs text-[#ece7dc]">
-                        {at === "all" ? "All types" : at}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </FilterGroup>
+              {showFleet && (
+                <>
+                  {/* Decision row */}
+                  <div className="mb-3">
+                    <FilterGroup label="Decision">
+                      {(["all", "allow", "deny", "warn"] as DecisionFilter[]).map(
+                        (d) => (
+                          <FilterPill
+                            key={d}
+                            label={d}
+                            active={decisionFilter === d}
+                            onClick={() => setDecisionFilter(d)}
+                          />
+                        ),
+                      )}
+                    </FilterGroup>
+                  </div>
 
-              <FilterGroup label="Agent">
-                <Select value={agentFilter} onValueChange={(v) => { if (v !== null) setAgentFilter(v); }}>
-                  <SelectTrigger className="h-7 text-xs bg-[#131721] border-[#2d3240] text-[#ece7dc] max-w-[180px]">
-                    <SelectValue placeholder="All agents" />
-                  </SelectTrigger>
-                  <SelectContent className="bg-[#131721] border-[#2d3240]">
-                    <SelectItem value="all" className="text-xs text-[#ece7dc]">All agents</SelectItem>
-                    {agentIds.map((id) => (
-                      <SelectItem key={id} value={id} className="text-xs text-[#ece7dc]">
-                        {id}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </FilterGroup>
-            </>
+                  {/* Action type + Agent row */}
+                  <div className="flex items-center gap-4">
+                    <FilterGroup label="Action">
+                      <Select value={actionFilter} onValueChange={(v) => { if (v !== null) setActionFilter(v); }}>
+                        <SelectTrigger className="h-7 text-xs bg-[#0b0d13] border-[#2d3240] text-[#ece7dc]">
+                          <SelectValue placeholder="All types" />
+                        </SelectTrigger>
+                        <SelectContent className="bg-[#131721] border-[#2d3240]">
+                          {ACTION_TYPES.map((at) => (
+                            <SelectItem key={at} value={at} className="text-xs text-[#ece7dc]">
+                              {at === "all" ? "All types" : at}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </FilterGroup>
+
+                    <FilterGroup label="Agent">
+                      <Select value={agentFilter} onValueChange={(v) => { if (v !== null) setAgentFilter(v); }}>
+                        <SelectTrigger className="h-7 text-xs bg-[#0b0d13] border-[#2d3240] text-[#ece7dc] max-w-[180px]">
+                          <SelectValue placeholder="All agents" />
+                        </SelectTrigger>
+                        <SelectContent className="bg-[#131721] border-[#2d3240]">
+                          <SelectItem value="all" className="text-xs text-[#ece7dc]">All agents</SelectItem>
+                          {agentIds.map((id) => (
+                            <SelectItem key={id} value={id} className="text-xs text-[#ece7dc]">
+                              {id}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </FilterGroup>
+                  </div>
+                </>
+              )}
+            </div>
           )}
         </div>
-      </div>
 
-      {/* Summary stats */}
-      <div className="shrink-0 border-b border-[#2d3240]/60 px-6 py-2 flex items-center gap-3">
+        {/* Inline summary stats */}
         <StatBadge label="Total" count={counts.total} />
         {showFleet ? (
           <>
@@ -445,21 +460,11 @@ export function AuditLog() {
       {/* Event table */}
       <div className="flex-1 overflow-auto">
         {isLoading && showFleet && unifiedEvents.length === 0 ? (
-          <div className="flex h-full items-center justify-center">
-            <div className="flex flex-col items-center gap-3">
-              <IconRefresh
-                size={20}
-                className="text-[#6f7f9a]/30 animate-spin"
-              />
-              <span className="text-[11px] text-[#6f7f9a]/40">
-                Loading audit events...
-              </span>
-            </div>
-          </div>
+          <SkeletonTable rows={12} />
         ) : unifiedEvents.length === 0 ? (
           <div className="flex h-full items-center justify-center">
             <div className="flex flex-col items-center gap-3">
-              <IconFileAnalytics size={24} className="text-[#6f7f9a]/20" />
+              <IconFileAnalytics size={24} className="text-[#6f7f9a]/50" />
               <span className="text-[12px] text-[#6f7f9a]/40">
                 {showLocal
                   ? "No local events recorded yet. Events are captured as you use the workbench."
@@ -481,7 +486,7 @@ export function AuditLog() {
           </div>
         ) : showFleet ? (
           <table className="w-full min-w-[800px]">
-            <thead className="sticky top-0 z-10 bg-[#0b0d13]">
+            <thead className="sticky top-0 z-10 bg-[#0b0d13]/60">
               <tr className="border-b border-[#2d3240]/60">
                 <th className={cn(TH, "w-8")} />
                 <th className={TH}>Timestamp</th>
@@ -494,7 +499,7 @@ export function AuditLog() {
               </tr>
             </thead>
             <tbody>
-              {unifiedEvents.map((event) => {
+              {unifiedEvents.map((event, index) => {
                 const isExpanded = expandedId === event.id;
 
                 return (
@@ -502,6 +507,7 @@ export function AuditLog() {
                     key={event.id}
                     event={event}
                     isExpanded={isExpanded}
+                    index={index}
                     onToggle={() =>
                       setExpandedId(isExpanded ? null : event.id)
                     }
@@ -512,7 +518,7 @@ export function AuditLog() {
           </table>
         ) : (
           <table className="w-full min-w-[700px]">
-            <thead className="sticky top-0 z-10 bg-[#0b0d13]">
+            <thead className="sticky top-0 z-10 bg-[#0b0d13]/60">
               <tr className="border-b border-[#2d3240]/60">
                 <th className={cn(TH, "w-8")} />
                 <th className={TH}>Timestamp</th>
@@ -522,7 +528,7 @@ export function AuditLog() {
               </tr>
             </thead>
             <tbody>
-              {unifiedEvents.map((event) => {
+              {unifiedEvents.map((event, index) => {
                 const isExpanded = expandedId === event.id;
 
                 return (
@@ -530,6 +536,7 @@ export function AuditLog() {
                     key={event.id}
                     event={event}
                     isExpanded={isExpanded}
+                    index={index}
                     onToggle={() =>
                       setExpandedId(isExpanded ? null : event.id)
                     }
@@ -544,9 +551,6 @@ export function AuditLog() {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Source Badge
-// ---------------------------------------------------------------------------
 
 function SourceBadge({
   mode,
@@ -572,9 +576,6 @@ function SourceBadge({
   );
 }
 
-// ---------------------------------------------------------------------------
-// Shared sub-components
-// ---------------------------------------------------------------------------
 
 function FilterGroup({
   label,
@@ -606,7 +607,7 @@ function FilterPill({
     <button
       onClick={onClick}
       className={cn(
-        "rounded-md px-2 py-1 text-[10px] font-medium capitalize transition-colors",
+        "rounded-md px-2 py-1 text-[10px] font-medium capitalize transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d4a84b]/40 focus-visible:ring-offset-1 focus-visible:ring-offset-[#05060a]",
         active
           ? "bg-[#d4a84b]/10 text-[#d4a84b]"
           : "text-[#6f7f9a]/50 hover:text-[#ece7dc] hover:bg-[#131721]/40",
@@ -640,17 +641,16 @@ function StatBadge({
   );
 }
 
-// ---------------------------------------------------------------------------
-// Fleet Event Row (original design)
-// ---------------------------------------------------------------------------
 
 function FleetEventRow({
   event,
   isExpanded,
+  index,
   onToggle,
 }: {
   event: UnifiedAuditEvent;
   isExpanded: boolean;
+  index: number;
   onToggle: () => void;
 }) {
   const decisionColor =
@@ -662,7 +662,10 @@ function FleetEventRow({
         onClick={onToggle}
         className={cn(
           "border-b border-[#2d3240]/30 cursor-pointer transition-colors",
-          isExpanded ? "bg-[#131721]" : "hover:bg-[#0b0d13]",
+          isExpanded
+            ? "bg-[#131721] border-l-2 border-l-[#d4a84b]"
+            : "hover:bg-[#131721] border-l-2 border-l-transparent",
+          !isExpanded && (index % 2 === 0 ? "bg-[#05060a]" : "bg-[#0b0d13]/40"),
         )}
       >
         <td className="px-3 py-2">
@@ -711,7 +714,7 @@ function FleetEventRow({
           {event.severity ? (
             <SeverityBadge severity={event.severity} />
           ) : (
-            <span className="text-[10px] text-[#6f7f9a]/20">---</span>
+            <span className="text-[10px] text-[#6f7f9a]/50">---</span>
           )}
         </td>
       </tr>
@@ -727,9 +730,6 @@ function FleetEventRow({
   );
 }
 
-// ---------------------------------------------------------------------------
-// Local Event Row
-// ---------------------------------------------------------------------------
 
 const SOURCE_COLORS: Record<string, string> = {
   simulator: "#d4a84b",
@@ -742,10 +742,12 @@ const SOURCE_COLORS: Record<string, string> = {
 function LocalEventRow({
   event,
   isExpanded,
+  index,
   onToggle,
 }: {
   event: UnifiedAuditEvent;
   isExpanded: boolean;
+  index: number;
   onToggle: () => void;
 }) {
   const sourceColor = SOURCE_COLORS[event.source ?? ""] ?? "#6f7f9a";
@@ -757,7 +759,10 @@ function LocalEventRow({
         onClick={onToggle}
         className={cn(
           "border-b border-[#2d3240]/30 cursor-pointer transition-colors",
-          isExpanded ? "bg-[#131721]" : "hover:bg-[#0b0d13]",
+          isExpanded
+            ? "bg-[#131721] border-l-2 border-l-[#d4a84b]"
+            : "hover:bg-[#131721] border-l-2 border-l-transparent",
+          !isExpanded && (index % 2 === 0 ? "bg-[#05060a]" : "bg-[#0b0d13]/40"),
         )}
       >
         <td className="px-3 py-2">
@@ -812,9 +817,6 @@ function LocalEventRow({
   );
 }
 
-// ---------------------------------------------------------------------------
-// Detail panels
-// ---------------------------------------------------------------------------
 
 function SeverityBadge({ severity }: { severity: string }) {
   const color = SEVERITY_COLORS[severity.toLowerCase()] ?? "#6f7f9a";

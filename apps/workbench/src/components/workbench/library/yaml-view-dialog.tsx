@@ -7,7 +7,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { IconCopy, IconCheck } from "@tabler/icons-react";
-import { yamlToPolicy, policyToJson, policyToToml, type ExportFormat } from "@/lib/workbench/yaml-utils";
+import { yamlToPolicy, policyToJson, policyToToml, type ExportFormat } from "@/features/policy/yaml-utils";
 import { cn } from "@/lib/utils";
 
 interface YamlViewDialogProps {

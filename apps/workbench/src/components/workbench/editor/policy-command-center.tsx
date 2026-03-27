@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback } from "react";
-import { useMultiPolicy } from "@/lib/workbench/multi-policy-store";
-import type { PolicyTab } from "@/lib/workbench/multi-policy-store";
+import { usePolicyTabs } from "@/features/policy/hooks/use-policy-actions";
+import type { PolicyTab } from "@/features/policy/types/policy-tab";
 import { GUARD_REGISTRY, GUARD_CATEGORIES } from "@/lib/workbench/guard-registry";
 import type { GuardId } from "@/lib/workbench/types";
 import { cn } from "@/lib/utils";
@@ -14,13 +14,8 @@ import {
   IconToggleRight,
   IconChevronDown,
   IconChevronRight,
-  IconWand,
-  IconShieldLock,
 } from "@tabler/icons-react";
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 /** Returns true/false for configured guards, null for missing guards. */
 function isGuardEnabled(tab: PolicyTab, guardId: string): boolean | null {
@@ -34,20 +29,14 @@ function enabledGuardCount(tab: PolicyTab): number {
   return GUARD_REGISTRY.filter((g) => isGuardEnabled(tab, g.id) === true).length;
 }
 
-// ---------------------------------------------------------------------------
-// Props
-// ---------------------------------------------------------------------------
 
 interface PolicyCommandCenterProps {
   onClose: () => void;
 }
 
-// ---------------------------------------------------------------------------
-// Component
-// ---------------------------------------------------------------------------
 
 export function PolicyCommandCenter({ onClose }: PolicyCommandCenterProps) {
-  const { tabs, multiDispatch } = useMultiPolicy();
+  const { tabs, multiDispatch } = usePolicyTabs();
 
   const allCategoryIds = useMemo(
     () => GUARD_CATEGORIES.map((c) => c.id),
@@ -394,21 +383,9 @@ export function PolicyCommandCenter({ onClose }: PolicyCommandCenterProps) {
       {/* ---------------------------------------------------------------- */}
       <div className="flex items-center gap-2 px-5 py-3 border-t border-[#2d3240] bg-[#0b0d13]">
         <button
-          disabled
-          className={cn(
-            "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[10px] font-mono",
-            "bg-[#131721] border border-[#2d3240] text-[#6f7f9a]/30 cursor-not-allowed",
-          )}
-          title="Harden all policies (coming soon)"
-        >
-          <IconShieldLock size={12} />
-          <span>Harden All</span>
-        </button>
-
-        <button
           onClick={() => {
             const count = tabs.length;
-            if (window.confirm(`Enable all 13 guards across ${count} ${count === 1 ? "policy" : "policies"}? This will mark all policies as unsaved.`)) {
+            if (window.confirm(`Enable all 13 guards across ${count} ${count === 1 ? "policy" : "policies"}?\n\nEvery guard will be activated on all open policies. Each affected policy will be marked as unsaved until you explicitly save it.`)) {
               handleEnableAllGuardsEverywhere();
             }
           }}
@@ -421,30 +398,6 @@ export function PolicyCommandCenter({ onClose }: PolicyCommandCenterProps) {
         >
           <IconShieldCheck size={12} />
           <span>Enable All Guards</span>
-        </button>
-
-        <button
-          disabled
-          className={cn(
-            "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[10px] font-mono",
-            "bg-[#131721] border border-[#2d3240] text-[#6f7f9a]/30 cursor-not-allowed",
-          )}
-          title="Compliance audit (coming soon)"
-        >
-          <IconWand size={12} />
-          <span>Compliance Audit</span>
-        </button>
-
-        <button
-          disabled
-          className={cn(
-            "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[10px] font-mono",
-            "bg-[#131721] border border-[#2d3240] text-[#6f7f9a]/30 cursor-not-allowed",
-          )}
-          title="Run all tests (coming soon)"
-        >
-          <IconShieldCheck size={12} />
-          <span>Run All Tests</span>
         </button>
       </div>
     </div>

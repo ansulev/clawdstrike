@@ -1,142 +1,220 @@
-import { useMemo, useState, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
-import { useKeyboardShortcuts, type ShortcutAction } from "@/lib/keyboard-shortcuts";
-import { useWorkbench, useMultiPolicy } from "@/lib/workbench/multi-policy-store";
-import { policyToYaml } from "@/lib/workbench/yaml-utils";
-import { ShortcutHelpDialog } from "./shortcut-help-dialog";
+/**
+ * ShortcutProvider — reads all commands with keybindings from the registry
+ * and wires them to a single global keydown listener.
+ *
+ * The SHORTCUT_DEFINITIONS export is preserved (derived from the registry)
+ * so that ShortcutHelpDialog continues to work unchanged.
+ */
+import { useEffect } from "react";
+import { useBottomPaneStore } from "@/features/bottom-pane/bottom-pane-store";
+import { getActivePaneRoute, usePaneStore } from "@/features/panes/pane-store";
+import {
+  commandRegistry,
+  type Command,
+  type CommandContext,
+} from "@/lib/command-registry";
+import { normalizeWorkbenchRoute } from "./workbench-routes";
 
-export const SHORTCUT_DEFINITIONS = [
-  // File
-  { key: "s", meta: true, shift: false, description: "Save policy", category: "File" },
-  { key: "s", meta: true, shift: true, description: "Save As", category: "File" },
-  { key: "n", meta: true, shift: false, description: "New policy", category: "File" },
-  { key: "o", meta: true, shift: false, description: "Open policy file", category: "File" },
-  { key: "e", meta: true, shift: false, description: "Export YAML", category: "File" },
-  // Tabs
-  { key: "t", meta: true, shift: false, description: "New tab", category: "Tabs" },
-  { key: "w", meta: true, shift: false, description: "Close tab", category: "Tabs" },
-  // Edit
-  { key: "z", meta: true, shift: false, description: "Undo", category: "Edit" },
-  { key: "z", meta: true, shift: true, description: "Redo", category: "Edit" },
-  { key: "b", meta: true, shift: false, description: "Toggle sidebar", category: "Edit" },
-  // Policy
-  { key: "v", meta: true, shift: true, description: "Validate policy", category: "Policy" },
-  { key: "y", meta: true, shift: true, description: "Copy YAML to clipboard", category: "Policy" },
-  // Navigate
-  { key: "1", meta: true, shift: false, description: "Editor", category: "Navigate" },
-  { key: "2", meta: true, shift: false, description: "Threat Lab", category: "Navigate" },
-  { key: "3", meta: true, shift: false, description: "Compare", category: "Navigate" },
-  { key: "4", meta: true, shift: false, description: "Compliance", category: "Navigate" },
-  { key: "5", meta: true, shift: false, description: "Receipts", category: "Navigate" },
-  { key: "6", meta: true, shift: false, description: "Library", category: "Navigate" },
-  // Help
-  { key: "/", meta: true, shift: false, description: "Show keyboard shortcuts", category: "Help" },
-] as const;
+// ---- Keybinding parser ----
 
-const NAV_ROUTES = [
-  "/editor",
-  "/simulator",
-  "/compare",
-  "/compliance",
-  "/receipts",
-  "/library",
-] as const;
+interface ParsedKeybinding {
+  key: string;
+  meta: boolean;
+  shift: boolean;
+  alt: boolean;
+}
 
 /**
- * Registers all app-wide keyboard shortcuts.
- * Must be rendered inside both <WorkbenchProvider> and a router context.
+ * Parse a keybinding string like "Meta+Shift+V" into a matcher object.
+ */
+function parseKeybinding(binding: string): ParsedKeybinding {
+  const parts = binding.split("+");
+  const key = parts[parts.length - 1].toLowerCase();
+  const meta = parts.some((p) => p === "Meta");
+  const shift = parts.some((p) => p === "Shift");
+  const alt = parts.some((p) => p === "Alt");
+  return { key, meta, shift, alt };
+}
+
+const SHIFTED_SYMBOL_KEY_MAP: Record<string, string> = {
+  "~": "`",
+  "!": "1",
+  "@": "2",
+  "#": "3",
+  "$": "4",
+  "%": "5",
+  "^": "6",
+  "&": "7",
+  "*": "8",
+  "(": "9",
+  ")": "0",
+  "_": "-",
+  "+": "=",
+  "{": "[",
+  "}": "]",
+  "|": "\\",
+  ":": ";",
+  "\"": "'",
+  "<": ",",
+  ">": ".",
+  "?": "/",
+};
+
+function normalizePressedKey(key: string): string {
+  const normalized = key.toLowerCase();
+  return SHIFTED_SYMBOL_KEY_MAP[key] ?? SHIFTED_SYMBOL_KEY_MAP[normalized] ?? normalized;
+}
+
+function isShiftedSymbolAlias(key: string): boolean {
+  return key in SHIFTED_SYMBOL_KEY_MAP;
+}
+
+function getShortcutBindings(): Array<{
+  cmd: Command & { keybinding: string };
+  parsed: ParsedKeybinding;
+}> {
+  const bindings = commandRegistry
+    .getAll()
+    .filter((cmd): cmd is Command & { keybinding: string } => !!cmd.keybinding)
+    .map((cmd) => ({
+      cmd,
+      parsed: parseKeybinding(cmd.keybinding),
+    }));
+
+  bindings.sort((a, b) => {
+    if (a.parsed.key === b.parsed.key) {
+      return (b.parsed.shift ? 1 : 0) - (a.parsed.shift ? 1 : 0);
+    }
+    return 0;
+  });
+
+  return bindings;
+}
+
+// ---- Shortcut definition type (for help dialog compatibility) ----
+
+export interface ShortcutDefinition {
+  key: string;
+  meta: boolean;
+  shift?: boolean;
+  alt?: boolean;
+  description: string;
+  category: string;
+}
+
+function getCommandContexts(command: Command): CommandContext[] {
+  if (!command.context) {
+    return ["global"];
+  }
+  return Array.isArray(command.context) ? command.context : [command.context];
+}
+
+function resolveActiveShortcutContexts(target: EventTarget | null): Set<CommandContext> {
+  const contexts = new Set<CommandContext>(["global"]);
+  const element = target instanceof Element ? target : null;
+
+  if (element?.closest('[data-shortcut-context="terminal"]')) {
+    contexts.add("terminal");
+    return contexts;
+  }
+
+  contexts.add("pane");
+
+  const route = normalizeWorkbenchRoute(
+    getActivePaneRoute(usePaneStore.getState().root, usePaneStore.getState().activePaneId),
+  );
+  if (route.startsWith("/editor") || route.startsWith("/file/")) {
+    contexts.add("editor");
+  }
+
+  if (useBottomPaneStore.getState().isOpen && useBottomPaneStore.getState().activeTab === "terminal") {
+    const activeElement = document.activeElement;
+    if (activeElement instanceof Element && activeElement.closest('[data-shortcut-context="terminal"]')) {
+      contexts.add("terminal");
+      contexts.delete("pane");
+      contexts.delete("editor");
+    }
+  }
+
+  return contexts;
+}
+
+function commandMatchesShortcutContext(command: Command, target: EventTarget | null): boolean {
+  const activeContexts = resolveActiveShortcutContexts(target);
+  return getCommandContexts(command).some((context) => activeContexts.has(context));
+}
+
+/**
+ * Derive SHORTCUT_DEFINITIONS from the current registry snapshot.
+ * This is exported so ShortcutHelpDialog can import it.
+ *
+ * Note: since this is derived dynamically, the help dialog must live inside
+ * the ShortcutProvider tree (which it already does via InitCommands).
+ */
+export function getShortcutDefinitions(): ShortcutDefinition[] {
+  return commandRegistry
+    .getAll()
+    .filter((cmd): cmd is Command & { keybinding: string } => !!cmd.keybinding)
+    .map((cmd) => {
+      const parsed = parseKeybinding(cmd.keybinding);
+      return {
+        key: parsed.key,
+        meta: parsed.meta,
+        shift: parsed.shift || undefined,
+        alt: parsed.alt || undefined,
+        description: cmd.title,
+        category: cmd.category,
+      };
+    });
+}
+
+// SHORTCUT_DEFINITIONS removed — was always empty at module load time
+// (registry not populated yet). Use getShortcutDefinitions() for live data.
+
+// ---- Component ----
+
+/**
+ * Registers a single global keydown listener that dispatches to command.execute()
+ * for any command whose keybinding matches the pressed keys.
+ *
+ * Renders nothing — visual output (ShortcutHelpDialog) is now handled
+ * by InitCommands which manages the dialog open/close state.
  */
 export function ShortcutProvider() {
-  const {
-    state,
-    dispatch,
-    exportYaml,
-    copyYaml,
-    openFile,
-    saveFile,
-    saveFileAs,
-    newPolicy,
-    undo,
-    redo,
-  } = useWorkbench();
-  const { multiDispatch, activeTab } = useMultiPolicy();
-  const navigate = useNavigate();
-  const [helpOpen, setHelpOpen] = useState(false);
+  useEffect(() => {
+    function handleKeydown(e: KeyboardEvent) {
+      const modifierPressed = e.metaKey || e.ctrlKey;
+      const normalizedKey = normalizePressedKey(e.key);
+      const bindings = getShortcutBindings();
 
-  const handleToggleSidebar = useCallback(() => {
-    dispatch({
-      type: "SET_SIDEBAR_COLLAPSED",
-      collapsed: !state.ui.sidebarCollapsed,
-    });
-  }, [dispatch, state.ui.sidebarCollapsed]);
+      for (const { cmd, parsed } of bindings) {
+        if (!commandMatchesShortcutContext(cmd, e.target)) {
+          continue;
+        }
 
-  const handleValidate = useCallback(() => {
-    const yaml = policyToYaml(state.activePolicy);
-    dispatch({ type: "SET_YAML", yaml });
-    navigate("/editor");
-  }, [state.activePolicy, dispatch, navigate]);
+        const keyMatches = normalizedKey === parsed.key;
+        const metaMatches = parsed.meta ? modifierPressed : !modifierPressed;
+        const shiftMatches = parsed.shift
+          ? e.shiftKey
+          : !e.shiftKey || (isShiftedSymbolAlias(e.key) && normalizedKey === parsed.key);
+        const altMatches = parsed.alt ? e.altKey : !e.altKey;
 
-  const handleNewTab = useCallback(() => {
-    multiDispatch({ type: "NEW_TAB" });
-    navigate("/editor");
-  }, [multiDispatch, navigate]);
+        if (keyMatches && metaMatches && shiftMatches && altMatches) {
+          e.preventDefault();
+          e.stopPropagation();
+          void commandRegistry.execute(cmd.id);
+          return;
+        }
+      }
 
-  const handleCloseTab = useCallback(() => {
-    if (!activeTab) return;
-    if (activeTab.dirty) {
-      const confirmed = window.confirm(`"${activeTab.name}" has unsaved changes. Close anyway?`);
-      if (!confirmed) return;
     }
-    multiDispatch({ type: "CLOSE_TAB", tabId: activeTab.id });
-  }, [activeTab, multiDispatch]);
 
-  const shortcuts: ShortcutAction[] = useMemo(
-    () => [
-      // File — shift:true entries must come before shift:false to match first
-      { key: "s", meta: true, shift: true, description: "Save As", action: () => void saveFileAs() },
-      { key: "s", meta: true, description: "Save policy", action: () => void saveFile() },
-      { key: "n", meta: true, description: "New policy", action: () => { newPolicy(); navigate("/editor"); } },
-      { key: "o", meta: true, description: "Open policy file", action: async () => { await openFile(); navigate("/editor"); } },
-      { key: "e", meta: true, description: "Export YAML", action: exportYaml },
-      // Tabs
-      { key: "t", meta: true, description: "New tab", action: handleNewTab },
-      { key: "w", meta: true, description: "Close tab", action: handleCloseTab },
-      // Edit — shift:true entries must come before shift:false for same key
-      { key: "z", meta: true, shift: true, description: "Redo", action: redo },
-      { key: "z", meta: true, description: "Undo", action: undo },
-      { key: "b", meta: true, description: "Toggle sidebar", action: handleToggleSidebar },
-      // Policy
-      { key: "v", meta: true, shift: true, description: "Validate policy", action: handleValidate },
-      { key: "y", meta: true, shift: true, description: "Copy YAML to clipboard", action: copyYaml },
-      // Navigate (Cmd+1..6)
-      ...NAV_ROUTES.map((route, i) => ({
-        key: String(i + 1),
-        meta: true,
-        description: `Navigate to ${route.slice(1)}`,
-        action: () => navigate(route),
-      })),
-      // Help — Cmd+/ (and Cmd+Shift+/ which produces "?" as e.key on many keyboards)
-      { key: "/", meta: true, description: "Show keyboard shortcuts", action: () => setHelpOpen((prev) => !prev) },
-      { key: "?", meta: true, shift: true, description: "Show keyboard shortcuts", action: () => setHelpOpen((prev) => !prev) },
-    ],
-    [
-      saveFile,
-      saveFileAs,
-      newPolicy,
-      openFile,
-      exportYaml,
-      handleNewTab,
-      handleCloseTab,
-      undo,
-      redo,
-      handleToggleSidebar,
-      handleValidate,
-      copyYaml,
-      navigate,
-    ],
-  );
+    window.addEventListener("keydown", handleKeydown, { capture: true });
+    return () => {
+      window.removeEventListener("keydown", handleKeydown, { capture: true });
+    };
+  }, []);
 
-  useKeyboardShortcuts(shortcuts);
-
-  return <ShortcutHelpDialog open={helpOpen} onOpenChange={setHelpOpen} />;
+  // ShortcutHelpDialog is now rendered by InitCommands.
+  return null;
 }

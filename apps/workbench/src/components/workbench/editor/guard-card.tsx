@@ -1,4 +1,5 @@
 import { useState, useCallback, useMemo, useEffect } from "react";
+import { motion } from "motion/react";
 import {
   Collapsible,
   CollapsibleTrigger,
@@ -16,7 +17,6 @@ import {
   computeCoverageStats,
 } from "@/lib/workbench/trustprint-patterns";
 import { useGuardProvenance } from "@/components/workbench/editor/inheritance-chain";
-import { useWorkbench } from "@/lib/workbench/multi-policy-store";
 import { GUARD_REGISTRY } from "@/lib/workbench/guard-registry";
 import { useGuardTestStatus, useTestRunnerOptional } from "@/lib/workbench/test-store";
 import { generateScenariosFromPolicy } from "@/lib/workbench/scenario-generator";
@@ -45,6 +45,8 @@ import {
   IconDatabase,
   IconCircleCheck,
 } from "@tabler/icons-react";
+import { usePolicyTabsStore } from "@/features/policy/stores/policy-tabs-store";
+import { usePolicyEditStore } from "@/features/policy/stores/policy-edit-store";
 
 /** Keys handled by custom spider_sense UI — excluded from the generic Advanced section. */
 const SPIDER_SENSE_HANDLED_KEYS = new Set([
@@ -56,9 +58,6 @@ const SPIDER_SENSE_HANDLED_KEYS = new Set([
   "embedding_api_key",
 ]);
 
-// ---------------------------------------------------------------------------
-// Trustprint Profile Card
-// ---------------------------------------------------------------------------
 
 function TrustprintProfileCard({
   patterns,
@@ -151,9 +150,6 @@ const ICON_MAP: Record<string, typeof IconLock> = {
   IconFingerprint,
 };
 
-// ---------------------------------------------------------------------------
-// Regression dot colors / tooltips
-// ---------------------------------------------------------------------------
 
 const TEST_STATUS_DOT: Record<string, { color: string; tip: string } | null> = {
   pass: { color: "#3dbf84", tip: "All tests pass" },
@@ -162,9 +158,6 @@ const TEST_STATUS_DOT: Record<string, { color: string; tip: string } | null> = {
   none: null,
 };
 
-// ---------------------------------------------------------------------------
-// TestScenario -> SuiteScenario conversion
-// ---------------------------------------------------------------------------
 
 function extractTarget(s: TestScenario): string {
   const p = s.payload;
@@ -226,7 +219,6 @@ function getGuardSummary(guardId: GuardId, config: Record<string, unknown>): str
   return parts.length > 0 ? parts.join(", ") : "default configuration";
 }
 
-// ---------------------------------------------------------------------------
 interface GuardCardProps {
   guardId: GuardId;
   /** Enable reorder controls (up/down buttons, drag handle). Only shown in custom view. */
@@ -247,6 +239,8 @@ interface GuardCardProps {
   isDragging?: boolean;
   /** Drop position indicator: "above" or "below". */
   dropIndicator?: "above" | "below" | null;
+  /** 1-indexed execution order badge shown in custom reorder mode. */
+  executionOrder?: number;
 }
 
 const PROVENANCE_BADGE_STYLES: Record<string, string> = {
@@ -270,8 +264,11 @@ export function GuardCard({
   onDragLeave,
   isDragging,
   dropIndicator,
+  executionOrder,
 }: GuardCardProps) {
-  const { state, dispatch } = useWorkbench();
+  const activeTabId = usePolicyTabsStore(s => s.activeTabId);
+  const activeTab = usePolicyTabsStore(s => s.tabs.find(t => t.id === s.activeTabId));
+  const editState = usePolicyEditStore(s => s.editStates.get(activeTabId));
   const [open, setOpen] = useState(false);
   const provenanceInfo = useGuardProvenance(guardId);
 
@@ -311,13 +308,13 @@ export function GuardCard({
   const meta = GUARD_REGISTRY.find((g) => g.id === guardId);
   if (!meta) return null;
 
-  const guardConfig = (state.activePolicy.guards[guardId] ?? {}) as Record<string, unknown>;
+  const guardConfig = ((editState?.policy ?? { version: "1.1.0", name: "", description: "", guards: {}, settings: {} }).guards[guardId] ?? {}) as Record<string, unknown>;
   const enabled = (guardConfig.enabled as boolean | undefined) ?? false;
 
   const Icon = ICON_MAP[meta.icon] ?? IconLock;
 
   // Per-guard native validation errors from the Rust engine
-  const nativeErrors = state.nativeValidation.guardErrors[guardId] ?? [];
+  const nativeErrors = (editState?.nativeValidation ?? { guardErrors: {}, topLevelErrors: [], topLevelWarnings: [], loading: false, valid: null }).guardErrors[guardId] ?? [];
   const hasNativeErrors = nativeErrors.length > 0;
 
   const summary = useMemo(
@@ -328,9 +325,10 @@ export function GuardCard({
   const handleToggle = useCallback(
     (checked: boolean | React.FormEvent<HTMLButtonElement>) => {
       const isEnabled = typeof checked === "boolean" ? checked : !enabled;
-      dispatch({ type: "TOGGLE_GUARD", guardId, enabled: isEnabled });
+      usePolicyEditStore.getState().toggleGuard(activeTabId, guardId, isEnabled || enabled, activeTab?.fileType ?? "clawdstrike_policy");
+      usePolicyTabsStore.getState().setDirty(activeTabId, true);
     },
-    [dispatch, guardId, enabled]
+    [activeTabId, activeTab?.fileType, guardId, enabled]
   );
 
   const handleConfigChange = useCallback(
@@ -338,11 +336,8 @@ export function GuardCard({
       // Handle nested keys like "detector.block_threshold" or "detector.layers.heuristic"
       const parts = key.split(".");
       if (parts.length === 1) {
-        dispatch({
-          type: "UPDATE_GUARD",
-          guardId,
-          config: { [key]: value } as Partial<GuardConfigMap[GuardId]>,
-        });
+        usePolicyEditStore.getState().updateGuard(activeTabId, guardId, { [key]: value } as Partial<GuardConfigMap[GuardId]>, activeTab?.fileType ?? "clawdstrike_policy");
+        usePolicyTabsStore.getState().setDirty(activeTabId, true);
       } else {
         // Build nested update — supports 2 or 3 levels of nesting
         const [topKey, ...rest] = parts;
@@ -356,19 +351,16 @@ export function GuardCard({
             (nested[rest[0]] as Record<string, unknown> | undefined) ?? {};
           nested[rest[0]] = { ...subExisting, [rest[1]]: value };
         }
-        dispatch({
-          type: "UPDATE_GUARD",
-          guardId,
-          config: { [topKey]: nested } as Partial<GuardConfigMap[GuardId]>,
-        });
+        usePolicyEditStore.getState().updateGuard(activeTabId, guardId, { [topKey]: nested } as Partial<GuardConfigMap[GuardId]>, activeTab?.fileType ?? "clawdstrike_policy");
+        usePolicyTabsStore.getState().setDirty(activeTabId, true);
       }
     },
-    [dispatch, guardId, guardConfig]
+    [activeTabId, activeTab?.fileType, guardId, guardConfig]
   );
 
   const handleGenerateTests = useCallback(() => {
     if (!testRunner) return;
-    const result = generateScenariosFromPolicy(state.activePolicy);
+    const result = generateScenariosFromPolicy((editState?.policy ?? { version: "1.1.0", name: "", description: "", guards: {}, settings: {} }));
     // Filter to only scenarios for this guard (scenario IDs start with "auto-{guardId}-")
     const prefix = `auto-${guardId}-`;
     const guardScenarios = result.scenarios.filter((s) => s.id.startsWith(prefix));
@@ -377,7 +369,7 @@ export function GuardCard({
     const suiteScenarios: SuiteScenario[] = guardScenarios.map(testScenarioToSuite);
     testRunner.dispatch({ type: "IMPORT_SCENARIOS", scenarios: suiteScenarios });
     setContextMenu(null);
-  }, [testRunner, state.activePolicy, guardId]);
+  }, [testRunner, (editState?.policy ?? { version: "1.1.0", name: "", description: "", guards: {}, settings: {} }), guardId]);
 
   const handleViewResults = useCallback(() => {
     // Scroll to any test result element that references this guard
@@ -428,6 +420,8 @@ export function GuardCard({
           aria-expanded={open}
           aria-label={`${open ? 'Collapse' : 'Expand'} ${meta.name} configuration`}
           className="flex items-center gap-3 w-full px-3 py-3 text-left cursor-pointer hover:bg-[#131721]/50 transition-colors rounded-t-lg"
+          render={<div role="button" tabIndex={0} />}
+          nativeButton={false}
         >
           {/* Drag handle — only in custom reorder mode */}
           {reorderable && (
@@ -437,6 +431,15 @@ export function GuardCard({
             >
               <IconGripVertical size={14} stroke={1.5} />
             </div>
+          )}
+          {/* Execution order badge — only in custom reorder mode */}
+          {executionOrder != null && (
+            <span
+              className="text-[8px] font-mono font-bold text-[#6f7f9a] bg-[#2d3240] rounded-full w-4 h-4 flex items-center justify-center shrink-0"
+              title={`Execution order: ${executionOrder}`}
+            >
+              {executionOrder}
+            </span>
           )}
           <Icon
             size={16}
@@ -554,7 +557,7 @@ export function GuardCard({
             size={14}
             stroke={1.5}
             className={cn(
-              "shrink-0 text-[#6f7f9a] transition-transform duration-200",
+              "shrink-0 text-[#6f7f9a] transition-transform duration-150",
               open && "rotate-180"
             )}
           />
@@ -577,6 +580,13 @@ export function GuardCard({
 
         {/* Body */}
         <CollapsibleContent>
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="overflow-hidden"
+          >
           <div className="px-3 pb-3 border-t border-[#2d3240]/50">
             <p className="text-[10px] text-[#6f7f9a] pt-2 pb-1">
               {meta.description}
@@ -586,7 +596,7 @@ export function GuardCard({
                 {/* --- Trustprint Profile --- */}
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
-                    <span className="text-[10px] font-mono font-medium text-[#ece7dc]">Trustprint Profile</span>
+                    <span className="text-[10px] font-mono font-medium text-[#ece7dc]" title="Embedding-based threat screening using vector similarity against known patterns">Trustprint Profile</span>
                   </div>
                   <p className="text-[9px] text-[#6f7f9a]/60 mb-2.5 leading-relaxed">
                     A Trustprint profile is the threat pattern database that this guard screens actions against.
@@ -672,6 +682,7 @@ export function GuardCard({
               />
             )}
           </div>
+          </motion.div>
         </CollapsibleContent>
       </div>
     </Collapsible>

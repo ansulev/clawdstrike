@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import {
   Collapsible,
   CollapsibleTrigger,
@@ -13,7 +13,15 @@ import {
   SelectContent,
   SelectItem,
 } from "@/components/ui/select";
-import { useWorkbench } from "@/lib/workbench/multi-policy-store";
+import {
+  ORIGIN_ACTOR_TYPE_OPTIONS as ACTOR_TYPE_OPTIONS,
+  ORIGIN_DEFAULT_BEHAVIOR_OPTIONS as DEFAULT_BEHAVIOR_OPTIONS,
+  ORIGIN_PROVENANCE_OPTIONS as PROVENANCE_OPTIONS,
+  ORIGIN_PROVIDER_OPTIONS as PROVIDERS,
+  ORIGIN_SPACE_TYPE_OPTIONS as SPACE_TYPES,
+  ORIGIN_VISIBILITY_OPTIONS as VISIBILITY_OPTIONS,
+  isCustomOriginChoice as isCustomChoice,
+} from "@/lib/workbench/origin-options";
 import type {
   OriginsConfig,
   OriginProfile,
@@ -23,6 +31,7 @@ import type {
   SpaceType,
   Visibility,
   ProvenanceConfidence,
+  ActorType,
   OriginDataPolicy,
   OriginBudgets,
   BridgePolicy,
@@ -37,55 +46,8 @@ import {
   IconWorld,
   IconFingerprint,
 } from "@tabler/icons-react";
-
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
-
-const PROVIDERS: { value: OriginProvider; label: string }[] = [
-  { value: "slack", label: "Slack" },
-  { value: "teams", label: "Teams" },
-  { value: "github", label: "GitHub" },
-  { value: "jira", label: "Jira" },
-  { value: "email", label: "Email" },
-  { value: "discord", label: "Discord" },
-  { value: "webhook", label: "Webhook" },
-];
-
-const SPACE_TYPES: { value: SpaceType; label: string }[] = [
-  { value: "channel", label: "Channel" },
-  { value: "group", label: "Group" },
-  { value: "dm", label: "DM" },
-  { value: "thread", label: "Thread" },
-  { value: "issue", label: "Issue" },
-  { value: "ticket", label: "Ticket" },
-  { value: "pull_request", label: "Pull Request" },
-  { value: "email_thread", label: "Email Thread" },
-];
-
-const VISIBILITY_OPTIONS: { value: Visibility; label: string }[] = [
-  { value: "private", label: "Private" },
-  { value: "internal", label: "Internal" },
-  { value: "public", label: "Public" },
-  { value: "external_shared", label: "External Shared" },
-  { value: "unknown", label: "Unknown" },
-];
-
-const PROVENANCE_OPTIONS: { value: ProvenanceConfidence; label: string }[] = [
-  { value: "strong", label: "Strong" },
-  { value: "medium", label: "Medium" },
-  { value: "weak", label: "Weak" },
-  { value: "unknown", label: "Unknown" },
-];
-
-const DEFAULT_BEHAVIOR_OPTIONS: { value: OriginDefaultBehavior; label: string }[] = [
-  { value: "deny", label: "Deny" },
-  { value: "minimal_profile", label: "Minimal Profile" },
-];
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
+import { usePolicyTabsStore } from "@/features/policy/stores/policy-tabs-store";
+import { usePolicyEditStore } from "@/features/policy/stores/policy-edit-store";
 
 function createEmptyProfile(): OriginProfile {
   return {
@@ -107,40 +69,41 @@ function createEmptyOriginsConfig(): OriginsConfig {
 // ---------------------------------------------------------------------------
 
 export function OriginEditor() {
-  const { state, dispatch } = useWorkbench();
-  const origins = state.activePolicy.origins;
-  const isV14 = state.activePolicy.version === "1.4.0";
-
-  // Don't render if not v1.4.0
-  if (!isV14) return null;
-
-  const enabled = Boolean(origins);
+  const activeTabId = usePolicyTabsStore(s => s.activeTabId);
+  const activeTab = usePolicyTabsStore(s => s.tabs.find(t => t.id === s.activeTabId));
+  const editState = usePolicyEditStore(s => s.editStates.get(activeTabId));
+  const origins = (editState?.policy ?? { version: "1.1.0", name: "", description: "", guards: {}, settings: {} }).origins;
+  const isV14 = (editState?.policy ?? { version: "1.1.0", name: "", description: "", guards: {}, settings: {} }).version === "1.4.0";
 
   const handleToggleOrigins = useCallback(
     (checked: boolean) => {
       if (checked) {
-        dispatch({
-          type: "UPDATE_ORIGINS",
-          origins: origins ?? createEmptyOriginsConfig(),
-        });
+        usePolicyEditStore.getState().updateOrigins(activeTabId, origins ?? createEmptyOriginsConfig(), activeTab?.fileType ?? "clawdstrike_policy");
+        usePolicyTabsStore.getState().setDirty(activeTabId, true);
       } else {
-        dispatch({ type: "UPDATE_ORIGINS", origins: undefined });
+        usePolicyEditStore.getState().updateOrigins(activeTabId, undefined, activeTab?.fileType ?? "clawdstrike_policy");
+      usePolicyTabsStore.getState().setDirty(activeTabId, true);
       }
     },
-    [dispatch, origins],
+    [activeTabId, activeTab?.fileType, origins],
   );
 
   const updateOrigins = useCallback(
     (updated: OriginsConfig) => {
-      dispatch({ type: "UPDATE_ORIGINS", origins: updated });
+      usePolicyEditStore.getState().updateOrigins(activeTabId, updated, activeTab?.fileType ?? "clawdstrike_policy");
+      usePolicyTabsStore.getState().setDirty(activeTabId, true);
     },
-    [dispatch],
+    [activeTabId, activeTab?.fileType],
   );
 
   const handleDefaultBehaviorChange = useCallback(
     (value: string | null) => {
       if (!origins || value == null) return;
-      updateOrigins({ ...origins, default_behavior: value as OriginDefaultBehavior });
+      updateOrigins({
+        ...origins,
+        profiles: origins.profiles ?? [],
+        default_behavior: value as OriginDefaultBehavior,
+      });
     },
     [origins, updateOrigins],
   );
@@ -149,14 +112,14 @@ export function OriginEditor() {
     if (!origins) return;
     updateOrigins({
       ...origins,
-      profiles: [...origins.profiles, createEmptyProfile()],
+      profiles: [...(origins.profiles ?? []), createEmptyProfile()],
     });
   }, [origins, updateOrigins]);
 
   const handleRemoveProfile = useCallback(
     (index: number) => {
       if (!origins) return;
-      const profiles = origins.profiles.filter((_, i) => i !== index);
+      const profiles = (origins.profiles ?? []).filter((_, i) => i !== index);
       updateOrigins({ ...origins, profiles });
     },
     [origins, updateOrigins],
@@ -165,12 +128,21 @@ export function OriginEditor() {
   const handleUpdateProfile = useCallback(
     (index: number, updated: OriginProfile) => {
       if (!origins) return;
-      const profiles = [...origins.profiles];
+      const profiles = [...(origins.profiles ?? [])];
       profiles[index] = updated;
       updateOrigins({ ...origins, profiles });
     },
     [origins, updateOrigins],
   );
+
+  // Don't render if not v1.4.0 — placed after all hooks to satisfy Rules of Hooks
+  if (!isV14) return null;
+
+  const enabled = Boolean(origins);
+  const safeOrigins: OriginsConfig = {
+    default_behavior: origins?.default_behavior ?? "deny",
+    profiles: origins?.profiles ?? [],
+  };
 
   return (
     <div className="flex flex-col gap-4 p-4 border-t border-[#2d3240]">
@@ -204,7 +176,7 @@ export function OriginEditor() {
               </span>
             </div>
             <Select
-              value={origins.default_behavior ?? "deny"}
+              value={safeOrigins.default_behavior ?? "deny"}
               onValueChange={handleDefaultBehaviorChange}
             >
               <SelectTrigger className="w-40 bg-[#131721] border-[#2d3240] text-[#ece7dc] text-xs font-mono">
@@ -226,7 +198,7 @@ export function OriginEditor() {
 
           {/* Profile cards */}
           <div className="flex flex-col gap-2">
-            {origins.profiles.map((profile, idx) => (
+            {(origins?.profiles ?? []).map((profile, idx) => (
               <OriginProfileCard
                 key={profile.id}
                 profile={profile}
@@ -264,6 +236,76 @@ interface OriginProfileCardProps {
 
 function OriginProfileCard({ profile, index, onUpdate, onRemove }: OriginProfileCardProps) {
   const [open, setOpen] = useState(false);
+  const serializedMetadata = profile.metadata
+    ? JSON.stringify(profile.metadata, null, 2)
+    : "";
+  const [metadataText, setMetadataText] = useState(() =>
+    serializedMetadata,
+  );
+  const [metadataError, setMetadataError] = useState(false);
+  const [customProviderMode, setCustomProviderMode] = useState(() =>
+    isCustomChoice(profile.match_rules.provider, PROVIDERS),
+  );
+  const [customProviderDraft, setCustomProviderDraft] = useState(
+    () => profile.match_rules.provider ?? "",
+  );
+  const customProviderModeRef = useRef(customProviderMode);
+  const [customSpaceTypeMode, setCustomSpaceTypeMode] = useState(() =>
+    isCustomChoice(profile.match_rules.space_type, SPACE_TYPES),
+  );
+  const [customSpaceTypeDraft, setCustomSpaceTypeDraft] = useState(
+    () => profile.match_rules.space_type ?? "",
+  );
+  const customSpaceTypeModeRef = useRef(customSpaceTypeMode);
+
+  useEffect(() => {
+    setMetadataText(serializedMetadata);
+    setMetadataError(false);
+  }, [serializedMetadata]);
+
+  useEffect(() => {
+    customProviderModeRef.current = customProviderMode;
+  }, [customProviderMode]);
+
+  useEffect(() => {
+    customSpaceTypeModeRef.current = customSpaceTypeMode;
+  }, [customSpaceTypeMode]);
+
+  useEffect(() => {
+    if (isCustomChoice(profile.match_rules.provider, PROVIDERS)) {
+      setCustomProviderMode(true);
+      setCustomProviderDraft(profile.match_rules.provider ?? "");
+      return;
+    }
+
+    if (profile.match_rules.provider !== undefined) {
+      setCustomProviderMode(false);
+      setCustomProviderDraft(profile.match_rules.provider);
+      return;
+    }
+
+    if (!customProviderModeRef.current) {
+      setCustomProviderDraft("");
+    }
+  }, [profile.match_rules.provider]);
+
+  useEffect(() => {
+    if (isCustomChoice(profile.match_rules.space_type, SPACE_TYPES)) {
+      setCustomSpaceTypeMode(true);
+      setCustomSpaceTypeDraft(profile.match_rules.space_type ?? "");
+      return;
+    }
+
+    if (profile.match_rules.space_type !== undefined) {
+      setCustomSpaceTypeMode(false);
+      setCustomSpaceTypeDraft(profile.match_rules.space_type);
+      return;
+    }
+
+    if (!customSpaceTypeModeRef.current) {
+      setCustomSpaceTypeDraft("");
+    }
+  }, [profile.match_rules.space_type]);
 
   const updateMatchRules = useCallback(
     (patch: Partial<OriginMatch>) => {
@@ -296,7 +338,11 @@ function OriginProfileCard({ profile, index, onUpdate, onRemove }: OriginProfile
         )}
       >
         {/* Card header */}
-        <CollapsibleTrigger className="flex items-center gap-3 w-full px-3 py-3 text-left cursor-pointer hover:bg-[#131721]/50 transition-colors rounded-t-lg">
+        <CollapsibleTrigger
+          className="flex items-center gap-3 w-full px-3 py-3 text-left cursor-pointer hover:bg-[#131721]/50 transition-colors rounded-t-lg"
+          render={<div role="button" tabIndex={0} />}
+          nativeButton={false}
+        >
           <IconFingerprint
             size={16}
             stroke={1.5}
@@ -331,7 +377,7 @@ function OriginProfileCard({ profile, index, onUpdate, onRemove }: OriginProfile
             size={14}
             stroke={1.5}
             className={cn(
-              "shrink-0 text-[#6f7f9a] transition-transform duration-200",
+              "shrink-0 text-[#6f7f9a] transition-transform duration-150",
               open && "rotate-180",
             )}
           />
@@ -368,62 +414,154 @@ function OriginProfileCard({ profile, index, onUpdate, onRemove }: OriginProfile
               <div className="space-y-3">
                 {/* Provider */}
                 <FieldRow label="Provider">
-                  <Select
-                    value={profile.match_rules.provider ?? "__none__"}
-                    onValueChange={(val) =>
-                      updateMatchRules({
-                        provider: val === "__none__" ? undefined : val as OriginProvider,
-                      })
-                    }
-                  >
-                    <SelectTrigger className="bg-[#131721] border-[#2d3240] text-[#ece7dc] text-xs font-mono w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent className="bg-[#131721] border-[#2d3240]">
-                      <SelectItem value="__none__" className="text-xs font-mono text-[#6f7f9a]">
-                        Any
-                      </SelectItem>
-                      {PROVIDERS.map((p) => (
-                        <SelectItem
-                          key={p.value}
-                          value={p.value}
-                          className="text-xs font-mono text-[#ece7dc] focus:bg-[#2d3240] focus:text-[#ece7dc]"
+                  {(() => {
+                    const currentVal = profile.match_rules.provider;
+                    const isCustom =
+                      customProviderMode ||
+                      isCustomChoice(currentVal, PROVIDERS);
+                    const selectVal =
+                      currentVal === undefined
+                        ? isCustom
+                          ? "__custom__"
+                          : "__none__"
+                        : isCustom
+                          ? "__custom__"
+                          : currentVal;
+                    return (
+                      <div className="flex flex-col gap-1.5">
+                        <Select
+                          value={selectVal}
+                          onValueChange={(val) => {
+                            if (val === "__none__") {
+                              setCustomProviderMode(false);
+                              setCustomProviderDraft("");
+                              updateMatchRules({ provider: undefined });
+                            } else if (val === "__custom__") {
+                              setCustomProviderMode(true);
+                              setCustomProviderDraft(currentVal ?? "");
+                              updateMatchRules({ provider: undefined });
+                            } else {
+                              setCustomProviderMode(false);
+                              setCustomProviderDraft(val ?? "");
+                              updateMatchRules({ provider: val as OriginProvider });
+                            }
+                          }}
                         >
-                          {p.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                          <SelectTrigger className="bg-[#131721] border-[#2d3240] text-[#ece7dc] text-xs font-mono w-full">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent className="bg-[#131721] border-[#2d3240]">
+                            <SelectItem value="__none__" className="text-xs font-mono text-[#6f7f9a]">
+                              Any
+                            </SelectItem>
+                            {PROVIDERS.map((p) => (
+                              <SelectItem
+                                key={p.value}
+                                value={p.value}
+                                className="text-xs font-mono text-[#ece7dc] focus:bg-[#2d3240] focus:text-[#ece7dc]"
+                              >
+                                {p.label}
+                              </SelectItem>
+                            ))}
+                            <SelectItem value="__custom__" className="text-xs font-mono text-[#d4a84b] focus:bg-[#2d3240] focus:text-[#d4a84b]">
+                              Custom...
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
+                        {isCustom && (
+                          <Input
+                            value={customProviderDraft}
+                            onChange={(e) => {
+                              const nextValue = e.target.value;
+                              setCustomProviderMode(true);
+                              setCustomProviderDraft(nextValue);
+                              updateMatchRules({
+                                provider: nextValue || undefined,
+                              });
+                            }}
+                            placeholder="e.g. my-custom-provider"
+                            className="bg-[#131721] border-[#2d3240] text-[#ece7dc] font-mono text-xs placeholder:text-[#6f7f9a]/50"
+                          />
+                        )}
+                      </div>
+                    );
+                  })()}
                 </FieldRow>
 
                 {/* Space Type */}
                 <FieldRow label="Space Type">
-                  <Select
-                    value={profile.match_rules.space_type ?? "__none__"}
-                    onValueChange={(val) =>
-                      updateMatchRules({
-                        space_type: val === "__none__" ? undefined : val as SpaceType,
-                      })
-                    }
-                  >
-                    <SelectTrigger className="bg-[#131721] border-[#2d3240] text-[#ece7dc] text-xs font-mono w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent className="bg-[#131721] border-[#2d3240]">
-                      <SelectItem value="__none__" className="text-xs font-mono text-[#6f7f9a]">
-                        Any
-                      </SelectItem>
-                      {SPACE_TYPES.map((st) => (
-                        <SelectItem
-                          key={st.value}
-                          value={st.value}
-                          className="text-xs font-mono text-[#ece7dc] focus:bg-[#2d3240] focus:text-[#ece7dc]"
+                  {(() => {
+                    const currentVal = profile.match_rules.space_type;
+                    const isCustom =
+                      customSpaceTypeMode ||
+                      isCustomChoice(currentVal, SPACE_TYPES);
+                    const selectVal =
+                      currentVal === undefined
+                        ? isCustom
+                          ? "__custom__"
+                          : "__none__"
+                        : isCustom
+                          ? "__custom__"
+                          : currentVal;
+                    return (
+                      <div className="flex flex-col gap-1.5">
+                        <Select
+                          value={selectVal}
+                          onValueChange={(val) => {
+                            if (val === "__none__") {
+                              setCustomSpaceTypeMode(false);
+                              setCustomSpaceTypeDraft("");
+                              updateMatchRules({ space_type: undefined });
+                            } else if (val === "__custom__") {
+                              setCustomSpaceTypeMode(true);
+                              setCustomSpaceTypeDraft(currentVal ?? "");
+                              updateMatchRules({ space_type: undefined });
+                            } else {
+                              setCustomSpaceTypeMode(false);
+                              setCustomSpaceTypeDraft(val ?? "");
+                              updateMatchRules({ space_type: val as SpaceType });
+                            }
+                          }}
                         >
-                          {st.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                          <SelectTrigger className="bg-[#131721] border-[#2d3240] text-[#ece7dc] text-xs font-mono w-full">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent className="bg-[#131721] border-[#2d3240]">
+                            <SelectItem value="__none__" className="text-xs font-mono text-[#6f7f9a]">
+                              Any
+                            </SelectItem>
+                            {SPACE_TYPES.map((st) => (
+                              <SelectItem
+                                key={st.value}
+                                value={st.value}
+                                className="text-xs font-mono text-[#ece7dc] focus:bg-[#2d3240] focus:text-[#ece7dc]"
+                              >
+                                {st.label}
+                              </SelectItem>
+                            ))}
+                            <SelectItem value="__custom__" className="text-xs font-mono text-[#d4a84b] focus:bg-[#2d3240] focus:text-[#d4a84b]">
+                              Custom...
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
+                        {isCustom && (
+                          <Input
+                            value={customSpaceTypeDraft}
+                            onChange={(e) => {
+                              const nextValue = e.target.value;
+                              setCustomSpaceTypeMode(true);
+                              setCustomSpaceTypeDraft(nextValue);
+                              updateMatchRules({
+                                space_type: nextValue || undefined,
+                              });
+                            }}
+                            placeholder="e.g. my-custom-space"
+                            className="bg-[#131721] border-[#2d3240] text-[#ece7dc] font-mono text-xs placeholder:text-[#6f7f9a]/50"
+                          />
+                        )}
+                      </div>
+                    );
+                  })()}
                 </FieldRow>
 
                 {/* Visibility */}
@@ -476,6 +614,18 @@ function OriginProfileCard({ profile, index, onUpdate, onRemove }: OriginProfile
                       updateMatchRules({ space_id: e.target.value || undefined })
                     }
                     placeholder="e.g. C99999"
+                    className="bg-[#131721] border-[#2d3240] text-[#ece7dc] font-mono text-xs placeholder:text-[#6f7f9a]/50"
+                  />
+                </FieldRow>
+
+                {/* Thread ID */}
+                <FieldRow label="Thread ID">
+                  <Input
+                    value={profile.match_rules.thread_id ?? ""}
+                    onChange={(e) =>
+                      updateMatchRules({ thread_id: e.target.value || undefined })
+                    }
+                    placeholder="e.g. 1234567890.123456"
                     className="bg-[#131721] border-[#2d3240] text-[#ece7dc] font-mono text-xs placeholder:text-[#6f7f9a]/50"
                   />
                 </FieldRow>
@@ -540,6 +690,46 @@ function OriginProfileCard({ profile, index, onUpdate, onRemove }: OriginProfile
                   />
                 </FieldRow>
 
+                {/* Actor ID */}
+                <FieldRow label="Actor ID">
+                  <Input
+                    value={profile.match_rules.actor_id ?? ""}
+                    onChange={(e) =>
+                      updateMatchRules({ actor_id: e.target.value || undefined })
+                    }
+                    placeholder="e.g. U12345, bot-ci-runner"
+                    className="bg-[#131721] border-[#2d3240] text-[#ece7dc] font-mono text-xs placeholder:text-[#6f7f9a]/50"
+                  />
+                </FieldRow>
+
+                {/* Actor Type */}
+                <FieldRow label="Actor Type">
+                  <Select
+                    value={profile.match_rules.actor_type ?? "__none__"}
+                    onValueChange={(val) =>
+                      updateMatchRules({
+                        actor_type: val === "__none__" ? undefined : val as ActorType,
+                      })
+                    }
+                  >
+                    <SelectTrigger className="bg-[#131721] border-[#2d3240] text-[#ece7dc] text-xs font-mono w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="bg-[#131721] border-[#2d3240]">
+                      <SelectItem value="__none__" className="text-xs font-mono text-[#6f7f9a]">Any</SelectItem>
+                      {ACTOR_TYPE_OPTIONS.map((at) => (
+                        <SelectItem
+                          key={at.value}
+                          value={at.value}
+                          className="text-xs font-mono text-[#ece7dc] focus:bg-[#2d3240] focus:text-[#ece7dc]"
+                        >
+                          {at.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </FieldRow>
+
                 {/* Actor Role */}
                 <FieldRow label="Actor Role">
                   <Input
@@ -582,6 +772,54 @@ function OriginProfileCard({ profile, index, onUpdate, onRemove }: OriginProfile
               </div>
             </div>
 
+            {/* Metadata */}
+            <div className="border border-[#2d3240] rounded-lg p-3 bg-[#0b0d13]/50">
+              <h4 className="text-[10px] font-mono uppercase tracking-wider text-[#6f7f9a] mb-3">
+                Metadata
+              </h4>
+              <div className="space-y-1">
+                <textarea
+                  value={metadataText}
+                  onChange={(e) => {
+                    setMetadataText(e.target.value);
+                    setMetadataError(false);
+                  }}
+                  onBlur={() => {
+                    const trimmed = metadataText.trim();
+                    if (trimmed === "") {
+                      setMetadataError(false);
+                      onUpdate({ ...profile, metadata: undefined });
+                      return;
+                    }
+                    try {
+                      const parsed = JSON.parse(trimmed);
+                      if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+                        setMetadataError(true);
+                        return;
+                      }
+                      setMetadataError(false);
+                      onUpdate({ ...profile, metadata: parsed as Record<string, unknown> });
+                    } catch {
+                      setMetadataError(true);
+                    }
+                  }}
+                  placeholder='{"key": "value"}'
+                  rows={3}
+                  className={cn(
+                    "w-full rounded-md px-3 py-2 bg-[#131721] border text-[#ece7dc] font-mono text-xs placeholder:text-[#6f7f9a]/50 resize-y",
+                    metadataError
+                      ? "border-[#c45c5c] focus:ring-[#c45c5c]"
+                      : "border-[#2d3240] focus:ring-[#d4a84b]",
+                  )}
+                />
+                {metadataError && (
+                  <p className="text-[10px] text-[#c45c5c] font-mono">
+                    Invalid JSON object
+                  </p>
+                )}
+              </div>
+            </div>
+
             {/* Profile overrides section */}
             <ProfileOverrides profile={profile} onUpdate={onUpdate} />
           </div>
@@ -609,7 +847,7 @@ function ProfileOverrides({
       </h4>
       <div className="space-y-4">
         {/* Posture state */}
-        <FieldRow label="Posture State">
+        <FieldRow label="Posture State" title="Resource usage limits and automated state transitions for agent capabilities">
           <Input
             value={profile.posture ?? ""}
             onChange={(e) =>
@@ -708,6 +946,17 @@ function McpOverrideSection({
               className="bg-[#131721] border-[#2d3240] text-[#ece7dc] font-mono text-xs placeholder:text-[#6f7f9a]/50"
             />
           </FieldRow>
+          <FieldRow label="Require Confirmation">
+            <Input
+              value={(mcp.require_confirmation ?? []).join(", ")}
+              onChange={(e) => {
+                const arr = e.target.value.split(",").map((s) => s.trim()).filter(Boolean);
+                onChange({ ...mcp, require_confirmation: arr.length > 0 ? arr : undefined });
+              }}
+              placeholder="deploy, delete_record"
+              className="bg-[#131721] border-[#2d3240] text-[#ece7dc] font-mono text-xs placeholder:text-[#6f7f9a]/50"
+            />
+          </FieldRow>
           <FieldRow label="Default Action">
             <Select
               value={mcp.default_action ?? "block"}
@@ -722,6 +971,73 @@ function McpOverrideSection({
               </SelectContent>
             </Select>
           </FieldRow>
+          <FieldRow label="Max Args Size">
+            <Input
+              type="number"
+              min={0}
+              value={mcp.max_args_size ?? ""}
+              onChange={(e) => {
+                const parsed = parseInt(e.target.value, 10);
+                const v = Number.isNaN(parsed) ? undefined : Math.max(0, parsed);
+                onChange({ ...mcp, max_args_size: v });
+              }}
+              placeholder="bytes"
+              className="bg-[#131721] border-[#2d3240] text-[#ece7dc] font-mono text-xs w-24 placeholder:text-[#6f7f9a]/50"
+            />
+          </FieldRow>
+
+          {/* Merge-mode fields for profile inheritance */}
+          <div className="border-t border-[#2d3240]/50 pt-2 mt-2">
+            <p className="text-[9px] font-mono uppercase tracking-wider text-[#6f7f9a] mb-2">
+              Merge Overrides
+            </p>
+            <div className="space-y-2">
+              <FieldRow label="Additional Allow">
+                <Input
+                  value={(mcp.additional_allow ?? []).join(", ")}
+                  onChange={(e) => {
+                    const arr = e.target.value.split(",").map((s) => s.trim()).filter(Boolean);
+                    onChange({ ...mcp, additional_allow: arr.length > 0 ? arr : undefined });
+                  }}
+                  placeholder="extra_tool_a"
+                  className="bg-[#131721] border-[#2d3240] text-[#ece7dc] font-mono text-xs placeholder:text-[#6f7f9a]/50"
+                />
+              </FieldRow>
+              <FieldRow label="Additional Block">
+                <Input
+                  value={(mcp.additional_block ?? []).join(", ")}
+                  onChange={(e) => {
+                    const arr = e.target.value.split(",").map((s) => s.trim()).filter(Boolean);
+                    onChange({ ...mcp, additional_block: arr.length > 0 ? arr : undefined });
+                  }}
+                  placeholder="extra_blocked_tool"
+                  className="bg-[#131721] border-[#2d3240] text-[#ece7dc] font-mono text-xs placeholder:text-[#6f7f9a]/50"
+                />
+              </FieldRow>
+              <FieldRow label="Remove Allow">
+                <Input
+                  value={(mcp.remove_allow ?? []).join(", ")}
+                  onChange={(e) => {
+                    const arr = e.target.value.split(",").map((s) => s.trim()).filter(Boolean);
+                    onChange({ ...mcp, remove_allow: arr.length > 0 ? arr : undefined });
+                  }}
+                  placeholder="revoke_tool_a"
+                  className="bg-[#131721] border-[#2d3240] text-[#ece7dc] font-mono text-xs placeholder:text-[#6f7f9a]/50"
+                />
+              </FieldRow>
+              <FieldRow label="Remove Block">
+                <Input
+                  value={(mcp.remove_block ?? []).join(", ")}
+                  onChange={(e) => {
+                    const arr = e.target.value.split(",").map((s) => s.trim()).filter(Boolean);
+                    onChange({ ...mcp, remove_block: arr.length > 0 ? arr : undefined });
+                  }}
+                  placeholder="unblock_tool_a"
+                  className="bg-[#131721] border-[#2d3240] text-[#ece7dc] font-mono text-xs placeholder:text-[#6f7f9a]/50"
+                />
+              </FieldRow>
+            </div>
+          </div>
         </div>
       )}
     </div>
@@ -785,7 +1101,7 @@ function EgressOverrideSection({
           <FieldRow label="Default Action">
             <Select
               value={egress.default_action ?? "block"}
-              onValueChange={(val) => onChange({ ...egress, default_action: val as "allow" | "block" })}
+              onValueChange={(val) => onChange({ ...egress, default_action: val as "allow" | "block" | "log" })}
             >
               <SelectTrigger className="w-24 bg-[#131721] border-[#2d3240] text-[#ece7dc] text-xs font-mono">
                 <SelectValue />
@@ -793,6 +1109,7 @@ function EgressOverrideSection({
               <SelectContent className="bg-[#131721] border-[#2d3240]">
                 <SelectItem value="allow" className="text-xs font-mono text-[#ece7dc]">Allow</SelectItem>
                 <SelectItem value="block" className="text-xs font-mono text-[#ece7dc]">Block</SelectItem>
+                <SelectItem value="log" className="text-xs font-mono text-[#ece7dc]">Log</SelectItem>
               </SelectContent>
             </Select>
           </FieldRow>
@@ -998,13 +1315,15 @@ function BridgePolicySection({
 function FieldRow({
   label,
   children,
+  title,
 }: {
   label: string;
   children: React.ReactNode;
+  title?: string;
 }) {
   return (
     <div className="flex items-center justify-between gap-3">
-      <label className="text-xs text-[#ece7dc] whitespace-nowrap">{label}</label>
+      <label className="text-xs text-[#ece7dc] whitespace-nowrap" title={title}>{label}</label>
       <div className="flex-1 max-w-[200px]">{children}</div>
     </div>
   );

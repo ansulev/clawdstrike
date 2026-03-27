@@ -1,6 +1,3 @@
-// ---------------------------------------------------------------------------
-// Hierarchy engine — CRUD operations and effective-policy merge logic
-// ---------------------------------------------------------------------------
 
 import type {
   OrgNode,
@@ -13,23 +10,14 @@ import type {
 import type { SavedPolicy, GuardConfigMap, PolicySettings } from "./types";
 import { GUARD_REGISTRY } from "./guard-registry";
 
-// ---------------------------------------------------------------------------
-// localStorage persistence key
-// ---------------------------------------------------------------------------
 
 const HIERARCHY_STORAGE_KEY = "clawdstrike_policy_hierarchy";
 
-// ---------------------------------------------------------------------------
-// ID generation
-// ---------------------------------------------------------------------------
 
 function uid(): string {
   return crypto.randomUUID();
 }
 
-// ---------------------------------------------------------------------------
-// Default / demo hierarchy
-// ---------------------------------------------------------------------------
 
 export function createDefaultHierarchy(): PolicyHierarchy {
   const orgId = uid();
@@ -155,9 +143,6 @@ export function createDefaultHierarchy(): PolicyHierarchy {
   return { nodes, rootId: orgId };
 }
 
-// ---------------------------------------------------------------------------
-// Path helpers
-// ---------------------------------------------------------------------------
 
 /**
  * Returns the ordered ancestry path from root to the given node (inclusive).
@@ -199,20 +184,25 @@ export function getDescendants(
 }
 
 /**
- * Returns all leaf (agent) node IDs under a given node.
+ * Returns all leaf enforcement node IDs under a given node.
+ *
+ * Endpoint nodes with no runtime children are also treated as leaves so a live
+ * hierarchy still validates correctly before runtimes are attached.
  */
 export function getLeafAgents(
   hierarchy: PolicyHierarchy,
   nodeId: string,
 ): string[] {
   return getDescendants(hierarchy, nodeId).filter(
-    (id) => hierarchy.nodes[id]?.type === "agent",
+    (id) => {
+      const node = hierarchy.nodes[id];
+      if (!node) return false;
+      if (node.type === "agent" || node.type === "runtime") return true;
+      return node.type === "endpoint" && node.children.length === 0;
+    },
   );
 }
 
-// ---------------------------------------------------------------------------
-// Effective policy computation
-// ---------------------------------------------------------------------------
 
 /**
  * Resolves the linked SavedPolicy for a node, if any.
@@ -342,9 +332,6 @@ export function computeEffectivePolicy(
   return { source, guards, settings };
 }
 
-// ---------------------------------------------------------------------------
-// CRUD mutations (all pure — return a new hierarchy)
-// ---------------------------------------------------------------------------
 
 export function addNode(
   hierarchy: PolicyHierarchy,
@@ -491,9 +478,6 @@ export function renameNode(
   };
 }
 
-// ---------------------------------------------------------------------------
-// Persistence
-// ---------------------------------------------------------------------------
 
 export function saveHierarchy(hierarchy: PolicyHierarchy): void {
   try {
@@ -525,9 +509,60 @@ export function clearHierarchy(): void {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Validation
-// ---------------------------------------------------------------------------
+
+/**
+ * Ensures a PolicyHierarchy has consistent parent↔child relationships.
+ * Preserves the original explicit child ordering where possible, then
+ * backfills any missing parent↔child links from parentId pointers so
+ * loaded/pulled data is always structurally sound.
+ */
+export function normalizeHierarchy(hierarchy: PolicyHierarchy): PolicyHierarchy {
+  const nodes = { ...hierarchy.nodes };
+
+  // Reset children arrays
+  for (const id of Object.keys(nodes)) {
+    nodes[id] = { ...nodes[id], children: [] };
+  }
+
+  // Preserve explicit child ordering and recover missing parent links when
+  // an existing children array is more authoritative than a missing parentId.
+  for (const originalNode of Object.values(hierarchy.nodes)) {
+    if (!nodes[originalNode.id]) {
+      continue;
+    }
+    for (const childId of originalNode.children) {
+      const child = nodes[childId];
+      if (!child) {
+        continue;
+      }
+      if (child.parentId == null || child.parentId === originalNode.id) {
+        if (child.parentId !== originalNode.id) {
+          nodes[childId] = { ...child, parentId: originalNode.id };
+        }
+        if (!nodes[originalNode.id].children.includes(childId)) {
+          nodes[originalNode.id] = {
+            ...nodes[originalNode.id],
+            children: [...nodes[originalNode.id].children, childId],
+          };
+        }
+      }
+    }
+  }
+
+  // Rebuild any missing child links from parentId pointers without disturbing
+  // the preserved explicit ordering above.
+  for (const node of Object.values(nodes)) {
+    if (node.parentId && nodes[node.parentId] && !nodes[node.parentId].children.includes(node.id)) {
+      nodes[node.parentId] = {
+        ...nodes[node.parentId],
+        children: [...nodes[node.parentId].children, node.id],
+      };
+    }
+  }
+
+  return { nodes, rootId: hierarchy.rootId };
+}
+
 
 export interface HierarchyValidationIssue {
   nodeId: string;
@@ -537,7 +572,7 @@ export interface HierarchyValidationIssue {
 }
 
 /**
- * Validates all leaf (agent) nodes in the hierarchy, checking that their
+ * Validates all leaf enforcement nodes in the hierarchy, checking that their
  * effective policies have at least one guard enabled.
  */
 export function validateAllLeaves(

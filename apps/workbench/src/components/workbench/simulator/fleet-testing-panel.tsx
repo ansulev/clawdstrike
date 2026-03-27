@@ -1,15 +1,14 @@
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useRef } from "react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { VerdictBadge } from "@/components/workbench/shared/verdict-badge";
-import { useFleetConnection } from "@/lib/workbench/use-fleet-connection";
-import { useWorkbench } from "@/lib/workbench/multi-policy-store";
+import { useFleetConnection } from "@/features/fleet/use-fleet-connection";
 import { useToast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
 import { simulatePolicy } from "@/lib/workbench/simulation-engine";
 import {
   fetchAuditEvents,
   type AuditEvent,
-} from "@/lib/workbench/fleet-client";
+} from "@/features/fleet/fleet-client";
 import {
   auditEventsToScenarios,
   summarizeTraffic,
@@ -21,23 +20,21 @@ import type { TestScenario, SimulationResult, Verdict } from "@/lib/workbench/ty
 import {
   IconCloudDownload,
   IconPlayerPlay,
-  IconRadar,
   IconArrowsExchange,
   IconAlertTriangle,
   IconCircleCheck,
   IconCircleX,
-  IconCircle,
   IconShieldCheck,
   IconPlugConnectedX,
   IconSettings,
   IconChevronDown,
   IconChevronRight,
   IconClock,
+  IconX,
 } from "@tabler/icons-react";
+import { usePolicyTabsStore } from "@/features/policy/stores/policy-tabs-store";
+import { usePolicyEditStore } from "@/features/policy/stores/policy-edit-store";
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
 
 type TimeRange = "1h" | "24h" | "7d";
 
@@ -60,9 +57,6 @@ interface WhatIfResult {
   }>;
 }
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 function sinceForRange(range: TimeRange): string {
   const now = new Date();
@@ -83,29 +77,6 @@ function countVerdict(
   return scenarios.filter((s) => s.expectedVerdict === verdict).length;
 }
 
-// ---------------------------------------------------------------------------
-// Sub-components
-// ---------------------------------------------------------------------------
-
-function ConnectionBadge({ connected }: { connected: boolean }) {
-  return (
-    <span
-      className={cn(
-        "inline-flex items-center gap-1 px-1.5 py-0 text-[9px] font-mono uppercase border rounded select-none tracking-wide",
-        connected
-          ? "text-[#3dbf84] border-[#3dbf84]/20 bg-[#3dbf84]/10"
-          : "text-[#6f7f9a] border-[#2d3240] bg-[#131721]",
-      )}
-    >
-      <IconCircle
-        size={5}
-        stroke={0}
-        fill={connected ? "#3dbf84" : "#6f7f9a"}
-      />
-      {connected ? "connected" : "offline"}
-    </span>
-  );
-}
 
 function HorizontalBar({
   items,
@@ -238,9 +209,6 @@ function GapCard({ gap }: { gap: CoverageGap }) {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Disconnected State
-// ---------------------------------------------------------------------------
 
 function DisconnectedState() {
   return (
@@ -267,13 +235,12 @@ function DisconnectedState() {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Main Panel
-// ---------------------------------------------------------------------------
 
 export function FleetTestingPanel() {
-  const { connection } = useFleetConnection();
-  const { state } = useWorkbench();
+  const { connection, getAuthenticatedConnection } = useFleetConnection();
+  const activeTabId = usePolicyTabsStore(s => s.activeTabId);
+  const activeTab = usePolicyTabsStore(s => s.tabs.find(t => t.id === s.activeTabId));
+  const editState = usePolicyEditStore(s => s.editStates.get(activeTabId));
   const { toast } = useToast();
 
   const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([]);
@@ -282,12 +249,13 @@ export function FleetTestingPanel() {
   const [selectedRange, setSelectedRange] = useState<TimeRange>("24h");
   const [whatIfResult, setWhatIfResult] = useState<WhatIfResult | null>(null);
   const [runningWhatIf, setRunningWhatIf] = useState(false);
+  const [simulationProgress, setSimulationProgress] = useState(0);
+  const cancelWhatIfRef = useRef(false);
   const [expandedSection, setExpandedSection] = useState<string | null>(
     "import",
   );
 
-  // Derived data
-  const trafficSummary: TrafficSummary | null = useMemo(
+    const trafficSummary: TrafficSummary | null = useMemo(
     () => (auditEvents.length > 0 ? summarizeTraffic(auditEvents) : null),
     [auditEvents],
   );
@@ -295,9 +263,9 @@ export function FleetTestingPanel() {
   const coverageGaps: CoverageGap[] = useMemo(
     () =>
       auditEvents.length > 0
-        ? identifyCoverageGaps(auditEvents, state.activePolicy)
+        ? identifyCoverageGaps(auditEvents, (editState?.policy ?? { version: "1.1.0", name: "", description: "", guards: {}, settings: {} }))
         : [],
-    [auditEvents, state.activePolicy],
+    [auditEvents, (editState?.policy ?? { version: "1.1.0", name: "", description: "", guards: {}, settings: {} })],
   );
 
   // Action type chart items
@@ -344,7 +312,7 @@ export function FleetTestingPanel() {
     setLoading(true);
     try {
       const since = sinceForRange(selectedRange);
-      const events = await fetchAuditEvents(connection, {
+      const events = await fetchAuditEvents(getAuthenticatedConnection(), {
         since,
         limit: 500,
       });
@@ -362,6 +330,14 @@ export function FleetTestingPanel() {
             ? `Last ${selectedRange} from ${connection.hushdUrl}`
             : `No audit events in the last ${selectedRange}`,
       });
+      if (events.length === 500) {
+        toast({
+          type: "warning",
+          title: "Results may be truncated",
+          description:
+            "Exactly 500 events returned. Narrow the time range for complete coverage.",
+        });
+      }
     } catch (err) {
       toast({
         type: "error",
@@ -384,60 +360,102 @@ export function FleetTestingPanel() {
     });
   }, [auditEvents, toast]);
 
+  const handleCancelWhatIf = useCallback(() => {
+    cancelWhatIfRef.current = true;
+  }, []);
+
   const handleRunWhatIf = useCallback(() => {
     if (scenarios.length === 0) return;
+
+    // Validate active policy has guards before running
+    if (
+      !(editState?.policy ?? { version: "1.1.0", name: "", description: "", guards: {}, settings: {} }) ||
+      !(editState?.policy ?? { version: "1.1.0", name: "", description: "", guards: {}, settings: {} }).guards ||
+      Object.keys((editState?.policy ?? { version: "1.1.0", name: "", description: "", guards: {}, settings: {} }).guards).length === 0
+    ) {
+      toast({
+        type: "error",
+        title: "No policy guards configured",
+        description:
+          "Add at least one guard to the active policy before running what-if analysis.",
+      });
+      return;
+    }
+
     setRunningWhatIf(true);
+    setSimulationProgress(0);
+    cancelWhatIfRef.current = false;
 
-    // Use setTimeout to avoid blocking the UI on large scenario sets
-    setTimeout(() => {
-      try {
-        const results: SimulationResult[] = [];
-        for (const s of scenarios) {
-          results.push(simulatePolicy(state.activePolicy, s));
-        }
+    const BATCH_SIZE = 100;
+    const results: SimulationResult[] = [];
+    let offset = 0;
 
-        // Build deltas
-        const deltas = scenarios.map((s, i) => {
-          const draftVerdict = results[i].overallVerdict;
-          const prodVerdict = s.expectedVerdict ?? "allow";
-          return {
-            scenarioId: s.id,
-            scenarioName: s.name,
-            target:
-              (s.payload.path as string) ??
-              (s.payload.host as string) ??
-              (s.payload.command as string) ??
-              (s.payload.tool as string) ??
-              "unknown",
-            productionDecision: prodVerdict,
-            draftDecision: draftVerdict,
-            changed: prodVerdict !== draftVerdict,
-          };
-        });
-
-        const whatIf: WhatIfResult = {
-          totalScenarios: scenarios.length,
-          productionAllow: countVerdict(scenarios, "allow"),
-          productionDeny: countVerdict(scenarios, "deny"),
-          productionWarn: countVerdict(scenarios, "warn"),
-          draftAllow: results.filter((r) => r.overallVerdict === "allow").length,
-          draftDeny: results.filter((r) => r.overallVerdict === "deny").length,
-          draftWarn: results.filter((r) => r.overallVerdict === "warn").length,
-          changedCount: deltas.filter((d) => d.changed).length,
-          deltas,
-        };
-
-        setWhatIfResult(whatIf);
+    function processBatch() {
+      if (cancelWhatIfRef.current) {
+        setRunningWhatIf(false);
+        setSimulationProgress(0);
         toast({
           type: "info",
-          title: `What-if complete -- ${whatIf.changedCount} verdict(s) changed`,
-          description: `${whatIf.totalScenarios} production scenarios replayed against draft policy`,
+          title: "What-if simulation cancelled",
         });
-      } finally {
-        setRunningWhatIf(false);
+        return;
       }
-    }, 10);
-  }, [scenarios, state.activePolicy, toast]);
+
+      const end = Math.min(offset + BATCH_SIZE, scenarios.length);
+      for (let i = offset; i < end; i++) {
+        results.push(simulatePolicy((editState?.policy ?? { version: "1.1.0", name: "", description: "", guards: {}, settings: {} }), scenarios[i]));
+      }
+      offset = end;
+      setSimulationProgress(Math.round((offset / scenarios.length) * 100));
+
+      if (offset < scenarios.length) {
+        // Yield to the event loop between batches
+        requestAnimationFrame(processBatch);
+        return;
+      }
+
+      // All done -- build deltas
+      const deltas = scenarios.map((s, i) => {
+        const draftVerdict = results[i].overallVerdict;
+        const prodVerdict = s.expectedVerdict ?? "deny";
+        return {
+          scenarioId: s.id,
+          scenarioName: s.name,
+          target:
+            (s.payload.path as string) ??
+            (s.payload.host as string) ??
+            (s.payload.command as string) ??
+            (s.payload.tool as string) ??
+            "unknown",
+          productionDecision: prodVerdict,
+          draftDecision: draftVerdict,
+          changed: prodVerdict !== draftVerdict,
+        };
+      });
+
+      const whatIf: WhatIfResult = {
+        totalScenarios: scenarios.length,
+        productionAllow: countVerdict(scenarios, "allow"),
+        productionDeny: countVerdict(scenarios, "deny"),
+        productionWarn: countVerdict(scenarios, "warn"),
+        draftAllow: results.filter((r) => r.overallVerdict === "allow").length,
+        draftDeny: results.filter((r) => r.overallVerdict === "deny").length,
+        draftWarn: results.filter((r) => r.overallVerdict === "warn").length,
+        changedCount: deltas.filter((d) => d.changed).length,
+        deltas,
+      };
+
+      setWhatIfResult(whatIf);
+      setRunningWhatIf(false);
+      toast({
+        type: "info",
+        title: `What-if complete -- ${whatIf.changedCount} verdict(s) changed`,
+        description: `${whatIf.totalScenarios} production scenarios replayed against draft policy`,
+      });
+    }
+
+    requestAnimationFrame(processBatch);
+  }, [scenarios, (editState?.policy ?? { version: "1.1.0", name: "", description: "", guards: {}, settings: {} }), toast]);
 
   const toggleSection = useCallback(
     (section: string) => {
@@ -456,24 +474,6 @@ export function FleetTestingPanel() {
 
   return (
     <div className="flex flex-col h-full">
-      {/* Header */}
-      <div className="flex items-center gap-3 px-4 py-3 border-b border-[#2d3240] bg-[#0b0d13] shrink-0">
-        <IconRadar size={14} stroke={1.5} className="text-[#d4a84b]" />
-        <span className="text-xs font-syne font-bold text-[#ece7dc]">
-          Fleet Testing
-        </span>
-        <ConnectionBadge connected={connection.connected} />
-        <span className="text-[10px] font-mono text-[#6f7f9a]">
-          {connection.hushdUrl}
-        </span>
-        <div className="flex-1" />
-        {auditEvents.length > 0 && (
-          <span className="text-[10px] font-mono text-[#6f7f9a]">
-            {auditEvents.length} event{auditEvents.length !== 1 ? "s" : ""}
-          </span>
-        )}
-      </div>
-
       <ScrollArea className="flex-1 overflow-y-auto">
         <div className="p-4 space-y-3">
           {/* ---- Section: Import from Production ---- */}
@@ -658,25 +658,46 @@ export function FleetTestingPanel() {
               {expandedSection === "whatif" && (
                 <div className="px-4 pb-4 space-y-4">
                   {/* Run button */}
-                  <button
-                    onClick={handleRunWhatIf}
-                    disabled={runningWhatIf}
-                    className={cn(
-                      "w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-[11px] font-medium transition-colors",
-                      runningWhatIf
-                        ? "bg-[#131721] text-[#6f7f9a] cursor-wait"
-                        : "bg-[#3dbf84]/10 border border-[#3dbf84]/20 text-[#3dbf84] hover:bg-[#3dbf84]/20",
+                  <div className="space-y-1.5">
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={handleRunWhatIf}
+                        disabled={runningWhatIf}
+                        className={cn(
+                          "flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-[11px] font-medium transition-colors",
+                          runningWhatIf
+                            ? "bg-[#131721] text-[#6f7f9a] cursor-wait"
+                            : "bg-[#3dbf84]/10 border border-[#3dbf84]/20 text-[#3dbf84] hover:bg-[#3dbf84]/20",
+                        )}
+                      >
+                        <IconPlayerPlay
+                          size={14}
+                          stroke={1.5}
+                          className={runningWhatIf ? "animate-pulse" : ""}
+                        />
+                        {runningWhatIf
+                          ? `Running... ${simulationProgress}%`
+                          : `Run What-If (${scenarios.length} scenarios)`}
+                      </button>
+                      {runningWhatIf && (
+                        <button
+                          onClick={handleCancelWhatIf}
+                          className="flex items-center justify-center w-9 h-9 rounded-lg border border-[#c45c5c]/20 bg-[#c45c5c]/10 text-[#c45c5c] hover:bg-[#c45c5c]/20 transition-colors"
+                          title="Cancel simulation"
+                        >
+                          <IconX size={14} stroke={1.5} />
+                        </button>
+                      )}
+                    </div>
+                    {runningWhatIf && (
+                      <div className="h-1.5 rounded-full bg-[#131721] border border-[#2d3240]/50 overflow-hidden">
+                        <div
+                          className="h-full rounded-full bg-[#3dbf84] transition-all duration-200"
+                          style={{ width: `${simulationProgress}%` }}
+                        />
+                      </div>
                     )}
-                  >
-                    <IconPlayerPlay
-                      size={14}
-                      stroke={1.5}
-                      className={runningWhatIf ? "animate-pulse" : ""}
-                    />
-                    {runningWhatIf
-                      ? "Running..."
-                      : `Run What-If (${scenarios.length} scenarios)`}
-                  </button>
+                  </div>
 
                   {/* Results comparison */}
                   {whatIfResult && (

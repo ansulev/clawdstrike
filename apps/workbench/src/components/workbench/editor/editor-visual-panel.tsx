@@ -8,8 +8,7 @@ import { DeployPanel } from "@/components/workbench/editor/deploy-panel";
 import { OriginEditor } from "@/components/workbench/editor/origin-editor";
 import { GUARD_CATEGORIES } from "@/lib/workbench/guard-registry";
 import type { GuardId } from "@/lib/workbench/types";
-import { useWorkbench } from "@/lib/workbench/multi-policy-store";
-import { useNativeValidation, countNativeErrors } from "@/lib/workbench/use-native-validation";
+import { countNativeErrors } from "@/features/policy/use-native-validation";
 import { useGuardOrder } from "@/lib/workbench/use-guard-order";
 import { cn } from "@/lib/utils";
 import {
@@ -17,14 +16,15 @@ import {
   IconList,
   IconArrowsSort,
 } from "@tabler/icons-react";
+import { usePolicyTabsStore } from "@/features/policy/stores/policy-tabs-store";
+import { usePolicyEditStore } from "@/features/policy/stores/policy-edit-store";
 
 export function EditorVisualPanel() {
-  const { state, dispatch } = useWorkbench();
+  const activeTabId = usePolicyTabsStore(s => s.activeTabId);
+  const activeTab = usePolicyTabsStore(s => s.tabs.find(t => t.id === s.activeTabId));
+  const editState = usePolicyEditStore(s => s.editStates.get(activeTabId));
 
-  // Run native Rust validation on YAML changes (800ms debounce, no-op in web mode)
-  useNativeValidation(state.yaml, dispatch);
-
-  const nv = state.nativeValidation;
+  const nv = (editState?.nativeValidation ?? { guardErrors: {}, topLevelErrors: [], topLevelWarnings: [], loading: false, valid: null });
   const errorCount = countNativeErrors(nv);
 
   const {
@@ -168,7 +168,7 @@ export function EditorVisualPanel() {
         <div className="flex items-center justify-between px-4 pt-4 pb-1">
           <div className="flex items-center gap-1.5">
             <IconArrowsSort size={12} stroke={1.5} className="text-[#6f7f9a]/70" />
-            <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[#6f7f9a]">
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-[#6f7f9a]">
               Guards
             </span>
           </div>
@@ -219,7 +219,7 @@ export function EditorVisualPanel() {
           <div className="flex flex-col gap-6 p-4 pt-2">
             {GUARD_CATEGORIES.map((category) => (
               <section key={category.id} className="flex flex-col gap-2">
-                <h2 className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[#6f7f9a]/80 px-1">
+                <h2 className="font-syne text-[10px] font-semibold uppercase tracking-wider text-[#6f7f9a]/80 px-1">
                   {category.label}
                 </h2>
                 <div className="flex flex-col gap-2">
@@ -242,6 +242,7 @@ export function EditorVisualPanel() {
                 reorderable
                 isFirst={idx === 0}
                 isLast={idx === guardOrder.length - 1}
+                executionOrder={idx + 1}
                 onMoveUp={() => moveGuardUp(guardId)}
                 onMoveDown={() => moveGuardDown(guardId)}
                 onDragStart={handleDragStart(guardId)}

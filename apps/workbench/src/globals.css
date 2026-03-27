@@ -2,6 +2,7 @@
 
 /* Google Fonts — Geist-like sans (Inter), distinctive display (Syne), monospace (JetBrains Mono) */
 @import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Syne:wght@400;500;600;700;800&family=JetBrains+Mono:ital,wght@0,400;0,500;0,600;1,400&display=swap");
+@import "./features/observatory/observatory-hud.css";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -64,7 +65,26 @@
   --color-verdict-allow: #3dbf84;
   --color-verdict-deny: #c45c5c;
   --color-verdict-warn: #d4a84b;
+  --color-border-subtle: #2d3240;
+  --color-surface-hover: #131721;
+  --color-deny: #c45c5c;
+  --color-allow: #3dbf84;
+  --color-surface-prominent: #1a202c;
+  --color-surface-floating: #232d3d;
 }
+
+/* ==========================================================================
+   Type Scale (reference — normalize toward these values)
+   ==========================================================================
+   Display:    font-syne text-xl    (20px) — page titles, hero text
+   Heading:    font-syne text-base  (16px) — section headings
+   Heading-sm: font-syne text-sm    (14px) — subsection headings
+   Body:       text-sm              (14px) — default body text
+   Body-sm:    text-xs              (12px) — secondary body text
+   Label:      text-[11px]          (11px) — form labels, metadata
+   Caption:    text-[10px]          (10px) — timestamps, badges, filters
+   Micro:      text-[9px]           (9px)  — status indicators only
+   ========================================================================== */
 
 /* ==========================================================================
    CSS Custom Properties (design tokens)
@@ -107,6 +127,23 @@
   /* Desktop-specific tokens */
   --titlebar-height: 36px;
   --statusbar-height: 24px;
+
+  /* Motion tokens */
+  --duration-instant: 100ms;
+  --duration-fast: 150ms;
+  --duration-normal: 250ms;
+  --duration-slow: 400ms;
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --duration-instant: 0ms;
+    --duration-fast: 0ms;
+    --duration-normal: 0ms;
+    --duration-slow: 0ms;
+  }
 }
 
 /* No separate .dark -- this app is always dark */
@@ -132,6 +169,40 @@
     font-family: var(--font-sans);
     scroll-behavior: smooth;
   }
+}
+
+/* Card elevation shadows for dark theme depth */
+.card-shadow {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4), 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+.card-shadow-hover {
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5), 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+/* Semantic border utilities for dark theme */
+.border-lifted {
+  border-color: #3d4250;
+}
+.border-active {
+  border-color: rgba(212, 168, 75, 0.25);
+}
+
+/* Spirit field stain overlay — applied to panel host containers */
+.spirit-field-stain-host {
+  position: relative;
+}
+.spirit-field-stain-host::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at top-left, var(--spirit-field-stain, transparent) 0%, transparent 70%);
+  pointer-events: none;
+  z-index: 0;
+  transition: background var(--duration-slow) ease-out;
+}
+.spirit-field-stain-host > * {
+  position: relative;
+  z-index: 1;
 }
 
 /* ==========================================================================
@@ -218,6 +289,41 @@
 @keyframes verdict-alert-flash {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.85; }
+}
+
+@keyframes hb-glow {
+  0%, 100% { opacity: 0.08; }
+  50% { opacity: 0.2; }
+}
+
+@keyframes hb-ring {
+  0%, 100% { opacity: 0.25; transform: scale(1); }
+  50% { opacity: 0.45; transform: scale(1.015); }
+}
+
+@keyframes hb-seg {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 0.85; }
+}
+
+@keyframes hb-sweep {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes hb-diamond {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 0.95; }
+}
+
+@keyframes hb-facets {
+  0%, 100% { opacity: 0.15; }
+  50% { opacity: 0.4; }
+}
+
+@keyframes hb-core {
+  0%, 100% { opacity: 0.06; }
+  50% { opacity: 0.18; }
 }
 
 /* ==========================================================================
@@ -323,6 +429,9 @@ body::after {
 }
 
 /* Button press state */
+button {
+  transition: transform var(--duration-instant) ease-out;
+}
 button:active:not(:disabled) {
   transform: scale(0.98);
 }
@@ -564,4 +673,10 @@ button:active:not(:disabled) {
   border: 1px solid #2d3240;
   border-radius: 3px;
   line-height: 1;
+}
+
+/* Spirit orb pulse animation — used by SpiritOrbIcon in ActivityBar */
+@keyframes spirit-orb-pulse {
+  0%, 100% { opacity: 0.85; transform: scale(1); }
+  50%       { opacity: 1;    transform: scale(1.08); }
 }

@@ -1,19 +1,13 @@
-// ---------------------------------------------------------------------------
-// Hint Settings — configure Claude Code hint text and visibility
-// ---------------------------------------------------------------------------
 import {
   useHintSettings,
   HINT_LABELS,
   DEFAULT_HINTS,
   type HintId,
-} from "@/lib/workbench/use-hint-settings";
+} from "@/features/settings/use-hint-settings";
 import { IconBrain, IconRefresh, IconCheck } from "@tabler/icons-react";
 import { cn } from "@/lib/utils";
 import { useState, useCallback } from "react";
 
-// ---------------------------------------------------------------------------
-// Hint groups
-// ---------------------------------------------------------------------------
 
 const HINT_GROUPS: { label: string; ids: HintId[] }[] = [
   {
@@ -33,9 +27,6 @@ const HINT_GROUPS: { label: string; ids: HintId[] }[] = [
 // Dot colors per group (matching the design language)
 const GROUP_COLORS = ["#d4a84b", "#3dbf84", "#8b5cf6"];
 
-// ---------------------------------------------------------------------------
-// Component
-// ---------------------------------------------------------------------------
 
 export function HintSettings() {
   const {
@@ -121,7 +112,7 @@ export function HintSettings() {
       {/* Hint groups */}
       {HINT_GROUPS.map((group, gi) => (
         <div key={group.label}>
-          <h3 className="text-[10px] font-mono font-semibold uppercase tracking-[0.12em] text-[#6f7f9a] mb-3 flex items-center gap-2">
+          <h3 className="text-[10px] font-mono font-semibold uppercase tracking-wider text-[#6f7f9a] mb-3 flex items-center gap-2">
             <span
               className="w-1.5 h-1.5 rounded-full shrink-0"
               style={{ backgroundColor: GROUP_COLORS[gi] }}
@@ -147,9 +138,6 @@ export function HintSettings() {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Per-hint card
-// ---------------------------------------------------------------------------
 
 function HintCard({
   id,

@@ -1,6 +1,5 @@
 import { useState, useCallback, useMemo, useRef } from "react";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { useWorkbench } from "@/lib/workbench/multi-policy-store";
 import { isDesktop } from "@/lib/tauri-bridge";
 import { cn } from "@/lib/utils";
 import {
@@ -26,10 +25,9 @@ import {
   IconClock,
   IconDatabase,
 } from "@tabler/icons-react";
+import { usePolicyTabsStore } from "@/features/policy/stores/policy-tabs-store";
+import { usePolicyEditStore } from "@/features/policy/stores/policy-edit-store";
 
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
 
 const ACTION_TYPES: { value: TestActionType; label: string }[] = [
   { value: "user_input", label: "User Input" },
@@ -88,9 +86,6 @@ function computeStageScores(matches: PatternMatch[]): StageScores {
   return scores;
 }
 
-// ---------------------------------------------------------------------------
-// Sub-components
-// ---------------------------------------------------------------------------
 
 function VerdictDisplay({ result }: { result: ScreeningResult }) {
   const config = VERDICT_CONFIG[result.verdict];
@@ -410,9 +405,6 @@ function EngineFooter() {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Example prompts for onboarding
-// ---------------------------------------------------------------------------
 
 const EXAMPLE_PROMPTS: { text: string; verdict: "deny" | "allow" | "ambiguous"; label: string }[] = [
   {
@@ -457,9 +449,6 @@ const EXAMPLE_PROMPTS: { text: string; verdict: "deny" | "allow" | "ambiguous"; 
   },
 ];
 
-// ---------------------------------------------------------------------------
-// Empty state with clickable examples
-// ---------------------------------------------------------------------------
 
 function EmptyResults({ onTryExample }: { onTryExample: (text: string) => void }) {
   return (
@@ -509,7 +498,7 @@ function EmptyResults({ onTryExample }: { onTryExample: (text: string) => void }
                   </span>
                 </div>
               </div>
-              <IconChevronRight size={12} stroke={1.5} className="text-[#6f7f9a]/20 group-hover:text-[#d4a84b]/50 mt-1 shrink-0 transition-colors" />
+              <IconChevronRight size={12} stroke={1.5} className="text-[#6f7f9a]/50 group-hover:text-[#d4a84b]/50 mt-1 shrink-0 transition-colors" />
             </button>
           );
         })}
@@ -518,12 +507,11 @@ function EmptyResults({ onTryExample }: { onTryExample: (text: string) => void }
   );
 }
 
-// ---------------------------------------------------------------------------
-// Main Component
-// ---------------------------------------------------------------------------
 
 export function TrustprintLab() {
-  const { state } = useWorkbench();
+  const activeTabId = usePolicyTabsStore(s => s.activeTabId);
+  const activeTab = usePolicyTabsStore(s => s.tabs.find(t => t.id === s.activeTabId));
+  const editState = usePolicyEditStore(s => s.editStates.get(activeTabId));
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Input state
@@ -539,8 +527,8 @@ export function TrustprintLab() {
 
   // Spider Sense config from active policy
   const spiderSenseConfig = useMemo<SpiderSenseConfig>(
-    () => (state.activePolicy.guards.spider_sense ?? { enabled: true }),
-    [state.activePolicy.guards.spider_sense],
+    () => ((editState?.policy ?? { version: "1.1.0", name: "", description: "", guards: {}, settings: {} }).guards.spider_sense ?? { enabled: true }),
+    [(editState?.policy ?? { version: "1.1.0", name: "", description: "", guards: {}, settings: {} }).guards.spider_sense],
   );
 
   // Handle screening

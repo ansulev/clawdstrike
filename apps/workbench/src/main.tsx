@@ -2,10 +2,8 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import { App } from "./App";
 import "./globals.css";
+import "@/lib/workbench/detection-workflow/index";
 
-// ---------------------------------------------------------------------------
-// Global error handlers — surface unhandled errors to console (#4)
-// ---------------------------------------------------------------------------
 
 window.addEventListener("unhandledrejection", (event) => {
   console.error("[unhandled-rejection]", event.reason);

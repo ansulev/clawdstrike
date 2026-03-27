@@ -1,4 +1,3 @@
-import { useWorkbench } from "@/lib/workbench/multi-policy-store";
 import { Switch } from "@/components/ui/switch";
 import { Slider } from "@/components/ui/slider";
 import {
@@ -9,6 +8,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { PolicySchemaVersion } from "@/lib/workbench/types";
+import { usePolicyTabsStore } from "@/features/policy/stores/policy-tabs-store";
+import { usePolicyEditStore } from "@/features/policy/stores/policy-edit-store";
 
 const VERSIONS: PolicySchemaVersion[] = ["1.1.0", "1.2.0", "1.3.0", "1.4.0"];
 
@@ -21,12 +22,14 @@ function formatTimeout(secs: number): string {
 }
 
 export function SettingsPanel() {
-  const { state, dispatch } = useWorkbench();
-  const { settings, version } = state.activePolicy;
+  const activeTabId = usePolicyTabsStore(s => s.activeTabId);
+  const activeTab = usePolicyTabsStore(s => s.tabs.find(t => t.id === s.activeTabId));
+  const editState = usePolicyEditStore(s => s.editStates.get(activeTabId));
+  const { settings, version } = (editState?.policy ?? { version: "1.1.0", name: "", description: "", guards: {}, settings: {} });
 
   return (
     <div className="flex flex-col gap-4 p-4 border-t border-[#2d3240]/60">
-      <h3 className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[#6f7f9a]">
+      <h3 className="text-[10px] font-semibold uppercase tracking-wider text-[#6f7f9a]">
         Policy Settings
       </h3>
 
@@ -36,7 +39,8 @@ export function SettingsPanel() {
         <Select
           value={version}
           onValueChange={(val) => {
-            dispatch({ type: "UPDATE_META", version: val as string });
+            usePolicyEditStore.getState().updateMeta(activeTabId, { version: val as string }, activeTab?.fileType ?? "clawdstrike_policy");
+          usePolicyTabsStore.getState().setDirty(activeTabId, true);
           }}
         >
           <SelectTrigger className="w-28 bg-[#131721] border-[#2d3240] text-[#ece7dc] text-xs font-mono">
@@ -67,7 +71,8 @@ export function SettingsPanel() {
         <Switch
           checked={settings.fail_fast ?? false}
           onCheckedChange={(checked) => {
-            dispatch({ type: "UPDATE_SETTINGS", settings: { fail_fast: !!checked } });
+            usePolicyEditStore.getState().updateSettings(activeTabId, { fail_fast: !!checked }, activeTab?.fileType ?? "clawdstrike_policy");
+            usePolicyTabsStore.getState().setDirty(activeTabId, true);
           }}
           className="data-checked:bg-[#d4a84b]"
         />
@@ -84,7 +89,8 @@ export function SettingsPanel() {
         <Switch
           checked={settings.verbose_logging ?? false}
           onCheckedChange={(checked) => {
-            dispatch({ type: "UPDATE_SETTINGS", settings: { verbose_logging: !!checked } });
+            usePolicyEditStore.getState().updateSettings(activeTabId, { verbose_logging: !!checked }, activeTab?.fileType ?? "clawdstrike_policy");
+            usePolicyTabsStore.getState().setDirty(activeTabId, true);
           }}
           className="data-checked:bg-[#d4a84b]"
         />
@@ -105,7 +111,8 @@ export function SettingsPanel() {
           step={300}
           onValueChange={(val) => {
             const v = Array.isArray(val) ? val[0] : val;
-            dispatch({ type: "UPDATE_SETTINGS", settings: { session_timeout_secs: v } });
+            usePolicyEditStore.getState().updateSettings(activeTabId, { session_timeout_secs: v }, activeTab?.fileType ?? "clawdstrike_policy");
+            usePolicyTabsStore.getState().setDirty(activeTabId, true);
           }}
           className="[&_[data-slot=slider-range]]:bg-[#d4a84b] [&_[data-slot=slider-thumb]]:border-[#d4a84b]"
         />

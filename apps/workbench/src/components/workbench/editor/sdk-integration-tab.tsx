@@ -13,11 +13,12 @@ import { tags } from "@lezer/highlight";
 import { searchKeymap, highlightSelectionMatches } from "@codemirror/search";
 import { python } from "@codemirror/lang-python";
 import { javascript } from "@codemirror/lang-javascript";
-import { useWorkbench, useMultiPolicy } from "@/lib/workbench/multi-policy-store";
+import { useWorkbenchState, usePolicyTabs } from "@/features/policy/hooks/use-policy-actions";
 import { useToast } from "@/components/ui/toast";
-import { policyToYaml } from "@/lib/workbench/yaml-utils";
+import { policyToYaml } from "@/features/policy/yaml-utils";
 import { isDesktop, savePolicyFile } from "@/lib/tauri-bridge";
 import { cn } from "@/lib/utils";
+import { SubTabBar, type SubTab } from "../shared/sub-tab-bar";
 import {
   IconCopy,
   IconCheck,
@@ -44,9 +45,6 @@ import {
   type DryRunOutput,
 } from "@/lib/workbench/script-dry-runner";
 
-// ---------------------------------------------------------------------------
-// Framework metadata
-// ---------------------------------------------------------------------------
 
 interface FrameworkMeta {
   label: string;
@@ -117,9 +115,6 @@ const FRAMEWORK_ORDER: SdkFramework[] = [
   "typescript-sdk",
 ];
 
-// ---------------------------------------------------------------------------
-// CodeMirror theme (matches ClawdStrike dark theme from yaml-editor.tsx)
-// ---------------------------------------------------------------------------
 
 const clawdCodeTheme = EditorView.theme(
   {
@@ -268,9 +263,6 @@ const clawdCodeHighlightStyle = HighlightStyle.define([
   { tag: tags.className, color: "#d4a84b" },
 ]);
 
-// ---------------------------------------------------------------------------
-// useCodeEditor hook
-// ---------------------------------------------------------------------------
 
 function useCodeEditor(
   containerRef: React.RefObject<HTMLDivElement | null>,
@@ -368,13 +360,10 @@ function useCodeEditor(
   return viewRef.current;
 }
 
-// ---------------------------------------------------------------------------
-// SdkIntegrationTab
-// ---------------------------------------------------------------------------
 
 export function SdkIntegrationTab() {
-  const { state } = useWorkbench();
-  const { activeTab } = useMultiPolicy();
+  const { state } = useWorkbenchState();
+  const { activeTab } = usePolicyTabs();
   const { toast } = useToast();
 
   // Framework tab state
@@ -778,35 +767,14 @@ export function SdkIntegrationTab() {
   return (
     <div className="h-full flex flex-col bg-[#05060a]">
       {/* Framework tab bar */}
-      <div className="flex items-center border-b border-[#2d3240] bg-[#0b0d13] shrink-0 overflow-x-auto">
-        {FRAMEWORK_ORDER.map((fw) => {
-          const fwMeta = FRAMEWORK_META[fw];
-          return (
-            <button
-              key={fw}
-              onClick={() => setActiveFramework(fw)}
-              className={cn(
-                "flex items-center gap-1 px-2.5 py-2 text-[10px] font-mono transition-colors border-b-2 -mb-px shrink-0 whitespace-nowrap",
-                activeFramework === fw
-                  ? "text-[#d4a84b] border-[#d4a84b]"
-                  : "text-[#6f7f9a] border-transparent hover:text-[#ece7dc] hover:border-[#2d3240]",
-              )}
-            >
-              <span
-                className={cn(
-                  "inline-flex items-center justify-center w-4 h-3.5 rounded text-[7px] font-bold leading-none",
-                  activeFramework === fw
-                    ? "bg-[#d4a84b]/20 text-[#d4a84b]"
-                    : "bg-[#2d3240] text-[#6f7f9a]",
-                )}
-              >
-                {fwMeta.languageBadge}
-              </span>
-              {fwMeta.label}
-            </button>
-          );
-        })}
-      </div>
+      <SubTabBar
+        tabs={FRAMEWORK_ORDER.map((fw): SubTab => ({
+          id: fw,
+          label: FRAMEWORK_META[fw].label,
+        }))}
+        activeTab={activeFramework}
+        onTabChange={(id) => setActiveFramework(id as SdkFramework)}
+      />
 
       {/* Script management bar */}
       <div className="flex items-center gap-1.5 px-3 py-1.5 border-b border-[#2d3240] bg-[#0b0d13] shrink-0">
@@ -891,7 +859,7 @@ export function SdkIntegrationTab() {
             value={scriptName}
             onChange={(e) => setScriptName(e.target.value)}
             className="bg-[#131721] text-[#ece7dc] border border-[#2d3240] rounded px-2 py-0.5 text-[9px] font-mono w-40 focus:border-[#d4a84b] outline-none transition-colors"
-            placeholder="Script name"
+            placeholder="e.g., file-guard-setup"
           />
         )}
 

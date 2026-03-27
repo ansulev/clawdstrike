@@ -4,11 +4,10 @@ import {
   CollapsibleTrigger,
   CollapsibleContent,
 } from "@/components/ui/collapsible";
-import { useWorkbench } from "@/lib/workbench/multi-policy-store";
 import { GUARD_REGISTRY } from "@/lib/workbench/guard-registry";
 import { loadBuiltinRuleset } from "@/lib/tauri-commands";
-import { BUILTIN_RULESETS } from "@/lib/workbench/builtin-rulesets";
-import { yamlToPolicy } from "@/lib/workbench/yaml-utils";
+import { BUILTIN_RULESETS } from "@/features/policy/builtin-rulesets";
+import { yamlToPolicy } from "@/features/policy/yaml-utils";
 import type { WorkbenchPolicy, GuardId, GuardConfigMap } from "@/lib/workbench/types";
 import { cn } from "@/lib/utils";
 import {
@@ -16,10 +15,9 @@ import {
   IconArrowRight,
   IconLayersLinked,
 } from "@tabler/icons-react";
+import { usePolicyTabsStore } from "@/features/policy/stores/policy-tabs-store";
+import { usePolicyEditStore } from "@/features/policy/stores/policy-edit-store";
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
 
 type GuardProvenance = "inherited" | "overridden" | "added" | "removed";
 
@@ -36,9 +34,6 @@ interface ResolvedBase {
   policy: WorkbenchPolicy;
 }
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 /**
  * Parse the `extends` field into an ordered array of base names.
@@ -178,9 +173,6 @@ function computeProvenance(
   return entries;
 }
 
-// ---------------------------------------------------------------------------
-// Badge sub-component
-// ---------------------------------------------------------------------------
 
 const PROVENANCE_STYLES: Record<GuardProvenance, string> = {
   inherited: "bg-[#6f7f9a]/10 text-[#6f7f9a] border-[#6f7f9a]/20",
@@ -220,9 +212,6 @@ function ProvenanceBadge({
   );
 }
 
-// ---------------------------------------------------------------------------
-// Skeleton loader
-// ---------------------------------------------------------------------------
 
 function ChainSkeleton() {
   return (
@@ -244,18 +233,17 @@ function ChainSkeleton() {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Main component
-// ---------------------------------------------------------------------------
 
 export function InheritanceChain() {
-  const { state } = useWorkbench();
+  const activeTabId = usePolicyTabsStore(s => s.activeTabId);
+  const activeTab = usePolicyTabsStore(s => s.tabs.find(t => t.id === s.activeTabId));
+  const editState = usePolicyEditStore(s => s.editStates.get(activeTabId));
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [resolvedBases, setResolvedBases] = useState<ResolvedBase[]>([]);
   const cacheRef = useRef<Map<string, ResolvedBase>>(new Map());
 
-  const extendsValue = state.activePolicy.extends;
+  const extendsValue = (editState?.policy ?? { version: "1.1.0", name: "", description: "", guards: {}, settings: {} }).extends;
   const baseNames = useMemo(() => parseExtends(extendsValue), [extendsValue]);
 
   // Load base rulesets when `extends` changes
@@ -302,7 +290,7 @@ export function InheritanceChain() {
   // If no extends set, render nothing
   if (baseNames.length === 0) return null;
 
-  const provenance = computeProvenance(resolvedBases, state.activePolicy);
+  const provenance = computeProvenance(resolvedBases, (editState?.policy ?? { version: "1.1.0", name: "", description: "", guards: {}, settings: {} }));
 
   // Group by provenance for summary counts
   const counts = { inherited: 0, overridden: 0, added: 0, removed: 0 };
@@ -359,7 +347,7 @@ export function InheritanceChain() {
             size={12}
             stroke={1.5}
             className={cn(
-              "shrink-0 text-[#6f7f9a] transition-transform duration-200",
+              "shrink-0 text-[#6f7f9a] transition-transform duration-150",
               open && "rotate-180",
             )}
           />
@@ -392,7 +380,7 @@ export function InheritanceChain() {
                   className="text-[#6f7f9a]/50"
                 />
                 <span className="inline-flex items-center px-2 py-0.5 text-[10px] font-mono text-[#d4a84b] bg-[#d4a84b]/10 border border-[#d4a84b]/20 rounded font-medium">
-                  {state.activePolicy.name || "Current Policy"}
+                  {(editState?.policy ?? { version: "1.1.0", name: "", description: "", guards: {}, settings: {} }).name || "Current Policy"}
                 </span>
               </div>
 
@@ -446,16 +434,10 @@ export function InheritanceChain() {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Module-level cache shared across all useGuardProvenance instances
-// ---------------------------------------------------------------------------
 
 /** Shared cache so multiple GuardCard instances don't each trigger separate loads. */
 const sharedBaseCache = new Map<string, ResolvedBase>();
 
-// ---------------------------------------------------------------------------
-// Exported helper for guard-card provenance tooltips
-// ---------------------------------------------------------------------------
 
 /**
  * Hook that returns provenance info for a single guard.
@@ -469,10 +451,12 @@ export function useGuardProvenance(guardId: GuardId): {
   provenance: GuardProvenance;
   source: string | null;
 } | null {
-  const { state } = useWorkbench();
+  const activeTabId = usePolicyTabsStore(s => s.activeTabId);
+  const activeTab = usePolicyTabsStore(s => s.tabs.find(t => t.id === s.activeTabId));
+  const editState = usePolicyEditStore(s => s.editStates.get(activeTabId));
   const [resolvedBases, setResolvedBases] = useState<ResolvedBase[]>([]);
 
-  const extendsValue = state.activePolicy.extends;
+  const extendsValue = (editState?.policy ?? { version: "1.1.0", name: "", description: "", guards: {}, settings: {} }).extends;
   const baseNames = useMemo(() => parseExtends(extendsValue), [extendsValue]);
 
   useEffect(() => {
@@ -507,7 +491,7 @@ export function useGuardProvenance(guardId: GuardId): {
   return useMemo(() => {
     if (baseNames.length === 0 || resolvedBases.length === 0) return null;
 
-    const all = computeProvenance(resolvedBases, state.activePolicy);
+    const all = computeProvenance(resolvedBases, (editState?.policy ?? { version: "1.1.0", name: "", description: "", guards: {}, settings: {} }));
     return all.find((e) => e.guardId === guardId) ?? null;
-  }, [baseNames, resolvedBases, state.activePolicy, guardId]);
+  }, [baseNames, resolvedBases, (editState?.policy ?? { version: "1.1.0", name: "", description: "", guards: {}, settings: {} }), guardId]);
 }

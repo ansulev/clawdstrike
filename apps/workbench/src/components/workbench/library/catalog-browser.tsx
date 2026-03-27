@@ -6,9 +6,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useWorkbench } from "@/lib/workbench/multi-policy-store";
-import { yamlToPolicy, policyToYaml } from "@/lib/workbench/yaml-utils";
-import { useFleetConnection } from "@/lib/workbench/use-fleet-connection";
+import { useWorkbenchState } from "@/features/policy/hooks/use-policy-actions";
+import { yamlToPolicy, policyToYaml } from "@/features/policy/yaml-utils";
+import { useFleetConnection } from "@/features/fleet/use-fleet-connection";
 import {
   POLICY_CATALOG,
   CATALOG_CATEGORIES,
@@ -16,7 +16,7 @@ import {
   type CatalogEntry,
   type CatalogCategory,
   type CatalogDifficulty,
-} from "@/lib/workbench/policy-catalog";
+} from "@/features/policy/policy-catalog";
 import {
   fetchCatalogTemplates,
   fetchCatalogCategories,
@@ -24,7 +24,7 @@ import {
   forkCatalogTemplate,
   type CatalogTemplate,
   type CatalogCategoryInfo,
-} from "@/lib/workbench/fleet-client";
+} from "@/features/fleet/fleet-client";
 import { cn } from "@/lib/utils";
 import {
   IconSearch,
@@ -544,8 +544,8 @@ function PublishDialog({
 // ---- Main catalog browser ----
 
 export function CatalogBrowser() {
-  const { state, loadPolicy } = useWorkbench();
-  const { connection } = useFleetConnection();
+  const { state, loadPolicy } = useWorkbenchState();
+  const { connection, getAuthenticatedConnection } = useFleetConnection();
   const isConnected = connection.connected;
 
   const [search, setSearch] = useState("");
@@ -578,8 +578,8 @@ export function CatalogBrowser() {
 
     try {
       const [templates, categories] = await Promise.all([
-        fetchCatalogTemplates(connection),
-        fetchCatalogCategories(connection),
+        fetchCatalogTemplates(getAuthenticatedConnection()),
+        fetchCatalogCategories(getAuthenticatedConnection()),
       ]);
       if (id !== fetchIdRef.current) return; // stale
       setCatalogTemplates(templates);
@@ -686,7 +686,7 @@ export function CatalogBrowser() {
       if (entry.source === "catalog" && entry.catalogId && isConnected) {
         setForkingId(entry.catalogId);
         try {
-          const result = await forkCatalogTemplate(connection, entry.catalogId);
+          const result = await forkCatalogTemplate(getAuthenticatedConnection(), entry.catalogId);
           if (result.success && result.template) {
             const [policy] = yamlToPolicy(result.template.yaml);
             if (policy) {
@@ -726,7 +726,7 @@ export function CatalogBrowser() {
 
       try {
         const yaml = policyToYaml(state.activePolicy);
-        const result = await publishCatalogTemplate(connection, {
+        const result = await publishCatalogTemplate(getAuthenticatedConnection(), {
           name: meta.name,
           description: meta.description,
           category: meta.category,
@@ -801,7 +801,7 @@ export function CatalogBrowser() {
                 onClick={loadCatalog}
                 disabled={catalogLoading}
                 title="Refresh catalog"
-                className="flex items-center gap-1 px-2 py-1 rounded-md bg-[#131721] text-[#6f7f9a] text-[10px] font-medium hover:text-[#ece7dc] transition-colors disabled:opacity-50"
+                className="flex items-center gap-1 px-2 py-1 rounded-md bg-[#131721] text-[#6f7f9a] text-[10px] font-medium hover:text-[#ece7dc] transition-colors disabled:opacity-40 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d4a84b]/40 focus-visible:ring-offset-1 focus-visible:ring-offset-[#05060a]"
               >
                 <IconRefresh size={11} stroke={1.5} className={catalogLoading ? "animate-spin" : ""} />
                 Refresh

@@ -1,7 +1,6 @@
 import { useState, useMemo, useCallback } from "react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { VerdictBadge } from "@/components/workbench/shared/verdict-badge";
-import { useWorkbench } from "@/lib/workbench/multi-policy-store";
 import { cn } from "@/lib/utils";
 import {
   computeThreatMatrix,
@@ -23,10 +22,9 @@ import {
   IconArrowRight,
   IconBulb,
 } from "@tabler/icons-react";
+import { usePolicyTabsStore } from "@/features/policy/stores/policy-tabs-store";
+import { usePolicyEditStore } from "@/features/policy/stores/policy-edit-store";
 
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
 
 const COVERAGE_COLORS: Record<CoverageLevel, { bg: string; text: string; border: string }> = {
   full: { bg: "bg-[#3dbf84]", text: "text-[#3dbf84]", border: "border-[#3dbf84]/30" },
@@ -35,9 +33,6 @@ const COVERAGE_COLORS: Record<CoverageLevel, { bg: string; text: string; border:
   na: { bg: "bg-[#2d3240]", text: "text-[#6f7f9a]/30", border: "border-[#2d3240]" },
 };
 
-// ---------------------------------------------------------------------------
-// Sub-components
-// ---------------------------------------------------------------------------
 
 function ScoreGauge({ score }: { score: number }) {
   const color = score >= 80 ? "#3dbf84" : score >= 50 ? "#d4a84b" : "#c45c5c";
@@ -246,9 +241,6 @@ function CellDrillDown({
   );
 }
 
-// ---------------------------------------------------------------------------
-// Matrix grid
-// ---------------------------------------------------------------------------
 
 function MatrixGrid({
   matrix,
@@ -337,9 +329,6 @@ function MatrixGrid({
   );
 }
 
-// ---------------------------------------------------------------------------
-// Main Component
-// ---------------------------------------------------------------------------
 
 interface ThreatMatrixProps {
   scenarios: TestScenario[];
@@ -347,13 +336,15 @@ interface ThreatMatrixProps {
 }
 
 export function ThreatMatrix({ scenarios, results }: ThreatMatrixProps) {
-  const { state } = useWorkbench();
+  const activeTabId = usePolicyTabsStore(s => s.activeTabId);
+  const activeTab = usePolicyTabsStore(s => s.tabs.find(t => t.id === s.activeTabId));
+  const editState = usePolicyEditStore(s => s.editStates.get(activeTabId));
   const [selectedCell, setSelectedCell] = useState<{ guardId: GuardId; category: AttackCategory } | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<AttackCategory | null>(null);
 
   const matrix = useMemo(
-    () => computeThreatMatrix(state.activePolicy),
-    [state.activePolicy],
+    () => computeThreatMatrix((editState?.policy ?? { version: "1.1.0", name: "", description: "", guards: {}, settings: {} })),
+    [(editState?.policy ?? { version: "1.1.0", name: "", description: "", guards: {}, settings: {} })],
   );
 
   const handleCellClick = useCallback((guardId: GuardId, category: AttackCategory) => {

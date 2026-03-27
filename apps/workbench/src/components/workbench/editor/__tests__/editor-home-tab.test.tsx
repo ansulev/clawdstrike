@@ -2,40 +2,30 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, beforeEach, vi } from "vitest";
 import { EditorHomeTab } from "../editor-home-tab";
+import { usePolicyTabsStore } from "@/features/policy/stores/policy-tabs-store";
+import type { TabMeta } from "@/features/policy/stores/policy-tabs-store";
 
-const multiDispatch = vi.fn();
-const openFile = vi.fn();
-const openFileByPath = vi.fn();
 const getRecentFiles = vi.fn(() => ["/tmp/example.yaml"]);
 
-const multiPolicyState = {
-  tabs: [],
-  multiDispatch,
-  multiState: { activeTabId: "tab-1" },
-  canAddTab: true,
-};
-
-vi.mock("@/lib/workbench/multi-policy-store", () => ({
-  useMultiPolicy: () => multiPolicyState,
-  useWorkbench: () => ({ openFile, openFileByPath }),
-}));
-
-vi.mock("@/lib/workbench/policy-store", () => ({
-  getRecentFiles: () => getRecentFiles(),
-}));
+vi.mock("@/features/policy/stores/policy-store", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/features/policy/stores/policy-store")>();
+  return {
+    ...actual,
+    getRecentFiles: () => getRecentFiles(),
+  };
+});
 
 vi.mock("@/lib/tauri-bridge", () => ({
   isDesktop: () => true,
+  openDetectionFile: vi.fn(),
+  readDetectionFileByPath: vi.fn(),
 }));
 
 describe("EditorHomeTab", () => {
   beforeEach(() => {
-    multiDispatch.mockReset();
-    openFile.mockReset();
-    openFileByPath.mockReset();
     getRecentFiles.mockClear();
-    multiPolicyState.tabs = [];
-    multiPolicyState.canAddTab = true;
+    // Reset tabs store to default state (single tab)
+    usePolicyTabsStore.getState()._reset();
   });
 
   it("memoizes recent file reads across rerenders", () => {
@@ -50,7 +40,12 @@ describe("EditorHomeTab", () => {
 
   it("disables template buttons when the tab limit is reached", async () => {
     const user = userEvent.setup();
-    multiPolicyState.canAddTab = false;
+
+    // Fill the store with 25 tabs to hit the limit
+    const store = usePolicyTabsStore.getState();
+    for (let i = 0; i < 24; i++) {
+      store.newTab({});
+    }
 
     render(<EditorHomeTab onNavigateToTab={() => {}} />);
 
@@ -60,6 +55,22 @@ describe("EditorHomeTab", () => {
 
     await user.click(strictTemplate!);
 
-    expect(multiDispatch).not.toHaveBeenCalled();
+    // Verify no new tab was created beyond 25
+    expect(usePolicyTabsStore.getState().tabs.length).toBe(25);
+  });
+
+  it("creates a new YARA rule from the start-new section", async () => {
+    const user = userEvent.setup();
+    const newTabSpy = vi.spyOn(usePolicyTabsStore.getState(), "newTab");
+
+    render(<EditorHomeTab onNavigateToTab={() => {}} />);
+
+    await user.click(screen.getByRole("button", { name: /yara rule/i }));
+
+    expect(newTabSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ fileType: "yara_rule" }),
+    );
+
+    newTabSpy.mockRestore();
   });
 });

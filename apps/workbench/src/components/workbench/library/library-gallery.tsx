@@ -1,14 +1,17 @@
 import { useState, useEffect } from "react";
-import { useWorkbench } from "@/lib/workbench/multi-policy-store";
-import { getRecentFiles } from "@/lib/workbench/policy-store";
-import { BUILTIN_RULESETS, type BuiltinRuleset } from "@/lib/workbench/builtin-rulesets";
+import { useWorkbenchState } from "@/features/policy/hooks/use-policy-actions";
+import { usePolicyTabsStore } from "@/features/policy/stores/policy-tabs-store";
+import { usePaneStore } from "@/features/panes/pane-store";
+import { getRecentFiles } from "@/features/policy/stores/policy-store";
+import { BUILTIN_RULESETS, type BuiltinRuleset } from "@/features/policy/builtin-rulesets";
 import {
   listBuiltinRulesets,
   loadBuiltinRuleset,
 } from "@/lib/tauri-commands";
 import { isDesktop } from "@/lib/tauri-bridge";
 import { cn } from "@/lib/utils";
-import { useHintSettingsSafe, type HintId } from "@/lib/workbench/use-hint-settings";
+import { SubTabBar, type SubTab } from "../shared/sub-tab-bar";
+import { useHintSettingsSafe, type HintId } from "@/features/settings/use-hint-settings";
 import {
   IconFile,
   IconFolderOpen,
@@ -30,10 +33,12 @@ import { PolicyCard } from "./policy-card";
 import { ImportExport } from "./import-export";
 import { YamlViewDialog } from "./yaml-view-dialog";
 import { CatalogBrowser } from "./catalog-browser";
+import { SigmaHQBrowser } from "./sigmahq-browser";
+import { PluginsBrowser } from "./plugins-browser";
 
 const MCP_LAUNCH_COMMAND = "bun run apps/workbench/mcp-server/index.ts";
 
-type LibraryTab = "my-policies" | "catalog";
+type LibraryTab = "my-policies" | "catalog" | "sigmahq" | "plugins";
 
 /**
  * Merge native rulesets from the Rust engine with the client-side fallback list.
@@ -102,9 +107,6 @@ function useBuiltinRulesets() {
 
 import { useMcpStatus } from "@/lib/workbench/use-mcp-status";
 
-// ---------------------------------------------------------------------------
-// Library prompt cards — read from hint settings store
-// ---------------------------------------------------------------------------
 
 const LIBRARY_PROMPT_CARDS: { hintId: HintId; fallbackLabel: string; fallbackPrompt: string }[] = [
   {
@@ -196,7 +198,7 @@ function LibraryCopyableCard({ label, prompt }: { label: string; prompt: string 
 }
 
 export function LibraryGallery() {
-  const { state, openFile, openFileByPath } = useWorkbench();
+  const { state, openFile, openFileByPath } = useWorkbenchState();
   const [viewYaml, setViewYaml] = useState<{ name: string; yaml: string } | null>(null);
   const { rulesets, loading, nativeAvailable } = useBuiltinRulesets();
   const [activeTab, setActiveTab] = useState<LibraryTab>("my-policies");
@@ -216,7 +218,7 @@ export function LibraryGallery() {
   return (
     <div className="p-6 max-w-6xl mx-auto">
       {/* Header + Import/Export */}
-      <div className="flex items-start justify-between gap-4 mb-6 flex-wrap">
+      <div className="flex items-start justify-between gap-4 mb-8 flex-wrap">
         <div>
           <h1 className="font-syne font-bold text-xl text-[#ece7dc] mb-1">
             Policy Library
@@ -229,41 +231,41 @@ export function LibraryGallery() {
       </div>
 
       {/* Tab switcher */}
-      <div className="flex items-center gap-1 mb-6 border-b border-[#2d3240]/40 pb-px">
-        <button
-          onClick={() => setActiveTab("my-policies")}
-          className={cn(
-            "flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-t-md transition-colors -mb-px border-b-2",
-            activeTab === "my-policies"
-              ? "text-[#ece7dc] border-[#d4a84b] bg-[#131721]/30"
-              : "text-[#6f7f9a] border-transparent hover:text-[#ece7dc] hover:bg-[#131721]/20",
-          )}
-        >
-          <IconBooks size={15} stroke={1.5} />
-          My Policies
-        </button>
-        <button
-          onClick={() => setActiveTab("catalog")}
-          className={cn(
-            "flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-t-md transition-colors -mb-px border-b-2",
-            activeTab === "catalog"
-              ? "text-[#ece7dc] border-[#d4a84b] bg-[#131721]/30"
-              : "text-[#6f7f9a] border-transparent hover:text-[#ece7dc] hover:bg-[#131721]/20",
-          )}
-        >
-          <IconLayoutGrid size={15} stroke={1.5} />
-          Catalog
-        </button>
+      <div className="mb-8">
+        <SubTabBar
+          tabs={[
+            { id: "my-policies", label: "My Policies", icon: IconBooks },
+            { id: "catalog", label: "Catalog", icon: IconLayoutGrid },
+            { id: "sigmahq", label: "SigmaHQ", icon: IconShieldCheck },
+            { id: "plugins", label: "Plugins", icon: IconPlugConnected },
+          ] satisfies SubTab[]}
+          activeTab={activeTab}
+          onTabChange={(id) => setActiveTab(id as LibraryTab)}
+        />
       </div>
 
       {/* Tab content */}
-      {activeTab === "catalog" ? (
+      {activeTab === "plugins" ? (
+        <PluginsBrowser />
+      ) : activeTab === "catalog" ? (
         <CatalogBrowser />
+      ) : activeTab === "sigmahq" ? (
+        <SigmaHQBrowser
+          onImport={(yaml) => {
+            const newTabId = usePolicyTabsStore.getState().newTab({
+              fileType: "sigma_rule",
+              yaml,
+            });
+            if (newTabId) {
+              usePaneStore.getState().openApp(`/file/__new__/${newTabId}`, "Sigma Rule");
+            }
+          }}
+        />
       ) : (
         <>
           {/* Recent files (desktop only) */}
           {desktop && recentFiles.length > 0 && (
-            <section className="mb-10">
+            <section className="mb-8">
               <h2 className="font-syne font-bold text-sm text-[#ece7dc] mb-4 flex items-center gap-2">
                 <span className="w-1.5 h-1.5 rounded-full bg-[#3dbf84]" />
                 Recent Files
@@ -298,7 +300,7 @@ export function LibraryGallery() {
           )}
 
           {/* Built-in rulesets */}
-          <section className="mb-10">
+          <section className="mb-8">
             <h2 className="font-syne font-bold text-sm text-[#ece7dc] mb-4 flex items-center gap-2">
               <span className="w-1.5 h-1.5 rounded-full bg-[#d4a84b]" />
               Built-in Rulesets
@@ -368,7 +370,7 @@ export function LibraryGallery() {
           </section>
 
           {/* AI Integrations */}
-          <section className="mt-10">
+          <section className="mt-8">
             <h2 className="font-syne font-bold text-sm text-[#ece7dc] mb-4 flex items-center gap-2">
               <span className="w-1.5 h-1.5 rounded-full bg-[#8b5cf6]" />
               AI Integrations

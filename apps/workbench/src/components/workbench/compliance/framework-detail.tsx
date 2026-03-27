@@ -1,5 +1,4 @@
 import { useMemo } from "react";
-import { useWorkbench } from "@/lib/workbench/multi-policy-store";
 import {
   scoreFramework,
   COMPLIANCE_FRAMEWORKS,
@@ -9,6 +8,9 @@ import type { ComplianceRequirementDef } from "@/lib/workbench/compliance-requir
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { IconCheck, IconX, IconArrowRight } from "@tabler/icons-react";
 import { Link } from "react-router-dom";
+import { Breadcrumb } from "@/components/workbench/shared/breadcrumb";
+import { usePolicyTabsStore } from "@/features/policy/stores/policy-tabs-store";
+import { usePolicyEditStore } from "@/features/policy/stores/policy-edit-store";
 
 interface FrameworkDetailProps {
   framework: ComplianceFramework;
@@ -80,8 +82,10 @@ function RequirementRow({
 }
 
 export function FrameworkDetail({ framework, onClose }: FrameworkDetailProps) {
-  const { state } = useWorkbench();
-  const { activePolicy } = state;
+  const activeTabId = usePolicyTabsStore(s => s.activeTabId);
+  const activeTab = usePolicyTabsStore(s => s.tabs.find(t => t.id === s.activeTabId));
+  const editState = usePolicyEditStore(s => s.editStates.get(activeTabId));
+  const activePolicy = editState?.policy ?? { version: "1.1.0", name: "", description: "", guards: {}, settings: {} };
 
   const frameworkDef = COMPLIANCE_FRAMEWORKS.find((f) => f.id === framework);
 
@@ -97,6 +101,9 @@ export function FrameworkDetail({ framework, onClose }: FrameworkDetailProps) {
 
   return (
     <div className="flex flex-col h-full">
+      {/* Breadcrumb */}
+      <Breadcrumb items={[{ label: "Compliance", href: "/compliance" }, { label: frameworkDef.name }]} />
+
       {/* Header */}
       <div className="shrink-0 flex items-center justify-between px-4 py-3 border-b border-[#2d3240] bg-[#0b0d13]">
         <div className="flex items-center gap-3">

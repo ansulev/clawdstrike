@@ -1,23 +1,24 @@
+// Re-export FileType from the registry for convenience
+export type { FileType } from "./file-type-registry";
+
 // ---- Policy Schema Types (mirroring Rust/TS canonical schema) ----
 
 export type PolicySchemaVersion = "1.1.0" | "1.2.0" | "1.3.0" | "1.4.0";
 
 export type Verdict = "allow" | "deny" | "warn";
 
-export type GuardId =
-  | "forbidden_path"
-  | "path_allowlist"
-  | "egress_allowlist"
-  | "secret_leak"
-  | "patch_integrity"
-  | "shell_command"
-  | "mcp_tool"
-  | "prompt_injection"
-  | "jailbreak"
-  | "computer_use"
-  | "remote_desktop_side_channel"
-  | "input_injection_capability"
-  | "spider_sense";
+/** Guard identifier. Built-in guards use BUILTIN_GUARD_IDS; plugins register arbitrary strings. */
+export type GuardId = string;
+
+/** The 13 built-in guard IDs, for reference and backward compat. */
+export const BUILTIN_GUARD_IDS = [
+  "forbidden_path", "path_allowlist", "egress_allowlist",
+  "secret_leak", "patch_integrity", "shell_command",
+  "mcp_tool", "prompt_injection", "jailbreak",
+  "computer_use", "remote_desktop_side_channel",
+  "input_injection_capability", "spider_sense",
+] as const;
+export type BuiltinGuardId = (typeof BUILTIN_GUARD_IDS)[number];
 
 // ---- Per-guard config interfaces ----
 
@@ -77,6 +78,10 @@ export interface McpToolConfig {
   require_confirmation?: string[];
   default_action?: "allow" | "block";
   max_args_size?: number;
+  additional_allow?: string[];
+  additional_block?: string[];
+  remove_allow?: string[];
+  remove_block?: string[];
 }
 
 export interface PromptInjectionConfig {
@@ -159,6 +164,8 @@ export interface GuardConfigMap {
   remote_desktop_side_channel?: RemoteDesktopSideChannelConfig;
   input_injection_capability?: InputInjectionCapabilityConfig;
   spider_sense?: SpiderSenseConfig;
+  /** Plugin guards store their config under their guard ID. */
+  [guardId: string]: Record<string, unknown> | { enabled?: boolean } | undefined;
 }
 
 export interface PolicySettings {
@@ -195,7 +202,9 @@ export type OriginProvider =
   | "jira"
   | "email"
   | "discord"
-  | "webhook";
+  | "webhook"
+  | "cli"
+  | "api";
 
 export type SpaceType =
   | "channel"
@@ -212,6 +221,8 @@ export type Visibility =
   | "internal"
   | "public"
   | "external_shared"
+  | "restricted"
+  | "external"
   | "unknown";
 
 export type ProvenanceConfidence = "strong" | "medium" | "weak" | "unknown";
@@ -230,6 +241,8 @@ export interface OriginMatch {
   external_participants?: boolean;
   tags?: string[];
   sensitivity?: string;
+  actor_id?: string;
+  actor_type?: ActorType;
   actor_role?: string;
   provenance_confidence?: ProvenanceConfidence;
 }
@@ -269,6 +282,7 @@ export interface OriginProfile {
   budgets?: OriginBudgets;
   bridge_policy?: BridgePolicy;
   explanation?: string;
+  metadata?: Record<string, unknown>;
 }
 
 export interface OriginsConfig {
@@ -294,6 +308,7 @@ export interface OriginContext {
   tags?: string[];
   sensitivity?: string;
   provenance_confidence?: ProvenanceConfidence;
+  metadata?: Record<string, unknown>;
 }
 
 // ---- Top-level policy ----
@@ -398,7 +413,7 @@ export interface TestScenario {
   redteamStrategyId?: string;
 }
 
-export type SimulationEngine = "native" | "client" | "stubbed";
+export type SimulationEngine = "native" | "client" | "stubbed" | "desktop_only";
 
 export interface GuardSimResult {
   guardId: GuardId;
@@ -487,22 +502,23 @@ export interface Receipt {
 
 // ---- Guard metadata (for UI rendering) ----
 
-export type GuardCategory =
-  | "filesystem"
-  | "network"
-  | "content"
-  | "tools"
-  | "detection"
-  | "cua";
+/** Guard category. Built-in categories listed in BUILTIN_GUARD_CATEGORY_IDS; plugins can register custom categories. */
+export type GuardCategory = string;
 
-export type ConfigFieldType =
-  | "toggle"
-  | "string_list"
-  | "pattern_list"
-  | "number_slider"
-  | "number_input"
-  | "select"
-  | "secret_pattern_list";
+export const BUILTIN_GUARD_CATEGORY_IDS = [
+  "filesystem", "network", "content", "tools", "detection", "cua",
+] as const;
+export type BuiltinGuardCategory = (typeof BUILTIN_GUARD_CATEGORY_IDS)[number];
+
+/** Config field type for guard config UI. Plugins can register custom field types; "json" provides a fallback JSON editor. */
+export type ConfigFieldType = string;
+
+export const BUILTIN_CONFIG_FIELD_TYPES = [
+  "toggle", "string_list", "pattern_list",
+  "number_slider", "number_input", "select",
+  "secret_pattern_list", "json",
+] as const;
+export type BuiltinConfigFieldType = (typeof BUILTIN_CONFIG_FIELD_TYPES)[number];
 
 export interface ConfigFieldDef {
   key: string;

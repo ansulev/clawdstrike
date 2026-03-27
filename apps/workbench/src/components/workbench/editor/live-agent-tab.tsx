@@ -1,10 +1,10 @@
 import { useState, useCallback, useRef, useMemo, useEffect } from "react";
-import { useWorkbench } from "@/lib/workbench/multi-policy-store";
-import { useFleetConnection } from "@/lib/workbench/use-fleet-connection";
+import { useFleetConnection } from "@/features/fleet/use-fleet-connection";
 import { useToast } from "@/components/ui/toast";
-import { policyToYaml } from "@/lib/workbench/yaml-utils";
+import { policyToYaml } from "@/features/policy/yaml-utils";
 import { isDesktop, savePolicyFile } from "@/lib/tauri-bridge";
 import { cn } from "@/lib/utils";
+import { SubTabBar, type SubTab } from "../shared/sub-tab-bar";
 import {
   IconPlayerPlay,
   IconPlayerStop,
@@ -20,6 +20,8 @@ import {
   IconRefresh,
 } from "@tabler/icons-react";
 import type { HushdEvent as BaseHushdEvent } from "@/lib/workbench/hushd-event-simulator";
+import { usePolicyTabsStore } from "@/features/policy/stores/policy-tabs-store";
+import { usePolicyEditStore } from "@/features/policy/stores/policy-edit-store";
 
 /** Extend HushdEvent with source tracking so the UI can distinguish live vs simulated */
 interface HushdEvent extends Omit<BaseHushdEvent, "verdict"> {
@@ -30,9 +32,6 @@ interface HushdEvent extends Omit<BaseHushdEvent, "verdict"> {
   sseEventType?: string;
 }
 
-// ---------------------------------------------------------------------------
-// Script Runner sub-panel
-// ---------------------------------------------------------------------------
 
 const EXAMPLE_SCRIPT = `"""
 Example test script using the clawdstrike.testing module.
@@ -62,14 +61,16 @@ sys.exit(0 if report.all_passed else 1)
 `;
 
 function ScriptRunnerPanel() {
-  const { state } = useWorkbench();
+  const activeTabId = usePolicyTabsStore(s => s.activeTabId);
+  const activeTab = usePolicyTabsStore(s => s.tabs.find(t => t.id === s.activeTabId));
+  const editState = usePolicyEditStore(s => s.editStates.get(activeTabId));
   const { toast } = useToast();
   const [copied, setCopied] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const policyYaml = useMemo(
-    () => policyToYaml(state.activePolicy),
-    [state.activePolicy],
+    () => policyToYaml((editState?.policy ?? { version: "1.1.0", name: "", description: "", guards: {}, settings: {} })),
+    [(editState?.policy ?? { version: "1.1.0", name: "", description: "", guards: {}, settings: {} })],
   );
 
   const command = `python -m clawdstrike.testing run --policy policy.yaml --suite tests/policy-tests.yaml`;
@@ -98,7 +99,7 @@ function ScriptRunnerPanel() {
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url;
-        a.download = `${state.activePolicy.name || "policy"}.yaml`;
+        a.download = `${(editState?.policy ?? { version: "1.1.0", name: "", description: "", guards: {}, settings: {} }).name || "policy"}.yaml`;
         a.click();
         URL.revokeObjectURL(url);
         toast({
@@ -116,7 +117,7 @@ function ScriptRunnerPanel() {
     } finally {
       setSaving(false);
     }
-  }, [policyYaml, state.activePolicy.name, toast]);
+  }, [policyYaml, (editState?.policy ?? { version: "1.1.0", name: "", description: "", guards: {}, settings: {} }).name, toast]);
 
   return (
     <div className="h-full flex flex-col">
@@ -191,7 +192,7 @@ function ScriptRunnerPanel() {
           }}
         >
           <div className="text-[#6f7f9a]/60">$ python -m clawdstrike.testing run --policy policy.yaml</div>
-          <div className="text-[#6f7f9a]/40 mt-1">Running 6 scenarios against &quot;{state.activePolicy.name || "policy"}&quot;...</div>
+          <div className="text-[#6f7f9a]/40 mt-1">Running 6 scenarios against &quot;{(editState?.policy ?? { version: "1.1.0", name: "", description: "", guards: {}, settings: {} }).name || "policy"}&quot;...</div>
           <div className="mt-1">
             <span className="text-[#3dbf84]">PASS</span>
             <span className="text-[#6f7f9a]/60"> SSH key blocked</span>
@@ -234,9 +235,6 @@ function ScriptRunnerPanel() {
   );
 }
 
-// ---------------------------------------------------------------------------
-// hushd Monitor sub-panel
-// ---------------------------------------------------------------------------
 
 type VerdictFilter = "ALL" | HushdEvent["verdict"];
 
@@ -422,7 +420,7 @@ export function consumeSseMessages(buffer: string): {
 }
 
 function HushdMonitorPanel() {
-  const { connection } = useFleetConnection();
+  const { connection, getCredentials } = useFleetConnection();
   const { toast } = useToast();
   const [endpoint, setEndpoint] = useState(connection.hushdUrl || "http://127.0.0.1:8080");
   const [connected, setConnected] = useState(false);
@@ -537,10 +535,11 @@ function HushdMonitorPanel() {
 
   const startSse = useCallback(
     (proxyBase: string) => {
+      const creds = getCredentials();
       const authScopeMismatch = describeHushdAuthScopeMismatch(
         endpoint,
         connection.hushdUrl,
-        connection.apiKey,
+        creds.apiKey,
       );
       if (authScopeMismatch) {
         setConnected(false);
@@ -549,7 +548,7 @@ function HushdMonitorPanel() {
         return;
       }
 
-      const authHeaders = buildHushdAuthHeaders(endpoint, connection.hushdUrl, connection.apiKey);
+      const authHeaders = buildHushdAuthHeaders(endpoint, connection.hushdUrl, creds.apiKey);
 
       // Clean up any prior EventSource before opening a new one
       removeListeners();
@@ -726,7 +725,7 @@ function HushdMonitorPanel() {
         }
       };
     },
-    [connection.apiKey, connection.hushdUrl, endpoint, removeListeners, scheduleReconnect],
+    [getCredentials, connection.hushdUrl, endpoint, removeListeners, scheduleReconnect],
   );
 
   // --- Connect: probe /health first, then open SSE ---
@@ -734,10 +733,11 @@ function HushdMonitorPanel() {
     setConnecting(true);
     setConnectionError(null);
     const proxyBase = resolveProxyBase(endpoint);
+    const connectCreds = getCredentials();
     const authScopeMismatch = describeHushdAuthScopeMismatch(
       endpoint,
       connection.hushdUrl,
-      connection.apiKey,
+      connectCreds.apiKey,
     );
     if (authScopeMismatch) {
       setConnecting(false);
@@ -751,7 +751,7 @@ function HushdMonitorPanel() {
       return;
     }
 
-    const authHeaders = buildHushdAuthHeaders(endpoint, connection.hushdUrl, connection.apiKey);
+    const authHeaders = buildHushdAuthHeaders(endpoint, connection.hushdUrl, connectCreds.apiKey);
 
     try {
       const resp = await fetch(`${proxyBase}/health`, {
@@ -790,7 +790,7 @@ function HushdMonitorPanel() {
           : msg,
       });
     }
-  }, [connection.apiKey, endpoint, startSse, toast]);
+  }, [getCredentials, endpoint, startSse, toast]);
 
   const handleDisconnect = useCallback(() => {
     stopSse();
@@ -892,7 +892,7 @@ function HushdMonitorPanel() {
           )}
         </div>
         <p className="mt-1.5 text-[8px] font-mono text-[#6f7f9a]/50">
-          {connection.apiKey.trim()
+          {getCredentials().apiKey.trim()
             ? "Uses the configured hushd API key from Settings for health checks and authenticated event streaming."
             : "No hushd API key configured. Authenticated hushd deployments will reject the live stream until you add one in Settings."}
         </p>
@@ -995,7 +995,7 @@ function HushdMonitorPanel() {
               </span>
               {/* Show daemon event_id on hover */}
               {evt.sourceEventId && (
-                <span className="text-[#6f7f9a]/20 shrink-0 text-[8px] hidden group-hover:inline truncate max-w-[120px]" title={evt.sourceEventId}>
+                <span className="text-[#6f7f9a]/50 shrink-0 text-[8px] hidden group-hover:inline truncate max-w-[120px]" title={evt.sourceEventId}>
                   {evt.sourceEventId.length > 12
                     ? `${evt.sourceEventId.slice(0, 8)}…`
                     : evt.sourceEventId}
@@ -1016,7 +1016,7 @@ function HushdMonitorPanel() {
                 Live SSE stream:
               </span>{" "}
               <code className="text-[#3dbf84]/60">{endpoint}/api/v1/events</code>
-              <span className="ml-2 text-[#6f7f9a]/25">
+              <span className="ml-2 text-[#6f7f9a]/50">
                 Hover events to see daemon event IDs
               </span>
             </>
@@ -1027,7 +1027,7 @@ function HushdMonitorPanel() {
                 Reconnecting to
               </span>{" "}
               <code className="text-[#d4a84b]/60">{endpoint}/api/v1/events</code>
-              <span className="ml-2 text-[#6f7f9a]/25">
+              <span className="ml-2 text-[#6f7f9a]/50">
                 Attempt {reconnectAttemptsRef.current} of {MAX_RECONNECT_ATTEMPTS}
               </span>
             </>
@@ -1042,11 +1042,13 @@ function HushdMonitorPanel() {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Main Live Agent Tab
-// ---------------------------------------------------------------------------
 
 type LiveSubTab = "script" | "hushd";
+
+const LIVE_TABS: SubTab[] = [
+  { id: "script", label: "Script Runner", icon: IconTerminal2 },
+  { id: "hushd", label: "hushd Monitor", icon: IconServer },
+];
 
 export function LiveAgentTab() {
   const [activeSubTab, setActiveSubTab] = useState<LiveSubTab>("script");
@@ -1054,32 +1056,7 @@ export function LiveAgentTab() {
   return (
     <div className="h-full flex flex-col bg-[#05060a]">
       {/* Sub-tab bar */}
-      <div className="flex items-center border-b border-[#2d3240] bg-[#0b0d13] shrink-0">
-        <button
-          onClick={() => setActiveSubTab("script")}
-          className={cn(
-            "flex items-center gap-1.5 px-3 py-2 text-[10px] font-mono transition-colors border-b-2 -mb-px",
-            activeSubTab === "script"
-              ? "text-[#d4a84b] border-[#d4a84b]"
-              : "text-[#6f7f9a] border-transparent hover:text-[#ece7dc] hover:border-[#2d3240]",
-          )}
-        >
-          <IconTerminal2 size={12} stroke={1.5} />
-          Script Runner
-        </button>
-        <button
-          onClick={() => setActiveSubTab("hushd")}
-          className={cn(
-            "flex items-center gap-1.5 px-3 py-2 text-[10px] font-mono transition-colors border-b-2 -mb-px",
-            activeSubTab === "hushd"
-              ? "text-[#d4a84b] border-[#d4a84b]"
-              : "text-[#6f7f9a] border-transparent hover:text-[#ece7dc] hover:border-[#2d3240]",
-          )}
-        >
-          <IconServer size={12} stroke={1.5} />
-          hushd Monitor
-        </button>
-      </div>
+      <SubTabBar tabs={LIVE_TABS} activeTab={activeSubTab} onTabChange={(id) => setActiveSubTab(id as LiveSubTab)} />
 
       {/* Sub-tab content */}
       <div className="flex-1 min-h-0">

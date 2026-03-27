@@ -1,11 +1,15 @@
-import { useEffect } from "react";
-import { describe, it, expect, vi } from "vitest";
-import { screen } from "@testing-library/react";
-import { render } from "@testing-library/react";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
-import { DesktopLayout } from "../desktop-layout";
-import { MultiPolicyProvider as WorkbenchProvider, useMultiPolicy } from "@/lib/workbench/multi-policy-store";
-import { FleetConnectionProvider } from "@/lib/workbench/use-fleet-connection";
+import React from "react";
+import "@testing-library/jest-dom/vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { MemoryRouter, useNavigate } from "react-router-dom";
+import {
+  DesktopLayout,
+  shouldSyncLocationToActivePane,
+} from "../desktop-layout";
+import { usePolicyTabsStore } from "@/features/policy/stores/policy-tabs-store";
+import { setActivePluginView } from "../active-plugin-view";
+import { registerView } from "@/lib/plugins/view-registry";
 
 vi.mock("@/lib/tauri-bridge", () => ({
   isDesktop: vi.fn(() => false),
@@ -15,31 +19,175 @@ vi.mock("@/lib/tauri-bridge", () => ({
   closeWindow: vi.fn(),
 }));
 
-function DirtyBackgroundTabBootstrap() {
-  const { multiDispatch } = useMultiPolicy();
+vi.mock("@/lib/commands/init-commands", () => ({
+  InitCommands: () => null,
+}));
 
-  useEffect(() => {
-    multiDispatch({ type: "UPDATE_META", name: "dirty-background-tab" });
-    multiDispatch({ type: "NEW_TAB" });
-  }, [multiDispatch]);
+vi.mock("@/features/policy/stores/policy-store", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/features/policy/stores/policy-store")>();
+  return { ...actual };
+});
 
-  return null;
+vi.mock("@/lib/workbench/use-auto-save", () => ({
+  useAutoSave: () => ({
+    pendingRecovery: [],
+    dismissRecovery: vi.fn(),
+    restoreRecovery: vi.fn(),
+  }),
+}));
+
+vi.mock("@/components/desktop/titlebar", () => ({
+  Titlebar: () => (
+    <header>
+      <span>Clawdstrike</span>
+      <span>Workbench</span>
+    </header>
+  ),
+}));
+
+vi.mock("@/features/activity-bar/components/activity-bar", () => ({
+  ActivityBar: () => (
+    <aside role="complementary">
+      <span>Editor</span>
+      <span>Lab</span>
+    </aside>
+  ),
+}));
+
+vi.mock("@/features/activity-bar/components/sidebar-panel", () => ({
+  SidebarPanel: () => null,
+}));
+
+vi.mock("@/features/activity-bar/components/sidebar-resize-handle", () => ({
+  SidebarResizeHandle: () => null,
+}));
+
+vi.mock("@/features/navigation/quick-open-dialog", () => ({
+  QuickOpenDialog: () => null,
+}));
+
+vi.mock("@/features/right-sidebar/components/right-sidebar", () => ({
+  RightSidebar: () => null,
+}));
+
+vi.mock("@/features/right-sidebar/components/right-sidebar-resize-handle", () => ({
+  RightSidebarResizeHandle: () => null,
+}));
+
+vi.mock("@/features/spirit/components/spirit-field-injector", () => ({
+  SpiritFieldInjector: () => null,
+}));
+
+vi.mock("@/features/spirit/components/spirit-mood-reactor", () => ({
+  SpiritMoodReactor: () => null,
+}));
+
+vi.mock("@/features/spirit/components/spirit-experience-tracker", () => ({
+  SpiritExperienceTracker: () => null,
+}));
+
+vi.mock("@/features/hunt/components/HuntTelemetryBridge", () => ({
+  HuntTelemetryBridge: () => null,
+}));
+
+vi.mock("@/features/observatory/components/ObservatoryTelemetryBridge", () => ({
+  ObservatoryTelemetryBridge: () => null,
+}));
+
+vi.mock("@/features/right-sidebar/stores/right-sidebar-store", () => ({
+  useRightSidebarStore: vi.fn((selector) => selector({ visible: false })),
+}));
+
+vi.mock("@/components/ui/resizable", () => ({
+  ResizableHandle: () => null,
+  ResizablePanel: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  ResizablePanelGroup: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+}));
+
+vi.mock("@/features/panes/pane-session", () => ({
+  savePaneSession: vi.fn(),
+  loadPaneSession: () => null,
+}));
+
+vi.mock("@/features/bottom-pane/bottom-pane-store", () => ({
+  useBottomPaneStore: Object.assign(
+    vi.fn((selector) => selector({ isOpen: false, size: 30, setSize: vi.fn() })),
+    {
+      getState: vi.fn(() => ({ isOpen: false, size: 30, setSize: vi.fn() })),
+      subscribe: vi.fn(() => () => {}),
+    },
+  ),
+}));
+
+vi.mock("@/components/desktop/status-bar", () => ({
+  StatusBar: () => <footer role="contentinfo">Status</footer>,
+}));
+
+vi.mock("@/components/desktop/shortcut-provider", () => ({
+  ShortcutProvider: () => null,
+}));
+
+vi.mock("@/components/desktop/command-palette", () => ({
+  CommandPalette: () => null,
+}));
+
+vi.mock("@/components/desktop/crash-recovery-banner", () => ({
+  CrashRecoveryBanner: () => null,
+}));
+
+vi.mock("@/features/bottom-pane/bottom-pane", () => ({
+  BottomPane: () => <div data-testid="bottom-pane">Bottom Pane</div>,
+}));
+
+vi.mock("@/features/panes/pane-root", () => ({
+  PaneRoot: () => <div data-testid="pane-root">Pane Root</div>,
+}));
+
+vi.mock("@/features/panes/pane-store", () => ({
+  getActivePaneRoute: vi.fn(() => ""),
+  usePaneStore: Object.assign(
+    vi.fn((selector) => selector({ root: {}, activePaneId: "main" })),
+    {
+      getState: vi.fn(() => ({
+        root: {},
+        activePaneId: "main",
+        syncRoute: vi.fn(),
+      })),
+    },
+  ),
+}));
+
+vi.mock("@/components/desktop/workbench-routes", () => ({
+  normalizeWorkbenchRoute: (route: string) => route,
+}));
+
+afterEach(() => {
+  usePolicyTabsStore.getState()._reset();
+  setActivePluginView(null);
+  cleanup();
+});
+
+function NavigateHarness() {
+  const navigate = useNavigate();
+
+  return (
+    <button type="button" onClick={() => navigate("/guards")}>
+      navigate-guards
+    </button>
+  );
 }
 
 function renderLayout(route = "/editor", withDirtyBackgroundTab = false) {
+  if (withDirtyBackgroundTab) {
+    const { tabs } = usePolicyTabsStore.getState();
+    if (tabs.length > 0) {
+      usePolicyTabsStore.getState().setDirty(tabs[0].id, true);
+    }
+  }
+
   return render(
     <MemoryRouter initialEntries={[route]}>
-      <FleetConnectionProvider>
-        <WorkbenchProvider>
-          {withDirtyBackgroundTab ? <DirtyBackgroundTabBootstrap /> : null}
-          <Routes>
-            <Route element={<DesktopLayout />}>
-              <Route path="editor" element={<div data-testid="editor-page">Editor Page</div>} />
-              <Route path="simulator" element={<div data-testid="simulator-page">Simulator Page</div>} />
-            </Route>
-          </Routes>
-        </WorkbenchProvider>
-      </FleetConnectionProvider>
+      <DesktopLayout />
     </MemoryRouter>,
   );
 }
@@ -48,7 +196,6 @@ describe("DesktopLayout", () => {
   it("renders the titlebar", () => {
     renderLayout();
 
-    // The titlebar renders a header with the brand name (split into two spans)
     expect(screen.getByText("Clawdstrike")).toBeInTheDocument();
     expect(screen.getByText("Workbench")).toBeInTheDocument();
   });
@@ -56,37 +203,33 @@ describe("DesktopLayout", () => {
   it("renders the sidebar", () => {
     renderLayout();
 
-    // Sidebar renders navigation items
     expect(screen.getByRole("complementary")).toBeInTheDocument();
     expect(screen.getByText("Editor")).toBeInTheDocument();
-    expect(screen.getByText("Threat Lab")).toBeInTheDocument();
+    expect(screen.getByText("Lab")).toBeInTheDocument();
   });
 
   it("renders the status bar", () => {
     renderLayout();
 
-    // Status bar renders as a footer
     expect(screen.getByRole("contentinfo")).toBeInTheDocument();
   });
 
-  it("renders the routed content via Outlet", () => {
+  it("renders the pane root", () => {
     renderLayout("/editor");
 
-    expect(screen.getByTestId("editor-page")).toBeInTheDocument();
-    expect(screen.getByText("Editor Page")).toBeInTheDocument();
+    expect(screen.getByTestId("pane-root")).toBeInTheDocument();
+    expect(screen.getByText("Pane Root")).toBeInTheDocument();
   });
 
-  it("renders a different route via Outlet", () => {
+  it("keeps the pane root mounted across routes", () => {
     renderLayout("/simulator");
 
-    expect(screen.getByTestId("simulator-page")).toBeInTheDocument();
-    expect(screen.getByText("Simulator Page")).toBeInTheDocument();
+    expect(screen.getByTestId("pane-root")).toBeInTheDocument();
   });
 
   it("has a flex column layout structure", () => {
     renderLayout();
 
-    // The root div should have flex flex-col
     const root = screen.getByText("Clawdstrike").closest("div.flex.flex-col");
     expect(root).toBeInTheDocument();
   });
@@ -94,7 +237,6 @@ describe("DesktopLayout", () => {
   it("has a flex row section for sidebar + content", () => {
     renderLayout();
 
-    // The sidebar and content area should be in a flex row container
     const sidebar = screen.getByRole("complementary");
     const flexRow = sidebar.parentElement;
     expect(flexRow).toBeInTheDocument();
@@ -111,5 +253,48 @@ describe("DesktopLayout", () => {
     window.dispatchEvent(event);
 
     expect(preventDefault).toHaveBeenCalled();
+  });
+
+  it("clears the active plugin panel when navigation changes routes", async () => {
+    const disposeView = registerView({
+      id: "test-plugin.panel",
+      slot: "activityBarPanel",
+      label: "Plugin Panel",
+      component: () => <div data-testid="plugin-view">Plugin View</div>,
+    });
+    setActivePluginView("test-plugin.panel");
+
+    render(
+      <MemoryRouter initialEntries={["/home"]}>
+        <NavigateHarness />
+        <DesktopLayout />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByTestId("plugin-view")).toBeInTheDocument();
+    expect(screen.queryByTestId("pane-root")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "navigate-guards" }));
+
+    await waitFor(() => {
+      expect(screen.queryByTestId("plugin-view")).not.toBeInTheDocument();
+    });
+    expect(screen.getByTestId("pane-root")).toBeInTheDocument();
+
+    disposeView();
+  });
+
+  it("skips syncing a stale browser route into a pane that already switched views", () => {
+    expect(
+      shouldSyncLocationToActivePane("/overview", "/home", "/home", "/editor"),
+    ).toBe(false);
+    expect(
+      shouldSyncLocationToActivePane(
+        "/editor",
+        "/lab?tab=simulate",
+        "/lab?tab=simulate",
+        "/editor",
+      ),
+    ).toBe(true);
   });
 });

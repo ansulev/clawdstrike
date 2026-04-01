@@ -29,6 +29,9 @@ docs/book
 **/.venv/
 .tmp-reticulum-venv/
 
+# Next.js build output
+**/.next/
+
 # TypeScript incremental builds
 *.tsbuildinfo
 
@@ -89,7 +92,21 @@ apps/terminal/.beads/
 # Regorus .NET build artifacts
 infra/vendor/regorus/**/obj/
 
+# WASM build artifacts (wasm-pack output, ~2.4MB binary)
+crates/libs/hush-wasm/pkg/
+crates/libs/hush-wasm/pkg-node/
+
+# Academy extracted sources (generated at build time)
+apps/academy/src/data/extracted-sources/*.json
+
+# Academy extracted rulesets (generated at build time)
+apps/academy/src/data/rulesets/*.json
+
+# Academy Pagefind search index (generated at postbuild)
+apps/academy/public/pagefind/
+
 # Vendored dependencies (local)
 vendor/
 !infra/vendor/
 !infra/vendor/**
+.planning/

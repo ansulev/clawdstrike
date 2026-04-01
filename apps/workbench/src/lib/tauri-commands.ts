@@ -10,6 +10,7 @@
  */
 
 import { isDesktop } from "./tauri-bridge";
+import { getWorkbenchE2EBridge, hasWorkbenchE2EInvoke } from "@/lib/workbench/e2e-bridge";
 
 
 export interface TauriValidationError {
@@ -172,8 +173,41 @@ export interface TauriChainVerificationResponse {
 
 
 async function tauriInvoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
+  const e2eInvoke = getWorkbenchE2EBridge()?.invoke;
+  if (e2eInvoke) {
+    return e2eInvoke<T>(cmd, args);
+  }
+
   const { invoke } = await import("@tauri-apps/api/core");
   return invoke<T>(cmd, args);
+}
+
+function normalizeTauriCommandError(command: string, err: unknown): Error {
+  if (err instanceof Error) {
+    return err;
+  }
+
+  if (
+    typeof err === "object" &&
+    err !== null &&
+    "message" in err &&
+    typeof err.message === "string" &&
+    err.message.trim()
+  ) {
+    return new Error(err.message);
+  }
+  if (typeof err === "object" && err !== null) {
+    const record = err as { error?: unknown };
+    if (typeof record.error === "string" && record.error.trim()) {
+      return new Error(record.error);
+    }
+  }
+
+  if (typeof err === "string" && err.trim()) {
+    return new Error(err);
+  }
+
+  return new Error(`${command} failed`);
 }
 
 
@@ -583,6 +617,64 @@ export async function convertSigmaRuleNative(
   } catch (err) {
     console.warn("[tauri-commands] convert_sigma_rule failed:", err);
     return null;
+  }
+}
+
+
+// ---- Global Search Types ----
+
+export interface TauriSearchMatch {
+  file_path: string;
+  line_number: number;
+  line_content: string;
+  match_start: number;
+  match_end: number;
+  source_match_start?: number;
+  source_match_end?: number;
+}
+
+export interface TauriSearchResult {
+  matches: TauriSearchMatch[];
+  file_count: number;
+  total_matches: number;
+  truncated: boolean;
+}
+
+/**
+ * Search for text across all eligible files in a project directory.
+ * Supports case-sensitive, whole-word, and regex modes.
+ * Returns null when not running inside Tauri or the browser E2E bridge.
+ */
+export async function searchInProjectNative(
+  rootPath: string,
+  query: string,
+  caseSensitive: boolean,
+  wholeWord: boolean,
+  useRegex: boolean,
+  searchId?: string,
+): Promise<TauriSearchResult | null> {
+  if (!isDesktop() && !hasWorkbenchE2EInvoke()) return null;
+  try {
+    return await tauriInvoke<TauriSearchResult>("search_in_project", {
+      rootPath,
+      query,
+      caseSensitive,
+      wholeWord,
+      useRegex,
+      searchId,
+    });
+  } catch (err) {
+    console.error("[tauri-commands] search_in_project failed:", err);
+    throw normalizeTauriCommandError("search_in_project", err);
+  }
+}
+
+export async function cancelSearchInProjectNative(searchId: string): Promise<void> {
+  if (!isDesktop() && !hasWorkbenchE2EInvoke()) return;
+  try {
+    await tauriInvoke("cancel_search_in_project", { searchId });
+  } catch (err) {
+    console.warn("[tauri-commands] cancel_search_in_project failed:", err);
   }
 }
 

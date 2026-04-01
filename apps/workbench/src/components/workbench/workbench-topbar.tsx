@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { useWorkbench } from "@/lib/workbench/multi-policy-store";
+import { useWorkbenchState } from "@/features/policy/hooks/use-policy-actions";
 import { useToast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
 import {
@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/select";
 import { isDesktop, pickSavePath } from "@/lib/tauri-bridge";
 import { exportPolicyFileNative } from "@/lib/tauri-commands";
-import { policyToFormat, formatExtension, formatMimeType, type ExportFormat } from "@/lib/workbench/yaml-utils";
+import { policyToFormat, formatExtension, formatMimeType, type ExportFormat } from "@/features/policy/yaml-utils";
 import { emitAuditEvent } from "@/lib/workbench/local-audit";
 import {
   IconFilePlus,
@@ -49,7 +49,7 @@ export function WorkbenchTopbar() {
     redo,
     canUndo,
     canRedo,
-  } = useWorkbench();
+  } = useWorkbenchState();
   const { toast } = useToast();
   const { activePolicy, validation } = state;
 

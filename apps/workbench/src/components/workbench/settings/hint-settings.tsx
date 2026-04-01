@@ -3,7 +3,7 @@ import {
   HINT_LABELS,
   DEFAULT_HINTS,
   type HintId,
-} from "@/lib/workbench/use-hint-settings";
+} from "@/features/settings/use-hint-settings";
 import { IconBrain, IconRefresh, IconCheck } from "@tabler/icons-react";
 import { cn } from "@/lib/utils";
 import { useState, useCallback } from "react";

@@ -50,6 +50,7 @@ describe("SessionStatus", () => {
     "blocked",
     "completed",
     "failed",
+    "evaluating",
   ];
 
   it.each(validStatuses)("accepts '%s' as a valid status", (status) => {
@@ -57,8 +58,8 @@ describe("SessionStatus", () => {
     expect(s).toBe(status);
   });
 
-  it("has exactly 5 statuses", () => {
-    expect(validStatuses).toHaveLength(5);
+  it("has exactly 6 statuses", () => {
+    expect(validStatuses).toHaveLength(6);
   });
 
   it("all valid statuses are distinct", () => {
@@ -70,10 +71,11 @@ describe("SessionStatus", () => {
     // Valid transition map: which statuses can transition to which
     const validTransitions: Record<SessionStatus, SessionStatus[]> = {
       idle: ["running"],
-      running: ["blocked", "completed", "failed"],
+      running: ["blocked", "completed", "failed", "evaluating"],
       blocked: ["running", "failed"],
       completed: [], // terminal state
       failed: ["idle"], // can be retried
+      evaluating: ["running", "idle", "blocked", "completed", "failed"], // transient: restores to previous status
     };
 
     it.each(Object.entries(validTransitions))(
@@ -332,6 +334,7 @@ describe("SwarmBoardState", () => {
       edges: [],
       selectedNodeId: null,
       inspectorOpen: false,
+      bundlePath: "",
     };
 
     expect(state.boardId).toBe("board-1");
@@ -350,6 +353,7 @@ describe("SwarmBoardState", () => {
       edges: [],
       selectedNodeId: "node-123",
       inspectorOpen: true,
+      bundlePath: "",
     };
 
     expect(state.selectedNodeId).toBe("node-123");
@@ -404,6 +408,8 @@ describe("Status dot color mapping", () => {
         return "#5b8def";
       case "failed":
         return "#ef4444";
+      case "evaluating":
+        return "#d4a84b";
     }
   }
 

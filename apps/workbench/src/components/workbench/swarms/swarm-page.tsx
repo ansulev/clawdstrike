@@ -16,7 +16,7 @@ import {
 } from "@tabler/icons-react";
 import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
-import { useSwarms, type CreateSwarmConfig } from "@/lib/workbench/swarm-store";
+import { useSwarms, type CreateSwarmConfig } from "@/features/swarm/stores/swarm-store";
 import type { Swarm, SwarmType } from "@/lib/workbench/sentinel-types";
 
 const SWARM_TYPE_BADGE: Record<SwarmType, { label: string; color: string; icon: typeof IconLock }> = {

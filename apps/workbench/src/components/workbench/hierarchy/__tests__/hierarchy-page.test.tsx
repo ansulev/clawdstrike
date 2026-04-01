@@ -14,9 +14,9 @@ const fleetClientMocks = vi.hoisted(() => ({
   deleteHierarchyNode: vi.fn(),
 }));
 
-vi.mock("@/lib/workbench/fleet-client", async () => {
-  const actual = await vi.importActual<typeof import("@/lib/workbench/fleet-client")>(
-    "@/lib/workbench/fleet-client",
+vi.mock("@/features/fleet/fleet-client", async () => {
+  const actual = await vi.importActual<typeof import("@/features/fleet/fleet-client")>(
+    "@/features/fleet/fleet-client",
   );
 
   return {
@@ -30,9 +30,9 @@ vi.mock("@/lib/workbench/fleet-client", async () => {
   };
 });
 
-vi.mock("@/lib/workbench/use-fleet-connection", async () => {
-  const actual = await vi.importActual<typeof import("@/lib/workbench/use-fleet-connection")>(
-    "@/lib/workbench/use-fleet-connection",
+vi.mock("@/features/fleet/use-fleet-connection", async () => {
+  const actual = await vi.importActual<typeof import("@/features/fleet/use-fleet-connection")>(
+    "@/features/fleet/use-fleet-connection",
   );
 
   return {

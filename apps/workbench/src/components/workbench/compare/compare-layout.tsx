@@ -1,20 +1,23 @@
 import { useState, useCallback, useEffect, useRef } from "react";
-import { useWorkbench } from "@/lib/workbench/multi-policy-store";
 import type { WorkbenchPolicy } from "@/lib/workbench/types";
 import { PolicySelector } from "./policy-selector";
 import { YamlDiffView } from "./yaml-diff-view";
 import { SemanticDiffView } from "./semantic-diff-view";
 import { cn } from "@/lib/utils";
+import { usePolicyTabsStore } from "@/features/policy/stores/policy-tabs-store";
+import { usePolicyEditStore } from "@/features/policy/stores/policy-edit-store";
 
 type DiffTab = "yaml" | "semantic";
 
 export function CompareLayout() {
-  const { state } = useWorkbench();
+  const activeTabId = usePolicyTabsStore(s => s.activeTabId);
+  // activeTab not needed in this component
+  const editState = usePolicyEditStore(s => s.editStates.get(activeTabId));
 
   const [activeTab, setActiveTab] = useState<DiffTab>("yaml");
 
-  const [policyA, setPolicyA] = useState<WorkbenchPolicy>(state.activePolicy);
-  const [yamlA, setYamlA] = useState<string>(state.yaml);
+  const [policyA, setPolicyA] = useState<WorkbenchPolicy>((editState?.policy ?? { version: "1.1.0", name: "", description: "", guards: {}, settings: {} }));
+  const [yamlA, setYamlA] = useState<string>((editState?.yaml ?? ""));
   /** Tracks whether the user has manually selected a different Policy A. */
   const userSelectedARef = useRef(false);
 
@@ -25,10 +28,10 @@ export function CompareLayout() {
   // has explicitly chosen a different policy via the selector.
   useEffect(() => {
     if (!userSelectedARef.current) {
-      setPolicyA(state.activePolicy);
-      setYamlA(state.yaml);
+      setPolicyA((editState?.policy ?? { version: "1.1.0", name: "", description: "", guards: {}, settings: {} }));
+      setYamlA((editState?.yaml ?? ""));
     }
-  }, [state.activePolicy, state.yaml]);
+  }, [(editState?.policy ?? { version: "1.1.0", name: "", description: "", guards: {}, settings: {} }), (editState?.yaml ?? "")]);
 
   const handleSelectA = useCallback(
     (policy: WorkbenchPolicy, yaml: string) => {

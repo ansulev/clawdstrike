@@ -6,7 +6,7 @@ import {
   buildDraftFromSeed,
 } from "../detection-workflow/use-draft-detection";
 import type { AgentEvent, Investigation, HuntPattern } from "../hunt-types";
-import type { MultiPolicyAction } from "../multi-policy-store";
+import type { MultiPolicyAction } from "@/features/policy/types/policy-tab";
 
 // ---- Helpers ----
 

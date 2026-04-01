@@ -9,8 +9,8 @@ const mockGetHint = vi.hoisted(() => vi.fn());
 const mockShowHints = vi.hoisted(() => ({ value: true }));
 const mockCtx = vi.hoisted(() => ({ value: null as object | null }));
 
-vi.mock("@/lib/workbench/use-hint-settings", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/lib/workbench/use-hint-settings")>();
+vi.mock("@/features/settings/use-hint-settings", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/features/settings/use-hint-settings")>();
   return {
     ...actual,
     useHintSettingsSafe: () => mockCtx.value,

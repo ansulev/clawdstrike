@@ -3,7 +3,8 @@ import React from "react";
 import { act, cleanup, render, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import "../detection-workflow/index";
-import { MultiPolicyProvider, useMultiPolicy } from "../multi-policy-store";
+import { PolicyBootstrapProvider } from "@/features/policy/hooks/use-policy-bootstrap";
+import { usePolicyTabs } from "@/features/policy/hooks/use-policy-actions";
 import { useDraftDetection } from "../detection-workflow/use-draft-detection";
 import { useEvidencePacks } from "../detection-workflow/use-evidence-packs";
 import { useLabExecution } from "../detection-workflow/use-lab-execution";
@@ -98,7 +99,7 @@ function Harness({
 }: {
   onSnapshot: (snapshot: HarnessSnapshot) => void;
 }) {
-  const { activeTab, tabs, multiDispatch } = useMultiPolicy();
+  const { activeTab, tabs, multiDispatch } = usePolicyTabs();
   const draftDetection = useDraftDetection({ dispatch: multiDispatch });
   const evidencePacks = useEvidencePacks(activeTab?.documentId, activeTab?.fileType);
   const labExecution = useLabExecution(activeTab?.documentId, activeTab?.fileType);
@@ -183,9 +184,9 @@ describe("detection workflow loop", () => {
     let snapshot: HarnessSnapshot | null = null;
 
     render(
-      <MultiPolicyProvider>
+      <PolicyBootstrapProvider>
         <Harness onSnapshot={(next) => { snapshot = next; }} />
-      </MultiPolicyProvider>,
+      </PolicyBootstrapProvider>,
     );
 
     await waitFor(() => {

@@ -190,6 +190,24 @@ export function SigilTopology(p: SigilProps) {
 }
 
 
+/** Observatory — ring with station dots (minimap motif) */
+export function SigilObservatory(p: SigilProps) {
+  return (
+    <svg {...base(p)}>
+      {/* outer ring */}
+      <circle cx="12" cy="12" r="9" fill="none" />
+      {/* center core */}
+      <circle cx="12" cy="12" r="2" />
+      {/* 5 station dots on ring */}
+      <circle cx="12" cy="3" r="1.2" />
+      <circle cx="20.5" cy="7.5" r="1.2" />
+      <circle cx="20.5" cy="16.5" r="1.2" />
+      <circle cx="3.5" cy="16.5" r="1.2" />
+      <circle cx="3.5" cy="7.5" r="1.2" />
+    </svg>
+  );
+}
+
 /** Settings — diamond core with radiating control lines */
 export function SigilSettings(p: SigilProps) {
   return (
@@ -203,6 +221,24 @@ export function SigilSettings(p: SigilProps) {
       <line x1="15.5" y1="15.5" x2="18.2" y2="18.2" />
       <line x1="5.8" y1="18.2" x2="8.5" y2="15.5" />
       <line x1="15.5" y1="8.5" x2="18.2" y2="5.8" />
+    </svg>
+  );
+}
+
+/** Hunt — crosshair target with center dot (recon/hunt motif) */
+export function SigilHunt(p: SigilProps) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      {...base(p)}
+    >
+      {/* Crosshair target */}
+      <circle cx="12" cy="12" r="6" />
+      <line x1="12" y1="2" x2="12" y2="6" />
+      <line x1="12" y1="18" x2="12" y2="22" />
+      <line x1="2" y1="12" x2="6" y2="12" />
+      <line x1="18" y1="12" x2="22" y2="12" />
+      <circle cx="12" cy="12" r="1.5" />
     </svg>
   );
 }

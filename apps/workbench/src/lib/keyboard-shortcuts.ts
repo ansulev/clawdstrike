@@ -4,6 +4,7 @@ export interface ShortcutAction {
   key: string;
   meta: boolean;
   shift?: boolean;
+  alt?: boolean;
   description: string;
   action: () => void;
 }
@@ -24,8 +25,9 @@ export function useKeyboardShortcuts(shortcuts: ShortcutAction[]): void {
         const keyMatches = e.key.toLowerCase() === shortcut.key.toLowerCase();
         const metaMatches = shortcut.meta ? modifierPressed : !modifierPressed;
         const shiftMatches = shortcut.shift ? e.shiftKey : !e.shiftKey;
+        const altMatches = shortcut.alt ? e.altKey : !e.altKey;
 
-        if (keyMatches && metaMatches && shiftMatches) {
+        if (keyMatches && metaMatches && shiftMatches && altMatches) {
           e.preventDefault();
           e.stopPropagation();
           shortcut.action();

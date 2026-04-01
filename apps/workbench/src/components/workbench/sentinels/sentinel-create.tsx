@@ -13,7 +13,7 @@ import {
   IconSparkles,
 } from "@tabler/icons-react";
 import { cn } from "@/lib/utils";
-import { useOperator } from "@/lib/workbench/operator-store";
+import { useOperator } from "@/features/operator/stores/operator-store";
 import {
   createSentinel,
   getSentinelCapabilities,

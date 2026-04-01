@@ -8,7 +8,7 @@ interface FrameworkSelectorProps {
 }
 
 
-function MiniScoreRing({ score, size = 32 }: { score: number; size?: number }) {
+export function MiniScoreRing({ score, size = 32 }: { score: number; size?: number }) {
   const color = score > 80 ? "#3dbf84" : score >= 50 ? "#d4a84b" : "#c45c5c";
   const strokeWidth = 3;
   const radius = (size - strokeWidth) / 2;

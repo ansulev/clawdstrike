@@ -2,9 +2,7 @@ import { useState, useMemo, useCallback } from "react";
 import { formatRelativeTime } from "@/lib/workbench/format-utils";
 import {
   IconCheck,
-  IconBan,
   IconArrowUpRight,
-  IconX,
   IconChevronDown,
   IconChevronRight,
   IconUser,
@@ -19,6 +17,12 @@ import {
 } from "@tabler/icons-react";
 import { cn } from "@/lib/utils";
 import { EnrichmentSidebar } from "./enrichment-sidebar";
+import { FindingDetailActions } from "./finding-detail-actions";
+import { ConfidenceBreakdown } from "./confidence-breakdown";
+import { useEnrichmentBridge } from "@/lib/plugins/threat-intel/enrichment-bridge";
+import { enrichmentOrchestrator } from "@/lib/workbench/enrichment-orchestrator";
+import { secureStore } from "@/lib/workbench/secure-store";
+import { useSignalStore } from "@/features/findings/stores/signal-store";
 import type {
   Finding,
   TimelineEntry,
@@ -38,6 +42,8 @@ interface FindingDetailProps {
   onMarkFalsePositive: (findingId: string) => void;
   onAddAnnotation: (findingId: string, text: string) => void;
   onRunEnrichment?: (findingId: string) => void;
+  onDraftDetection?: (findingId: string) => void;
+  onDraftGuard?: (findingId: string) => void;
   onBack?: () => void;
 }
 
@@ -98,10 +104,19 @@ export function FindingDetail({
   onMarkFalsePositive,
   onAddAnnotation,
   onRunEnrichment,
+  onDraftDetection,
+  onDraftGuard,
   onBack,
 }: FindingDetailProps) {
   const [annotationText, setAnnotationText] = useState("");
   const [expandedEntryId, setExpandedEntryId] = useState<string | null>(null);
+
+  const enrichmentBridge = useEnrichmentBridge(enrichmentOrchestrator);
+  const allSignals = useSignalStore.use.signals();
+  const findingSignals = useMemo(
+    () => allSignals.filter((s) => finding.signalIds.includes(s.id)),
+    [allSignals, finding.signalIds],
+  );
 
   const sevColor = SEVERITY_COLORS[finding.severity] ?? "#6f7f9a";
   const statusConfig = STATUS_CONFIG[finding.status] ?? STATUS_CONFIG.emerging;
@@ -197,41 +212,29 @@ export function FindingDetail({
                   </>
                 )}
               </div>
+
+              <details className="mt-2">
+                <summary className="cursor-pointer text-[10px] text-[#6f7f9a]/60 hover:text-[#6f7f9a] transition-colors select-none list-none flex items-center gap-1">
+                  <IconChevronRight size={10} stroke={1.5} className="transition-transform details-open:rotate-90" />
+                  Score breakdown
+                </summary>
+                <div className="mt-2">
+                  <ConfidenceBreakdown finding={finding} signals={findingSignals} />
+                </div>
+              </details>
             </div>
 
-            <div className="flex items-center gap-1.5 shrink-0">
-              {finding.status === "emerging" && (
-                <>
-                  <ActionButton
-                    label="Confirm"
-                    icon={<IconCheck size={12} stroke={2} />}
-                    color="#d4a84b"
-                    onClick={() => onConfirm(finding.id)}
-                  />
-                  <ActionButton
-                    label="Dismiss"
-                    icon={<IconBan size={12} stroke={1.5} />}
-                    color="#6f7f9a"
-                    onClick={() => onDismiss(finding.id)}
-                  />
-                </>
-              )}
-              {finding.status === "confirmed" && (
-                <>
-                  <ActionButton
-                    label="Promote to Intel"
-                    icon={<IconArrowUpRight size={12} stroke={2} />}
-                    color="#3dbf84"
-                    onClick={() => onPromote(finding.id)}
-                  />
-                  <ActionButton
-                    label="Mark FP"
-                    icon={<IconX size={12} stroke={1.5} />}
-                    color="#6f7f9a"
-                    onClick={() => onMarkFalsePositive(finding.id)}
-                  />
-                </>
-              )}
+            <div className="shrink-0">
+              <FindingDetailActions
+                finding={finding}
+                onConfirm={onConfirm}
+                onDismiss={onDismiss}
+                onPromote={onPromote}
+                onMarkFalsePositive={onMarkFalsePositive}
+                getApiKey={(service) =>
+                  secureStore.get(`plugin:clawdstrike.${service}:api_key`)
+                }
+              />
             </div>
           </div>
         </div>
@@ -471,11 +474,13 @@ export function FindingDetail({
       <div className="w-80 shrink-0 border-l border-[#2d3240]/60 overflow-y-auto bg-[#0b0d13]">
         <EnrichmentSidebar
           enrichments={finding.enrichments}
-          onRunEnrichment={
-            onRunEnrichment
-              ? () => onRunEnrichment(finding.id)
-              : undefined
-          }
+          onRunEnrichment={() => {
+            enrichmentBridge.runEnrichment(finding);
+            onRunEnrichment?.(finding.id);
+          }}
+          sourceStatuses={enrichmentBridge.sourceStatuses}
+          isEnriching={enrichmentBridge.isEnriching}
+          onCancel={enrichmentBridge.cancel}
         />
       </div>
     </div>
@@ -503,39 +508,6 @@ function SectionHeader({
         </span>
       )}
     </div>
-  );
-}
-
-function ActionButton({
-  label,
-  icon,
-  color,
-  onClick,
-}: {
-  label: string;
-  icon: React.ReactNode;
-  color: string;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[11px] font-medium transition-colors border"
-      style={{
-        color,
-        borderColor: color + "25",
-        backgroundColor: color + "10",
-      }}
-      onMouseEnter={(e) => {
-        e.currentTarget.style.backgroundColor = color + "20";
-      }}
-      onMouseLeave={(e) => {
-        e.currentTarget.style.backgroundColor = color + "10";
-      }}
-    >
-      {icon}
-      {label}
-    </button>
   );
 }
 

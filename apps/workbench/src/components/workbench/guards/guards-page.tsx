@@ -1,6 +1,5 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
-import { useNavigate } from "react-router-dom";
-import { useWorkbench } from "@/lib/workbench/multi-policy-store";
+import { usePaneStore } from "@/features/panes/pane-store";
 import { GUARD_REGISTRY, GUARD_CATEGORIES } from "@/lib/workbench/guard-registry";
 import type { GuardMeta, GuardCategory, GuardId } from "@/lib/workbench/types";
 import { useToast } from "@/components/ui/toast";
@@ -31,6 +30,8 @@ import {
   IconTestPipe,
   IconArrowRight,
 } from "@tabler/icons-react";
+import { usePolicyTabsStore } from "@/features/policy/stores/policy-tabs-store";
+import { usePolicyEditStore } from "@/features/policy/stores/policy-edit-store";
 
 // ---------------------------------------------------------------------------
 // Icon mapping — guard-registry.ts uses string names for icons
@@ -527,8 +528,9 @@ interface GuardsPageProps {
 }
 
 export function GuardsPage({ onNavigateToEditor: onNavigateToEditorProp }: GuardsPageProps = {}) {
-  const { state, dispatch } = useWorkbench();
-  const navigate = useNavigate();
+  const activeTabId = usePolicyTabsStore(s => s.activeTabId);
+  const activeTab = usePolicyTabsStore(s => s.tabs.find(t => t.id === s.activeTabId));
+  const editState = usePolicyEditStore(s => s.editStates.get(activeTabId));
   const { toast } = useToast();
 
   const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>("all");
@@ -540,13 +542,13 @@ export function GuardsPage({ onNavigateToEditor: onNavigateToEditorProp }: Guard
   // Compute which guards are active in the current policy
   const activeGuardIds = useMemo(() => {
     const active = new Set<string>();
-    for (const [id, config] of Object.entries(state.activePolicy.guards)) {
+    for (const [id, config] of Object.entries((editState?.policy ?? { version: "1.1.0", name: "", description: "", guards: {}, settings: {} }).guards)) {
       if (config && (config as Record<string, unknown>).enabled !== false) {
         active.add(id);
       }
     }
     return active;
-  }, [state.activePolicy.guards]);
+  }, [(editState?.policy ?? { version: "1.1.0", name: "", description: "", guards: {}, settings: {} }).guards]);
 
   const activeCount = activeGuardIds.size;
 
@@ -601,27 +603,32 @@ export function GuardsPage({ onNavigateToEditor: onNavigateToEditorProp }: Guard
   const handleToggleGuard = useCallback(
     (guardId: string) => {
       const isCurrentlyActive = activeGuardIds.has(guardId);
-      dispatch({
-        type: "TOGGLE_GUARD",
-        guardId: guardId as GuardId,
-        enabled: !isCurrentlyActive,
-      });
+      usePolicyEditStore.getState().toggleGuard(activeTabId, guardId as GuardId, !isCurrentlyActive, activeTab?.fileType ?? "clawdstrike_policy");
+      usePolicyTabsStore.getState().setDirty(activeTabId, true);
       toast({
         type: "success",
         title: isCurrentlyActive ? "Guard disabled" : "Guard enabled",
         description: `${GUARD_REGISTRY.find((g) => g.id === guardId)?.name ?? guardId} has been ${isCurrentlyActive ? "disabled" : "enabled"} in the active policy.`,
       });
     },
-    [activeGuardIds, dispatch, toast],
+    [activeGuardIds, activeTabId, activeTab?.fileType, toast],
   );
 
-  const handleNavigateToEditor = useCallback(() => {
+  const handleNavigateToEditor = useCallback(async () => {
     if (onNavigateToEditorProp) {
       onNavigateToEditorProp();
     } else {
-      navigate("/editor");
+      // Open the active file tab (draft detection creates a new tab)
+      const { usePolicyTabsStore } = await import("@/features/policy/stores/policy-tabs-store");
+      const activeTab = usePolicyTabsStore.getState().getActiveTab();
+      if (activeTab) {
+        const route = activeTab.filePath
+          ? `/file/${activeTab.filePath}`
+          : `/file/__new__/${activeTab.id}`;
+        usePaneStore.getState().openApp(route, activeTab.name || "Detection");
+      }
     }
-  }, [navigate, onNavigateToEditorProp]);
+  }, [onNavigateToEditorProp]);
 
   const handleGenerateTests = useCallback(
     (guard: GuardMeta) => {
@@ -803,7 +810,7 @@ export function GuardsPage({ onNavigateToEditor: onNavigateToEditorProp }: Guard
                     onNavigateToEditor={handleNavigateToEditor}
                     onGenerateTests={() => handleGenerateTests(selectedGuard)}
                     currentConfig={
-                      state.activePolicy.guards[selectedGuard.id as GuardId] as
+                      (editState?.policy ?? { version: "1.1.0", name: "", description: "", guards: {}, settings: {} }).guards[selectedGuard.id as GuardId] as
                         | Record<string, unknown>
                         | undefined
                     }

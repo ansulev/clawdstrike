@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { Receipt } from "@/lib/workbench/types";
-import type { FleetConnection } from "@/lib/workbench/fleet-client";
+import type { FleetConnection } from "@/features/fleet/fleet-client";
 import { VerdictBadge } from "@/components/workbench/shared/verdict-badge";
 import { ReceiptDetail } from "./receipt-detail";
 import { ScrollArea } from "@/components/ui/scroll-area";

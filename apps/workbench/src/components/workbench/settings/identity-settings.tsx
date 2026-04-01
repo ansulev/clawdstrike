@@ -14,7 +14,7 @@ import {
   IconAlertTriangle,
 } from "@tabler/icons-react";
 import { cn } from "@/lib/utils";
-import { useOperator } from "@/lib/workbench/operator-store";
+import { useOperator } from "@/features/operator/stores/operator-store";
 import { deriveSigil, deriveSigilColor } from "@/lib/workbench/sentinel-manager";
 import type { SigilType } from "@/lib/workbench/sentinel-manager";
 

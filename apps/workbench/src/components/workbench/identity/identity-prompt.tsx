@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { useOperator } from "@/lib/workbench/operator-store";
+import { useOperator } from "@/features/operator/stores/operator-store";
 
 export function IdentityPrompt() {
   const { currentOperator, initialized, createIdentity } = useOperator();

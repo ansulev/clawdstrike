@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useWorkbench } from "@/lib/workbench/multi-policy-store";
-import { yamlToPolicy, policyToYaml } from "@/lib/workbench/yaml-utils";
+import { yamlToPolicy, policyToYaml } from "@/features/policy/yaml-utils";
 import type { WorkbenchPolicy } from "@/lib/workbench/types";
-import { BUILTIN_RULESETS } from "@/lib/workbench/builtin-rulesets";
+import { BUILTIN_RULESETS } from "@/features/policy/builtin-rulesets";
 import {
   listBuiltinRulesets,
   loadBuiltinRuleset,
@@ -17,6 +16,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { usePolicyTabsStore } from "@/features/policy/stores/policy-tabs-store";
+import { usePolicyEditStore } from "@/features/policy/stores/policy-edit-store";
 
 
 interface RulesetListEntry {
@@ -143,7 +144,9 @@ interface PolicySelectorProps {
 }
 
 export function PolicySelector({ label, onSelect }: PolicySelectorProps) {
-  const { state } = useWorkbench();
+  const activeTabId = usePolicyTabsStore(s => s.activeTabId);
+  const activeTab = usePolicyTabsStore(s => s.tabs.find(t => t.id === s.activeTabId));
+  const editState = usePolicyEditStore(s => s.editStates.get(activeTabId));
   const { rulesets, loading: listLoading, nativeAvailable } = useBuiltinRulesetList();
 
   // Cache resolved built-in rulesets so repeated selections don't re-fetch
@@ -156,13 +159,13 @@ export function PolicySelector({ label, onSelect }: PolicySelectorProps) {
   const handleSelect = useCallback(
     async (value: string) => {
       if (value === "__current__") {
-        onSelect(state.activePolicy, state.yaml);
+        onSelect((editState?.policy ?? { version: "1.1.0", name: "", description: "", guards: {}, settings: {} }), (editState?.yaml ?? ""));
         return;
       }
 
       if (value.startsWith("saved:")) {
         const id = value.slice(6);
-        const saved = state.savedPolicies.find((p) => p.id === id);
+        const saved = usePolicyTabsStore.getState().savedPolicies.find((p) => p.id === id);
         if (saved) {
           onSelect(saved.policy, saved.yaml);
         }
@@ -186,7 +189,7 @@ export function PolicySelector({ label, onSelect }: PolicySelectorProps) {
         setLoadingRuleset(false);
       }
     },
-    [state, onSelect]
+    [editState?.policy, onSelect]
   );
 
   const isLoading = listLoading || loadingRuleset;
@@ -238,12 +241,12 @@ export function PolicySelector({ label, onSelect }: PolicySelectorProps) {
             ))}
           </SelectGroup>
 
-          {state.savedPolicies.length > 0 && (
+          {usePolicyTabsStore.getState().savedPolicies.length > 0 && (
             <>
               <SelectSeparator />
               <SelectGroup>
                 <SelectLabel className="text-[#6f7f9a]">Saved Policies</SelectLabel>
-                {state.savedPolicies.map((sp) => (
+                {usePolicyTabsStore.getState().savedPolicies.map((sp) => (
                   <SelectItem
                     key={sp.id}
                     value={`saved:${sp.id}`}

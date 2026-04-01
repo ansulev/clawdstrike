@@ -13,9 +13,9 @@ const mockGetHint = vi.hoisted(() => vi.fn());
 const mockIsCustomized = vi.hoisted(() => vi.fn());
 const mockShowHints = vi.hoisted(() => ({ value: true }));
 
-vi.mock("@/lib/workbench/use-hint-settings", async () => {
-  const actual = await vi.importActual<typeof import("@/lib/workbench/use-hint-settings")>(
-    "@/lib/workbench/use-hint-settings",
+vi.mock("@/features/settings/use-hint-settings", async () => {
+  const actual = await vi.importActual<typeof import("@/features/settings/use-hint-settings")>(
+    "@/features/settings/use-hint-settings",
   );
   return {
     ...actual,
@@ -32,7 +32,7 @@ vi.mock("@/lib/workbench/use-hint-settings", async () => {
 });
 
 // Re-import the actual constants after mocking (they are passed through)
-import { DEFAULT_HINTS, HINT_LABELS, type HintId } from "@/lib/workbench/use-hint-settings";
+import { DEFAULT_HINTS, HINT_LABELS, type HintId } from "@/features/settings/use-hint-settings";
 
 
 const ALL_HINT_IDS: HintId[] = [

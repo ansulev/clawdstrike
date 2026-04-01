@@ -1,4 +1,4 @@
-import type { PolicyTab } from "../multi-policy-store";
+import type { PolicyTab } from "@/features/policy/types/policy-tab";
 import type { FileType } from "../file-type-registry";
 import { parseSigmaYaml } from "../sigma-types";
 import {

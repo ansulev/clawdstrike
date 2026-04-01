@@ -43,8 +43,8 @@ import {
   fetchPrincipals as apiFetchPrincipals,
   type FleetConnection,
   type PrincipalInfo,
-} from "@/lib/workbench/fleet-client";
-import { useFleetConnection } from "@/lib/workbench/use-fleet-connection";
+} from "@/features/fleet/fleet-client";
+import { useFleetConnection } from "@/features/fleet/use-fleet-connection";
 import {
   computeHierarchicalLayout,
   computeFitTransform,

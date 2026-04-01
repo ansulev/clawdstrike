@@ -3,6 +3,9 @@
  *
  * Creates artifact nodes on the SwarmBoard for detection documents,
  * evidence packs, and lab runs, then navigates the user to the board.
+ *
+ * Post-migration: writes directly to the Zustand swarm-board store
+ * instead of using DOM events or localStorage fallbacks.
  */
 
 import { useCallback, useMemo } from "react";
@@ -10,6 +13,7 @@ import type { FileType } from "../file-type-registry";
 import {
   createBoardNode,
 } from "../swarm-board-store";
+import { useSwarmBoardStore } from "@/features/swarm/stores/swarm-board-store";
 import type { EvidencePack, LabRun, PublicationManifest } from "./shared-types";
 import {
   createConversionOutputNode,
@@ -65,17 +69,15 @@ const LAYOUT = {
 } as const;
 
 // ---------------------------------------------------------------------------
-// Dispatch helper — pushes nodes into the store without requiring the
-// React context (we import the factory only; the store context dispatch
-// is called externally via a lightweight custom event).
+// Dispatch helper — writes directly to the Zustand swarm-board store.
 //
-// Because the SwarmBoardProvider may not be mounted in the editor/lab
-// tree (it lives under LabLayout), we use a custom DOM event that the
-// SwarmBoardProvider can listen for. If the provider is not mounted,
-// we fall back to persisting directly into localStorage so the nodes
-// appear when the user navigates to the board.
+// With the Zustand migration (Plan 01), the store is globally accessible
+// via useSwarmBoardStore.getState() without requiring the React context
+// tree. No DOM events or localStorage fallbacks needed — the store
+// handles its own persistence via debounced writes.
 // ---------------------------------------------------------------------------
 
+/** @deprecated Kept for backward compatibility in existing test references. */
 const SWARM_LAUNCH_EVENT = "workbench:swarm-launch-nodes";
 
 export interface SwarmLaunchPayload {
@@ -197,38 +199,18 @@ function buildPayload(options: SwarmLaunchOptions): SwarmLaunchPayload {
   return { nodes, edges };
 }
 
-function dispatchSwarmNodes(payload: SwarmLaunchPayload): void {
-  // Fire custom event for any mounted SwarmBoardProvider
-  window.dispatchEvent(
-    new CustomEvent(SWARM_LAUNCH_EVENT, { detail: payload }),
-  );
-
-  // Also persist into localStorage so nodes are available even if
-  // the board hasn't mounted yet. We merge into the existing persisted
-  // state rather than overwriting.
-  try {
-    const STORAGE_KEY = "clawdstrike_workbench_swarm_board";
-    const raw = localStorage.getItem(STORAGE_KEY);
-    const existing = raw ? JSON.parse(raw) : null;
-
-    const nodes = [
-      ...(existing?.nodes ?? []),
-      ...payload.nodes,
-    ];
-    const edges = [
-      ...(existing?.edges ?? []),
-      ...payload.edges,
-    ];
-
-    const state = {
-      boardId: existing?.boardId ?? `board-${Date.now().toString(36)}`,
-      repoRoot: existing?.repoRoot ?? "",
-      nodes,
-      edges,
-    };
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  } catch (e) {
-    console.warn("[use-swarm-launch] Failed to persist swarm nodes:", e);
+/**
+ * Push pre-built nodes and edges directly into the Zustand swarm-board store.
+ * Exported as _dispatchSwarmNodes for testability (prefixed with underscore
+ * to signal internal-but-testable).
+ */
+export function _dispatchSwarmNodes(payload: SwarmLaunchPayload): void {
+  const { actions } = useSwarmBoardStore.getState();
+  for (const node of payload.nodes) {
+    actions.addNodeDirect(node);
+  }
+  for (const edge of payload.edges) {
+    actions.addEdge(edge);
   }
 }
 
@@ -253,7 +235,7 @@ export function useSwarmLaunch(options: SwarmLaunchOptions): SwarmLaunchActions 
 
   const openReviewSwarm = useCallback(() => {
     if (!documentId || !fileType) return;
-    dispatchSwarmNodes(
+    _dispatchSwarmNodes(
       buildPayload({
         documentId,
         fileType,
@@ -267,7 +249,7 @@ export function useSwarmLaunch(options: SwarmLaunchOptions): SwarmLaunchActions 
       }),
     );
 
-    onNavigate?.("/lab");
+    onNavigate?.("/swarm-board");
   }, [
     documentId,
     evidencePack,
@@ -288,7 +270,7 @@ export function useSwarmLaunch(options: SwarmLaunchOptions): SwarmLaunchActions 
         evidencePack && evidencePack.id === evidencePackId
           ? evidencePack
           : null;
-      dispatchSwarmNodes(
+      _dispatchSwarmNodes(
         buildPayload({
           documentId,
           fileType,
@@ -300,7 +282,7 @@ export function useSwarmLaunch(options: SwarmLaunchOptions): SwarmLaunchActions 
         }),
       );
 
-      onNavigate?.("/lab");
+      onNavigate?.("/swarm-board");
     },
     [documentId, evidencePack, filePath, fileType, name, onNavigate, sourceHash, tabId],
   );
@@ -309,7 +291,7 @@ export function useSwarmLaunch(options: SwarmLaunchOptions): SwarmLaunchActions 
     (labRunId: string) => {
       if (!documentId || !fileType) return;
       const nextRun = labRun && labRun.id === labRunId ? labRun : null;
-      dispatchSwarmNodes(
+      _dispatchSwarmNodes(
         buildPayload({
           documentId,
           fileType,
@@ -322,7 +304,7 @@ export function useSwarmLaunch(options: SwarmLaunchOptions): SwarmLaunchActions 
         }),
       );
 
-      onNavigate?.("/lab");
+      onNavigate?.("/swarm-board");
     },
     [documentId, evidencePack, filePath, fileType, labRun, name, onNavigate, sourceHash, tabId],
   );
@@ -334,7 +316,7 @@ export function useSwarmLaunch(options: SwarmLaunchOptions): SwarmLaunchActions 
         publicationManifest && publicationManifest.id === publicationId
           ? publicationManifest
           : null;
-      dispatchSwarmNodes(
+      _dispatchSwarmNodes(
         buildPayload({
           documentId,
           fileType,
@@ -348,7 +330,7 @@ export function useSwarmLaunch(options: SwarmLaunchOptions): SwarmLaunchActions 
         }),
       );
 
-      onNavigate?.("/lab");
+      onNavigate?.("/swarm-board");
     },
     [
       documentId,

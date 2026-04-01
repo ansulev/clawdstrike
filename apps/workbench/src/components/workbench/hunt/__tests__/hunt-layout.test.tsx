@@ -1,13 +1,19 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 
+// jsdom does not implement Element.getAnimations; stub it so components
+// that rely on the Web Animations API don't crash during tests.
+if (!Element.prototype.getAnimations) {
+  Element.prototype.getAnimations = () => [];
+}
+
 const fleetClientMocks = vi.hoisted(() => ({
   fetchAuditEvents: vi.fn(),
 }));
 
-vi.mock("@/lib/workbench/fleet-client", async () => {
-  const actual = await vi.importActual<typeof import("@/lib/workbench/fleet-client")>(
-    "@/lib/workbench/fleet-client",
+vi.mock("@/features/fleet/fleet-client", async () => {
+  const actual = await vi.importActual<typeof import("@/features/fleet/fleet-client")>(
+    "@/features/fleet/fleet-client",
   );
 
   return {
@@ -16,9 +22,9 @@ vi.mock("@/lib/workbench/fleet-client", async () => {
   };
 });
 
-vi.mock("@/lib/workbench/use-fleet-connection", async () => {
-  const actual = await vi.importActual<typeof import("@/lib/workbench/use-fleet-connection")>(
-    "@/lib/workbench/use-fleet-connection",
+vi.mock("@/features/fleet/use-fleet-connection", async () => {
+  const actual = await vi.importActual<typeof import("@/features/fleet/use-fleet-connection")>(
+    "@/features/fleet/use-fleet-connection",
   );
 
   return {
@@ -48,8 +54,10 @@ vi.mock("@/lib/workbench/use-fleet-connection", async () => {
   };
 });
 
+import { MemoryRouter } from "react-router-dom";
 import { HuntLayout } from "../hunt-layout";
-import { MultiPolicyProvider } from "@/lib/workbench/multi-policy-store";
+import { PolicyBootstrapProvider as MultiPolicyProvider } from "@/features/policy/hooks/use-policy-bootstrap";
+import { HuntTelemetryBridge } from "@/features/hunt/components/HuntTelemetryBridge";
 
 async function flushMicrotasks() {
   await Promise.resolve();
@@ -97,7 +105,7 @@ describe("HuntLayout", () => {
   });
 
   it("stops polling while the stream is paused and resumes on live", async () => {
-    render(<MultiPolicyProvider><HuntLayout /></MultiPolicyProvider>);
+    render(<MemoryRouter><MultiPolicyProvider><HuntTelemetryBridge /><HuntLayout /></MultiPolicyProvider></MemoryRouter>);
     await flushMicrotasks();
 
     expect(fleetClientMocks.fetchAuditEvents).toHaveBeenCalledTimes(1);
@@ -114,7 +122,7 @@ describe("HuntLayout", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "LIVE" }));
     await flushMicrotasks();
-    expect(screen.getByRole("button", { name: "PAUSED" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "PAUSED" })).toBeTruthy();
     expect(globalThis.clearInterval).toHaveBeenCalledWith(activeIntervalId);
     expect(intervalCallbacks.size).toBe(0);
 

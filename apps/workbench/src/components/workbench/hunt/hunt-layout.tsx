@@ -1,18 +1,17 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import type { AgentEvent, AgentBaseline, Investigation, HuntPattern, StreamFilters, StreamStats } from "@/lib/workbench/hunt-types";
+import { useState, useCallback, useMemo } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
+import type { Investigation, StreamFilters, StreamStats } from "@/lib/workbench/hunt-types";
 import {
-  auditEventToAgentEvent,
-  enrichEvents,
-  computeBaseline,
   computeStreamStats,
-  timeRangeToSince,
 } from "@/lib/workbench/hunt-engine";
-import { useFleetConnection } from "@/lib/workbench/use-fleet-connection";
-import { fetchAuditEvents } from "@/lib/workbench/fleet-client";
-import { useMultiPolicy } from "@/lib/workbench/multi-policy-store";
+import { useFleetConnection } from "@/features/fleet/use-fleet-connection";
+import { fetchAuditEvents } from "@/features/fleet/fleet-client";
+import { usePolicyTabs } from "@/features/policy/hooks/use-policy-actions";
+import { usePolicyTabsStore } from "@/features/policy/stores/policy-tabs-store";
 import { useDraftDetection } from "@/lib/workbench/detection-workflow/use-draft-detection";
 import { buildOpenDocumentCoverage } from "@/lib/workbench/detection-workflow/coverage-projection";
 import { usePublishedCoverage } from "@/lib/workbench/detection-workflow/use-published-coverage";
+import { useHuntStore } from "@/features/hunt/stores/hunt-store";
 import {
   IconActivity,
   IconChartBar,
@@ -21,6 +20,7 @@ import {
   IconCircle,
   IconAlertTriangle,
 } from "@tabler/icons-react";
+import { usePaneStore } from "@/features/panes/pane-store";
 import { cn } from "@/lib/utils";
 import { SubTabBar, type SubTab } from "../shared/sub-tab-bar";
 import { ActivityStream } from "./activity-stream";
@@ -44,6 +44,14 @@ const HUNT_TABS: SubTab[] = [
   { id: "investigate", label: "Investigate", icon: IconSearch },
   { id: "patterns", label: "Patterns", icon: IconBrain },
 ];
+
+function parseHuntTab(search: string): HuntTab {
+  const tab = new URLSearchParams(search).get("tab");
+  if (tab === "baselines" || tab === "investigate" || tab === "patterns") {
+    return tab;
+  }
+  return "stream";
+}
 
 // ---------------------------------------------------------------------------
 // Status indicators (right-side slot for SubTabBar)
@@ -109,81 +117,41 @@ function HuntStatusIndicators({
 // ---------------------------------------------------------------------------
 
 export function HuntLayout() {
-  const [activeTab, setActiveTab] = useState<HuntTab>("stream");
-  const [events, setEvents] = useState<AgentEvent[]>([]);
-  const [baselines, setBaselines] = useState<Map<string, AgentBaseline>>(new Map());
-  const [investigations, setInvestigations] = useState<Investigation[]>([]);
-  const [patterns, setPatterns] = useState<HuntPattern[]>([]);
   const [streamFilters, setStreamFilters] = useState<StreamFilters>({ timeRange: "24h" });
-  const [streamLive, setStreamLive] = useState(true);
   const [sensitivity, setSensitivity] = useState<"low" | "medium" | "high">("medium");
+  const { search } = useLocation();
+  const navigate = useNavigate();
+  const activeTab = parseHuntTab(search);
 
-  const { connection, getAuthenticatedConnection } = useFleetConnection();
+  const { connection } = useFleetConnection();
   const connected = connection.connected;
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const publishedCoverage = usePublishedCoverage();
+  const events = useHuntStore.use.events();
+  const baselines = useHuntStore.use.baselines();
+  const investigations = useHuntStore.use.investigations();
+  const patterns = useHuntStore.use.patterns();
+  const streamLive = useHuntStore.use.isLive();
+  const huntActions = useHuntStore.use.actions();
 
   // Draft detection hook — bridges Hunt -> Editor
-  const { multiDispatch, tabs } = useMultiPolicy();
+  const { multiDispatch, tabs } = usePolicyTabs();
   const {
     draftFromEvents,
     draftFromInvestigation,
     draftFromPattern,
   } = useDraftDetection({
     dispatch: multiDispatch,
-    onNavigateToEditor: undefined, // Hunt is embedded; no navigation needed
-  });
-
-  // Fetch events from fleet and convert + enrich
-  const fetchEvents = useCallback(async () => {
-    if (!connected) return;
-
-    try {
-      const since = timeRangeToSince("24h");
-      const auditEvents = await fetchAuditEvents(getAuthenticatedConnection(), { since, limit: 500 });
-      const converted = auditEvents.map(auditEventToAgentEvent);
-
-      // Compute baselines from all events by agent
-      const agentIds = new Set(converted.map((e) => e.agentId));
-      const newBaselines = new Map<string, AgentBaseline>();
-      for (const agentId of agentIds) {
-        const agentEvents = converted.filter((e) => e.agentId === agentId);
-        const agentName = agentEvents[0]?.agentName ?? agentId;
-        const teamId = agentEvents[0]?.teamId;
-        newBaselines.set(agentId, computeBaseline(agentId, agentName, converted, teamId));
+    onNavigateToEditor: () => {
+      // After drafting a detection, the active tab in policy-tabs-store has the new policy
+      const activeTab = usePolicyTabsStore.getState().getActiveTab();
+      if (activeTab?.filePath) {
+        usePaneStore.getState().openFile(activeTab.filePath, activeTab.name);
+      } else if (activeTab) {
+        // Untitled file -- use __new__ route
+        usePaneStore.getState().openApp(`/file/__new__/${activeTab.id}`, activeTab.name);
       }
-      setBaselines(newBaselines);
-
-      // Enrich events with anomaly scores
-      const enriched = enrichEvents(converted, newBaselines);
-      setEvents(enriched);
-    } catch (err) {
-      console.warn("[hunt-layout] Failed to fetch events:", err);
-    }
-  }, [connected, getAuthenticatedConnection]);
-
-  // Keep a stable ref to the latest fetchEvents so the polling effect only
-  // re-runs when `connected` or `streamLive` change, not when the callback
-  // identity changes due to closure captures (e.g. connection object).
-  const fetchEventsRef = useRef(fetchEvents);
-  fetchEventsRef.current = fetchEvents;
-
-  // Initial fetch + auto-poll every 30 seconds while the stream is live.
-  useEffect(() => {
-    if (pollRef.current) clearInterval(pollRef.current);
-    pollRef.current = null;
-
-    if (!connected || !streamLive) {
-      return;
-    }
-
-    fetchEventsRef.current();
-    pollRef.current = setInterval(() => fetchEventsRef.current(), 30_000);
-    return () => {
-      if (pollRef.current) clearInterval(pollRef.current);
-      pollRef.current = null;
-    };
-  }, [connected, streamLive]);
+    },
+  });
 
   // Derived: open investigations count
   const openInvestigations = useMemo(
@@ -206,23 +174,43 @@ export function HuntLayout() {
   );
 
   // Derived: baselines as array for Baselines component
-  const baselinesArray = useMemo(
-    () => Array.from(baselines.values()),
-    [baselines],
-  );
+  const baselinesArray = baselines;
 
   const openDocumentCoverage = useMemo(
     () => buildOpenDocumentCoverage(tabs),
     [tabs],
   );
 
+  const handleTabChange = useCallback(
+    (tab: HuntTab) => {
+      const params = new URLSearchParams(search);
+      if (tab === "stream") {
+        params.delete("tab");
+      } else {
+        params.set("tab", tab);
+      }
+      const nextSearch = params.toString();
+      navigate(
+        {
+          pathname: "/hunt",
+          search: nextSearch ? `?${nextSearch}` : "",
+        },
+        { replace: false },
+      );
+    },
+    [navigate, search],
+  );
+
   return (
-    <div className="flex flex-col h-full min-h-0">
+    <div
+      className="flex flex-col h-full min-h-0 border border-transparent transition-colors duration-[400ms] ease-out"
+      style={{ borderColor: "var(--spirit-accent)" }}
+    >
       {/* Sub-tab bar with status indicators */}
       <SubTabBar
         tabs={HUNT_TABS}
         activeTab={activeTab}
-        onTabChange={(id) => setActiveTab(id as HuntTab)}
+        onTabChange={(id) => handleTabChange(id as HuntTab)}
       >
         <HuntStatusIndicators
           connected={connected}
@@ -241,7 +229,7 @@ export function HuntLayout() {
             onDraftDetection={draftFromEvents}
             stats={streamStats}
             live={streamLive}
-            onToggleLive={() => setStreamLive((prev) => !prev)}
+            onToggleLive={() => huntActions.setLive(!streamLive)}
             onEscalate={(eventIds, note) => {
               const inv: Investigation = {
                 id: crypto.randomUUID(),
@@ -267,8 +255,8 @@ export function HuntLayout() {
                 eventIds,
                 annotations: [],
               };
-              setInvestigations((prev) => [inv, ...prev]);
-              setActiveTab("investigate");
+              huntActions.createInvestigation(inv);
+              handleTabChange("investigate");
             }}
           />
         )}
@@ -287,34 +275,14 @@ export function HuntLayout() {
             investigations={investigations}
             events={events}
             onDraftDetection={draftFromInvestigation}
-            onCreateInvestigation={(inv) => {
-              setInvestigations((prev) => [inv, ...prev]);
-            }}
-            onUpdateInvestigation={(id, updates) => {
-              setInvestigations((prev) =>
-                prev.map((i) => (i.id === id ? { ...i, ...updates, updatedAt: new Date().toISOString() } : i)),
-              );
-            }}
+            onCreateInvestigation={huntActions.createInvestigation}
+            onUpdateInvestigation={huntActions.updateInvestigation}
             onAddAnnotation={(investigationId, text) => {
-              setInvestigations((prev) =>
-                prev.map((i) =>
-                  i.id === investigationId
-                    ? {
-                        ...i,
-                        updatedAt: new Date().toISOString(),
-                        annotations: [
-                          ...i.annotations,
-                          {
-                            id: crypto.randomUUID(),
-                            text,
-                            createdAt: new Date().toISOString(),
-                            createdBy: "analyst",
-                          },
-                        ],
-                      }
-                    : i,
-                ),
-              );
+              huntActions.addAnnotation(investigationId, {
+                createdAt: new Date().toISOString(),
+                createdBy: "analyst",
+                text,
+              });
             }}
             openDocumentCoverage={openDocumentCoverage}
             publishedCoverage={publishedCoverage}
@@ -325,7 +293,7 @@ export function HuntLayout() {
           <PatternMining
             patterns={patterns}
             events={events}
-            onPatternsChange={setPatterns}
+            onPatternsChange={huntActions.setPatterns}
             onDraftDetection={draftFromPattern}
             openDocumentCoverage={openDocumentCoverage}
             publishedCoverage={publishedCoverage}

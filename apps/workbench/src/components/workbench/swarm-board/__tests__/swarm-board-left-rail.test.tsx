@@ -6,8 +6,8 @@ import { MemoryRouter } from "react-router-dom";
 import {
   SwarmBoardProvider,
   useSwarmBoard,
-} from "@/lib/workbench/swarm-board-store";
-import type { SwarmBoardNodeData } from "@/lib/workbench/swarm-board-types";
+} from "@/features/swarm/stores/swarm-board-store";
+import type { SwarmBoardNodeData } from "@/features/swarm/swarm-board-types";
 
 // ---------------------------------------------------------------------------
 // Mock @xyflow/react

@@ -12,8 +12,8 @@ import {
   IconAlertTriangle,
 } from "@tabler/icons-react";
 import { cn } from "@/lib/utils";
-import { useFleetConnection } from "@/lib/workbench/use-fleet-connection";
-import type { HealthResponse } from "@/lib/workbench/fleet-client";
+import { useFleetConnection } from "@/features/fleet/use-fleet-connection";
+import type { HealthResponse } from "@/features/fleet/fleet-client";
 import { emitAuditEvent } from "@/lib/workbench/local-audit";
 
 /** Ensure a URL has an http(s):// prefix — normalizes bare "localhost:PORT" inputs. */

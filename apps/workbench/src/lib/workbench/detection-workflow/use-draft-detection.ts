@@ -14,8 +14,10 @@
 
 import { useState, useCallback } from "react";
 import { FILE_TYPE_REGISTRY } from "../file-type-registry";
-import type { MultiPolicyAction } from "../multi-policy-store";
+import type { MultiPolicyAction } from "@/features/policy/types/policy-tab";
 import type { AgentEvent, Investigation, HuntPattern } from "../hunt-types";
+import type { Finding } from "../finding-engine";
+import type { Signal } from "../signal-pipeline";
 import type { CoverageGapCandidate, DraftSeed } from "./shared-types";
 import type { DraftBuildResult } from "./execution-types";
 import { getEvidencePackStore } from "./evidence-pack-store";
@@ -23,8 +25,10 @@ import {
   mapEventsToDraftSeed,
   mapInvestigationToDraftSeed,
   mapPatternToDraftSeed,
+  mapFindingToDraftSeed,
 } from "./draft-mappers";
 import { generateDraft } from "./draft-generator";
+import { useFindingStore } from "@/features/findings/stores/finding-store";
 
 export function buildSeedFromEvents(
   events: AgentEvent[],
@@ -50,6 +54,14 @@ export function buildSeedFromPattern(
   selectedGap?: CoverageGapCandidate,
 ): DraftSeed {
   return mapPatternToDraftSeed(pattern, selectedGap);
+}
+
+export function buildSeedFromFinding(
+  finding: Finding,
+  signals: Signal[],
+  selectedGap?: CoverageGapCandidate,
+): DraftSeed {
+  return mapFindingToDraftSeed(finding, signals, selectedGap);
 }
 
 // ---- Draft Building ----
@@ -152,6 +164,12 @@ export interface UseDraftDetectionResult {
   ) => Promise<void>;
   /** Draft a detection rule from a discovered pattern. */
   draftFromPattern: (pattern: HuntPattern, selectedGap?: CoverageGapCandidate) => Promise<void>;
+  /** Draft a detection rule from a confirmed finding. */
+  draftFromFinding: (
+    finding: Finding,
+    signals: Signal[],
+    selectedGap?: CoverageGapCandidate,
+  ) => Promise<void>;
   /** Whether a draft is currently being generated. */
   loading: boolean;
   /** Status message for the most recent draft action. */
@@ -257,10 +275,45 @@ export function useDraftDetection({
     [generateDraftWithEvidence, openDraft],
   );
 
+  const draftFromFinding = useCallback(
+    async (
+      finding: Finding,
+      signals: Signal[],
+      selectedGap?: CoverageGapCandidate,
+    ) => {
+      setLoading(true);
+      setStatusMessage(null);
+      try {
+        const seed = buildSeedFromFinding(finding, signals, selectedGap);
+        const { draft, starterEvidence } = await generateDraftWithEvidence(seed);
+        openDraft(draft, starterEvidence.documentId);
+        setStatusMessage(
+          `Drafted "${draft.name}" as ${FILE_TYPE_REGISTRY[draft.fileType].shortLabel} with starter evidence`,
+        );
+
+        // Bidirectional link: annotate source finding with draft reference (INTEL-08)
+        useFindingStore.getState().actions.addAnnotation(finding.id, {
+          id: `ann_draft_${Date.now()}`,
+          text: `Linked to detection draft: ${draft.name} (${draft.fileType})`,
+          createdBy: "detection_workflow",
+          createdAt: new Date().toISOString(),
+        });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Unknown error";
+        setStatusMessage(`Draft failed: ${msg}`);
+        console.error("[use-draft-detection] draftFromFinding failed:", err);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [generateDraftWithEvidence, openDraft],
+  );
+
   return {
     draftFromEvents,
     draftFromInvestigation,
     draftFromPattern,
+    draftFromFinding,
     loading,
     statusMessage,
   };

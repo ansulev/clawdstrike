@@ -307,6 +307,9 @@ pub trait Guard: Send + Sync {
     async fn check(&self, action: &GuardAction<'_>, context: &GuardContext) -> GuardResult;
 }
 
+#[cfg(test)]
+mod egress_allowlist_plugin_parity;
+
 // ===========================================================================
 // Tests
 // ===========================================================================

@@ -23,6 +23,8 @@ import {
   TextArea,
   SelectInput,
 } from "./shared-form-fields";
+import type { DetectionVisualPanelProps } from "@/lib/workbench/detection-workflow/shared-types";
+import { registerVisualPanel } from "@/lib/workbench/detection-workflow/visual-panels";
 
 
 // ---- Constants ----
@@ -81,16 +83,12 @@ const PRODUCT_OPTIONS = [
   "zeek",
 ];
 
-const ACCENT = "#7c9aef";
-
+/** Default accent color for Sigma panels (used by internal subcomponents). */
+const DEFAULT_ACCENT = "#7c9aef";
 
 // ---- Props ----
 
-interface SigmaVisualPanelProps {
-  yaml: string;
-  onYamlChange: (yaml: string) => void;
-  readOnly?: boolean;
-}
+type SigmaVisualPanelProps = DetectionVisualPanelProps;
 
 
 
@@ -242,7 +240,7 @@ function ConditionBar({
     return (
       <div
         className="bg-[#05060a] border border-[#2d3240] border-l-2 rounded px-4 py-3 font-mono text-[12px] text-[#6f7f9a]/50 italic"
-        style={{ borderLeftColor: ACCENT }}
+        style={{ borderLeftColor: DEFAULT_ACCENT }}
       >
         (empty)
       </div>
@@ -252,7 +250,7 @@ function ConditionBar({
   return (
     <div
       className="bg-[#05060a] border border-[#2d3240] border-l-2 rounded px-4 py-3 font-mono text-[12px] leading-relaxed flex flex-wrap gap-x-1.5 gap-y-0.5"
-      style={{ borderLeftColor: ACCENT }}
+      style={{ borderLeftColor: DEFAULT_ACCENT }}
     >
       {tokens.map((token, i) => {
         let color = "#ece7dc";
@@ -266,7 +264,7 @@ function ConditionBar({
             color = "#d4a84b";
           }
         } else if (token.type === "reference") {
-          color = ACCENT;
+          color = DEFAULT_ACCENT;
           cursor = "pointer";
         } else if (token.type === "paren") {
           color = "#6f7f9a";
@@ -279,7 +277,7 @@ function ConditionBar({
               color,
               cursor,
               borderBottom: token.type === "reference" && hoveredSelection === token.value
-                ? `1px solid ${ACCENT}60`
+                ? `1px solid ${DEFAULT_ACCENT}60`
                 : "1px solid transparent",
               transition: "border-color 150ms ease",
             }}
@@ -311,7 +309,7 @@ function SelectionNode({
   onMouseEnter: () => void;
   onMouseLeave: () => void;
 }) {
-  const borderColor = isNegated ? "#c45c5c" : ACCENT;
+  const borderColor = isNegated ? "#c45c5c" : DEFAULT_ACCENT;
   const entries = Object.entries(value);
   const isEmpty = entries.length === 0;
 
@@ -323,7 +321,7 @@ function SelectionNode({
         borderLeftWidth: 3,
         borderLeftColor: borderColor,
         opacity: isNegated ? 0.7 : 1,
-        boxShadow: isHighlighted ? `0 0 0 1px ${ACCENT}40` : "none",
+        boxShadow: isHighlighted ? `0 0 0 1px ${DEFAULT_ACCENT}40` : "none",
         transition: "box-shadow 150ms ease",
       }}
       onMouseEnter={onMouseEnter}
@@ -332,7 +330,7 @@ function SelectionNode({
       <div className="flex items-center gap-2">
         <span
           className="text-[11px] font-mono font-bold"
-          style={{ color: isNegated ? "#c45c5c" : ACCENT }}
+          style={{ color: isNegated ? "#c45c5c" : DEFAULT_ACCENT }}
         >
           {name}
         </span>
@@ -526,9 +524,9 @@ function TagBadge({ tag }: { tag: string }) {
       style={
         isAttack
           ? {
-              color: ACCENT,
-              backgroundColor: `${ACCENT}10`,
-              borderColor: `${ACCENT}30`,
+              color: DEFAULT_ACCENT,
+              backgroundColor: `${DEFAULT_ACCENT}10`,
+              borderColor: `${DEFAULT_ACCENT}30`,
             }
           : undefined
       }
@@ -578,7 +576,9 @@ function statusColor(status: SigmaStatus): string {
 
 // ---- Main Panel ----
 
-export function SigmaVisualPanel({ yaml: yamlText, onYamlChange, readOnly }: SigmaVisualPanelProps) {
+export function SigmaVisualPanel(props: SigmaVisualPanelProps) {
+  const { source: yamlText, onSourceChange: onYamlChange, readOnly, accentColor } = props;
+  const ACCENT = accentColor ?? "#7c9aef";
   const { rule, errors } = useMemo(() => parseSigmaYaml(yamlText), [yamlText]);
 
   // Round-trip update: parse current YAML as a document, update a field, stringify back.
@@ -816,3 +816,7 @@ export function SigmaVisualPanel({ yaml: yamlText, onYamlChange, readOnly }: Sig
     </ScrollArea>
   );
 }
+
+// ---- Self-registration ----
+// Register SigmaVisualPanel in the visual panel registry at module load.
+registerVisualPanel("sigma_rule", SigmaVisualPanel);

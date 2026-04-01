@@ -17,7 +17,7 @@ import {
   IconBrandPython,
 } from "@tabler/icons-react";
 import { cn } from "@/lib/utils";
-import type { SwarmBoardNodeData } from "@/lib/workbench/swarm-board-types";
+import type { SwarmBoardNodeData } from "@/features/swarm/swarm-board-types";
 
 // ---------------------------------------------------------------------------
 // File type config

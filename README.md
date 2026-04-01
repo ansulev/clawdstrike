@@ -8,7 +8,7 @@
   <a href="https://pypi.org/project/clawdstrike/"><img src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fpypi.org%2Fpypi%2Fclawdstrike%2Fjson&query=%24.info.version&prefix=v&label=PyPI&logo=python&logoColor=white&color=fe7d37&style=flat-square" alt="PyPI"></a>
   <a href="https://github.com/backbay-labs/homebrew-tap/blob/main/Formula/clawdstrike.rb"><img src="https://img.shields.io/badge/homebrew-clawdstrike-FBB040?style=flat-square&logo=homebrew" alt="Homebrew"></a>
   <a href="https://artifacthub.io/packages/search?repo=clawdstrike"><img src="https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/clawdstrike" alt="Artifact Hub"></a>
-  <a href="https://discord.gg/tWKSGCvq"><img src="https://img.shields.io/badge/discord-join-5865F2?style=flat-square&logo=discord&logoColor=white" alt="Discord"></a>
+  <a href="https://discord.gg/fdbCZHm8zM"><img src="https://img.shields.io/badge/discord-join-5865F2?style=flat-square&logo=discord&logoColor=white" alt="Discord"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue?style=flat-square" alt="License: Apache-2.0"></a>
   <img src="https://img.shields.io/badge/MSRV-1.93-orange?style=flat-square&logo=rust" alt="MSRV: 1.93">
 </p>
@@ -69,19 +69,19 @@
 
 ## The Problem
 
-Google's 2026 Cybersecurity Forecast calls it the **"Shadow Agent" crisis**: employees and teams spinning up AI agents without corporate oversight, creating invisible pipelines that exfiltrate sensitive data, violate compliance, and leak IP. No one sanctioned them. No one is watching them. And your security stack wasn't built for this.
+[Google's 2026 Cybersecurity Forecast](https://cloud.google.com/security/resources/cybersecurity-forecast) calls it the **"Shadow Agent" crisis**: employees and teams spinning up AI agents without corporate oversight, creating invisible pipelines that exfiltrate sensitive data, violate compliance, and leak IP. The AI agent hype cycle accelerates it: prototypes become deployments before anyone can threat-model the blast radius. No one sanctioned them. No one is watching them. And most security stacks were built for defined, static attacks — not continuous, goal-driven agentic behavior.
 
-Your org provisioned 50 agents. Shadow IT spun up 50 more outside your asset inventory. One is exfiltrating `.env` secrets to an unclassified endpoint. Another is patching auth middleware with no peer review, no receipt, no rollback. A third just ran `chmod 777` against a production filesystem. Your SIEM shows green across the board because none of these actions generate the signals it was built to detect.
+Your org provisioned 50 agents. Shadow IT spun up 50 more outside your asset inventory. One exfiltrates `.env` secrets to an unclassified endpoint. Another patches auth middleware with no peer review, no receipt, no rollback. A third runs `chmod 777` against a production filesystem. Your SIEM stays green because these actions don’t generate the signals it was built to detect.
 
 **Logs tell you what happened. Clawdstrike stops it before it happens.**
 
 **Every decision is signed. Every receipt is non-repudiable. If it didn't get a signature, it didn't get permission.**
 
+Clawdstrike enforces policy at the tool boundary — fail-closed, with signed proof.
+
 ## What Clawdstrike Is
 
 Clawdstrike is a **fail-closed policy engine and cryptographic attestation runtime** for AI agent systems. It sits at the tool boundary, the exact point where an agent's intent becomes a real-world action, and enforces security policy with signed proof. From a single SDK install to a fleet of thousands of managed agents, the same engine, the same receipts, the same guarantees.
-
-Every action. Every agent. Every time. No exceptions.
 
 ```mermaid
 flowchart LR
@@ -104,8 +104,6 @@ Three layers, one system:
 | **Swarm Trace** | Prevention + hunting at the agent tool boundary. Hunt across signed receipts, kernel telemetry (Tetragon, auditd), and network flows (Hubble), build timelines, run natural-language and structured queries, correlate against detection rules, and ship OCSF-formatted findings straight into your SIEM. |
 
 ---
-
-## Why This Matters
 
 <table>
 <tr>
@@ -133,6 +131,8 @@ Three layers, one system:
 </td>
 </tr>
 </table>
+
+ **Every action. Every agent. Every time. No exceptions.**
 
 ---
 

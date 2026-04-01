@@ -25,20 +25,19 @@ import {
   TextInput,
   TextArea,
 } from "./shared-form-fields";
+import type { DetectionVisualPanelProps } from "@/lib/workbench/detection-workflow/shared-types";
+import { registerVisualPanel } from "@/lib/workbench/detection-workflow/visual-panels";
 
 
 // ---- Constants ----
 
-const ACCENT = "#e0915c";
+/** Default accent color for YARA panels (used by internal subcomponents). */
+const DEFAULT_ACCENT = "#e0915c";
 
 
 // ---- Types ----
 
-interface YaraVisualPanelProps {
-  source: string;
-  onSourceChange: (source: string) => void;
-  readOnly?: boolean;
-}
+type YaraVisualPanelProps = DetectionVisualPanelProps;
 
 interface ParsedYaraRule {
   ruleName: string;
@@ -521,7 +520,7 @@ function StringDisplay({ str }: { str: ParsedYaraString }) {
       <div className="flex items-center gap-2 flex-wrap">
         <span
           className="text-[11px] font-semibold font-mono"
-          style={{ color: ACCENT }}
+          style={{ color: DEFAULT_ACCENT }}
         >
           {str.variable}
         </span>
@@ -658,7 +657,7 @@ function ConditionDisplay({ condition }: { condition: string }) {
   return (
     <div
       className="border-l-2 pl-4 py-3 font-mono text-[12px] leading-[1.8] whitespace-pre-wrap"
-      style={{ borderLeftColor: ACCENT }}
+      style={{ borderLeftColor: DEFAULT_ACCENT }}
     >
       {tokens.map((tok, i) => (
         <span
@@ -679,7 +678,9 @@ export function YaraVisualPanel({
   source,
   onSourceChange,
   readOnly,
+  accentColor,
 }: YaraVisualPanelProps) {
+  const ACCENT = accentColor ?? "#e0915c";
   const rule = useMemo(() => parseYaraRule(source), [source]);
 
   const getMetaValue = useCallback(
@@ -887,3 +888,7 @@ export function YaraVisualPanel({
     </ScrollArea>
   );
 }
+
+// ---- Self-registration ----
+// Register YaraVisualPanel in the visual panel registry at module load.
+registerVisualPanel("yara_rule", YaraVisualPanel);

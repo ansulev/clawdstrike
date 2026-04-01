@@ -1,8 +1,7 @@
 import { useState, useCallback, useRef, useMemo, useEffect } from "react";
-import { useWorkbench } from "@/lib/workbench/multi-policy-store";
-import { useFleetConnection } from "@/lib/workbench/use-fleet-connection";
+import { useFleetConnection } from "@/features/fleet/use-fleet-connection";
 import { useToast } from "@/components/ui/toast";
-import { policyToYaml } from "@/lib/workbench/yaml-utils";
+import { policyToYaml } from "@/features/policy/yaml-utils";
 import { isDesktop, savePolicyFile } from "@/lib/tauri-bridge";
 import { cn } from "@/lib/utils";
 import { SubTabBar, type SubTab } from "../shared/sub-tab-bar";
@@ -21,6 +20,8 @@ import {
   IconRefresh,
 } from "@tabler/icons-react";
 import type { HushdEvent as BaseHushdEvent } from "@/lib/workbench/hushd-event-simulator";
+import { usePolicyTabsStore } from "@/features/policy/stores/policy-tabs-store";
+import { usePolicyEditStore } from "@/features/policy/stores/policy-edit-store";
 
 /** Extend HushdEvent with source tracking so the UI can distinguish live vs simulated */
 interface HushdEvent extends Omit<BaseHushdEvent, "verdict"> {
@@ -60,14 +61,16 @@ sys.exit(0 if report.all_passed else 1)
 `;
 
 function ScriptRunnerPanel() {
-  const { state } = useWorkbench();
+  const activeTabId = usePolicyTabsStore(s => s.activeTabId);
+  const activeTab = usePolicyTabsStore(s => s.tabs.find(t => t.id === s.activeTabId));
+  const editState = usePolicyEditStore(s => s.editStates.get(activeTabId));
   const { toast } = useToast();
   const [copied, setCopied] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const policyYaml = useMemo(
-    () => policyToYaml(state.activePolicy),
-    [state.activePolicy],
+    () => policyToYaml((editState?.policy ?? { version: "1.1.0", name: "", description: "", guards: {}, settings: {} })),
+    [(editState?.policy ?? { version: "1.1.0", name: "", description: "", guards: {}, settings: {} })],
   );
 
   const command = `python -m clawdstrike.testing run --policy policy.yaml --suite tests/policy-tests.yaml`;
@@ -96,7 +99,7 @@ function ScriptRunnerPanel() {
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url;
-        a.download = `${state.activePolicy.name || "policy"}.yaml`;
+        a.download = `${(editState?.policy ?? { version: "1.1.0", name: "", description: "", guards: {}, settings: {} }).name || "policy"}.yaml`;
         a.click();
         URL.revokeObjectURL(url);
         toast({
@@ -114,7 +117,7 @@ function ScriptRunnerPanel() {
     } finally {
       setSaving(false);
     }
-  }, [policyYaml, state.activePolicy.name, toast]);
+  }, [policyYaml, (editState?.policy ?? { version: "1.1.0", name: "", description: "", guards: {}, settings: {} }).name, toast]);
 
   return (
     <div className="h-full flex flex-col">
@@ -189,7 +192,7 @@ function ScriptRunnerPanel() {
           }}
         >
           <div className="text-[#6f7f9a]/60">$ python -m clawdstrike.testing run --policy policy.yaml</div>
-          <div className="text-[#6f7f9a]/40 mt-1">Running 6 scenarios against &quot;{state.activePolicy.name || "policy"}&quot;...</div>
+          <div className="text-[#6f7f9a]/40 mt-1">Running 6 scenarios against &quot;{(editState?.policy ?? { version: "1.1.0", name: "", description: "", guards: {}, settings: {} }).name || "policy"}&quot;...</div>
           <div className="mt-1">
             <span className="text-[#3dbf84]">PASS</span>
             <span className="text-[#6f7f9a]/60"> SSH key blocked</span>

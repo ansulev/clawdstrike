@@ -1,11 +1,12 @@
 import React from "react";
-import { beforeEach, describe, it, expect, vi } from "vitest";
-import { fireEvent, screen } from "@testing-library/react";
+import { afterEach, beforeEach, describe, it, expect, vi } from "vitest";
+import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { StatusBar } from "../status-bar";
 import { renderWithProviders } from "@/test/test-helpers";
 import { GUARD_REGISTRY } from "@/lib/workbench/guard-registry";
-import { useMultiPolicy, useWorkbench } from "@/lib/workbench/multi-policy-store";
+import { usePolicyTabs, useWorkbenchState } from "@/features/policy/hooks/use-policy-actions";
 import { isDesktop } from "@/lib/tauri-bridge";
+import { usePaneStore } from "@/features/panes/pane-store";
 
 vi.mock("@/lib/tauri-bridge", () => ({
   isDesktop: vi.fn(() => false),
@@ -16,8 +17,8 @@ vi.mock("@/lib/tauri-bridge", () => ({
 }));
 
 function DetectionStatusHarness() {
-  const { multiDispatch } = useMultiPolicy();
-  const { dispatch } = useWorkbench();
+  const { multiDispatch } = usePolicyTabs();
+  const { dispatch } = useWorkbenchState();
 
   return (
     <>
@@ -90,8 +91,45 @@ function DetectionStatusHarness() {
   );
 }
 
+function StatusBarVisibilityHarness() {
+  const { multiDispatch } = usePolicyTabs();
+  const [ready, setReady] = React.useState(false);
+
+  React.useEffect(() => {
+    multiDispatch({
+      type: "NEW_TAB",
+      fileType: "yara_rule",
+      yaml: `rule demo_rule {
+  strings:
+    $re = /a{2,3}/
+  condition:
+    $re
+}
+`,
+    });
+    setReady(true);
+  }, [multiDispatch]);
+
+  if (!ready) {
+    return null;
+  }
+
+  return (
+    <>
+      <button type="button" onClick={() => multiDispatch({ type: "NEW_TAB" })}>
+        open-policy
+      </button>
+      <StatusBar />
+    </>
+  );
+}
+
 beforeEach(() => {
   vi.mocked(isDesktop).mockReturnValue(false);
+});
+
+afterEach(() => {
+  usePaneStore.getState()._reset();
 });
 
 describe("StatusBar", () => {
@@ -127,6 +165,14 @@ describe("StatusBar", () => {
     renderWithProviders(<StatusBar />);
 
     expect(screen.getByText("unsaved")).toBeInTheDocument();
+  });
+
+  it("hides the unsaved file-path segment for unsaved file routes", () => {
+    usePaneStore.getState().syncRoute("/file/__new__/draft-policy");
+
+    renderWithProviders(<StatusBar />);
+
+    expect(screen.queryByText("unsaved")).not.toBeInTheDocument();
   });
 
   it("renders as a footer element", () => {
@@ -167,5 +213,17 @@ describe("StatusBar", () => {
 
     expect(screen.getByText("1 error")).toBeInTheDocument();
     expect(screen.getByText("YARA Rule")).toBeInTheDocument();
+  });
+
+  it("reveals segments that start empty once their content appears", async () => {
+    renderWithProviders(<StatusBarVisibilityHarness />);
+
+    expect(screen.queryByText("v1.2.0")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "open-policy" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("v1.2.0")).toBeInTheDocument();
+    });
   });
 });

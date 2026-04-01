@@ -320,7 +320,7 @@ export interface SentinelRuntimeBinding {
  * At least one of policyId or policyName must be set.
  */
 export interface PolicyRef {
-  /** SavedPolicy.id from multi-policy-store — for locally saved policies. */
+  /** SavedPolicy.id from policy-tabs-store — for locally saved policies. */
   policyId?: string;
   /** WorkbenchPolicy.name — for named resolution. */
   policyName?: string;

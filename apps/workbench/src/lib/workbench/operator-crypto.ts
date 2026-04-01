@@ -223,23 +223,24 @@ export async function verifyOwnershipProof(
 export async function exportKey(secretKeyHex: string, publicKeyHex: string, passphrase: string): Promise<string> {
   const salt = crypto.getRandomValues(new Uint8Array(16));
   const iv = crypto.getRandomValues(new Uint8Array(12));
+  const passphraseBytes = new TextEncoder().encode(passphrase);
 
   const passphraseKey = await crypto.subtle.importKey(
     "raw",
-    buf(new TextEncoder().encode(passphrase)),
+    passphraseBytes,
     "PBKDF2",
     false,
     ["deriveKey"],
   );
   const aesKey = await crypto.subtle.deriveKey(
-    { name: "PBKDF2", salt: buf(salt), iterations: 600_000, hash: "SHA-256" },
+    { name: "PBKDF2", salt, iterations: 600_000, hash: "SHA-256" },
     passphraseKey,
     { name: "AES-GCM", length: 256 },
     false,
     ["encrypt"],
   );
   const plaintext = new TextEncoder().encode(publicKeyHex + ":" + secretKeyHex);
-  const encrypted = await crypto.subtle.encrypt({ name: "AES-GCM", iv: buf(iv) }, aesKey, buf(plaintext));
+  const encrypted = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, aesKey, plaintext);
 
   const packed = new Uint8Array(salt.length + iv.length + encrypted.byteLength);
   packed.set(salt, 0);
@@ -262,23 +263,24 @@ export async function importKey(
   const salt = packed.slice(0, 16);
   const iv = packed.slice(16, 28);
   const ciphertext = packed.slice(28);
+  const passphraseBytes = new TextEncoder().encode(passphrase);
 
   const passphraseKey = await crypto.subtle.importKey(
     "raw",
-    buf(new TextEncoder().encode(passphrase)),
+    passphraseBytes,
     "PBKDF2",
     false,
     ["deriveKey"],
   );
   const aesKey = await crypto.subtle.deriveKey(
-    { name: "PBKDF2", salt: buf(salt), iterations: 600_000, hash: "SHA-256" },
+    { name: "PBKDF2", salt, iterations: 600_000, hash: "SHA-256" },
     passphraseKey,
     { name: "AES-GCM", length: 256 },
     false,
     ["decrypt"],
   );
 
-  const decrypted = await crypto.subtle.decrypt({ name: "AES-GCM", iv: buf(iv) }, aesKey, buf(ciphertext));
+  const decrypted = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, aesKey, ciphertext);
   const combined = new TextDecoder().decode(decrypted);
   const separatorIndex = combined.indexOf(":");
   if (separatorIndex === -1) {

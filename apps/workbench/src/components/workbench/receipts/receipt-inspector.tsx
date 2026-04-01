@@ -1,5 +1,4 @@
 import { useState, useCallback, useMemo, useEffect, useRef } from "react";
-import { useWorkbench } from "@/lib/workbench/multi-policy-store";
 import { usePersistedReceipts } from "@/lib/workbench/use-persisted-receipts";
 import type { Receipt, Verdict, GuardId, TestActionType } from "@/lib/workbench/types";
 import { GUARD_REGISTRY } from "@/lib/workbench/guard-registry";
@@ -16,17 +15,19 @@ import {
 import { signReceiptNative, signReceiptPersistentNative, simulateActionNative } from "@/lib/tauri-commands";
 import { isDesktop } from "@/lib/tauri-bridge";
 import { emitAuditEvent } from "@/lib/workbench/local-audit";
-import { useFleetConnection } from "@/lib/workbench/use-fleet-connection";
+import { useFleetConnection } from "@/features/fleet/use-fleet-connection";
 import {
   storeReceiptsBatch,
   fetchReceipts as apiFetchReceipts,
   type FleetReceipt,
-} from "@/lib/workbench/fleet-client";
+} from "@/features/fleet/fleet-client";
 import {
   verdictFromNativeGuardResult,
   verdictFromNativeSimulation,
 } from "@/lib/workbench/native-simulation";
 import { IconCloudUpload, IconCloudDownload, IconCircleDot, IconDots } from "@tabler/icons-react";
+import { usePolicyTabsStore } from "@/features/policy/stores/policy-tabs-store";
+import { usePolicyEditStore } from "@/features/policy/stores/policy-edit-store";
 
 function randomHex(len: number): string {
   const bytes = new Uint8Array(len / 2);
@@ -295,7 +296,9 @@ function writeSyncedIds(ids: Set<string>): void {
 }
 
 export function ReceiptInspector() {
-  const { state } = useWorkbench();
+  const activeTabId = usePolicyTabsStore(s => s.activeTabId);
+  const activeTab = usePolicyTabsStore(s => s.tabs.find(t => t.id === s.activeTabId));
+  const editState = usePolicyEditStore(s => s.editStates.get(activeTabId));
   const { receipts, setReceipts, clearReceipts } = usePersistedReceipts();
   const [jsonInput, setJsonInput] = useState("");
   const [importError, setImportError] = useState("");
@@ -492,8 +495,8 @@ export function ReceiptInspector() {
 
   const handleGenerate = useCallback(() => {
     const receipt = generateTestReceipt(
-      state.activePolicy.name,
-      state.activePolicy.guards as unknown as Record<string, unknown>
+      (editState?.policy ?? { version: "1.1.0", name: "", description: "", guards: {}, settings: {} }).name,
+      (editState?.policy ?? { version: "1.1.0", name: "", description: "", guards: {}, settings: {} }).guards as unknown as Record<string, unknown>
     );
     setReceipts((prev) => [receipt, ...prev]);
     emitAuditEvent({
@@ -502,7 +505,7 @@ export function ReceiptInspector() {
       summary: `Generated test receipt — ${receipt.verdict} (${receipt.guard})`,
       details: { receiptId: receipt.id, verdict: receipt.verdict, guard: receipt.guard, policyName: receipt.policyName },
     });
-  }, [state.activePolicy]);
+  }, [(editState?.policy ?? { version: "1.1.0", name: "", description: "", guards: {}, settings: {} })]);
 
   /**
    * Generate a real receipt using the native Rust policy engine + Ed25519 signing.
@@ -525,8 +528,8 @@ export function ReceiptInspector() {
     setGenerating(true);
     try {
       const sample = SAMPLE_ACTIONS[selectedAction];
-      const policyYaml = state.yaml;
-      const policyName = state.activePolicy.name;
+      const policyYaml = (editState?.yaml ?? "");
+      const policyName = (editState?.policy ?? { version: "1.1.0", name: "", description: "", guards: {}, settings: {} }).name;
 
       // Step 1: Simulate the action against the current policy via the Rust engine
       const simResp = await simulateActionNative(
@@ -660,7 +663,7 @@ export function ReceiptInspector() {
     } finally {
       setGenerating(false);
     }
-  }, [state.yaml, state.activePolicy.name, selectedAction, handleGenerate]);
+  }, [(editState?.yaml ?? ""), (editState?.policy ?? { version: "1.1.0", name: "", description: "", guards: {}, settings: {} }).name, selectedAction, handleGenerate]);
 
   const handleClear = useCallback(() => {
     clearReceipts();
@@ -675,12 +678,12 @@ export function ReceiptInspector() {
     setSigning(true);
     try {
       // Generate a SHA-256 content hash from the current policy YAML
-      const yamlBytes = new TextEncoder().encode(state.yaml);
+      const yamlBytes = new TextEncoder().encode((editState?.yaml ?? ""));
       const hashBuffer = await crypto.subtle.digest("SHA-256", yamlBytes.buffer as ArrayBuffer);
       const hashArray = Array.from(new Uint8Array(hashBuffer));
       const contentHash = hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
 
-      const verdictPassed = state.validation.valid && state.validation.errors.length === 0;
+      const verdictPassed = (editState?.validation ?? { valid: true, errors: [], warnings: [] }).valid && (editState?.validation ?? { valid: true, errors: [], warnings: [] }).errors.length === 0;
       // Prefer persistent key signing; fall back to ephemeral.
       const resp =
         (await signReceiptPersistentNative(contentHash, verdictPassed)) ??
@@ -717,7 +720,7 @@ export function ReceiptInspector() {
           timestamp: signedReceiptTimestamp(resp.signed_receipt) ?? new Date().toISOString(),
           verdict: verdictPassed ? "allow" : "deny",
           guard: "policy_validation",
-          policyName: state.activePolicy.name,
+          policyName: (editState?.policy ?? { version: "1.1.0", name: "", description: "", guards: {}, settings: {} }).name,
           action: { type: "file_access", target: "policy.yaml" },
           evidence: {
             content_hash: contentHash,
@@ -754,7 +757,7 @@ export function ReceiptInspector() {
     } finally {
       setSigning(false);
     }
-  }, [state.yaml, state.validation, state.activePolicy.name]);
+  }, [(editState?.yaml ?? ""), (editState?.validation ?? { valid: true, errors: [], warnings: [] }), (editState?.policy ?? { version: "1.1.0", name: "", description: "", guards: {}, settings: {} }).name]);
 
   // Get unique guard names for the guard filter
   const guardNames = useMemo(() => {

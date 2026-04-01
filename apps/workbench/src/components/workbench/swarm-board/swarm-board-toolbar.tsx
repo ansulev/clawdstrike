@@ -32,8 +32,8 @@ import {
   MAX_ACTIVE_TERMINALS,
   type SpawnSessionOptions,
   type SpawnClaudeSessionOptions,
-} from "@/lib/workbench/swarm-board-store";
-import { useTerminalSessions } from "@/lib/workbench/use-terminal-sessions";
+} from "@/features/swarm/stores/swarm-board-store";
+import { useTerminalSessionsFromBoard } from "@/lib/workbench/use-terminal-sessions";
 
 // ---------------------------------------------------------------------------
 // Layout constants
@@ -57,7 +57,8 @@ const LAYOUT_SETTLE_MS = 50;
 // ---------------------------------------------------------------------------
 
 export function SwarmBoardToolbar() {
-  const { addNode, clearBoard, state, dispatch } = useSwarmBoard();
+  const board = useSwarmBoard();
+  const { addNode, clearBoard, state, dispatch } = board;
   const {
     spawnSession,
     spawnClaudeSession,
@@ -65,7 +66,7 @@ export function SwarmBoardToolbar() {
     activeSessionCount,
     canSpawnMore,
     hasRepoRoot,
-  } = useTerminalSessions();
+  } = useTerminalSessionsFromBoard(board);
   const reactFlow = useReactFlow();
   const [spawning, setSpawning] = useState(false);
   const [optionsOpen, setOptionsOpen] = useState(false);

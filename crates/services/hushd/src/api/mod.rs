@@ -12,6 +12,7 @@ pub mod me;
 pub mod metrics;
 pub mod policy;
 pub mod policy_scoping;
+pub mod presence;
 pub mod rbac;
 pub mod saml;
 pub mod session;
@@ -57,6 +58,7 @@ pub use policy_scoping::{
     CreateAssignmentRequest, CreateScopedPolicyRequest, ListAssignmentsResponse,
     ListScopedPoliciesResponse, ResolvePolicyResponse, UpdateScopedPolicyRequest,
 };
+pub use presence::CreatePresenceTicketResponse;
 pub use rbac::{
     CreateRoleAssignmentResponse, DeleteRoleAssignmentResponse, DeleteRoleResponse,
     GetRoleResponse, ListRoleAssignmentsResponse, ListRolesResponse, UpsertRoleResponse,
@@ -371,6 +373,10 @@ pub fn create_router(state: AppState) -> Router {
         )
         .layer(middleware::from_fn_with_state(state.clone(), require_auth));
 
+    let presence_ticket_routes = Router::new()
+        .route("/api/v1/presence/tickets", post(presence::create_ticket))
+        .layer(middleware::from_fn_with_state(state.clone(), require_auth));
+
     // Admin routes - require auth + admin scope
     let admin_routes = Router::new()
         .route("/api/v1/policy", put(policy::update_policy))
@@ -449,15 +455,21 @@ pub fn create_router(state: AppState) -> Router {
         .route("/api/v1/swarm/blobs/pin", post(swarm_hub::pin_swarm_blob))
         .layer(middleware::from_fn_with_state(state.clone(), require_auth));
 
+    // WebSocket routes — auth handled internally via query param because the
+    // browser WebSocket constructor cannot set custom HTTP headers.
+    let ws_routes = Router::new().route("/api/v1/presence", get(presence::ws_handler));
+
     // Note: Rate limiting is applied to all routes except /health (handled in middleware).
     // CORS is applied only if enabled in config.
     let max_body = state.config.max_request_body_bytes;
 
     let app = Router::new()
         .merge(public_routes)
+        .merge(ws_routes)
         .nest("/v1", v1_routes)
         .merge(check_routes)
         .merge(read_routes)
+        .merge(presence_ticket_routes)
         .merge(admin_routes)
         .layer(middleware::from_fn_with_state(
             state.rate_limit.clone(),

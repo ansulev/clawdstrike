@@ -1,6 +1,24 @@
-import type { GuardMeta, GuardId } from "./types";
+import type { GuardMeta } from "./types";
 
-export const GUARD_REGISTRY: GuardMeta[] = [
+// ---- Internal storage ----
+
+/** The mutable Map backing the guard registry. Keyed by guard ID. */
+const guardMap = new Map<string, GuardMeta>();
+
+/** Mutable category entries. Built-in categories are seeded below; plugins add more. */
+const categoryEntries: Array<{ id: string; label: string; guards: string[] }> = [
+  { id: "filesystem", label: "Filesystem", guards: ["forbidden_path", "path_allowlist"] },
+  { id: "network", label: "Network", guards: ["egress_allowlist"] },
+  { id: "content", label: "Content", guards: ["secret_leak", "patch_integrity"] },
+  { id: "tools", label: "Tools", guards: ["shell_command", "mcp_tool"] },
+  { id: "detection", label: "Detection", guards: ["prompt_injection", "jailbreak", "spider_sense"] },
+  { id: "cua", label: "Computer Use", guards: ["computer_use", "remote_desktop_side_channel", "input_injection_capability"] },
+];
+
+// ---- Built-in guard definitions (seed data) ----
+
+/** The 13 built-in guard definitions. Used to seed the registry at module load. */
+export const BUILTIN_GUARDS: readonly GuardMeta[] = [
   {
     id: "forbidden_path",
     name: "Forbidden Path",
@@ -214,25 +232,162 @@ export const GUARD_REGISTRY: GuardMeta[] = [
       { key: "pattern_db_path", label: "Trustprint Profile", type: "select", defaultValue: "builtin:s2bench-v1", options: [{ value: "builtin:s2bench-v1", label: "Trustprint Baseline (s2bench-v1)" }] },
     ],
   },
-];
+] as const;
 
-export function getGuardMeta(id: string): GuardMeta | undefined {
-  return GUARD_REGISTRY.find((g) => g.id === id);
+// ---- Seed built-in guards into the map ----
+
+for (const guard of BUILTIN_GUARDS) {
+  guardMap.set(guard.id, guard as GuardMeta);
 }
 
-/** All guard IDs in canonical order, derived from the registry. */
-export const ALL_GUARD_IDS: GuardId[] = GUARD_REGISTRY.map((g) => g.id as GuardId);
+// ---- Registration API ----
 
-/** Guard ID to display name mapping, derived from the registry. */
-export const GUARD_DISPLAY_NAMES: Record<GuardId, string> = Object.fromEntries(
-  GUARD_REGISTRY.map((g) => [g.id, g.name]),
-) as Record<GuardId, string>;
+/**
+ * Register a guard in the registry. Returns a dispose function to unregister.
+ * Throws if a guard with the same ID is already registered.
+ */
+export function registerGuard(meta: GuardMeta): () => void {
+  if (guardMap.has(meta.id)) {
+    throw new Error(`Guard "${meta.id}" is already registered`);
+  }
+  guardMap.set(meta.id, meta);
 
-export const GUARD_CATEGORIES = [
-  { id: "filesystem" as const, label: "Filesystem", guards: ["forbidden_path", "path_allowlist"] },
-  { id: "network" as const, label: "Network", guards: ["egress_allowlist"] },
-  { id: "content" as const, label: "Content", guards: ["secret_leak", "patch_integrity"] },
-  { id: "tools" as const, label: "Tools", guards: ["shell_command", "mcp_tool"] },
-  { id: "detection" as const, label: "Detection", guards: ["prompt_injection", "jailbreak", "spider_sense"] },
-  { id: "cua" as const, label: "Computer Use", guards: ["computer_use", "remote_desktop_side_channel", "input_injection_capability"] },
-];
+  // Auto-add to its category (create category if it doesn't exist)
+  let cat = categoryEntries.find((c) => c.id === meta.category);
+  if (!cat) {
+    cat = { id: meta.category, label: meta.category, guards: [] };
+    categoryEntries.push(cat);
+  }
+  if (!cat.guards.includes(meta.id)) {
+    cat.guards.push(meta.id);
+  }
+
+  return () => {
+    guardMap.delete(meta.id);
+    // Remove from category
+    const catEntry = categoryEntries.find((c) => c.id === meta.category);
+    if (catEntry) {
+      const idx = catEntry.guards.indexOf(meta.id);
+      if (idx !== -1) catEntry.guards.splice(idx, 1);
+      // Remove empty non-built-in categories
+      if (catEntry.guards.length === 0 && !["filesystem", "network", "content", "tools", "detection", "cua"].includes(catEntry.id)) {
+        const catIdx = categoryEntries.indexOf(catEntry);
+        if (catIdx !== -1) categoryEntries.splice(catIdx, 1);
+      }
+    }
+  };
+}
+
+/** Unregister a guard by ID. No-op if not found. */
+export function unregisterGuard(id: string): void {
+  const meta = guardMap.get(id);
+  guardMap.delete(id);
+  if (meta) {
+    const catEntry = categoryEntries.find((c) => c.id === meta.category);
+    if (catEntry) {
+      const idx = catEntry.guards.indexOf(id);
+      if (idx !== -1) catEntry.guards.splice(idx, 1);
+      if (catEntry.guards.length === 0 && !["filesystem", "network", "content", "tools", "detection", "cua"].includes(catEntry.id)) {
+        const catIdx = categoryEntries.indexOf(catEntry);
+        if (catIdx !== -1) categoryEntries.splice(catIdx, 1);
+      }
+    }
+  }
+}
+
+// ---- Query API ----
+
+/** Returns all registered guards as an array. */
+export function getAllGuards(): GuardMeta[] {
+  return Array.from(guardMap.values());
+}
+
+/** Returns guard metadata by ID, or undefined if not registered. */
+export function getGuardMeta(id: string): GuardMeta | undefined {
+  return guardMap.get(id);
+}
+
+/** Returns all registered guard IDs. */
+export function getAllGuardIds(): string[] {
+  return Array.from(guardMap.keys());
+}
+
+/** Returns display name map for all registered guards. */
+export function getGuardDisplayNames(): Record<string, string> {
+  return Object.fromEntries(Array.from(guardMap.values()).map((g) => [g.id, g.name]));
+}
+
+/** Returns a live reference to the category entries array. */
+export function getGuardCategories(): Array<{ id: string; label: string; guards: string[] }> {
+  return categoryEntries;
+}
+
+/**
+ * Register a new guard category. Returns a dispose function to unregister.
+ * If the category already exists, returns a no-op dispose.
+ */
+export function registerGuardCategory(category: { id: string; label: string }): () => void {
+  const existing = categoryEntries.find((c) => c.id === category.id);
+  if (existing) {
+    return () => {};
+  }
+  categoryEntries.push({ id: category.id, label: category.label, guards: [] });
+  return () => {
+    const idx = categoryEntries.findIndex((c) => c.id === category.id);
+    if (idx !== -1 && categoryEntries[idx].guards.length === 0) {
+      categoryEntries.splice(idx, 1);
+    }
+  };
+}
+
+// ---- Backward-compatible exports (Proxy-based live views) ----
+
+function createArrayProxy<T>(getArray: () => T[]): T[] {
+  return new Proxy([] as T[], {
+    get(_target, prop, receiver) {
+      const arr = getArray();
+      if (prop === Symbol.iterator) return arr[Symbol.iterator].bind(arr);
+      if (prop === "length") return arr.length;
+      const value = Reflect.get(arr, prop, receiver);
+      return typeof value === "function" ? value.bind(arr) : value;
+    },
+    has(_target, prop) {
+      const arr = getArray();
+      return Reflect.has(arr, prop);
+    },
+  });
+}
+
+/**
+ * Live view of all registered guards. Supports .filter(), .map(), .find(), .length, etc.
+ * Consumers should prefer getAllGuards() for new code.
+ */
+export const GUARD_REGISTRY: GuardMeta[] = createArrayProxy(() => Array.from(guardMap.values()));
+
+/** All registered guard IDs, live. Backward-compatible export. */
+export const ALL_GUARD_IDS: string[] = createArrayProxy(() => Array.from(guardMap.keys()));
+
+/** Guard ID to display name mapping. Live proxy. */
+export const GUARD_DISPLAY_NAMES: Record<string, string> = new Proxy({} as Record<string, string>, {
+  get(_target, prop) {
+    if (typeof prop === "symbol") return undefined;
+    const guard = guardMap.get(prop);
+    return guard ? guard.name : undefined;
+  },
+  has(_target, prop) {
+    if (typeof prop === "symbol") return false;
+    return guardMap.has(prop);
+  },
+  ownKeys() {
+    return Array.from(guardMap.keys());
+  },
+  getOwnPropertyDescriptor(_target, prop) {
+    if (typeof prop === "symbol") return undefined;
+    const guard = guardMap.get(prop);
+    if (!guard) return undefined;
+    return { configurable: true, enumerable: true, value: guard.name };
+  },
+});
+
+/** Live view of guard categories. Backward-compatible export. */
+export const GUARD_CATEGORIES: Array<{ id: string; label: string; guards: string[] }> = createArrayProxy(() => categoryEntries);

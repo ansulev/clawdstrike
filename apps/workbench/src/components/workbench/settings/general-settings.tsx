@@ -1,4 +1,4 @@
-import { useGeneralSettings, type FontSize, type AutosaveInterval } from "@/lib/workbench/use-general-settings";
+import { useGeneralSettings, type FontSize, type AutosaveInterval } from "@/features/settings/use-general-settings";
 import { IconPalette, IconTypography, IconDeviceFloppy, IconHash } from "@tabler/icons-react";
 import { cn } from "@/lib/utils";
 

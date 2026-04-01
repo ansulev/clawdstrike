@@ -4,8 +4,8 @@ import {
   checkForUpdates,
   getBaseRulesetYaml,
 } from "@/lib/workbench/catalog-deps";
-import { BUILTIN_RULESETS } from "@/lib/workbench/builtin-rulesets";
-import type { CatalogEntry } from "@/lib/workbench/policy-catalog";
+import { BUILTIN_RULESETS } from "@/features/policy/builtin-rulesets";
+import type { CatalogEntry } from "@/features/policy/policy-catalog";
 import { cn } from "@/lib/utils";
 import {
   IconGitBranch,

@@ -2,8 +2,6 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 import { FindingsIntelPage } from "../findings-intel-page";
-import { FindingProvider } from "@/lib/workbench/finding-store";
-import { IntelProvider } from "@/lib/workbench/intel-store";
 import type { Finding } from "@/lib/workbench/finding-engine";
 
 const FINDING_STORAGE_KEY = "clawdstrike_workbench_findings";
@@ -68,11 +66,7 @@ describe("FindingsIntelPage", () => {
 
     render(
       <MemoryRouter initialEntries={["/findings"]}>
-        <FindingProvider>
-          <IntelProvider>
-            <FindingsIntelPage />
-          </IntelProvider>
-        </FindingProvider>
+        <FindingsIntelPage />
       </MemoryRouter>,
     );
 

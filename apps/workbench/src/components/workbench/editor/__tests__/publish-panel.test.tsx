@@ -49,7 +49,7 @@ vi.mock("@/lib/workbench/detection-workflow/use-publication", () => ({
 
 // ---- Mock fleet connection ----
 
-vi.mock("@/lib/workbench/use-fleet-connection", () => ({
+vi.mock("@/features/fleet/use-fleet-connection", () => ({
   useFleetConnection: () => ({
     connection: { connected: false },
     agents: [],
@@ -59,7 +59,7 @@ vi.mock("@/lib/workbench/use-fleet-connection", () => ({
 
 // ---- Mock fleet client ----
 
-vi.mock("@/lib/workbench/fleet-client", () => ({
+vi.mock("@/features/fleet/fleet-client", () => ({
   deployPolicy: vi.fn(),
 }));
 

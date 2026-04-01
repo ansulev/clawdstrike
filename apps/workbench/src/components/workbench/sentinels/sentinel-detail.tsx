@@ -23,7 +23,7 @@ import {
 } from "@tabler/icons-react";
 import { cn } from "@/lib/utils";
 import { SubTabBar, type SubTab } from "../shared/sub-tab-bar";
-import { useOperator } from "@/lib/workbench/operator-store";
+import { useOperator } from "@/features/operator/stores/operator-store";
 import {
   activateSentinel,
   pauseSentinel,

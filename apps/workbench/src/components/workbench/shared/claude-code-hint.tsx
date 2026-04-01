@@ -1,7 +1,7 @@
 import { useState, useCallback } from "react";
 import { IconTerminal, IconCopy, IconCheck, IconX } from "@tabler/icons-react";
 import { cn } from "@/lib/utils";
-import { useHintSettingsSafe, type HintId, DEFAULT_HINTS } from "@/lib/workbench/use-hint-settings";
+import { useHintSettingsSafe, type HintId, DEFAULT_HINTS } from "@/features/settings/use-hint-settings";
 
 interface ClaudeCodeHintProps {
   hintId?: HintId;

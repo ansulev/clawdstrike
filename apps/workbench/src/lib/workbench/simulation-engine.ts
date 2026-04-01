@@ -828,7 +828,7 @@ function stubPathAllowlist(
       verdict: "deny",
       message: `No allowed paths configured for ${actionType} — fail-closed`,
       evidence: { path, actionType },
-      engine: "stubbed",
+      engine: "desktop_only",
     };
   }
 
@@ -839,7 +839,7 @@ function stubPathAllowlist(
       verdict: "allow",
       message: `Action type "${actionType}" not subject to path allowlist`,
       evidence: { actionType },
-      engine: "stubbed",
+      engine: "desktop_only",
     };
   }
 
@@ -852,7 +852,7 @@ function stubPathAllowlist(
         verdict: "allow",
         message: `Path "${path}" matched allowlist pattern "${allowed}"`,
         evidence: { path, matchedPattern: allowed },
-        engine: "stubbed",
+        engine: "desktop_only",
       };
     }
   }
@@ -863,124 +863,35 @@ function stubPathAllowlist(
     verdict: "deny",
     message: `Path "${path}" not in allowlist — denied (basic matching; run in desktop mode for full glob evaluation)`,
     evidence: { path, allowedPaths },
-    engine: "stubbed",
+    engine: "desktop_only",
   };
 }
 
-/** Obvious threat keywords for the Spider Sense heuristic fallback. */
-const SPIDER_SENSE_THREAT_KEYWORDS = [
-  "ignore previous",
-  "ignore all instructions",
-  "jailbreak",
-  "system prompt",
-  "override",
-  "unlimited mode",
-  "no restrictions",
-  "bypass safety",
-  "bypass security",
-  "reveal your instructions",
-  "act as root",
-  "sudo rm",
-  "exfiltrate",
-  "data exfiltration",
-  "reverse shell",
-  "disable firewall",
-  "drop table",
-  "eval(atob(",
-];
-
-/** Ambiguous / lower-confidence patterns for the Spider Sense heuristic fallback. */
-const SPIDER_SENSE_AMBIGUOUS_KEYWORDS = [
-  "pretend",
-  "hypothetical",
-  "for educational purposes",
-  "roleplay",
-  "developer mode",
-  "act as",
-  "simulate",
-];
-
 function stubSpiderSense(
   _config: SpiderSenseConfig,
-  scenario: TestScenario,
+  _scenario: TestScenario,
 ): GuardSimResult {
-  // Extract text from the scenario payload for keyword screening
-  const text = (
-    (scenario.payload.text as string) ||
-    (scenario.payload.command as string) ||
-    (scenario.payload.content as string) ||
-    ""
-  ).toLowerCase();
-
-  if (!text) {
-    return {
-      guardId: "spider_sense",
-      guardName: "Spider Sense",
-      verdict: "allow",
-      message: "No text content to screen (heuristic fallback — run in desktop mode for full embedding-based evaluation)",
-      evidence: { note: "Heuristic keyword fallback; embedding-based cosine similarity requires runtime" },
-      engine: "stubbed",
-    };
-  }
-
-  const matchedThreats: string[] = [];
-  for (const kw of SPIDER_SENSE_THREAT_KEYWORDS) {
-    if (text.includes(kw)) {
-      matchedThreats.push(kw);
-    }
-  }
-
-  const matchedAmbiguous: string[] = [];
-  for (const kw of SPIDER_SENSE_AMBIGUOUS_KEYWORDS) {
-    if (text.includes(kw)) {
-      matchedAmbiguous.push(kw);
-    }
-  }
-
-  if (matchedThreats.length > 0) {
-    return {
-      guardId: "spider_sense",
-      guardName: "Spider Sense",
-      verdict: "deny",
-      message: `Heuristic: ${matchedThreats.length} threat keyword(s) detected — "${matchedThreats.join('", "')}" (heuristic fallback; run in desktop mode for full evaluation)`,
-      evidence: { matchedThreats, matchedAmbiguous, engine: "heuristic_keyword_fallback" },
-      engine: "stubbed",
-    };
-  }
-
-  if (matchedAmbiguous.length > 0) {
-    return {
-      guardId: "spider_sense",
-      guardName: "Spider Sense",
-      verdict: "warn",
-      message: `Heuristic: ${matchedAmbiguous.length} ambiguous keyword(s) detected — "${matchedAmbiguous.join('", "')}" (heuristic fallback; run in desktop mode for full evaluation)`,
-      evidence: { matchedThreats, matchedAmbiguous, engine: "heuristic_keyword_fallback" },
-      engine: "stubbed",
-    };
-  }
-
   return {
     guardId: "spider_sense",
     guardName: "Spider Sense",
     verdict: "allow",
-    message: "No threat keywords detected (heuristic fallback — run in desktop mode for full embedding-based evaluation)",
-    evidence: { matchedThreats: [], matchedAmbiguous: [], engine: "heuristic_keyword_fallback" },
-    engine: "stubbed",
+    engine: "desktop_only",
+    message: "This guard requires the desktop runtime — run via Tauri or CLI for full evaluation",
+    evidence: { note: "Embedding-based cosine similarity and hierarchical threat screening require native runtime" },
   };
 }
 
 function stubComputerUse(
-  config: ComputerUseConfig,
+  _config: ComputerUseConfig,
   _scenario: TestScenario,
 ): GuardSimResult {
-  const mode = config.mode || "guardrail";
   return {
     guardId: "computer_use",
     guardName: "Computer Use",
     verdict: "allow",
-    message: `CUA guard requires active desktop session context (mode: ${mode}) — run in desktop mode for real enforcement`,
-    evidence: { note: "Requires CUA session state and screen capture context", mode, allowed_actions: config.allowed_actions },
-    engine: "stubbed",
+    engine: "desktop_only",
+    message: "This guard requires the desktop runtime — run via Tauri or CLI for full evaluation",
+    evidence: { note: "Requires CUA session state and screen capture context" },
   };
 }
 
@@ -992,9 +903,9 @@ function stubRemoteDesktopSideChannel(
     guardId: "remote_desktop_side_channel",
     guardName: "Remote Desktop Side-Channel",
     verdict: "allow",
-    message: "Side-channel guard requires active RDP/VNC session — run in desktop mode for real enforcement",
+    engine: "desktop_only",
+    message: "This guard requires the desktop runtime — run via Tauri or CLI for full evaluation",
     evidence: { note: "Requires live session state for clipboard, audio, drive mapping checks" },
-    engine: "stubbed",
   };
 }
 
@@ -1006,9 +917,9 @@ function stubInputInjectionCapability(
     guardId: "input_injection_capability",
     guardName: "Input Injection",
     verdict: "allow",
-    message: "Input injection guard requires CUA runtime context — run in desktop mode for real enforcement",
+    engine: "desktop_only",
+    message: "This guard requires the desktop runtime — run via Tauri or CLI for full evaluation",
     evidence: { note: "Requires active input device enumeration and capability probing" },
-    engine: "stubbed",
   };
 }
 

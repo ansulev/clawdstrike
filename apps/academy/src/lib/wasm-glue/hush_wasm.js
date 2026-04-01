@@ -25,7 +25,6 @@ export class WasmInstructionHierarchyEnforcer {
             var ptr2 = ret[0];
             var len2 = ret[1];
             if (ret[3]) {
-                ptr2 = 0;
                 throw takeFromExternrefTable0(ret[2]);
             }
             deferred3_0 = ptr2;
@@ -80,7 +79,6 @@ export class WasmJailbreakDetector {
             var ptr3 = ret[0];
             var len3 = ret[1];
             if (ret[3]) {
-                ptr3 = 0;
                 throw takeFromExternrefTable0(ret[2]);
             }
             deferred4_0 = ptr3;
@@ -146,7 +144,6 @@ export class WasmOutputSanitizer {
             var ptr2 = ret[0];
             var len2 = ret[1];
             if (ret[3]) {
-                ptr2 = 0; len2 = 0;
                 throw takeFromExternrefTable0(ret[2]);
             }
             deferred3_0 = ptr2;
@@ -260,7 +257,6 @@ export class WasmSpiderSenseDetector {
             var ptr2 = ret[0];
             var len2 = ret[1];
             if (ret[3]) {
-                ptr2 = 0; len2 = 0;
                 throw takeFromExternrefTable0(ret[2]);
             }
             deferred3_0 = ptr2;
@@ -287,7 +283,6 @@ export function canonicalize_json(json_str) {
         var ptr2 = ret[0];
         var len2 = ret[1];
         if (ret[3]) {
-            ptr2 = 0; len2 = 0;
             throw takeFromExternrefTable0(ret[2]);
         }
         deferred3_0 = ptr2;
@@ -319,7 +314,6 @@ export function compute_merkle_root(leaf_hashes_json) {
         var ptr2 = ret[0];
         var len2 = ret[1];
         if (ret[3]) {
-            ptr2 = 0; len2 = 0;
             throw takeFromExternrefTable0(ret[2]);
         }
         deferred3_0 = ptr2;
@@ -345,7 +339,6 @@ export function detect_prompt_injection(text, max_scan_bytes) {
         var ptr2 = ret[0];
         var len2 = ret[1];
         if (ret[3]) {
-            ptr2 = 0; len2 = 0;
             throw takeFromExternrefTable0(ret[2]);
         }
         deferred3_0 = ptr2;
@@ -395,7 +388,6 @@ export function generate_merkle_proof(leaf_hashes_json, leaf_index) {
         var ptr2 = ret[0];
         var len2 = ret[1];
         if (ret[3]) {
-            ptr2 = 0; len2 = 0;
             throw takeFromExternrefTable0(ret[2]);
         }
         deferred3_0 = ptr2;
@@ -428,7 +420,6 @@ export function get_canonical_json(receipt_json) {
         var ptr2 = ret[0];
         var len2 = ret[1];
         if (ret[3]) {
-            ptr2 = 0; len2 = 0;
             throw takeFromExternrefTable0(ret[2]);
         }
         deferred3_0 = ptr2;
@@ -510,7 +501,6 @@ export function hash_receipt(receipt_json, algorithm) {
         var ptr3 = ret[0];
         var len3 = ret[1];
         if (ret[3]) {
-            ptr3 = 0; len3 = 0;
             throw takeFromExternrefTable0(ret[2]);
         }
         deferred4_0 = ptr3;
@@ -683,7 +673,6 @@ export function public_key_from_private(private_key_hex) {
         var ptr2 = ret[0];
         var len2 = ret[1];
         if (ret[3]) {
-            ptr2 = 0; len2 = 0;
             throw takeFromExternrefTable0(ret[2]);
         }
         deferred3_0 = ptr2;
@@ -719,7 +708,6 @@ export function sign_ed25519(private_key_hex, message) {
         var ptr3 = ret[0];
         var len3 = ret[1];
         if (ret[3]) {
-            ptr3 = 0; len3 = 0;
             throw takeFromExternrefTable0(ret[2]);
         }
         deferred4_0 = ptr3;

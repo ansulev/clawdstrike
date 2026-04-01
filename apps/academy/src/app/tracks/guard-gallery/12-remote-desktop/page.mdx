@@ -96,7 +96,7 @@ guards:
 Select a remote desktop channel below to see how the guard evaluates it. Try enabled
 channels (audio, printing) and disabled ones (clipboard, drive mapping).
 
-<GuardPlayground guard="remote_desktop_side_channel" actionType="custom" customActionType="remote.clipboard" placeholder="Enter a remote desktop channel (e.g., remote.clipboard)..." defaultInput="remote.clipboard" examples={[{label: "Clipboard", value: "remote.clipboard"}, {label: "File transfer", value: "remote.file_transfer"}, {label: "Session share", value: "remote.session_share"}, {label: "Audio", value: "remote.audio"}]} />
+<GuardPlayground guard="remote_desktop_side_channel" actionType="custom" customActionType="remote_desktop" placeholder="Enter a remote desktop channel (e.g., remote.clipboard)..." defaultInput="remote.clipboard" examples={[{label: "Clipboard", value: "remote.clipboard"}, {label: "File transfer", value: "remote.file_transfer"}, {label: "Session share", value: "remote.session_share"}, {label: "Audio", value: "remote.audio"}]} />
 
 ## Bypass Challenges
 
@@ -109,6 +109,7 @@ channels (audio, printing) and disabled ones (clipboard, drive mapping).
   hint="Check which channels are enabled in the default config. Audio and printing are typically enabled."
   challengeId="guard-gallery/12-remote-desktop/easy"
   actionType="custom"
+  customActionType="remote_desktop"
   placeholder="Enter a remote desktop channel..."
 />
 
@@ -121,6 +122,7 @@ channels (audio, printing) and disabled ones (clipboard, drive mapping).
   hint="remote.session.connect is NOT a side channel -- it's a session management action handled by the ComputerUseGuard. The is_remote_side_channel_candidate() function excludes it, so this guard doesn't evaluate it at all. It returns ALLOW because it's not this guard's jurisdiction."
   challengeId="guard-gallery/12-remote-desktop/hard"
   actionType="custom"
+  customActionType="remote_desktop"
   placeholder="Enter a remote desktop action..."
 />
 

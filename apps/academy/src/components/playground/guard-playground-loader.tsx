@@ -56,10 +56,19 @@ export function GuardPlayground({
     return <PromptInjectionPlayground />;
   }
 
-  // Other WASM guards (jailbreak, spider_sense, etc.) share the text input
-  // pattern and WASM evaluation -- reuse PromptInjectionPlayground for now
+  // Other WASM guards (jailbreak, spider_sense, etc.) use the generic playground
+  // with actionType="text" so evaluateGuard dispatches to the correct WASM detector
   if (WASM_GUARDS.has(guard)) {
-    return <PromptInjectionPlayground />;
+    return (
+      <GenericGuardPlayground
+        guard={guard}
+        actionType="text"
+        placeholder={placeholder}
+        defaultInput={defaultInput}
+        config={defaultConfig}
+        examples={examples}
+      />
+    );
   }
 
   // TS-simulated guards use the generic playground

@@ -25,6 +25,8 @@ interface BypassChallengeProps {
   config?: Record<string, unknown>;
   /** Action type for this guard (e.g., 'file_access', 'shell_command') */
   actionType: string;
+  /** For actionType="custom": the fixed action_type to send (e.g., 'computer_use', 'remote_desktop') */
+  customActionType?: string;
   /** Input placeholder text */
   placeholder?: string;
 }
@@ -34,7 +36,7 @@ type ChallengeStatus = 'idle' | 'evaluating' | 'success' | 'failure';
 /**
  * Build a GuardAction from the action type and user input value.
  */
-function buildAction(actionType: string, inputValue: string): GuardAction {
+function buildAction(actionType: string, inputValue: string, customActionType?: string): GuardAction {
   switch (actionType) {
     case 'file_access':
       return { type: 'file_access', path: inputValue };
@@ -51,7 +53,7 @@ function buildAction(actionType: string, inputValue: string): GuardAction {
     case 'text':
       return { type: 'text', text: inputValue };
     default:
-      return { type: 'custom', action_type: actionType, data: { value: inputValue } };
+      return { type: 'custom', action_type: customActionType ?? actionType, data: { value: inputValue, action: inputValue, channel: inputValue } };
   }
 }
 
@@ -63,6 +65,7 @@ export function BypassChallenge({
   challengeId,
   config,
   actionType,
+  customActionType,
   placeholder,
 }: BypassChallengeProps) {
   const [inputValue, setInputValue] = useState('');
@@ -89,7 +92,7 @@ export function BypassChallenge({
     setShowHint(false);
 
     try {
-      const action = buildAction(actionType, inputValue);
+      const action = buildAction(actionType, inputValue, customActionType);
       const result = await evaluateGuard(guard as GuardName, config ?? {}, action);
       setLastResult(result);
 

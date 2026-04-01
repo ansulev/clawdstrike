@@ -62,7 +62,7 @@ function buildAction(
       return {
         type: 'custom',
         action_type: customActionType ?? 'unknown',
-        data: { value: input },
+        data: { value: input, action: input, channel: input },
       };
   }
 }

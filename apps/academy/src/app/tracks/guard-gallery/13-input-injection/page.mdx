@@ -74,7 +74,7 @@ guards:
 Select an input type below to see how the InputInjectionCapability guard evaluates it.
 Try allowed types (keyboard, mouse, touch) and unknown types to see the fail-closed behavior.
 
-<GuardPlayground guard="computer_use" actionType="custom" customActionType="input.inject" placeholder="Enter an input type (keyboard, mouse, touch)..." defaultInput="keyboard" examples={[{label: "Keyboard", value: "keyboard"}, {label: "Mouse", value: "mouse"}, {label: "Touch", value: "touch"}, {label: "Unknown type", value: "gamepad"}]} />
+<GuardPlayground guard="computer_use" actionType="custom" customActionType="computer_use" placeholder="Enter an input type (keyboard, mouse, touch)..." defaultInput="keyboard" examples={[{label: "Keyboard", value: "keyboard"}, {label: "Mouse", value: "mouse"}, {label: "Touch", value: "touch"}, {label: "Unknown type", value: "gamepad"}]} />
 
 ## Bypass Challenges
 
@@ -87,6 +87,7 @@ Try allowed types (keyboard, mouse, touch) and unknown types to see the fail-clo
   hint="The default allowed types are keyboard, mouse, and touch. Send input.inject with one of these types."
   challengeId="guard-gallery/13-input-injection/easy"
   actionType="custom"
+  customActionType="computer_use"
   placeholder="Enter input.inject action..."
 />
 
@@ -99,6 +100,7 @@ Try allowed types (keyboard, mouse, touch) and unknown types to see the fail-clo
   hint="Fail-closed! Missing input_type = DENY, even if everything else looks fine. This is a deliberate design choice -- the guard requires explicit type declaration."
   challengeId="guard-gallery/13-input-injection/hard"
   actionType="custom"
+  customActionType="computer_use"
   placeholder="Enter input.inject action (try omitting input_type)..."
 />
 

@@ -126,7 +126,7 @@ locations. Try the examples below, or type your own paths:
 And the egress guard controls which domains the agent can reach. Test it with domains
 that should be allowed and blocked:
 
-<GuardPlayground guard="egress_allowlist" actionType="egress" placeholder="Enter a domain to check..." defaultInput="api.github.com" examples={[{label: "GitHub API (allowed)", value: "api.github.com"}, {label: "npm registry (allowed)", value: "registry.npmjs.org"}, {label: "Rust docs (allowed)", value: "docs.rs"}, {label: "Random site (blocked)", value: "evil.com"}, {label: "Social media (blocked)", value: "twitter.com"}]} />
+<GuardPlayground guard="egress_allowlist" actionType="network_egress" placeholder="Enter a domain to check..." defaultInput="api.github.com" examples={[{label: "GitHub API (allowed)", value: "api.github.com"}, {label: "npm registry (allowed)", value: "registry.npmjs.org"}, {label: "Rust docs (allowed)", value: "docs.rs"}, {label: "Random site (blocked)", value: "evil.com"}, {label: "Social media (blocked)", value: "twitter.com"}]} />
 
 Notice how the forbidden path guard allows `/docs/README.md` and `/src/main.rs` (safe
 project paths) but blocks `/project/secrets/api.key` and `~/.ssh/id_rsa` (sensitive

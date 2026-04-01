@@ -71,7 +71,7 @@ guards:
 Select a CUA action type below to see how the Computer Use Guard evaluates it. Try
 both allowed and unknown action types to see how the guard responds.
 
-<GuardPlayground guard="computer_use" actionType="custom" customActionType="remote.session.connect" placeholder="Enter a CUA action type (e.g., remote.screenshot)..." defaultInput="remote.session.connect" examples={[{label: "Connect session", value: "remote.session.connect"}, {label: "Inject input", value: "input.inject"}, {label: "Unknown action", value: "remote.install_software"}, {label: "Take screenshot", value: "remote.screenshot"}]} />
+<GuardPlayground guard="computer_use" actionType="custom" customActionType="computer_use" placeholder="Enter a CUA action type (e.g., remote.screenshot)..." defaultInput="remote.session.connect" examples={[{label: "Connect session", value: "remote.session.connect"}, {label: "Inject input", value: "input.inject"}, {label: "Unknown action", value: "remote.install_software"}, {label: "Take screenshot", value: "remote.screenshot"}]} />
 
 ## Bypass Challenges
 
@@ -84,6 +84,7 @@ both allowed and unknown action types to see how the guard responds.
   hint="The 10 default allowed actions include remote.session.connect, remote.session.disconnect, input.inject, and remote.clipboard. Try one of these."
   challengeId="guard-gallery/10-computer-use/easy"
   actionType="custom"
+  customActionType="computer_use"
   placeholder="Enter a CUA action type..."
 />
 
@@ -96,6 +97,7 @@ both allowed and unknown action types to see how the guard responds.
   hint="Guardrail mode WARNS but ALLOWS unknown actions. Try any action type NOT in the default allowed list, like 'remote.install_software'. It will be allowed with a warning, not denied."
   challengeId="guard-gallery/10-computer-use/hard"
   actionType="custom"
+  customActionType="computer_use"
   placeholder="Enter a CUA action type..."
 />
 

@@ -39,7 +39,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" suppressHydrationWarning>
+      {/* suppressHydrationWarning: extensions (e.g. Grammarly) inject data-* attrs on <body> before hydration */}
       <body
+        suppressHydrationWarning
         className={`${inter.variable} ${cormorantDisplay.variable} ${jetbrainsMono.variable} font-sans antialiased [font-feature-settings:'liga'_1] tracking-[0.01em]`}
       >
         <ThemeProvider>{children}</ThemeProvider>

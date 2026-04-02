@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { BookOpen, ArrowRight } from 'lucide-react';
+import { LearningProgressBar } from '@/components/layout/learning-progress-bar';
 import { ThemeToggle } from '@/components/layout/theme-toggle';
 import { Button } from '@/components/ui/button';
 import { getAllTracks } from '@/lib/content';
@@ -41,6 +42,9 @@ export default function Home() {
             Explore threat scenarios, dig into guards, and build policies — all
             backed by the real WASM engine in your browser.
           </p>
+          <div className="mt-10 w-full max-w-md">
+            <LearningProgressBar tracks={tracks} />
+          </div>
           <div className="mt-10 flex flex-wrap items-center gap-3">
             <Button variant="warm" size="lg" asChild>
               <Link href={firstLessonPath}>Start learning</Link>

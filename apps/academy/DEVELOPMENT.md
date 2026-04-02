@@ -35,12 +35,6 @@ Open [http://localhost:3000](http://localhost:3000).
 
 ---
 
-## Hydration / browser extensions
-
-Extensions (e.g. **Grammarly**) may inject attributes on `<body>` before React hydrates. The root layout sets **`suppressHydrationWarning`** on **`<body>`** (and `<html>`) so those mismatches do not surface as hydration errors in development.
-
----
-
 ## Useful paths
 
 | Path | Purpose |

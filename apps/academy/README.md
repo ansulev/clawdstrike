@@ -15,27 +15,30 @@
 
 ## Preview
 
-<p align="center">
-  <strong>Landing</strong> — hero, tracks, and calls to action
-</p>
-<p align="center">
-  <img
-    src="./images/academy-readme-landing.png"
-    alt="ClawdStrike Academy landing: hero and learning tracks"
-    width="1100"
-  />
-</p>
+**Landing** — hero, tracks, and calls to action
 
-<p align="center">
-  <strong>Guard Gallery</strong> — browse guards by tier
-</p>
-<p align="center">
-  <img
-    src="./images/academy-readme-guard-gallery.png"
-    alt="ClawdStrike Academy Guard Gallery overview"
-    width="1100"
-  />
-</p>
+
+
+**Guard Gallery** — browse guards by tier
+
+
+
+---
+
+## Run locally
+
+From the **repository root** (npm workspaces):
+
+```bash
+npm install
+cd apps/academy
+npm run dev
+```
+
+Open [http://localhost:3000](http://localhost:3000).
+
+- **Node:** **24** matches root `package.json` `engines` (e.g. `mise install`, then `mise exec -- npm run dev` if you do not use 24 globally).
+- `dev` **script:** runs `prebuild` (ruleset extraction + source extraction) before `next dev`.
 
 ---
 

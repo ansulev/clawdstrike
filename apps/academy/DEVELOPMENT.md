@@ -18,31 +18,16 @@ That file is the design-system reference (colors, typography, shadows, layout, c
 
 ---
 
-## Run locally
-
-From the **repository root** (npm workspaces):
-
-```bash
-npm install
-cd apps/academy
-npm run dev
-```
-
-Open [http://localhost:3000](http://localhost:3000).
-
-- **Node:** **24** matches root `package.json` `engines` (e.g. `mise install`, then `mise exec -- npm run dev` if you do not use 24 globally).
-- **`dev` script:** runs `prebuild` (ruleset extraction + source extraction) before `next dev`.
-
----
-
 ## Useful paths
 
-| Path | Purpose |
-| ---- | ------- |
-| `src/app/` | Next.js App Router routes and layouts |
-| `src/components/` | UI and layout components |
-| `docs/design/DESIGN.md` | Visual design contract |
-| `images/` | Readme / marketing screenshots (e.g. `academy-readme-*.png`) |
+
+| Path                    | Purpose                                                      |
+| ----------------------- | ------------------------------------------------------------ |
+| `src/app/`              | Next.js App Router routes and layouts                        |
+| `src/components/`       | UI and layout components                                     |
+| `docs/design/DESIGN.md` | Visual design contract                                       |
+| `images/`               | Readme / marketing screenshots (e.g. `academy-readme-*.png`) |
+
 
 ---
 

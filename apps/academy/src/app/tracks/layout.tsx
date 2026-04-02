@@ -53,9 +53,11 @@ export default function TracksLayout({
           <Sidebar tracks={tracks} />
         </aside>
 
-        {/* Main content */}
+        {/* Main content — wide readable column; prose max-w removed so grids fill horizontal space */}
         <main className="flex-1 min-w-0">
-          <div className="max-w-3xl mx-auto px-6 py-10 prose prose-neutral dark:prose-invert prose-headings:font-semibold prose-a:text-primary prose-pre:bg-transparent prose-pre:p-0 prose-pre:m-0">
+          <div
+            className="mx-auto w-full max-w-[min(100%,88rem)] px-6 py-10 sm:px-8 lg:px-10 xl:px-12 prose prose-neutral max-w-none dark:prose-invert prose-headings:font-display prose-headings:font-light prose-h1:text-3xl prose-h1:tracking-tight prose-h2:text-2xl prose-h2:tracking-tight prose-a:text-primary prose-pre:bg-transparent prose-pre:p-0 prose-pre:m-0"
+          >
             {children}
           </div>
         </main>

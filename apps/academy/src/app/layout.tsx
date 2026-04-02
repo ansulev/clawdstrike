@@ -1,11 +1,22 @@
 import type { Metadata } from 'next';
-import { Inter, JetBrains_Mono } from 'next/font/google';
+import { Cormorant_Garamond, Inter, JetBrains_Mono } from 'next/font/google';
 import { ThemeProvider } from '@/providers/theme-provider';
 import './globals.css';
 
 const inter = Inter({
   variable: '--font-inter',
   subsets: ['latin'],
+  display: 'swap',
+});
+
+/**
+ * Display headings: DESIGN.md references Waldenburg 300; we use Cormorant Garamond
+ * 300 as a licensed, Google-hosted whisper-light substitute.
+ */
+const cormorantDisplay = Cormorant_Garamond({
+  variable: '--font-academy-display',
+  subsets: ['latin'],
+  weight: ['300', '600'],
   display: 'swap',
 });
 
@@ -29,7 +40,7 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body
-        className={`${inter.variable} ${jetbrainsMono.variable} font-sans antialiased`}
+        className={`${inter.variable} ${cormorantDisplay.variable} ${jetbrainsMono.variable} font-sans antialiased [font-feature-settings:'liga'_1] tracking-[0.01em]`}
       >
         <ThemeProvider>{children}</ThemeProvider>
       </body>

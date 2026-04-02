@@ -29,7 +29,7 @@ TypeScript packages are built/tested per-package (no root JS workspace):
 Docs:
 - `mdbook build docs` / `mdbook test docs`
 
-**ClawdStrike Academy (`apps/academy`):** UI must follow `apps/academy/docs/design/DESIGN.md`. Develop with `npm install` at the repo root, then `npm run dev` in `apps/academy`.
+**ClawdStrike Academy (`apps/academy`):** Contributor and agent setup (design rules, `npm run dev`, notes) is in `apps/academy/DEVELOPMENT.md`. Visitor-facing overview is `apps/academy/README.md`.
 
 ## Coding Style & Naming Conventions
 

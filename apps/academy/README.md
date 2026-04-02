@@ -1,41 +1,52 @@
 # ClawdStrike Academy
 
-Next.js app (`clawdstrike-academy`): interactive onboarding for the ClawdStrike runtime security system — lesson tracks, guard gallery, policy lab, and in-browser WASM demos.
+**Learn ClawdStrike by doing.** An interactive learning surface for the runtime security stack: guided tracks, a guard gallery, policy exercises, and a real policy engine compiled to **WebAssembly** — running in your browser.
 
-## Screenshots
+---
 
-Assets live in `[images/](./images/)`. Paths are relative to this README (`./images/…`).
+## What you’ll find here
 
-### Landing
+- **Learning tracks** — ordered lessons from first principles to deeper topics (threat scenarios, policy lab, guard deep-dives).
+- **Guard Gallery** — all built-in guards in one place, with tiered explanations and hands-on pages.
+- **Policy Lab** — edit YAML, compare rulesets, see inheritance — tied to how ClawdStrike actually evaluates policy.
+- **No separate install for readers** — when this app is hosted or you run it locally, the heavy lifting is the same engine the project ships, just behind a friendly UI.
 
-Hero, primary CTAs, and learning tracks.
+---
 
-### Guard Gallery
+## Preview
 
-Tier sections and guard cards.
+<p align="center">
+  <strong>Landing</strong> — hero, tracks, and calls to action
+</p>
+<p align="center">
+  <img
+    src="./images/academy-readme-landing.png"
+    alt="ClawdStrike Academy landing: hero and learning tracks"
+    width="1100"
+  />
+</p>
 
-## UI / design (required)
+<p align="center">
+  <strong>Guard Gallery</strong> — browse guards by tier
+</p>
+<p align="center">
+  <img
+    src="./images/academy-readme-guard-gallery.png"
+    alt="ClawdStrike Academy Guard Gallery overview"
+    width="1100"
+  />
+</p>
 
-**All UI work in `apps/academy` must follow:**
+---
 
-`[docs/design/DESIGN.md](docs/design/DESIGN.md)`
+## More about the project
 
-That document is the design-system reference (colors, typography, shadows, layout, components). Read it before adding or changing pages, components, or global styles. When AI agents implement UI here, point them at that path.
+ClawdStrike is the wider **policy, receipts, and enforcement** system this Academy teaches. Start at the [repository root README](../../README.md) for install, architecture, and community links.
 
-**Implementation note:** `DESIGN.md` references Waldenburg / Geist; the app uses **Cormorant Garamond** (300/600) for display and **JetBrains Mono** for code until licensed or self-hosted fonts are added.
+---
 
-## Development
+## For contributors & tooling
 
-From the repository root (npm workspaces):
+If you are **developing this app**, running it locally, or you are an **AI agent** changing UI or behavior, use the dedicated guide — it holds setup commands, design rules, and repo-specific notes:
 
-```bash
-npm install
-cd apps/academy
-npm run dev
-```
-
-Then open [http://localhost:3000](http://localhost:3000).
-
-**Tooling:** Node **24** matches root `package.json` `engines` (e.g. `mise install` / `mise exec -- npm run dev`). The `dev` script runs a `prebuild` (ruleset + source extraction) before Next.js.
-
-**Hydration noise in dev:** Some browser extensions (e.g. Grammarly) inject attributes on `<body>`. The root layout uses `suppressHydrationWarning` on `<body>` so that does not surface as a React hydration error.
+**[→ Development guide (Contributors & agents)](./DEVELOPMENT.md)**

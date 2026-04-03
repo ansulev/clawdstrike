@@ -162,12 +162,14 @@ export default function GuardGalleryPage() {
   return (
     <div className="space-y-10">
       {/* Page header */}
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Guard Gallery</h1>
-        <p className="text-lg text-muted-foreground mt-2">
+      <div className="max-w-4xl">
+        <h1 className="font-display text-4xl font-light tracking-tight md:text-[2.25rem] md:leading-[1.17]">
+          Guard Gallery
+        </h1>
+        <p className="mt-3 text-lg leading-relaxed tracking-[0.01em] text-muted-foreground">
           Deep-dive into each of ClawdStrike&apos;s 13 built-in security guards
         </p>
-        <p className="text-sm text-muted-foreground mt-4 max-w-2xl">
+        <p className="mt-4 text-sm leading-relaxed tracking-[0.01em] text-muted-foreground">
           Guards are organized by complexity. Start with green tier for
           pattern-matching guards, work up to red tier for ML-based detection.
         </p>
@@ -179,11 +181,11 @@ export default function GuardGalleryPage() {
         if (cards.length === 0) return null;
 
         return (
-          <section key={tier} className="space-y-4">
-            <h2 className="text-xl font-semibold tracking-tight border-b pb-2">
+          <section key={tier} className="space-y-5">
+            <h2 className="block w-full border-b border-border pb-3 font-display text-xl font-light tracking-tight text-foreground md:text-2xl">
               {title}
             </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:gap-5 lg:grid-cols-3 xl:grid-cols-4">
               {cards.map((card) => (
                 <Link
                   key={card.slug}
